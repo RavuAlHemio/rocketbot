@@ -6,7 +6,6 @@ use std::sync::Arc;
 use std::time::Duration;
 
 use async_trait::async_trait;
-use chrono::Utc;
 use futures_util::{SinkExt, StreamExt};
 use json::JsonValue;
 use log::{debug, error, log_enabled, warn};
@@ -30,6 +29,7 @@ use crate::plugins::load_plugins;
 
 static LOGIN_MESSAGE_ID: &'static str = "login4242";
 static GET_ROOMS_MESSAGE_ID: &'static str = "rooms4242";
+static SUBSCRIBE_ROOMS_MESSAGE_ID: &'static str = "roomchanges4242";
 static SEND_MESSAGE_MESSAGE_ID: &'static str = "sendmessage4242";
 static ID_ALPHABET: &'static str = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789";
 const ID_LENGTH: usize = 17;
@@ -96,8 +96,8 @@ struct ConnectionState {
     outgoing_receiver: mpsc::UnboundedReceiver<JsonValue>,
     exit_notify: Arc<Notify>,
     plugins: Vec<Box<dyn RocketBotPlugin>>,
-    last_channel_query_unixtime: i64,
     subscribed_channels: Arc<RwLock<ChannelDatabase>>,
+    my_user_id: Option<String>,
 }
 impl ConnectionState {
     fn new(
@@ -105,16 +105,16 @@ impl ConnectionState {
         outgoing_receiver: mpsc::UnboundedReceiver<JsonValue>,
         exit_notify: Arc<Notify>,
         plugins: Vec<Box<dyn RocketBotPlugin>>,
-        last_channel_query_unixtime: i64,
         subscribed_channels: Arc<RwLock<ChannelDatabase>>,
+        my_user_id: Option<String>,
     ) -> ConnectionState {
         ConnectionState {
             outgoing_sender,
             outgoing_receiver,
             exit_notify,
             plugins,
-            last_channel_query_unixtime,
             subscribed_channels,
+            my_user_id,
         }
     }
 }
@@ -231,8 +231,8 @@ pub(crate) async fn connect() -> Arc<ServerConnection> {
         outgoing_receiver,
         exit_notify,
         Vec::new(),
-        0,
         subscribed_channels,
+        None,
     );
     let second_conn: Arc<ServerConnection> = Arc::clone(&conn);
     let generic_conn: Arc<dyn RocketBotInterface> = second_conn;
@@ -357,7 +357,46 @@ async fn run_connection(mut state: &mut ConnectionState) -> Result<(), WebSocket
     Ok(())
 }
 
-async fn handle_received(body: &JsonValue, state: &mut ConnectionState) {
+async fn channel_joined(state: &mut ConnectionState, channel: Channel) {
+    {
+        let mut cdb_write = state.subscribed_channels
+            .write().await;
+        cdb_write
+            .register_channel(channel.clone());
+    }
+
+    // subscribe to messages in this room
+    let sub_body = json::object! {
+        msg: "sub",
+        id: format!("sub_{}", channel.id),
+        name: "stream-room-messages",
+        params: [
+            channel.id.clone(),
+            false,
+        ],
+    };
+    state.outgoing_sender.send(sub_body)
+        .expect("failed to enqueue subscription message");
+}
+
+async fn channel_left(state: &mut ConnectionState, channel_id: &str) {
+    {
+        let mut cdb_write = state.subscribed_channels
+            .write().await;
+        cdb_write
+            .forget_by_id(channel_id);
+    }
+
+    // unsubscribe
+    let unsub_body = json::object! {
+        msg: "unsub",
+        id: format!("sub_{}", channel_id),
+    };
+    state.outgoing_sender.send(unsub_body)
+        .expect("failed to enqueue unsubscription message");
+}
+
+async fn handle_received(body: &JsonValue, mut state: &mut ConnectionState) {
     if body["msg"] == "ping" {
         // answer with a pong
         let pong_body = json::object! {msg: "pong"};
@@ -395,14 +434,35 @@ async fn handle_received(body: &JsonValue, state: &mut ConnectionState) {
         state.outgoing_sender.send(login_body)
             .expect("failed to enqueue login message");
     } else if body["msg"] == "result" && body["id"] == LOGIN_MESSAGE_ID {
-        // login successful; get our rooms
+        // login successful
+
+        // store our ID
+        let user_id = body["result"]["id"].as_str()
+            .expect("user ID missing or not a string")
+            .to_owned();
+        state.my_user_id = Some(user_id.clone());
+
+        // subscribe to changes to our room state
+        let subscribe_room_change_body = json::object! {
+            msg: "sub",
+            id: SUBSCRIBE_ROOMS_MESSAGE_ID,
+            name: "stream-notify-user",
+            params: [
+                format!("{}/rooms-changed", user_id),
+                false,
+            ],
+        };
+        state.outgoing_sender.send(subscribe_room_change_body)
+            .expect("failed to enqueue room update subscription message");
+
+        // get which rooms we are currently in
         let room_list_body = json::object! {
             msg: "method",
             method: "rooms/get",
             id: GET_ROOMS_MESSAGE_ID,
             params: [
                 {
-                    "$date": state.last_channel_query_unixtime,
+                    "$date": 0,
                 },
             ],
         };
@@ -424,46 +484,19 @@ async fn handle_received(body: &JsonValue, state: &mut ConnectionState) {
                 update_room["fname"].to_string(),
             );
 
-            {
-                let mut cdb_write = state.subscribed_channels
-                    .write().await;
-                cdb_write
-                    .register_channel(channel.clone());
-            }
-
-            // subscribe to messages in this room
-            let sub_body = json::object! {
-                msg: "sub",
-                id: format!("sub_{}", channel.id),
-                name: "stream-room-messages",
-                params: [
-                    channel.id.clone(),
-                    false,
-                ],
-            };
-            state.outgoing_sender.send(sub_body)
-                .expect("failed to enqueue subscription message");
+            channel_joined(&mut state, channel).await;
         }
         for remove_room in body["result"]["remove"].members() {
-            {
-                let mut chandb_write = state.subscribed_channels
-                    .write().await;
-                chandb_write
-                    .forget_by_id(
-                        &remove_room["_id"].to_string(),
-                    );
-            }
-
-            // unsubscribe
-            let unsub_body = json::object! {
-                msg: "unsub",
-                id: format!("sub_{}", remove_room["_id"]),
+            let room_id = match remove_room["_id"].as_str() {
+                Some(s) => s,
+                None => {
+                    error!("error while handling removed rooms: room ID missing or not a string");
+                    continue;
+                }
             };
-            state.outgoing_sender.send(unsub_body)
-                .expect("failed to enqueue unsubscription message");
+
+            channel_left(&mut state, room_id).await;
         }
-        state.last_channel_query_unixtime = Utc::now().timestamp();
-        // TODO: update this periodically
     } else if body["msg"] == "changed" && body["collection"] == "stream-room-messages" {
         // we got a message! (probably)
 
@@ -509,6 +542,32 @@ async fn handle_received(body: &JsonValue, state: &mut ConnectionState) {
             for plugin in &state.plugins {
                 plugin.channel_message(&message).await;
             }
+        }
+    } else if body["msg"] == "changed" && body["collection"] == "stream-notify-user" {
+        let my_user_id = match &state.my_user_id {
+            Some(muid) => muid.as_str(),
+            None => return,
+        };
+        let rooms_changed_event_name = format!("{}/rooms-changed", my_user_id);
+
+        if body["fields"]["eventName"] == rooms_changed_event_name && body["fields"]["args"][0] == "inserted" {
+            // somebody added us to a channel!
+            // subscribe to its messages
+            let update_room = &body["fields"]["args"][1];
+            if update_room["t"] != "c" {
+                // not a channel; skip
+                // TODO: private messages?
+                return;
+            }
+
+            // remember this room
+            let channel = Channel::new(
+                update_room["_id"].to_string(),
+                update_room["name"].to_string(),
+                update_room["name"].to_string(), // fname is missing for some reason
+            );
+
+            channel_joined(&mut state, channel).await;
         }
     }
 }
