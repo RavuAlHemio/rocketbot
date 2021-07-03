@@ -10,7 +10,7 @@ jobs:
       - name: update packages
         run: pacman -Syu --noconfirm
       - name: install cargo
-        run: pacman -S --needed cargo
+        run: pacman -S --needed --noconfirm cargo
       - name: run debug build
         run: cargo build
       - name: run release build
