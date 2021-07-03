@@ -1,0 +1,38 @@
+use std::sync::Weak;
+
+use json::JsonValue;
+use rocketbot_interface::interfaces::{RocketBotInterface, RocketBotPlugin};
+
+use crate::config::CONFIG;
+
+
+pub(crate) async fn load_plugins(iface: Weak<dyn RocketBotInterface>) -> Vec<Box<dyn RocketBotPlugin>> {
+    let mut plugins: Vec<Box<dyn RocketBotPlugin>> = Vec::new();
+
+    {
+        let config_guard = CONFIG
+            .get().expect("initial config not set")
+            .read().await;
+
+        for plugin_config in &config_guard.plugins {
+            if !plugin_config.enabled {
+                continue;
+            }
+
+            let iface_weak = Weak::clone(&iface);
+            let inner_config: JsonValue = plugin_config.config.clone().into();
+
+            let plugin: Box<dyn RocketBotPlugin> = if plugin_config.name == "belch" {
+                Box::new(rocketbot_plugin_belch::BelchPlugin::new(iface_weak, inner_config))
+            } else if plugin_config.name == "thanks" {
+                Box::new(rocketbot_plugin_thanks::ThanksPlugin::new(iface_weak, inner_config))
+            } else {
+                panic!("unknown plugin {}", plugin_config.name);
+            };
+
+            plugins.push(plugin);
+        }
+
+        plugins
+    }
+}

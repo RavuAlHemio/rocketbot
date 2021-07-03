@@ -1,0 +1,7 @@
+[workspace]
+members = [
+    "rocketbot",
+    "rocketbot_interface",
+    "rocketbot_plugin_belch",
+    "rocketbot_plugin_thanks",
+]

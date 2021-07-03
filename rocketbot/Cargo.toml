@@ -1,0 +1,22 @@
+[package]
+name = "rocketbot"
+version = "0.1.0"
+edition = "2018"
+
+[dependencies]
+async-trait = { version = "0.1" }
+chrono = { version = "0.4" }
+env_logger = { version = "0.8" }
+futures-util = { version = "0.3" }
+json = { version = "0.12" }
+log = { version = "0.4" }
+once_cell = { version = "1.8" }
+rand = { version = "0.8" }
+rocketbot_interface = { path = "../rocketbot_interface" }
+rocketbot_plugin_belch = { path = "../rocketbot_plugin_belch" }
+rocketbot_plugin_thanks = { path = "../rocketbot_plugin_thanks" }
+serde = { version = "1.0", features = ["derive"] }
+serde_json = { version = "1.0" }
+sha2 = { version = "0.9" }
+tokio = { version = "1.7", features = ["macros", "net", "rt-multi-thread", "sync", "time"] }
+tokio-tungstenite = { version = "0.14", features = ["rustls-tls"] }
