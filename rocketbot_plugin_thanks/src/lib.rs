@@ -153,6 +153,14 @@ impl ThanksPlugin {
         ).await;
         if let Err(e) = exec_res {
             error!("error inserting thanks: {}", e);
+            interface.send_channel_message(
+                &channel_message.channel.name,
+                &format!(
+                    "@{}: something broke, sorry!",
+                    channel_message.message.sender.username,
+                ),
+            ).await;
+            return;
         }
 
         info!("{} thanks {} in {}: {}", thanker_lower, thankee_lower, channel, reason);
