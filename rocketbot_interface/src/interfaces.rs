@@ -14,6 +14,10 @@ pub trait RocketBotInterface : Send + Sync {
 
     /// Sends a textual message to a person.
     async fn send_private_message(&self, username: &str, message: &str);
+
+    /// Attempts to resolve the username-like value to an actual username on the server. Potentially
+    /// enlists the assistance of relevant plugins.
+    async fn resolve_username(&self, username: &str) -> Option<String>;
 }
 
 
@@ -29,4 +33,8 @@ pub trait RocketBotPlugin: Send + Sync {
 
     /// Called if a textual message has been received directly from another user.
     async fn private_message(&self, _message: &Message) {}
+
+    /// Called if another plugin has requested to resolve a username-like value to an actual
+    /// username on the server.
+    async fn username_resolution(&self, _username: &str) -> Option<String> { None }
 }

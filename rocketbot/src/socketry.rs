@@ -95,7 +95,7 @@ struct ConnectionState {
     outgoing_sender: mpsc::UnboundedSender<JsonValue>,
     outgoing_receiver: mpsc::UnboundedReceiver<JsonValue>,
     exit_notify: Arc<Notify>,
-    plugins: Vec<Box<dyn RocketBotPlugin>>,
+    plugins: Arc<RwLock<Vec<Box<dyn RocketBotPlugin>>>>,
     subscribed_channels: Arc<RwLock<ChannelDatabase>>,
     my_user_id: Option<String>,
 }
@@ -104,7 +104,7 @@ impl ConnectionState {
         outgoing_sender: mpsc::UnboundedSender<JsonValue>,
         outgoing_receiver: mpsc::UnboundedReceiver<JsonValue>,
         exit_notify: Arc<Notify>,
-        plugins: Vec<Box<dyn RocketBotPlugin>>,
+        plugins: Arc<RwLock<Vec<Box<dyn RocketBotPlugin>>>>,
         subscribed_channels: Arc<RwLock<ChannelDatabase>>,
         my_user_id: Option<String>,
     ) -> ConnectionState {
@@ -122,6 +122,7 @@ impl ConnectionState {
 pub(crate) struct ServerConnection {
     outgoing_sender: mpsc::UnboundedSender<JsonValue>,
     exit_notify: Arc<Notify>,
+    plugins: Arc<RwLock<Vec<Box<dyn RocketBotPlugin>>>>,
     subscribed_channels: Arc<RwLock<ChannelDatabase>>,
     rng: Mutex<StdRng>,
 }
@@ -129,12 +130,14 @@ impl ServerConnection {
     fn new(
         outgoing_sender: mpsc::UnboundedSender<JsonValue>,
         exit_notify: Arc<Notify>,
+        plugins: Arc<RwLock<Vec<Box<dyn RocketBotPlugin>>>>,
         subscribed_channels: Arc<RwLock<ChannelDatabase>>,
         rng: Mutex<StdRng>,
     ) -> ServerConnection {
         ServerConnection {
             outgoing_sender,
             exit_notify,
+            plugins,
             subscribed_channels,
             rng,
         }
@@ -154,6 +157,7 @@ impl Clone for ServerConnection {
         ServerConnection::new(
             self.outgoing_sender.clone(),
             Arc::clone(&self.exit_notify),
+            Arc::clone(&self.plugins),
             Arc::clone(&self.subscribed_channels),
             Mutex::new(StdRng::from_entropy()),
         )
@@ -196,6 +200,20 @@ impl RocketBotInterface for ServerConnection {
     async fn send_private_message(&self, username: &str, message: &str) {
         todo!()
     }
+
+    async fn resolve_username(&self, username: &str) -> Option<String> {
+        // ask all plugins, stop at the first non-None result
+        {
+            let plugins = self.plugins
+                .read().await;
+            for plugin in plugins.iter() {
+                if let Some(un) = plugin.username_resolution(username).await {
+                    return Some(un);
+                }
+            }
+        }
+        None
+    }
 }
 
 
@@ -219,18 +237,20 @@ pub(crate) async fn connect() -> Arc<ServerConnection> {
     let (outgoing_sender, outgoing_receiver) = mpsc::unbounded_channel();
     let exit_notify = Arc::new(Notify::new());
     let subscribed_channels = Arc::new(RwLock::new(ChannelDatabase::new_empty()));
+    let plugins = Arc::new(RwLock::new(Vec::new()));
 
     let conn = Arc::new(ServerConnection::new(
         outgoing_sender.clone(),
         Arc::clone(&exit_notify),
+        Arc::clone(&plugins),
         Arc::clone(&subscribed_channels),
         Mutex::new(StdRng::from_entropy()),
     ));
-    let mut state = ConnectionState::new(
+    let state = ConnectionState::new(
         outgoing_sender,
         outgoing_receiver,
         exit_notify,
-        Vec::new(),
+        plugins,
         subscribed_channels,
         None,
     );
@@ -238,9 +258,13 @@ pub(crate) async fn connect() -> Arc<ServerConnection> {
     let generic_conn: Arc<dyn RocketBotInterface> = second_conn;
 
     // load the plugins
-    let mut plugins: Vec<Box<dyn RocketBotPlugin>> = load_plugins(Arc::downgrade(&generic_conn))
+    let mut loaded_plugins: Vec<Box<dyn RocketBotPlugin>> = load_plugins(Arc::downgrade(&generic_conn))
         .await;
-    state.plugins.append(&mut plugins);
+    {
+        let mut plugins_guard = state.plugins
+            .write().await;
+        plugins_guard.append(&mut loaded_plugins);
+    }
 
     tokio::spawn(async move {
         run_connections(state).await
@@ -539,8 +563,12 @@ async fn handle_received(body: &JsonValue, mut state: &mut ConnectionState) {
             );
 
             // distribute among plugins
-            for plugin in &state.plugins {
-                plugin.channel_message(&message).await;
+            {
+                let plugins = state.plugins
+                    .read().await;
+                for plugin in plugins.iter() {
+                    plugin.channel_message(&message).await;
+                }
             }
         }
     } else if body["msg"] == "changed" && body["collection"] == "stream-notify-user" {

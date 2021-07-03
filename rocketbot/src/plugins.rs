@@ -24,6 +24,8 @@ pub(crate) async fn load_plugins(iface: Weak<dyn RocketBotInterface>) -> Vec<Box
 
             let plugin: Box<dyn RocketBotPlugin> = if plugin_config.name == "belch" {
                 Box::new(rocketbot_plugin_belch::BelchPlugin::new(iface_weak, inner_config))
+            } else if plugin_config.name == "config_user_alias" {
+                Box::new(rocketbot_plugin_config_user_alias::ConfigUserAliasPlugin::new(iface_weak, inner_config))
             } else if plugin_config.name == "thanks" {
                 Box::new(rocketbot_plugin_thanks::ThanksPlugin::new(iface_weak, inner_config))
             } else {
