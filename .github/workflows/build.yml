@@ -1,7 +1,7 @@
 name: rocketbot build
 on: [push]
 jobs:
-  build-arch:
+  build-arch-debug:
     runs-on: ubuntu-latest
     container: archlinux:base-devel
     steps:
@@ -13,9 +13,19 @@ jobs:
         run: pacman -S --needed --noconfirm cargo
       - name: run debug build
         run: cargo build
-      - name: run release build
-        run: cargo build --release
       - name: run debug tests
         run: cargo test
+  build-arch-release:
+    runs-on: ubuntu-latest
+    container: archlinux:base-devel
+    steps:
+      - name: check out repository code
+        uses: actions/checkout@v2
+      - name: update packages
+        run: pacman -Syu --noconfirm
+      - name: install cargo
+        run: pacman -S --needed --noconfirm cargo
+      - name: run release build
+        run: cargo build --release
       - name: run release tests
         run: cargo test --release
