@@ -15,6 +15,11 @@ jobs:
         run: cargo build
       - name: run debug tests
         run: cargo test
+      - name: upload debug binary
+        uses: actions/upload-artifact@v2
+        with:
+          name: debug-binary
+          path: target/debug/rocketbot
   build-arch-release:
     runs-on: ubuntu-latest
     container: archlinux:base-devel
@@ -29,3 +34,8 @@ jobs:
         run: cargo build --release
       - name: run release tests
         run: cargo test --release
+      - name: upload release binary
+        uses: actions/upload-artifact@v2
+        with:
+          name: debug-binary
+          path: target/release/rocketbot
