@@ -3,6 +3,7 @@ mod errors;
 mod jsonage;
 mod plugins;
 mod socketry;
+mod string_utils;
 
 
 use std::ffi::OsString;

@@ -1,5 +1,6 @@
 use core::panic;
-use std::collections::HashMap;
+use std::collections::{HashMap, HashSet};
+use std::collections::hash_map::Entry as HashMapEntry;
 use std::fmt::Write;
 use std::ops::DerefMut;
 use std::sync::Arc;
@@ -12,6 +13,7 @@ use log::{debug, error, log_enabled, warn};
 use rand::{Rng, SeedableRng};
 use rand::distributions::{Distribution, Uniform};
 use rand::rngs::StdRng;
+use rocketbot_interface::commands::{CommandDefinition, CommandInstance, CommandValue, CommandValueType};
 use rocketbot_interface::interfaces::{RocketBotInterface, RocketBotPlugin};
 use rocketbot_interface::model::{Channel, ChannelMessage, Message, User};
 use sha2::{Digest, Sha256};
@@ -25,6 +27,7 @@ use crate::config::CONFIG;
 use crate::errors::WebSocketError;
 use crate::jsonage::parse_message;
 use crate::plugins::load_plugins;
+use crate::string_utils::{SplitChunk, split_whitespace};
 
 
 static LOGIN_MESSAGE_ID: &'static str = "login4242";
@@ -87,6 +90,40 @@ impl ChannelDatabase {
 
     fn by_name(&self) -> &HashMap<String, Channel> {
         &self.by_name
+    }
+}
+
+
+#[derive(Clone, Debug, Eq, Hash, PartialEq)]
+struct CommandConfiguration {
+    command_prefix: String,
+    short_option_prefix: String,
+    long_option_prefix: String,
+    stop_parse_option: String,
+}
+impl CommandConfiguration {
+    fn new(
+        command_prefix: String,
+        short_option_prefix: String,
+        long_option_prefix: String,
+        stop_parse_option: String,
+    ) -> CommandConfiguration {
+        CommandConfiguration {
+            command_prefix,
+            short_option_prefix,
+            long_option_prefix,
+            stop_parse_option,
+        }
+    }
+}
+impl Default for CommandConfiguration {
+    fn default() -> Self {
+        CommandConfiguration::new(
+            String::from("!"),
+            String::from("-"),
+            String::from("--"),
+            String::from("--"),
+        )
     }
 }
 
@@ -220,6 +257,24 @@ impl RocketBotInterface for ServerConnection {
             }
         }
         None
+    }
+
+    async fn register_channel_command(&self, command: &CommandDefinition) -> bool {
+        let mut commands_guard = self.shared_state.commands
+            .write().await;
+        match commands_guard.entry(command.name.clone()) {
+            HashMapEntry::Occupied(_) => {
+                false
+            },
+            HashMapEntry::Vacant(ve) => {
+                ve.insert(command.clone());
+                true
+            },
+        }
+    }
+
+    async fn register_private_message_command(&self, command: &CommandDefinition) -> bool {
+        todo!();
     }
 }
 
@@ -583,6 +638,9 @@ async fn handle_received(body: &JsonValue, mut state: &mut ConnectionState) {
                     plugin.channel_message(&message).await;
                 }
             }
+
+            // parse commands if there are any
+            distribute_channel_message_commands(&message, &mut state).await;
         }
     } else if body["msg"] == "changed" && body["collection"] == "stream-notify-user" {
         let my_user_id = match &state.my_user_id {
@@ -610,5 +668,223 @@ async fn handle_received(body: &JsonValue, mut state: &mut ConnectionState) {
 
             channel_joined(&mut state, channel).await;
         }
+    }
+}
+
+async fn distribute_channel_message_commands(channel_message: &ChannelMessage, state: &mut ConnectionState) {
+    let command_config = &state.shared_state.command_config;
+
+    let command_prefix = &command_config.command_prefix;
+    let message = &channel_message.message;
+    if !message.raw.starts_with(command_prefix) {
+        return;
+    }
+
+    let pieces: Vec<SplitChunk> = split_whitespace(&message.raw).collect();
+    let command_text = pieces[0];
+    if !command_text.chunk.starts_with(command_prefix) {
+        return;
+    }
+    let command_name = &command_text.chunk[command_prefix.len()..];
+
+    // do we know this command?
+    let command = {
+        let commands_guard = state.shared_state.commands
+            .read().await;
+        match commands_guard.get(command_name) {
+            Some(cd) => cd.clone(),
+            None => return,
+        }
+    };
+
+    let mut i = 0;
+    let mut set_flags = HashSet::new();
+    let mut option_values = HashMap::new();
+    while i < pieces.len() {
+        if pieces[i].chunk == command_config.stop_parse_option {
+            // no more options beyond this point, just positional args
+            // move forward and stop parsing
+            i += 1;
+            break;
+        }
+
+        // this code assumes that the long option prefix is not a prefix of the short option prefix
+        // (e.g. short option prefix "--", long option prefix "-")
+        assert!(!command_config.short_option_prefix.starts_with(&command_config.long_option_prefix));
+
+        if pieces[i].chunk.starts_with(&command_config.long_option_prefix) {
+            // it's a long option/flag!
+            let option_name = &pieces[i].chunk[command_config.long_option_prefix.len()..];
+
+            let handling_result = handle_option(
+                &command,
+                &option_name,
+                None,
+                &mut i,
+                &mut set_flags,
+                &mut option_values,
+                &pieces,
+                &command_name,
+                &message.raw,
+            );
+            if let OptionHandlingResult::Failure = handling_result {
+                // error messages already logged
+                return;
+            }
+        } else if pieces[i].chunk.starts_with(&command_config.short_option_prefix) {
+            // it's a bunch of short options!
+            let mut value_consumed_by_option: Option<String> = None;
+
+            for c in pieces[i].chunk[command_config.short_option_prefix.len()..].chars() {
+                let option_name: String = String::from(c);
+
+                let handling_result = handle_option(
+                    &command,
+                    &option_name,
+                    value_consumed_by_option.as_deref(),
+                    &mut i,
+                    &mut set_flags,
+                    &mut option_values,
+                    &pieces,
+                    &command_name,
+                    &message.raw,
+                );
+                match handling_result {
+                    OptionHandlingResult::Failure => {
+                        // error messages already logged
+                        return;
+                    },
+                    OptionHandlingResult::Flag => {
+                        // no worries here
+                    },
+                    OptionHandlingResult::Option => {
+                        // make sure we remember that this option gobbled up an argument
+                        value_consumed_by_option = Some(option_name);
+                    },
+                }
+            }
+        }
+
+        i += 1;
+    }
+
+    // gobble up the requisite positional arguments
+    let mut pos_args = Vec::with_capacity(command.arg_count);
+    for j in 0..command.arg_count {
+        if i >= pieces.len() {
+            warn!("missing positional argument with index {} passed to {}", j, command_name);
+            debug!("command line is {:?}", message.raw);
+            return;
+        }
+        pos_args.push(pieces[i].chunk.to_owned());
+        i += 1;
+    }
+
+    // take the rest
+    let rest_string = if i < pieces.len() {
+        message.raw[pieces[i].orig_index..].to_owned()
+    } else {
+        String::new()
+    };
+
+    // it finally comes together
+    let instance = CommandInstance::new(
+        command.name.clone(),
+        set_flags,
+        option_values,
+        pos_args,
+        rest_string,
+    );
+
+    // distribute among plugins
+    {
+        let plugins = state.shared_state.plugins
+            .read().await;
+        for plugin in plugins.iter() {
+            plugin.channel_command(&channel_message, &instance).await;
+        }
+    }
+}
+
+#[derive(Clone, Copy, Debug, Eq, Hash, PartialEq)]
+enum OptionHandlingResult {
+    Failure,
+    Flag,
+    Option,
+}
+
+fn handle_option(
+    command: &CommandDefinition,
+    option_name: &str,
+    value_consumed_by_option: Option<&str>,
+    i: &mut usize,
+    set_flags: &mut HashSet<String>,
+    option_values: &mut HashMap<String, CommandValue>,
+    pieces: &[SplitChunk],
+    command_name: &str,
+    raw_message: &str,
+) -> OptionHandlingResult {
+    if command.flags.contains(option_name) {
+        // flag found!
+        set_flags.insert(option_name.to_owned());
+        OptionHandlingResult::Flag
+    } else {
+        // is it an option?
+        let option_type = match command.options.get(option_name) {
+            Some(ot) => ot,
+            None => {
+                warn!("unknown option {:?} passed to {}", option_name, command_name);
+                debug!("command line is {:?}", raw_message);
+                return OptionHandlingResult::Failure;
+            }
+        };
+
+        if let Some(vcbo) = value_consumed_by_option {
+            // e.g. "-abcd value" where both -a and -b take a value
+            warn!("option {:?} passed to {} wants a value which was already consumed by option {:?}", option_name, command_name, vcbo);
+            debug!("command line is {:?}", raw_message);
+            return OptionHandlingResult::Failure;
+        }
+
+        // is there a next piece?
+        if *i + 1 >= pieces.len() {
+            warn!("option {:?} of {} is missing an argument", option_name, command_name);
+            debug!("command line is {:?}", raw_message);
+            return OptionHandlingResult::Failure;
+        }
+        let option_value_str = pieces[*i + 1].chunk;
+
+        let option_value = match option_type {
+            CommandValueType::String => CommandValue::String(option_value_str.to_owned()),
+            CommandValueType::Float => {
+                let float_val: f64 = match option_value_str.parse() {
+                    Ok(v) => v,
+                    Err(e) => {
+                        warn!("failed to parse argument {:?} for option {:?} of {} as a floating-point value: {}", option_value_str, option_name, command_name, e);
+                        debug!("command line is {:?}", raw_message);
+                        return OptionHandlingResult::Failure;
+                    },
+                };
+                CommandValue::Float(float_val)
+            },
+            CommandValueType::Integer => {
+                let int_val: i64 = match option_value_str.parse() {
+                    Ok(v) => v,
+                    Err(e) => {
+                        warn!("failed to parse argument {:?} for option {:?} of {} as an integer: {}", option_value_str, option_name, command_name, e);
+                        debug!("command line is {:?}", raw_message);
+                        return OptionHandlingResult::Failure;
+                    },
+                };
+                CommandValue::Integer(int_val)
+            },
+        };
+
+        option_values.insert(option_name.to_owned(), option_value);
+
+        // skip over one more argument (the value to this option)
+        *i += 1;
+
+        OptionHandlingResult::Option
     }
 }
