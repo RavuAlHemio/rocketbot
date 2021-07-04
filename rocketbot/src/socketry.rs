@@ -91,75 +91,82 @@ impl ChannelDatabase {
 }
 
 
-struct ConnectionState {
+struct SharedConnectionState {
     outgoing_sender: mpsc::UnboundedSender<JsonValue>,
+    exit_notify: Notify,
+    plugins: RwLock<Vec<Box<dyn RocketBotPlugin>>>,
+    subscribed_channels: RwLock<ChannelDatabase>,
+    rng: Mutex<StdRng>,
+    command_config: CommandConfiguration,
+    commands: RwLock<HashMap<String, CommandDefinition>>,
+}
+impl SharedConnectionState {
+    fn new(
+        outgoing_sender: mpsc::UnboundedSender<JsonValue>,
+        exit_notify: Notify,
+        plugins: RwLock<Vec<Box<dyn RocketBotPlugin>>>,
+        subscribed_channels: RwLock<ChannelDatabase>,
+        rng: Mutex<StdRng>,
+        command_config: CommandConfiguration,
+        commands: RwLock<HashMap<String, CommandDefinition>>,
+    ) -> Self {
+        Self {
+            outgoing_sender,
+            exit_notify,
+            plugins,
+            subscribed_channels,
+            rng,
+            command_config,
+            commands,
+        }
+    }
+}
+
+
+struct ConnectionState {
+    shared_state: Arc<SharedConnectionState>,
     outgoing_receiver: mpsc::UnboundedReceiver<JsonValue>,
-    exit_notify: Arc<Notify>,
-    plugins: Arc<RwLock<Vec<Box<dyn RocketBotPlugin>>>>,
-    subscribed_channels: Arc<RwLock<ChannelDatabase>>,
     my_user_id: Option<String>,
 }
 impl ConnectionState {
     fn new(
-        outgoing_sender: mpsc::UnboundedSender<JsonValue>,
+        shared_state: Arc<SharedConnectionState>,
         outgoing_receiver: mpsc::UnboundedReceiver<JsonValue>,
-        exit_notify: Arc<Notify>,
-        plugins: Arc<RwLock<Vec<Box<dyn RocketBotPlugin>>>>,
-        subscribed_channels: Arc<RwLock<ChannelDatabase>>,
         my_user_id: Option<String>,
     ) -> ConnectionState {
         ConnectionState {
-            outgoing_sender,
+            shared_state,
             outgoing_receiver,
-            exit_notify,
-            plugins,
-            subscribed_channels,
             my_user_id,
         }
     }
 }
 
 pub(crate) struct ServerConnection {
-    outgoing_sender: mpsc::UnboundedSender<JsonValue>,
-    exit_notify: Arc<Notify>,
-    plugins: Arc<RwLock<Vec<Box<dyn RocketBotPlugin>>>>,
-    subscribed_channels: Arc<RwLock<ChannelDatabase>>,
-    rng: Mutex<StdRng>,
+    shared_state: Arc<SharedConnectionState>,
 }
 impl ServerConnection {
     fn new(
-        outgoing_sender: mpsc::UnboundedSender<JsonValue>,
-        exit_notify: Arc<Notify>,
-        plugins: Arc<RwLock<Vec<Box<dyn RocketBotPlugin>>>>,
-        subscribed_channels: Arc<RwLock<ChannelDatabase>>,
-        rng: Mutex<StdRng>,
+        shared_state: Arc<SharedConnectionState>,
     ) -> ServerConnection {
         ServerConnection {
-            outgoing_sender,
-            exit_notify,
-            plugins,
-            subscribed_channels,
-            rng,
+            shared_state,
         }
     }
 
     pub fn send(&self, message: JsonValue) {
-        self.outgoing_sender.send(message)
+        self.shared_state.outgoing_sender.send(message)
             .expect("failed to enqueue message");
     }
 
     pub fn disconnect(&self) {
-        self.exit_notify.notify_one();
+        self.shared_state.exit_notify.notify_one();
     }
 }
 impl Clone for ServerConnection {
     fn clone(&self) -> Self {
         ServerConnection::new(
-            self.outgoing_sender.clone(),
-            Arc::clone(&self.exit_notify),
-            Arc::clone(&self.plugins),
-            Arc::clone(&self.subscribed_channels),
-            Mutex::new(StdRng::from_entropy()),
+            Arc::clone(&self.shared_state),
         )
     }
 }
@@ -168,7 +175,7 @@ impl RocketBotInterface for ServerConnection {
     async fn send_channel_message(&self, channel: &str, message: &str) {
         // make an ID for this message
         let channel_opt = {
-            let cdb_guard = self.subscribed_channels
+            let cdb_guard = self.shared_state.subscribed_channels
                 .read().await;
             cdb_guard.get_by_name(channel).map(|c| c.clone())
         };
@@ -179,7 +186,7 @@ impl RocketBotInterface for ServerConnection {
             return;
         };
 
-        let message_id = generate_message_id(&self.rng).await;
+        let message_id = generate_message_id(&self.shared_state.rng).await;
         let message_body = json::object! {
             msg: "method",
             method: "sendMessage",
@@ -193,7 +200,7 @@ impl RocketBotInterface for ServerConnection {
             ],
         };
 
-        self.outgoing_sender.send(message_body)
+        self.shared_state.outgoing_sender.send(message_body)
             .expect("failed to enqueue channel message");
     }
 
@@ -204,7 +211,7 @@ impl RocketBotInterface for ServerConnection {
     async fn resolve_username(&self, username: &str) -> Option<String> {
         // ask all plugins, stop at the first non-None result
         {
-            let plugins = self.plugins
+            let plugins = self.shared_state.plugins
                 .read().await;
             for plugin in plugins.iter() {
                 if let Some(un) = plugin.username_resolution(username).await {
@@ -235,23 +242,29 @@ async fn generate_message_id<R: Rng>(rng_lock: &Mutex<R>) -> String {
 
 pub(crate) async fn connect() -> Arc<ServerConnection> {
     let (outgoing_sender, outgoing_receiver) = mpsc::unbounded_channel();
-    let exit_notify = Arc::new(Notify::new());
-    let subscribed_channels = Arc::new(RwLock::new(ChannelDatabase::new_empty()));
-    let plugins = Arc::new(RwLock::new(Vec::new()));
+    let exit_notify = Notify::new();
+    let subscribed_channels = RwLock::new(ChannelDatabase::new_empty());
+    let plugins = RwLock::new(Vec::new());
+    let rng = Mutex::new(StdRng::from_entropy());
+    let command_config = Default::default();
+    let commands = RwLock::new(HashMap::new());
 
-    let conn = Arc::new(ServerConnection::new(
-        outgoing_sender.clone(),
-        Arc::clone(&exit_notify),
-        Arc::clone(&plugins),
-        Arc::clone(&subscribed_channels),
-        Mutex::new(StdRng::from_entropy()),
-    ));
-    let state = ConnectionState::new(
+    let shared_state = Arc::new(SharedConnectionState::new(
         outgoing_sender,
-        outgoing_receiver,
         exit_notify,
         plugins,
         subscribed_channels,
+        rng,
+        command_config,
+        commands,
+    ));
+
+    let conn = Arc::new(ServerConnection::new(
+        Arc::clone(&shared_state),
+    ));
+    let state = ConnectionState::new(
+        shared_state,
+        outgoing_receiver,
         None,
     );
     let second_conn: Arc<ServerConnection> = Arc::clone(&conn);
@@ -261,7 +274,7 @@ pub(crate) async fn connect() -> Arc<ServerConnection> {
     let mut loaded_plugins: Vec<Box<dyn RocketBotPlugin>> = load_plugins(Arc::downgrade(&generic_conn))
         .await;
     {
-        let mut plugins_guard = state.plugins
+        let mut plugins_guard = state.shared_state.plugins
             .write().await;
         plugins_guard.append(&mut loaded_plugins);
     }
@@ -321,12 +334,12 @@ async fn run_connection(mut state: &mut ConnectionState) -> Result<(), WebSocket
         version: "1",
         support: ["1"]
     };
-    state.outgoing_sender.send(connect_message)
+    state.shared_state.outgoing_sender.send(connect_message)
         .expect("failed to enqueue connect message");
 
     loop {
         tokio::select! {
-            _ = state.exit_notify.notified() => {
+            _ = state.shared_state.exit_notify.notified() => {
                 debug!("graceful exit requested");
                 break;
             },
@@ -383,7 +396,7 @@ async fn run_connection(mut state: &mut ConnectionState) -> Result<(), WebSocket
 
 async fn channel_joined(state: &mut ConnectionState, channel: Channel) {
     {
-        let mut cdb_write = state.subscribed_channels
+        let mut cdb_write = state.shared_state.subscribed_channels
             .write().await;
         cdb_write
             .register_channel(channel.clone());
@@ -399,13 +412,13 @@ async fn channel_joined(state: &mut ConnectionState, channel: Channel) {
             false,
         ],
     };
-    state.outgoing_sender.send(sub_body)
+    state.shared_state.outgoing_sender.send(sub_body)
         .expect("failed to enqueue subscription message");
 }
 
 async fn channel_left(state: &mut ConnectionState, channel_id: &str) {
     {
-        let mut cdb_write = state.subscribed_channels
+        let mut cdb_write = state.shared_state.subscribed_channels
             .write().await;
         cdb_write
             .forget_by_id(channel_id);
@@ -416,7 +429,7 @@ async fn channel_left(state: &mut ConnectionState, channel_id: &str) {
         msg: "unsub",
         id: format!("sub_{}", channel_id),
     };
-    state.outgoing_sender.send(unsub_body)
+    state.shared_state.outgoing_sender.send(unsub_body)
         .expect("failed to enqueue unsubscription message");
 }
 
@@ -424,7 +437,7 @@ async fn handle_received(body: &JsonValue, mut state: &mut ConnectionState) {
     if body["msg"] == "ping" {
         // answer with a pong
         let pong_body = json::object! {msg: "pong"};
-        state.outgoing_sender.send(pong_body)
+        state.shared_state.outgoing_sender.send(pong_body)
             .expect("failed to enqueue pong message");
     } else if body["msg"] == "connected" {
         // login
@@ -455,7 +468,7 @@ async fn handle_received(body: &JsonValue, mut state: &mut ConnectionState) {
                 },
             ],
         };
-        state.outgoing_sender.send(login_body)
+        state.shared_state.outgoing_sender.send(login_body)
             .expect("failed to enqueue login message");
     } else if body["msg"] == "result" && body["id"] == LOGIN_MESSAGE_ID {
         // login successful
@@ -476,7 +489,7 @@ async fn handle_received(body: &JsonValue, mut state: &mut ConnectionState) {
                 false,
             ],
         };
-        state.outgoing_sender.send(subscribe_room_change_body)
+        state.shared_state.outgoing_sender.send(subscribe_room_change_body)
             .expect("failed to enqueue room update subscription message");
 
         // get which rooms we are currently in
@@ -490,7 +503,7 @@ async fn handle_received(body: &JsonValue, mut state: &mut ConnectionState) {
                 },
             ],
         };
-        state.outgoing_sender.send(room_list_body)
+        state.shared_state.outgoing_sender.send(room_list_body)
             .expect("failed to enqueue room list message");
     } else if body["msg"] == "result" && body["id"] == GET_ROOMS_MESSAGE_ID {
         // update our rooms
@@ -527,7 +540,7 @@ async fn handle_received(body: &JsonValue, mut state: &mut ConnectionState) {
         for message_json in body["fields"]["args"].members() {
             let channel_id = message_json["rid"].to_string();
             let channel_opt = {
-                let chandb_read = state.subscribed_channels
+                let chandb_read = state.shared_state.subscribed_channels
                     .read().await;
                 chandb_read.get_by_id(&channel_id).map(|c| c.clone())
             };
@@ -564,7 +577,7 @@ async fn handle_received(body: &JsonValue, mut state: &mut ConnectionState) {
 
             // distribute among plugins
             {
-                let plugins = state.plugins
+                let plugins = state.shared_state.plugins
                     .read().await;
                 for plugin in plugins.iter() {
                     plugin.channel_message(&message).await;
