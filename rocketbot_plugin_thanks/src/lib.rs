@@ -8,7 +8,8 @@ use log::{error, info};
 use tokio_postgres::{self, NoTls};
 
 use rocketbot_interface::interfaces::{RocketBotInterface, RocketBotPlugin};
-use rocketbot_interface::model::{ChannelMessage, InlineFragment, MessageFragment};
+use rocketbot_interface::message::{InlineFragment, MessageFragment};
+use rocketbot_interface::model::ChannelMessage;
 
 
 fn find_user_mention_in_inline_fragment(fragment: &InlineFragment) -> Option<String> {

@@ -2,7 +2,7 @@ use std::convert::TryFrom;
 use std::fmt;
 
 use json::JsonValue;
-use rocketbot_interface::model::{Checkbox, InlineFragment, ListItem, MessageFragment};
+use rocketbot_interface::message::{Checkbox, InlineFragment, ListItem, MessageFragment};
 use serde::{Deserialize, Deserializer, Serialize, Serializer};
 use serde::de::Visitor;
 use serde::ser::{SerializeMap, SerializeSeq};
