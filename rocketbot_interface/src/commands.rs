@@ -16,6 +16,27 @@ pub struct CommandDefinition {
     pub options: HashMap<String, CommandValueType>,
     pub arg_count: usize,
 }
+impl CommandDefinition {
+    pub fn new(
+        name: String,
+        flags: HashSet<String>,
+        options: HashMap<String, CommandValueType>,
+        arg_count: usize,
+    ) -> CommandDefinition {
+        CommandDefinition {
+            name,
+            flags,
+            options,
+            arg_count,
+        }
+    }
+
+    pub fn copy_named(&self, new_name: &str) -> CommandDefinition {
+        let mut ret = self.clone();
+        ret.name = new_name.to_owned();
+        ret
+    }
+}
 
 
 #[derive(Clone, Debug, PartialEq)]

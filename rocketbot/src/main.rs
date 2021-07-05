@@ -1,4 +1,5 @@
 mod config;
+mod commands;
 mod errors;
 mod jsonage;
 mod plugins;
