@@ -55,7 +55,7 @@ pub(crate) fn parse_command(
     pieces: &[SplitChunk],
     raw_message: &str,
 ) -> Option<CommandInstance> {
-    let mut i = 0;
+    let mut i = 1;
     let mut set_flags = HashSet::new();
     let mut option_values = HashMap::new();
     let mut pos_args = Vec::with_capacity(command.arg_count);
@@ -247,7 +247,7 @@ mod tests {
         parse_command(
             command,
             &CommandConfiguration::default(),
-            &pieces[1..],
+            &pieces,
             &message,
         )
     }
