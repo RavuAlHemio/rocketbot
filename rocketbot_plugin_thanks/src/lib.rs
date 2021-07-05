@@ -1,3 +1,4 @@
+use std::collections::{HashMap, HashSet};
 use std::convert::TryInto;
 use std::sync::Weak;
 
@@ -7,72 +8,9 @@ use json::JsonValue;
 use log::{error, info};
 use tokio_postgres::{self, NoTls};
 
+use rocketbot_interface::commands::{CommandDefinition, CommandInstance};
 use rocketbot_interface::interfaces::{RocketBotInterface, RocketBotPlugin};
-use rocketbot_interface::message::{InlineFragment, MessageFragment};
 use rocketbot_interface::model::ChannelMessage;
-
-
-fn find_user_mention_in_inline_fragment(fragment: &InlineFragment) -> Option<String> {
-    match fragment {
-        InlineFragment::Bold(inner) => find_user_mention_in_inline_fragment(inner),
-        InlineFragment::Emoji(_name) => None,
-        InlineFragment::InlineCode(_code) => None,
-        InlineFragment::Italic(inner) => find_user_mention_in_inline_fragment(inner),
-        InlineFragment::Link(_url, label) => find_user_mention_in_inline_fragment(label),
-        InlineFragment::MentionChannel(_channel_name) => None,
-        InlineFragment::MentionUser(user_name) => Some(user_name.clone()),
-        InlineFragment::PlainText(_text) => None,
-        InlineFragment::Strike(inner) => find_user_mention_in_inline_fragment(inner),
-    }
-}
-
-fn find_user_mention_in_inline_fragments<'a, I: Iterator<Item = &'a InlineFragment>>(fragments: I) -> Option<String> {
-    for frag in fragments {
-        if let Some(mention) = find_user_mention_in_inline_fragment(frag) {
-            return Some(mention);
-        }
-    }
-    None
-}
-
-fn find_user_mention_in_message_fragment(fragment: &MessageFragment) -> Option<String> {
-    match fragment {
-        MessageFragment::BigEmoji(_emoji_codes) => None,
-        MessageFragment::Code(_language, _lines) => None,
-        MessageFragment::Heading(_level, fragments)
-            => find_user_mention_in_inline_fragments(fragments.iter()),
-        MessageFragment::OrderedList(items)
-            => find_user_mention_in_inline_fragments(
-                items.iter()
-                    .flat_map(|item| item.label.iter())
-            ),
-        MessageFragment::Paragraph(fragments)
-            => find_user_mention_in_inline_fragments(fragments.iter()),
-        MessageFragment::Quote(fragments)
-            => fragments.iter()
-                .filter_map(|frag| find_user_mention_in_message_fragment(frag))
-                .nth(0),
-        MessageFragment::Tasks(tasks)
-            => tasks.iter()
-                .map(|task| find_user_mention_in_inline_fragments(task.label.iter()))
-                .filter_map(|mention| mention)
-                .nth(0),
-        MessageFragment::UnorderedList(items)
-            => find_user_mention_in_inline_fragments(
-                items.iter()
-                    .flat_map(|item| item.label.iter())
-            ),
-    }
-}
-
-fn find_user_mention_in_message_fragments<'a, I: Iterator<Item = &'a MessageFragment>>(fragments: I) -> Option<String> {
-    for frag in fragments {
-        if let Some(mention) = find_user_mention_in_message_fragment(frag) {
-            return Some(mention);
-        }
-    }
-    None
-}
 
 
 pub struct ThanksPlugin {
@@ -81,25 +19,6 @@ pub struct ThanksPlugin {
     most_grateful_count: usize,
 }
 impl ThanksPlugin {
-    async fn find_user_mention(&self, channel_message: &ChannelMessage) -> Option<String> {
-        let interface = match self.interface.upgrade() {
-            None => return None,
-            Some(i) => i,
-        };
-
-        let mention_opt = find_user_mention_in_message_fragments(channel_message.message.parsed.iter());
-        match mention_opt {
-            Some(m) => Some(m),
-            None => {
-                interface.send_channel_message(
-                    &channel_message.channel.name,
-                    &format!("@{}: please use the mention syntax (`@username`) to target a user", channel_message.message.sender.username),
-                ).await;
-                None
-            },
-        }
-    }
-
     async fn connect_db(&self) -> Result<tokio_postgres::Client, tokio_postgres::Error> {
         let (client, connection) = match tokio_postgres::connect(&self.db_conn_string, NoTls).await {
             Ok(cc) => cc,
@@ -114,25 +33,27 @@ impl ThanksPlugin {
         Ok(client)
     }
 
-    async fn handle_thank(&self, channel_message: &ChannelMessage) {
+    async fn handle_thank(&self, channel_message: &ChannelMessage, command: &CommandInstance) {
         let interface = match self.interface.upgrade() {
             None => return,
             Some(i) => i,
-        };
-        let target = match self.find_user_mention(channel_message).await {
-            Some(tw) => tw,
-            None => return,
         };
         let db_client = match self.connect_db().await {
             Ok(c) => c,
             Err(_e) => return,
         };
 
+        let raw_target = &command.args[0];
+        let target = match interface.resolve_username(&raw_target).await {
+            Some(u) => u,
+            None => raw_target.clone(),
+        };
+
         let now = Utc::now();
         let thanker_lower = channel_message.message.sender.username.to_lowercase();
         let thankee_lower = target.to_lowercase();
         let channel = channel_message.channel.name.clone();
-        let reason = channel_message.message.raw.clone();
+        let reason = command.rest.clone();
 
         if thanker_lower == thankee_lower {
             interface.send_channel_message(
@@ -200,18 +121,20 @@ impl ThanksPlugin {
         ).await;
     }
 
-    async fn handle_thanked(&self, channel_message: &ChannelMessage) {
+    async fn handle_thanked(&self, channel_message: &ChannelMessage, command: &CommandInstance) {
         let interface = match self.interface.upgrade() {
             None => return,
             Some(i) => i,
         };
-        let target = match self.find_user_mention(channel_message).await {
-            Some(tw) => tw,
-            None => return,
-        };
         let db_client = match self.connect_db().await {
             Ok(c) => c,
             Err(_e) => return,
+        };
+
+        let raw_target = &command.args[0];
+        let target = match interface.resolve_username(&raw_target).await {
+            Some(u) => u,
+            None => raw_target.clone(),
         };
 
         let target_lower = target.to_lowercase();
@@ -289,18 +212,20 @@ impl ThanksPlugin {
         ).await;
     }
 
-    async fn handle_grateful(&self, channel_message: &ChannelMessage) {
+    async fn handle_grateful(&self, channel_message: &ChannelMessage, command: &CommandInstance) {
         let interface = match self.interface.upgrade() {
             None => return,
             Some(i) => i,
         };
-        let target = match self.find_user_mention(channel_message).await {
-            Some(tw) => tw,
-            None => return,
-        };
         let db_client = match self.connect_db().await {
             Ok(c) => c,
             Err(_e) => return,
+        };
+
+        let raw_target = &command.args[0];
+        let target = match interface.resolve_username(&raw_target).await {
+            Some(u) => u,
+            None => raw_target.clone(),
         };
 
         let target_lower = target.to_lowercase();
@@ -378,7 +303,7 @@ impl ThanksPlugin {
         ).await;
     }
 
-    async fn handle_topthanked(&self, channel_message: &ChannelMessage) {
+    async fn handle_topthanked(&self, channel_message: &ChannelMessage, _command: &CommandInstance) {
         let interface = match self.interface.upgrade() {
             None => return,
             Some(i) => i,
@@ -425,7 +350,7 @@ impl ThanksPlugin {
         }
     }
 
-    async fn handle_topgrateful(&self, channel_message: &ChannelMessage) {
+    async fn handle_topgrateful(&self, channel_message: &ChannelMessage, _command: &CommandInstance) {
         let interface = match self.interface.upgrade() {
             None => return,
             Some(i) => i,
@@ -474,7 +399,55 @@ impl ThanksPlugin {
 }
 #[async_trait]
 impl RocketBotPlugin for ThanksPlugin {
-    fn new(interface: Weak<dyn RocketBotInterface>, config: JsonValue) -> Self {
+    async fn new(interface: Weak<dyn RocketBotInterface>, config: JsonValue) -> Self {
+        // register commands
+        let my_interface = match interface.upgrade() {
+            None => panic!("interface is gone"),
+            Some(i) => i,
+        };
+
+        let thanks_command = CommandDefinition::new(
+            "thanks".to_owned(),
+            HashSet::new(),
+            HashMap::new(),
+            1,
+        );
+        let thank_command = thanks_command.copy_named("thank");
+        let thx_command = thanks_command.copy_named("thx");
+        my_interface.register_channel_command(&thanks_command).await;
+        my_interface.register_channel_command(&thank_command).await;
+        my_interface.register_channel_command(&thx_command).await;
+
+        let thanked_command = CommandDefinition::new(
+            "thanked".to_owned(),
+            HashSet::new(),
+            HashMap::new(),
+            1,
+        );
+        let grateful_command = CommandDefinition::new(
+            "grateful".to_owned(),
+            HashSet::new(),
+            HashMap::new(),
+            1,
+        );
+        my_interface.register_channel_command(&thanked_command).await;
+        my_interface.register_channel_command(&grateful_command).await;
+
+        let topthanked_command = CommandDefinition::new(
+            "topthanked".to_owned(),
+            HashSet::new(),
+            HashMap::new(),
+            0,
+        );
+        let topgrateful_command = CommandDefinition::new(
+            "topgrateful".to_owned(),
+            HashSet::new(),
+            HashMap::new(),
+            0,
+        );
+        my_interface.register_channel_command(&topthanked_command).await;
+        my_interface.register_channel_command(&topgrateful_command).await;
+
         ThanksPlugin {
             interface,
             db_conn_string: config["db_conn_string"]
@@ -485,33 +458,17 @@ impl RocketBotPlugin for ThanksPlugin {
         }
     }
 
-    async fn channel_message(&self, channel_message: &ChannelMessage) {
-        if !channel_message.message.raw.starts_with("!") {
-            return;
-        }
-
-        if channel_message.message.raw == "!topthanked" {
-            self.handle_topthanked(channel_message).await
-        } else if channel_message.message.raw == "!topgrateful" {
-            self.handle_topgrateful(channel_message).await
-        } else if let Some(frag) = channel_message.message.parsed.get(0) {
-            if let MessageFragment::Paragraph(pieces) = frag {
-                if let Some(cmd) = pieces.get(0) {
-                    if let InlineFragment::PlainText(cmd) = cmd {
-                        if !cmd.starts_with("!") {
-                            return;
-                        }
-
-                        if cmd.starts_with("!thank ") || cmd.starts_with("!thanks ") || cmd.starts_with("!thx ") {
-                            self.handle_thank(channel_message).await
-                        } else if cmd.starts_with("!thanked ") {
-                            self.handle_thanked(channel_message).await
-                        } else if cmd.starts_with("!grateful ") {
-                            self.handle_grateful(channel_message).await
-                        }
-                    }
-                }
-            }
+    async fn channel_command(&self, channel_message: &ChannelMessage, command: &CommandInstance) {
+        if command.name == "thank" || command.name == "thanks" || command.name == "thx" {
+            self.handle_thank(channel_message, command).await
+        } else if command.name == "thanked" {
+            self.handle_thanked(channel_message, command).await
+        } else if command.name == "grateful" {
+            self.handle_grateful(channel_message, command).await
+        } else if command.name == "topthanked" {
+            self.handle_topthanked(channel_message, command).await
+        } else if command.name == "topgrateful" {
+            self.handle_topgrateful(channel_message, command).await
         }
     }
 }
