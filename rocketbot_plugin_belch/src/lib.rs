@@ -12,7 +12,7 @@ pub struct BelchPlugin {
 }
 #[async_trait]
 impl RocketBotPlugin for BelchPlugin {
-    fn new(interface: Weak<dyn RocketBotInterface>, _config: JsonValue) -> Self {
+    async fn new(interface: Weak<dyn RocketBotInterface>, _config: JsonValue) -> Self {
         BelchPlugin {
             interface,
         }

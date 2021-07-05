@@ -37,7 +37,7 @@ pub trait RocketBotInterface : Send + Sync {
 pub trait RocketBotPlugin: Send + Sync {
     /// Instantiates this plugin and provides it with an interface to communicate with the bot (and
     /// the server to which it is connected).
-    fn new(interface: Weak<dyn RocketBotInterface>, config: JsonValue) -> Self where Self: Sized;
+    async fn new(interface: Weak<dyn RocketBotInterface>, config: JsonValue) -> Self where Self: Sized;
 
     /// Called if a textual message has been received in a channel.
     async fn channel_message(&self, _channel_message: &ChannelMessage) {}

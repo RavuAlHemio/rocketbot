@@ -12,7 +12,7 @@ pub struct ConfigUserAliasPlugin {
 }
 #[async_trait]
 impl RocketBotPlugin for ConfigUserAliasPlugin {
-    fn new(_interface: Weak<dyn RocketBotInterface>, config: JsonValue) -> Self {
+    async fn new(_interface: Weak<dyn RocketBotInterface>, config: JsonValue) -> Self {
         let mut lowercase_alias_to_username = HashMap::new();
         for (key, val) in config["lowercase_alias_to_username"].entries() {
             lowercase_alias_to_username.insert(
