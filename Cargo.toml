@@ -1,9 +1,11 @@
 [workspace]
 members = [
     "rocketbot",
+    "rocketbot_geonames",
     "rocketbot_interface",
     "rocketbot_plugin_belch",
     "rocketbot_plugin_config_user_alias",
     "rocketbot_plugin_fortune",
     "rocketbot_plugin_thanks",
+    "rocketbot_plugin_weather",
 ]
