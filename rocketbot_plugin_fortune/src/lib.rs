@@ -140,6 +140,7 @@ impl RocketBotPlugin for FortunePlugin {
                             &channel_message.channel.name,
                             fortune,
                         ).await;
+                    break;
                 }
             }
         }
