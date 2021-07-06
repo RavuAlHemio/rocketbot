@@ -560,6 +560,11 @@ async fn handle_received(body: &JsonValue, mut state: &mut ConnectionState) {
         // we got a message! (probably)
 
         for message_json in body["fields"]["args"].members() {
+            if message_json.has_key("editedAt") {
+                // TODO: handle edited messages?
+                return;
+            }
+
             let channel_id = message_json["rid"].to_string();
             let channel_opt = {
                 let chandb_read = state.shared_state.subscribed_channels
