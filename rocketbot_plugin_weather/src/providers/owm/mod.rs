@@ -326,9 +326,9 @@ impl WeatherProvider for OpenWeatherMapProvider {
 
         if forecast.weather_states.len() > 0 {
             if ret.len() > 0 {
-                ret.push_str("; ");
+                ret.push_str("\n");
             }
-            ret.push_str("forecast: ");
+            ret.push_str("forecast:\n");
 
             let summarized = ForecastSummary::summarize_forecast(&forecast);
             let forecast_list: Vec<String> = summarized
@@ -343,10 +343,10 @@ impl WeatherProvider for OpenWeatherMapProvider {
                     kelvin_to_celsius(fs.max_temp_kelvin),
                 ))
                 .collect();
-            let forecast_string = forecast_list.join(", ");
+            let forecast_string = forecast_list.join("\n");
             ret.push_str(&forecast_string);
         }
 
-        format!("OpenWeatherMap: {}", ret)
+        format!("OpenWeatherMap:\n{}", ret)
     }
 }
