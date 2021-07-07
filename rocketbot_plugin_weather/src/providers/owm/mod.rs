@@ -7,6 +7,7 @@ use async_trait::async_trait;
 use bytes::Buf;
 use chrono::{Date, Datelike, DateTime, Duration, TimeZone, Utc, Weekday};
 use json::JsonValue;
+use log::error;
 use once_cell::sync::Lazy;
 use regex::Regex;
 use reqwest;
@@ -21,6 +22,7 @@ use crate::providers::owm::model::{Forecast, StationReading, WeatherState};
 static WEATHER_STATION_REGEX: Lazy<Regex> = Lazy::new(|| Regex::new(
     "^owm:ws:(?P<id>[0-9a-f]+)$"
 ).expect("failed to compile regex"));
+const ERROR_TEXT: &'static str = "An error occurred.";
 
 
 fn kelvin_to_celsius(kelvin: f64) -> f64 {
@@ -209,7 +211,10 @@ impl OpenWeatherMapProvider {
         );
         let mut readings: Vec<StationReading> = match self.get_and_populate_json(&weather_uri).await {
             Ok(cw) => cw,
-            Err(e) => return e.to_string(),
+            Err(e) => {
+                error!("error obtaining weather station readings: {}", e);
+                return ERROR_TEXT.to_owned();
+            },
         };
 
         if readings.len() == 0 {
@@ -289,7 +294,10 @@ impl WeatherProvider for OpenWeatherMapProvider {
         );
         let current_weather: WeatherState = match self.get_and_populate_json(&weather_uri).await {
             Ok(cw) => cw,
-            Err(e) => return e.to_string(),
+            Err(e) => {
+                error!("failed to obtain weather for lat={} lon={}: {}", latitude_deg_north, longitude_deg_east, e);
+                return ERROR_TEXT.to_owned();
+            },
         };
 
         let forecast_uri = format!(
@@ -298,7 +306,10 @@ impl WeatherProvider for OpenWeatherMapProvider {
         );
         let forecast: Forecast = match self.get_and_populate_json(&forecast_uri).await {
             Ok(f) => f,
-            Err(e) => return e.to_string(),
+            Err(e) => {
+                error!("failed to obtain forecast for lat={} lon={}: {}", latitude_deg_north, longitude_deg_east, e);
+                return ERROR_TEXT.to_owned();
+            },
         };
 
         let mut ret = String::new();
