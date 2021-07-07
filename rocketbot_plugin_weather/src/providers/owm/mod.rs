@@ -334,7 +334,7 @@ impl WeatherProvider for OpenWeatherMapProvider {
             let forecast_list: Vec<String> = summarized
                 .iter()
                 .map(|(d, fs)| format!(
-                    "{} {}.{:02}. {} {:.1}\u{2013}{:.1} \u{B0}C",
+                    "*{}* {}.{:02}. {} {:.1}\u{2013}{:.1} \u{B0}C",
                     weekday_to_short(d.weekday()),
                     d.day(),
                     d.month(),
