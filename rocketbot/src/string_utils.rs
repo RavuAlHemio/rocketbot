@@ -78,10 +78,7 @@ impl<'a> std::iter::Iterator for SplitWhitespace<'a> {
 }
 
 pub(crate) fn split_whitespace<'a>(string: &'a str) -> SplitWhitespace<'a> {
-    SplitWhitespace {
-        input_string: string,
-        current_index: 0,
-    }
+    SplitWhitespace::new(string, 0)
 }
 
 #[cfg(test)]
