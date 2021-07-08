@@ -12,7 +12,7 @@ jobs:
       - name: install cargo
         run: pacman -S --needed --noconfirm cargo
       - name: update version
-        run: "sed -i -e 's/{{VERSION}}/`git rev-parse HEAD`/' rocketbot_plugin_version/src/lib.rs"
+        run: 'sed -i -e "s/{{VERSION}}/`git rev-parse HEAD`/" rocketbot_plugin_version/src/lib.rs'
       - name: run debug build
         run: cargo build
       - name: run debug tests
@@ -33,7 +33,7 @@ jobs:
       - name: install cargo
         run: pacman -S --needed --noconfirm cargo
       - name: update version
-        run: "sed -i -e 's/{{VERSION}}/`git rev-parse HEAD`/' rocketbot_plugin_version/src/lib.rs"
+        run: 'sed -i -e "s/{{VERSION}}/`git rev-parse HEAD`/" rocketbot_plugin_version/src/lib.rs'
       - name: run release build
         run: cargo build --release
       - name: run release tests
