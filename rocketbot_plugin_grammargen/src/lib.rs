@@ -1,5 +1,5 @@
-mod grammar;
-mod parsing;
+pub mod grammar;
+pub mod parsing;
 
 
 use std::collections::HashMap;

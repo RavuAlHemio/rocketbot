@@ -1,5 +1,5 @@
 use std::collections::{HashMap, HashSet};
-use std::fmt::Debug;
+use std::fmt::{self, Debug};
 use std::sync::Arc;
 
 use async_trait::async_trait;
@@ -11,7 +11,7 @@ use tokio::sync::Mutex;
 
 
 #[derive(Debug)]
-pub(crate) struct GeneratorState {
+pub struct GeneratorState {
     pub rulebook: Rulebook,
     pub conditions: HashSet<String>,
     pub rng: Arc<Mutex<StdRng>>,
@@ -42,13 +42,35 @@ impl Clone for GeneratorState {
     }
 }
 
+#[derive(Clone, Debug, Eq, Hash, PartialEq)]
+pub enum SoundnessError {
+    UnresolvedReference(String),
+    NoAlternatives,
+    ArgumentCountMismatch(String, usize, usize),
+}
+impl fmt::Display for SoundnessError {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match self {
+            SoundnessError::UnresolvedReference(identifier)
+                => write!(f, "unresolved reference to {:?}", identifier),
+            SoundnessError::NoAlternatives
+                => write!(f, "production is left with zero alternatives"),
+            SoundnessError::ArgumentCountMismatch(production, expected_args, got_args)
+                => write!(f, "call to production {:?} (which expects {} arguments) with {} arguments", production, expected_args, got_args),
+        }
+    }
+}
+impl std::error::Error for SoundnessError {
+}
+
 #[async_trait]
-pub(crate) trait TextGenerator : Debug + Sync + Send {
+pub trait TextGenerator : Debug + Sync + Send {
     async fn generate(&self, state: &GeneratorState) -> Option<String>;
+    async fn verify_soundness(&self, state: &GeneratorState) -> Result<(), SoundnessError>;
 }
 
 #[derive(Clone, Debug, Eq, PartialEq)]
-pub(crate) struct Rulebook {
+pub struct Rulebook {
     pub rule_definitions: HashMap<String, RuleDefinition>,
 }
 impl Rulebook {
@@ -62,7 +84,7 @@ impl Rulebook {
 }
 
 #[derive(Clone, Debug, Eq, Hash, PartialEq)]
-pub(crate) struct RuleDefinition {
+pub struct RuleDefinition {
     pub name: String,
     pub param_names: Vec<String>,
     pub top_production: Production,
@@ -82,7 +104,7 @@ impl RuleDefinition {
 }
 
 #[derive(Clone, Debug, Eq, Hash, PartialEq)]
-pub(crate) struct Production {
+pub struct Production {
     pub alternatives: Vec<Alternative>,
 }
 impl Production {
@@ -100,7 +122,7 @@ impl TextGenerator for Production {
         let my_alternatives: Vec<&Alternative> = self.alternatives
             .iter()
             .filter(|alt| alt.conditions.iter().all(|cond|
-                state.conditions.contains(&cond.identifier) == cond.negated
+                state.conditions.contains(&cond.identifier) != cond.negated
             ))
             .collect();
         let total_weight: BigUint = my_alternatives
@@ -130,10 +152,29 @@ impl TextGenerator for Production {
 
         unreachable!();
     }
+
+    async fn verify_soundness(&self, state: &GeneratorState) -> Result<(), SoundnessError> {
+        let my_alternatives: Vec<&Alternative> = self.alternatives
+            .iter()
+            .filter(|alt| alt.conditions.iter().all(|cond|
+                state.conditions.contains(&cond.identifier) != cond.negated
+            ))
+            .collect();
+        if my_alternatives.len() == 0 {
+            Err(SoundnessError::NoAlternatives)
+        } else {
+            for alt in my_alternatives {
+                if let Err(e) = alt.verify_soundness(&state).await {
+                    return Err(e);
+                }
+            }
+            Ok(())
+        }
+    }
 }
 
 #[derive(Clone, Debug, Eq, Hash, PartialEq)]
-pub(crate) struct Alternative {
+pub struct Alternative {
     pub conditions: Vec<Condition>,
     pub weight: BigUint,
     pub sequence: Vec<SequenceElement>,
@@ -165,10 +206,19 @@ impl TextGenerator for Alternative {
         }
         Some(ret)
     }
+
+    async fn verify_soundness(&self, state: &GeneratorState) -> Result<(), SoundnessError> {
+        for element in &self.sequence {
+            if let Err(e) = element.verify_soundness(&state).await {
+                return Err(e);
+            }
+        }
+        Ok(())
+    }
 }
 
 #[derive(Clone, Debug, Eq, Hash, PartialEq)]
-pub(crate) struct Condition {
+pub struct Condition {
     pub negated: bool,
     pub identifier: String,
 }
@@ -185,14 +235,14 @@ impl Condition {
 }
 
 #[derive(Clone, Debug, Eq, Hash, PartialEq)]
-pub(crate) enum SequenceElementCount {
+pub enum SequenceElementCount {
     One,
     OneOrMore,
     ZeroOrMore,
 }
 
 #[derive(Clone, Debug, Eq, Hash, PartialEq)]
-pub(crate) struct SequenceElement {
+pub struct SequenceElement {
     pub element: SingleSequenceElement,
     pub count: SequenceElementCount,
 }
@@ -244,10 +294,14 @@ impl TextGenerator for SequenceElement {
 
         Some(ret)
     }
+
+    async fn verify_soundness(&self, state: &GeneratorState) -> Result<(), SoundnessError> {
+        self.element.verify_soundness(&state).await
+    }
 }
 
 #[derive(Clone, Debug, Eq, Hash, PartialEq)]
-pub(crate) enum SingleSequenceElement {
+pub enum SingleSequenceElement {
     Parenthesized {
         production: Production,
      },
@@ -349,6 +403,50 @@ impl TextGenerator for SingleSequenceElement {
             SingleSequenceElement::String { value } => {
                 // finally, something simple to generate :-D
                 Some(value.clone())
+            },
+        }
+    }
+
+    async fn verify_soundness(&self, state: &GeneratorState) -> Result<(), SoundnessError> {
+        match self {
+            SingleSequenceElement::Parenthesized { production } => {
+                production.verify_soundness(&state).await
+            },
+            SingleSequenceElement::Optional { production, .. } => {
+                production.verify_soundness(&state).await
+            },
+            SingleSequenceElement::Call { identifier, arguments } => {
+                if let Some(rule) = state.rulebook.rule_definitions.get(identifier) {
+                    if rule.param_names.len() != arguments.len() {
+                        return Err(SoundnessError::ArgumentCountMismatch(
+                            identifier.clone(),
+                            rule.param_names.len(),
+                            arguments.len(),
+                        ));
+                    }
+
+                    let mut sub_state = state.clone();
+                    for (param_name, arg) in rule.param_names.iter().zip(arguments.iter()) {
+                        sub_state.rulebook.rule_definitions.insert(
+                            param_name.clone(),
+                            RuleDefinition::new(
+                                param_name.clone(),
+                                Vec::new(),
+                                arg.clone(),
+                            ),
+                        );
+                    }
+
+                    // recurse
+                    rule.top_production.verify_soundness(&sub_state).await
+                } else {
+                    // rule definition not found
+                    Err(SoundnessError::UnresolvedReference(identifier.clone()))
+                }
+            },
+            SingleSequenceElement::String { .. } => {
+                // constant strings are always sound
+                Ok(())
             },
         }
     }

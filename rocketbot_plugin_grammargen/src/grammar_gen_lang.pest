@@ -15,16 +15,18 @@ COMMENT =
 comment_to_eol = _{ !NEWLINE ~ ANY }
 multiline_comment_content = _{ !"*/" ~ ANY }
 
-escaped_string =
-    @{ "\""
-    ~   ( "\\\""
-        | "\\\\"
-        | "\\u" ~ hexd ~ hexd ~ hexd ~ hexd
-        | "\\U" ~ hexd ~ hexd ~ hexd ~ hexd ~ hexd ~ hexd ~ hexd ~ hexd
-        | (!("\"" | "\\") ~ ANY)
-        )*
-    ~ "\""
+escaped_string = ${ "\"" ~ escaped_string_char* ~ "\"" }
+escaped_string_char =
+    ${ escaped_backslash_or_quote
+    | hex_escape
+    | other_string_char
     }
+escaped_backslash_or_quote = @{ "\\\\" | "\\\"" }
+hex_escape =
+    @{ "\\u" ~ hexd ~ hexd ~ hexd ~ hexd
+    | "\\U" ~ hexd ~ hexd ~ hexd ~ hexd ~ hexd ~ hexd ~ hexd ~ hexd
+    }
+other_string_char = @{ (!("\"" | "\\") ~ ANY) }
 
 identifier =
     @{ ('A'..'Z' | 'a'..'z' | "_")
@@ -47,11 +49,8 @@ condition = { "!" ~ negated? ~ identifier }
 negated = { "!" }
 weight = { "<" ~ number ~ ">" }
 
-sequence_elem =
-    { single_sequence_elem ~ "*"
-    | single_sequence_elem ~ "+"
-    | single_sequence_elem
-    }
+sequence_elem = { single_sequence_elem ~ kleene? }
+kleene = { "*" | "+" }
 
 single_sequence_elem =
     { parenthesized

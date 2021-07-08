@@ -14,3 +14,6 @@ pest_derive = { version = "2.1" }
 rand = { version = "0.8" }
 rocketbot_interface = { path = "../rocketbot_interface" }
 tokio = { version = "1.7", features = ["sync"] }
+
+[dev-dependencies]
+tokio = { version = "1.7", features = ["macros", "rt-multi-thread"] }
