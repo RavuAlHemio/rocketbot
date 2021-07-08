@@ -7,6 +7,7 @@ use std::sync::Weak;
 
 use async_trait::async_trait;
 use json::JsonValue;
+use log::warn;
 use once_cell::sync::Lazy;
 use regex::Regex;
 use rocketbot_geonames::GeoNamesClient;
@@ -90,6 +91,7 @@ impl WeatherPlugin {
             // find the location using GeoNames (Wunderground's geocoding is really bad)
             let loc = match self.geonames_client.get_first_geo_name(&location).await {
                 Err(e) => {
+                    warn!("GeoNames error: {}", e);
                     interface.send_channel_message(
                         &channel_message.channel.name,
                         &format!(
