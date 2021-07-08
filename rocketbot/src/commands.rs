@@ -172,7 +172,12 @@ fn handle_option(
     command_name: &str,
     raw_message: &str,
 ) -> OptionHandlingResult {
-    if command.flags.contains(option_name) {
+    let is_flag = command.flags
+        .as_ref()
+        .map(|cf| cf.contains(option_name))
+        .unwrap_or(false);
+
+    if is_flag {
         // flag found!
         set_flags.insert(option_name.to_owned());
         OptionHandlingResult::Flag
@@ -181,6 +186,12 @@ fn handle_option(
         let option_type = match command.options.get(option_name) {
             Some(ot) => ot,
             None => {
+                if command.flags.is_none() {
+                    // command allows custom flags; it's one of those
+                    set_flags.insert(option_name.to_owned());
+                    return OptionHandlingResult::Flag;
+                }
+
                 warn!("unknown option {:?} passed to {}", option_name, command_name);
                 debug!("command line is {:?}", raw_message);
                 return OptionHandlingResult::Failure;
@@ -256,7 +267,7 @@ mod tests {
     fn test_empty() {
         let command = CommandDefinition::new(
             "bloop".into(),
-            HashSet::new(),
+            Some(HashSet::new()),
             HashMap::new(),
             0,
         );
@@ -276,7 +287,7 @@ mod tests {
     fn test_rest() {
         let command = CommandDefinition::new(
             "bloop".into(),
-            HashSet::new(),
+            Some(HashSet::new()),
             HashMap::new(),
             0,
         );
@@ -296,7 +307,7 @@ mod tests {
     fn test_single_arg() {
         let command = CommandDefinition::new(
             "bloop".into(),
-            HashSet::new(),
+            Some(HashSet::new()),
             HashMap::new(),
             1,
         );

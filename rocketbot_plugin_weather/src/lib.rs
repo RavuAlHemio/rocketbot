@@ -157,7 +157,7 @@ impl RocketBotPlugin for WeatherPlugin {
 
         let weather_command = CommandDefinition::new(
             "weather".to_owned(),
-            HashSet::new(),
+            Some(HashSet::new()),
             HashMap::new(),
             0,
         );

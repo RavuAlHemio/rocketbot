@@ -12,14 +12,16 @@ pub enum CommandValueType {
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub struct CommandDefinition {
     pub name: String,
-    pub flags: HashSet<String>,
+    pub flags: Option<HashSet<String>>,
     pub options: HashMap<String, CommandValueType>,
     pub arg_count: usize,
 }
 impl CommandDefinition {
+    /// Pass `None` to `flags` to receive any and all flags specified by the user. Pass a `Some`
+    /// value with an empty `HashSet<String>` to declare that the command does not take any flags.
     pub fn new(
         name: String,
-        flags: HashSet<String>,
+        flags: Option<HashSet<String>>,
         options: HashMap<String, CommandValueType>,
         arg_count: usize,
     ) -> CommandDefinition {
