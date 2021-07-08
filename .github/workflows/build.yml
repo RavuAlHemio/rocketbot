@@ -9,8 +9,8 @@ jobs:
         uses: actions/checkout@v2
       - name: update packages
         run: pacman -Syu --noconfirm
-      - name: install cargo
-        run: pacman -S --needed --noconfirm cargo
+      - name: install packages
+        run: pacman -S --needed --noconfirm cargo git
       - name: update version
         run: 'sed -i -e "s/{{VERSION}}/`git rev-parse HEAD`/" rocketbot_plugin_version/src/lib.rs'
       - name: run debug build
@@ -30,8 +30,8 @@ jobs:
         uses: actions/checkout@v2
       - name: update packages
         run: pacman -Syu --noconfirm
-      - name: install cargo
-        run: pacman -S --needed --noconfirm cargo
+      - name: install packages
+        run: pacman -S --needed --noconfirm cargo git
       - name: update version
         run: 'sed -i -e "s/{{VERSION}}/`git rev-parse HEAD`/" rocketbot_plugin_version/src/lib.rs'
       - name: run release build
