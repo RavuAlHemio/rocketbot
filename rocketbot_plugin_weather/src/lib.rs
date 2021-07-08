@@ -92,7 +92,10 @@ impl WeatherPlugin {
                 Err(e) => {
                     interface.send_channel_message(
                         &channel_message.channel.name,
-                        &format!("@{} GeoNames cannot find that location!", e),
+                        &format!(
+                            "@{} GeoNames cannot find that location!",
+                            channel_message.message.sender.username,
+                        ),
                     ).await;
                     return;
                 },
