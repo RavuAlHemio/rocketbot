@@ -28,6 +28,8 @@ pub(crate) async fn load_plugins(iface: Weak<dyn RocketBotInterface>) -> Vec<Box
                 Box::new(rocketbot_plugin_config_user_alias::ConfigUserAliasPlugin::new(iface_weak, inner_config).await)
             } else if plugin_config.name == "fortune" {
                 Box::new(rocketbot_plugin_fortune::FortunePlugin::new(iface_weak, inner_config).await)
+            } else if plugin_config.name == "grammargen" {
+                Box::new(rocketbot_plugin_grammargen::GrammarGenPlugin::new(iface_weak, inner_config).await)
             } else if plugin_config.name == "thanks" {
                 Box::new(rocketbot_plugin_thanks::ThanksPlugin::new(iface_weak, inner_config).await)
             } else if plugin_config.name == "version" {

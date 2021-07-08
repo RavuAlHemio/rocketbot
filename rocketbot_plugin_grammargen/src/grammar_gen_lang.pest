@@ -1,0 +1,66 @@
+WHITESPACE =
+    _{ " " // Space
+    | "\u{09}" // Tab
+    | "\u{0A}" // New Line
+    | "\u{0D}" // Carriage Return
+    | "\u{0C}" // Form Feed
+    | "\u{0B}" // Vertical Tab
+    }
+
+COMMENT =
+    _{ "//" ~ comment_to_eol*
+    | "/*" ~ multiline_comment_content* ~ "*/"
+    }
+
+comment_to_eol = _{ !NEWLINE ~ ANY }
+multiline_comment_content = _{ !"*/" ~ ANY }
+
+escaped_string =
+    @{ "\""
+    ~   ( "\\\""
+        | "\\\\"
+        | "\\u" ~ hexd ~ hexd ~ hexd ~ hexd
+        | "\\U" ~ hexd ~ hexd ~ hexd ~ hexd ~ hexd ~ hexd ~ hexd ~ hexd
+        | (!("\"" | "\\") ~ ANY)
+        )*
+    ~ "\""
+    }
+
+identifier =
+    @{ ('A'..'Z' | 'a'..'z' | "_")
+    ~ ('A'..'Z' | 'a'..'z' | '0'..'9' | "_")*
+    }
+
+number = { ASCII_DIGIT+ }
+hexd = { ASCII_HEX_DIGIT }
+
+ggrulebook = { SOI ~ ruledef+ ~ EOI }
+ruledef = { paramrule | ggrule }
+
+paramrule = { identifier ~ "{" ~ identifier ~ ("," ~ identifier)* ~ "}" ~ ":" ~ ggproduction ~ ";" }
+ggrule = { identifier ~ ":" ~ ggproduction ~ ";" }
+ggproduction = { alternative ~ ("|" ~ alternative)* }
+
+alternative = { condition* ~ weight? ~ sequence_elem+ }
+
+condition = { "!" ~ negated? ~ identifier }
+negated = { "!" }
+weight = { "<" ~ number ~ ">" }
+
+sequence_elem =
+    { single_sequence_elem ~ "*"
+    | single_sequence_elem ~ "+"
+    | single_sequence_elem
+    }
+
+single_sequence_elem =
+    { parenthesized
+    | optional
+    | call_params
+    | identifier
+    | escaped_string
+    }
+
+parenthesized = { "(" ~ ggproduction ~ ")" }
+optional = { "[" ~ weight? ~ ggproduction ~ "]" }
+call_params = { identifier ~ "{" ~ ggproduction ~ ("," ~ ggproduction)* ~ "}" }
