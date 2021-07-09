@@ -61,7 +61,7 @@ impl ChannelDatabase {
         // make sure we either don't know the channel at all or we know it fully
         // (ensure there is no pair of channels with different IDs but the same name)
         let know_id = self.by_id.contains_key(&channel.id);
-        let know_name = self.by_name.contains_key(&channel.id);
+        let know_name = self.by_name.contains_key(&channel.name);
         if know_id != know_name {
             panic!(
                 "attempting to register duplicate channel with ID {:?} (already known? {}) and name {:?} (already known? {})",
