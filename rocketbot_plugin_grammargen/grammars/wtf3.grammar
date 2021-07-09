@@ -1,0 +1,663 @@
+// START SYMBOL
+
+wtf3
+    : "Ich " verb1construct ", " opt_interjection conjunction " " chosen_person " " verb3construct "."
+    ;
+
+// PERSONS
+
+person : __IRC_nick ;
+chosen_person : __IRC_chosen_nick;
+
+// VERBS
+
+verb1construct
+    : !!opt_B   <3> verb1construct_builtin
+    | !opt_g    <1> verb1construct_wg
+    ;
+
+verb1construct_builtin
+    : <6> verb1_simple
+    | <1> verb1_simple_reqadverb
+    | <6> verb1_simple_movement
+    | <17> verb1_self
+    | <7> verb1_self_movement
+    | <42> verb1_object_simple
+    | <1> verb1_object_movement
+    | <6> verb1_object_split
+    | <5> verb1_object_complex
+    ;
+
+verb1construct_wg
+    :   wg_verb1
+        [ " " noun4 ]
+        [ " " adverb ]
+        [ " " adverbial ]
+    ;
+
+verb1_simple
+    :   ( "rede"
+        | "stinke"
+        | "spamme"
+        | "sitze"
+        | "liege"
+        | "singe"
+        )
+        [ " " adverb ]
+        [ " " adverbial ]
+    ;
+
+verb1_simple_reqadverb
+    :   ( "klinge"
+        )
+        " " adverb
+        [ " " adverbial ]
+    ;
+
+verb1_simple_movement
+    :   ( "wichse"
+        | "gehe"
+        | "laufe"
+        | "fliege"
+        | "scheiße"
+        | "niese"
+        | "purzle"
+        )
+        [ " " adverb ]
+        [ " " movement_adverbial ]
+    ;
+
+verb1_self
+    :   ( "sehe"
+        | "beschreibe"
+        | "putze"
+        | "schlage"
+        | "langweile"
+        | "erschrecke"
+        | "entspanne"
+        | "animiere"
+        | "erschieße"
+        | "beschimpfe"
+        | "fotografiere"
+        | "interviewe"
+        | "verkaufe"
+        | "wiederhole"
+        | "hinterfrage"
+        | "befeuchte"
+        | "trockne"
+        )
+        " mich"
+        [ " " adverb ]
+        [ " " adverbial ]
+    ;
+
+verb1_self_movement
+    :   ( "entspanne"
+        )
+        " mich"
+        [ " " adverb ]
+        [ " " movement_adverbial ]
+    ;
+
+verb1_object_simple
+    : <40>  ( "beschreibe"
+            | "putze"
+            | "erschrecke"
+            | "lese"
+            | "esse"
+            | "verunstalte"
+            | "programmiere"
+            | "reibe"
+            | "animiere"
+            | "erschieße"
+            | "highlighte"
+            | "beschimpfe"
+            | "fotografiere"
+            | "kaufe"
+            | "verkaufe"
+            | "bastle"
+            | "kategorisiere"
+            | "hinterfrage"
+            | "interviewe"
+            | "befeuchte"
+            | "trockne"
+            | "organisiere"
+            | "verherrliche"
+            | "torpediere"
+            | "verwarne"
+            | "verfärbe"
+            | "digitalisiere"
+            | "verschwende"
+            | "kritisiere"
+            | "beamtshandle"
+            | [ "de" ] "komprimiere"
+            | "verheize"
+            | "verdecke"
+            | "entlause"
+            | "entkräfte"
+            | "zerbreche"
+            | "entlohne"
+            | "belege"
+            | "zerknülle"
+            | "knete"
+            )
+            " "
+            noun4
+            [ " " adverb ]
+            [ " " adverbial ]
+    | <2>   ( "rede"
+            | "schreibe"
+            )
+            [ " " adverb ]
+            [ " " adverbial ]
+            ( " über " noun4
+            | " von " noun3
+            )
+    ;
+
+verb1_object_movement
+    :   ( "schlage"
+        )
+        " "
+        noun4
+        [ " " adverb ]
+        [ " " movement_adverbial ]
+    ;
+
+verb1_object_split
+    : <3>   ( "schaue"
+            | "zünde"
+            | "locke"
+            )
+            " "
+            noun4
+            [ " " adverb ]
+            [ " " adverbial ]
+            " an"
+    | <2>   ( "schule"
+            | "packe"
+            )
+            " "
+            noun4
+            [ " " adverb ]
+            [ " " adverbial ]
+            " ein"
+    | <1>   ( "spiele"
+            )
+            " "
+            noun4
+            [ " " adverb ]
+            [ " " adverbial ]
+            " herunter"
+    ;
+
+verb1_object_complex
+    :   ( "verwechsle"
+        | "betrüge"
+        )
+        [ " " adverb ]
+        [ " " adverbial ]
+        " "
+        noun4
+        " mit "
+        noun3
+    |   "äußere mich"
+        [ " " adverb ]
+        [ " " adverbial ]
+        (   " zu "
+            noun3
+        |   " über "
+            noun4
+        )
+    |   ( "spiele"
+        | "schlafe"
+        )
+        [ " " adverb ]
+        [ " " adverbial ]
+        " mit "
+        noun3
+    ;
+
+verb3construct
+    : !!opt_B   <3> verb3construct_builtin
+    | !opt_g    <1> verb3construct_wg
+    ;
+
+verb3construct_builtin
+    : <6> verb3_simple
+    | <1> verb3_simple_reqadverb
+    | <8> verb3_simple_movement
+    | <16> verb3_self
+    | <1> verb3_self_movement
+    | <48> verb3_object_simple
+    | <1> verb3_object_movement
+    | <5> verb3_object_complex
+    ;
+
+verb3construct_wg
+    :   [ adverb " " ]
+        [ adverbial " " ]
+        [ noun4 " " ]
+        wg_verb3
+    ;
+
+verb3_simple
+    :   [ adverb " " ]
+        [ adverbial " " ]
+        ( "redet"
+        | "stinkt"
+        | "spammt"
+        | "sitzt"
+        | "liegt"
+        | "singt"
+        )
+    ;
+
+verb3_simple_reqadverb
+    :   adverb " "
+        [ adverbial " " ]
+        ( "klingt"
+        )
+    ;
+
+verb3_simple_movement
+    :   [ adverb " " ]
+        [ movement_adverbial " " ]
+        ( "wichst"
+        | "geht"
+        | "läuft"
+        | "fliegt"
+        | "scheißt"
+        | "pinkelt"
+        | "niest"
+        | "purzelt"
+        )
+    ;
+
+verb3_self
+    :   "sich "
+        [ adverb " " ]
+        [ adverbial " " ]
+        ( "sieht"
+        | "beschreibt"
+        | "putzt"
+        | "schlägt"
+        | "langweilt"
+        | "erschreckt"
+        | "animiert"
+        | "erschießt"
+        | "beschimpft"
+        | "fotografiert"
+        | "verkauft"
+        | "wiederholt"
+        | "hinterfragt"
+        | "interviewt"
+        | "befeuchtet"
+        | "trocknet"
+        )
+    ;
+
+verb3_self_movement
+    :   "sich "
+        [ adverb " " ]
+        [ movement_adverbial " " ]
+        ( "entspannt"
+        )
+    ;
+
+verb3_object_simple
+    : <46>  [ adverb " " ]
+            [ adverbial " " ]
+            noun4
+            " "
+            ( "beschreibt"
+            | "putzt"
+            | "erschreckt"
+            | "liest"
+            | "isst"
+            | "verunstaltet"
+            | "programmiert"
+            | "reibt"
+            | "animiert"
+            | "erschießt"
+            | "anschaut"
+            | "highlightet"
+            | "beschimpft"
+            | "fotografiert"
+            | "kauft"
+            | "verkauft"
+            | "bastelt"
+            | "kategorisiert"
+            | "hinterfragt"
+            | "einschult"
+            | "interviewt"
+            | "einpackt"
+            | "befeuchtet"
+            | "trocknet"
+            | "organisiert"
+            | "verherrlicht"
+            | "torpediert"
+            | "verwarnt"
+            | "verfärbt"
+            | "digitalisiert"
+            | "anzündet"
+            | "verschwendet"
+            | "kritisiert"
+            | "beamtshandelt"
+            | [ "de" ] "komprimiert"
+            | "verheizt"
+            | "verdeckt"
+            | "entlaust"
+            | "entkräftet"
+            | "zerbricht"
+            | "entlohnt"
+            | "belegt"
+            | "zerknüllt"
+            | "knetet"
+            | "herunterspielt"
+            | "anlockt"
+            )
+    | <2>   [ adverb " " ]
+            [ adverbial " " ]
+            ( "von " noun3
+            | "über " noun4
+            )
+            " "
+            ( "schreibt"
+            | "redet"
+            )
+    ;
+
+verb3_object_movement
+    :   [ adverb " " ]
+        noun4
+        " "
+        [ movement_adverbial " " ]
+        ( "schlägt"
+        )
+    ;
+
+verb3_object_complex
+    :   [ adverb " " ]
+        [ adverbial " " ]
+        noun4
+        " mit "
+        noun3
+        ( " verwechselt"
+        | " betrügt"
+        )
+    |   "sich "
+        [ adverb " " ]
+        [ adverbial " " ]
+        (   "zu "
+            noun3
+        |   "über "
+            noun4
+        )
+        " äußert"
+    |   [ adverb " " ]
+        [ adverbial " " ]
+        "mit "
+        noun3
+        ( " spielt"
+        | " schläft"
+        )
+    ;
+
+// ARTICLES AND NOUNS
+
+art_m1 : "der" | "ein" ;
+art_m3 : "dem" | "einem" ;
+art_m4 : "den" | "einen" ;
+
+art_f1 : "die" | "eine" ;
+art_f3 : "der" | "einer" ;
+art_f4 : "die" | "eine" ;
+
+art_n1 : "das" | "ein" ;
+art_n3 : "dem" | "einem" ;
+art_n4 : "das" | "ein" ;
+
+noun1   : !!opt_B   noun{art_m1, art_f1, art_n1}
+        | !opt_g    wg_noun{art_m1, art_f1, art_n1}
+        ;
+noun3   : !!opt_B   noun{art_m3, art_f3, art_n3}
+        | !opt_g    wg_noun{art_m3, art_f3, art_n3}
+        ;
+noun4   : !!opt_B   noun{art_m4, art_f4, art_n4}
+        | !opt_g    wg_noun{art_m4, art_f4, art_n4}
+        ;
+
+noun{art_m, art_f, art_n}
+    : art_m " ROFL-Copter"
+    | art_n " Katzenzüchtungsbuch"
+    | art_f " Schultasche"
+    | ("Slashdot" | "YouPorn" | "Wikipedia")
+    | art_f " Zahnbürste"
+    | art_f " Klopapierrolle"
+    | art_n " Pferd"
+    | art_f " " ("Lehr" | "Auto" | "Flaschenpost") "-Industrie"
+    | art_f " " ("Viagra" | "Cialis") "-Pille"
+    | art_f " Cola-Dose"
+    | art_f " Semmel"
+    | art_n " Handy"
+    | art_m " Saft"
+    | art_f " Uhr"
+    | art_n " Fenster"
+    | art_f " " ("Kamera" | "Webcam")
+    | (art_m | art_n) " Teller"
+    | art_f " " ("Uni Wien" | "TU Wien")
+    | art_n " Topic"
+    | art_m " Clown"
+    | art_m " Drucker"
+    | art_m " Vogerlsalat"
+    | art_f " Pizza-Porn-Seite"
+    | art_m " " ("Installateuer" | "Monteur" | "Programmierer")
+    | art_n " " ("Buch" | "Bilderbuch" | "Linux-Buch" | "GIMP-Buch" | "HMTL-Buch" | "CSS-Buch" | "Lotus-Notes-Buch") // HMTL [sic]
+    | art_f " Steckdose"
+    | "Substi"
+    | art_m " Substi-Ersatz"
+    | art_n " Deo"
+    | (art_f | art_n) " Cola"
+    | art_n " Papier"
+    | art_f " Präsentation"
+    | art_f " Katze"
+    | "Schmierfett"
+    | art_m " " ("Fleck" | "Ketchup-Fleck" | "Fett-Fleck")
+    | art_f " Lesbe"
+    | art_f " Teetasse"
+    | art_m " Kugelschreiber"
+    | art_m " Interpreter"
+    | art_m " Channel"
+    | art_m " Tisch"
+    | art_m " Baum"
+    | art_f " Gerichtsverhandlung"
+    | art_m " Roboter"
+    | art_f " Waschmaschine"
+    // custom nouns:
+    | art_m " Penis"
+    | art_m " Handwerker"
+    | art_m " Schreßer"
+    | "Ravus Bart"
+    | art_m " Hund"
+    | art_f " Kaffeetasse"
+    | art_n " " ("Kaffee" | "Tee") "häferl"
+    | art_m " Bierkrug"
+    | art_m " " ("Eimer" | "Kübel")
+    | art_m " Heizkörper"
+    | art_f " Fußbodenheizung"
+    | art_f " Wäsche"
+    | art_m " Wäscheständer"
+    | art_m " " ("Stuhl" | "Sessel")
+    | art_f " Couch"
+    | art_n " Sofa"
+    | art_f " Leiter"
+    | art_f " Nähmaschine"
+    | art_f " Ampel"
+    | art_f " Limonadendose"
+    | art_f " Pflanze"
+    | art_m " Polster"
+    | art_f " Decke"
+    | art_n " Leintuch"
+    | art_f " Hose"
+    | art_f " Unterhose"
+    | art_n " Leiberl"
+    | art_n " Hemd"
+    | art_m " Pullover"
+    | art_f " Jacke"
+    | art_m " Schuh"
+    | art_f " Wiederholung"
+    | art_n " " ("Ladegerät" | "Netzteil")
+    | art_m " " ("Computer" | "Laptop")
+    | art_m " " ("Schrank" | "Kasten")
+    | art_m " " ("Stand" | "Hand") "mixer"
+    | art_f " " ( "Wohnzimmer" | "Esszimmer" | "Küchen" | "Vorzimmer" | "Badezimmer" | "Abstellraum"
+                | "Aufzugs" | "Gang" | "Toiletten" | "Dusch" | "Steh" | "Balkon"
+                )
+                "lampe"
+    | art_f " Tür"
+    | art_m " Brandmelder"
+    | art_m " Aufzug"
+    | art_m " Betonmischer"
+    | art_m " Kran"
+    | art_m " Bagger"
+    | art_m " Container"
+    | art_n " Notlicht"
+    | art_f " Mine"
+    | art_m " Steinbruch"
+    | art_m " " ("Hörsaal" | "Seminarraum")
+    | art_f " " ("Bibliothek" | "Mensa")
+    | art_n " Labor"
+    | person
+    ;
+
+// ADVERBS AND ADVERBIALS
+
+adverb
+    :   (   <14> ""
+        |   <1> "vielleicht "
+        |   <1> "etwas "
+        |   <1> "eher "
+        |   <1> "nicht "
+        |   <1> "teilweise "
+        |   <1> "sehr "
+        |   <1> "ein wenig "
+        )
+        (   !!opt_B <3> adverb_builtin
+        |   !opt_g  <1> wg_adverb
+        )
+        ;
+
+adverb_builtin
+    :
+        ( "kältlich" | "gespannt" | "glücklich" | "verspannt" | "langsam"
+        | "blöd" | "suspekt" | "begeistert" | "schauend" | "schnell" | "redend"
+        | "zufrieden" | "gelangweilt" | "entspannt" | "ruhig" | "erstaunt"
+        | "wichsend" | "reibend" | "stinkend" | "froh" | "spammend" | "repetitiv"
+        | "lustvoll" | "lustlos" | "beeindruckt" | "unbeeindruckt"
+        | noun4 " verkaufend"
+        | "mit " noun3 " spielend"
+        | "von " noun3 " begafft"
+        | ("auf " | "neben ") noun3 " liegend"
+        | noun4 " essend"
+        )
+    ;
+
+adverbial
+    : <5> ("über" | "auf" | "bei" | "mit") " " noun3
+    | <2> "zwischen " noun3 " und " noun3
+    ;
+
+movement_adverbial
+    : adverbial
+    | ("durch" | "um" | "in") " " noun4
+    | ("aus" | "zu") " " noun3
+    ;
+
+opt_interjection
+    : <3>  ""
+    | <1>  ( "foobar" | "oida" | "heast" | "uppsala" | "lalala" | "ramba zamba"
+            | "bla bla"
+            )
+            ", "
+    ;
+
+conjunction
+    : "während" | "zudem" | "bis" | "wodurch" | "da" | "solange" | "womit"
+    ;
+
+
+// and now: word generation, stolen from a different viperBOT function
+
+wg_verb1 : wg_prefix wg_root wg_verb1_suffix ;
+wg_verb3
+    : wg_prefix wg_root_t wg_verb3_suffix_t
+    | wg_prefix wg_root_non_t wg_verb3_suffix_non_t
+    ;
+wg_adverb : wg_prefix wg_root wg_adverb_suffix ;
+wg_noun{art_m, art_f, art_n}
+    : art_m " " wg_cap_prefix wg_root
+    | art_f " " wg_cap_prefix wg_root "e"
+    | art_n " " wg_cap_prefix wg_root
+    ;
+
+wg_prefix
+    : "an" | "be" | "um" | "auf" | "zu" | "ab" | "ge" | "miss" | "der" | "ver"
+    ;
+
+wg_cap_prefix
+    : "An" | "Be" | "Um" | "Auf" | "Zu" | "Ab" | "Ge" | "Miss" | "Der" | "Ver"
+    ;
+
+wg_root : wg_root_t | wg_root_non_t ;
+
+wg_root_t
+    : <2> wg_preconsonants wg_vowel wg_postconsonants_t
+    | <1> wg_vowel wg_postconsonants_t
+    ;
+
+wg_root_non_t
+    : <2> wg_preconsonants wg_vowel wg_postconsonants_non_t
+    | <1> wg_vowel wg_postconsonants_non_t
+    ;
+
+wg_preconsonants
+    : <3> wg_consonant_simple
+    | <1> wg_consonant_cluster
+    ;
+
+wg_consonant_simple
+    : "b" | "c" | "d" | "f" | "g" | "h" | "k" | "l" | "m" | "n" "p" | "r" | "s"
+    | "t" | "w" | "y" | "z"
+    ;
+
+wg_consonant_cluster
+    : "str" | "fl" | "bl" | "kr" | "sch" | "tsch" | "br" | "gl" | "kl"
+    ;
+
+wg_vowel
+    : <2> wg_vowel_simple
+    | <1> wg_vowel_umlaut
+    | <1> wg_vowel_diphthong
+    ;
+
+wg_vowel_simple : "a" | "e" | "i" | "o" | "u" ;
+wg_vowel_umlaut : "ä" | "ö" | "ü" ;
+wg_vowel_diphthong : "ei" | "ai" | "ah" ;
+
+wg_postconsonants_t
+    : "chst" | "scht" | "cht" | "st"
+    | "nt" | "st"
+    ;
+
+wg_postconsonants_non_t
+    : "nk" | "ß" | "ss" | "ff"
+    ;
+
+wg_verb1_suffix : "e" ;
+wg_verb3_suffix_t : "et" ;
+wg_verb3_suffix_non_t : "t" ;
+wg_verbinf_suffix : "en" ;
+wg_adverb_suffix
+    : "bar" | "er" | "ig" | "isch" | "haft"
+    ;
