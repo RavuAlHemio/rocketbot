@@ -1134,6 +1134,7 @@ dependencies = [
  "rocketbot_plugin_config_user_alias",
  "rocketbot_plugin_fortune",
  "rocketbot_plugin_grammargen",
+ "rocketbot_plugin_text_commands",
  "rocketbot_plugin_thanks",
  "rocketbot_plugin_vaccine",
  "rocketbot_plugin_version",
@@ -1213,6 +1214,17 @@ dependencies = [
  "num-traits",
  "pest",
  "pest_derive",
+ "rand",
+ "rocketbot_interface",
+ "tokio",
+]
+
+[[package]]
+name = "rocketbot_plugin_text_commands"
+version = "0.1.0"
+dependencies = [
+ "async-trait",
+ "json",
  "rand",
  "rocketbot_interface",
  "tokio",

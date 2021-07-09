@@ -1,0 +1,11 @@
+[package]
+name = "rocketbot_plugin_text_commands"
+version = "0.1.0"
+edition = "2018"
+
+[dependencies]
+async-trait = { version = "0.1" }
+json = { version = "0.12" }
+rand = { version = "0.8" }
+rocketbot_interface = { path = "../rocketbot_interface" }
+tokio = { version = "1.7", features = ["sync"] }
