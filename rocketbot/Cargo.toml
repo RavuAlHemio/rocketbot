@@ -20,6 +20,7 @@ rocketbot_plugin_config_user_alias = { path = "../rocketbot_plugin_config_user_a
 rocketbot_plugin_fortune = { path = "../rocketbot_plugin_fortune" }
 rocketbot_plugin_grammargen = { path = "../rocketbot_plugin_grammargen" }
 rocketbot_plugin_thanks = { path = "../rocketbot_plugin_thanks" }
+rocketbot_plugin_vaccine = { path = "../rocketbot_plugin_vaccine" }
 rocketbot_plugin_version = { path = "../rocketbot_plugin_version" }
 rocketbot_plugin_weather = { path = "../rocketbot_plugin_weather" }
 serde = { version = "1.0", features = ["derive"] }
