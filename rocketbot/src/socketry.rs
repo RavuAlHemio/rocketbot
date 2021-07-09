@@ -1,5 +1,5 @@
 use core::panic;
-use std::collections::HashMap;
+use std::collections::{HashMap, HashSet};
 use std::collections::hash_map::Entry as HashMapEntry;
 use std::fmt::Write;
 use std::ops::DerefMut;
@@ -8,6 +8,9 @@ use std::time::Duration;
 
 use async_trait::async_trait;
 use futures_util::{SinkExt, StreamExt};
+use hyper::StatusCode;
+use hyper::client::HttpConnector;
+use hyper_rustls::HttpsConnector;
 use json::JsonValue;
 use log::{debug, error, log_enabled, warn};
 use rand::{Rng, SeedableRng};
@@ -18,10 +21,11 @@ use rocketbot_interface::interfaces::{RocketBotInterface, RocketBotPlugin};
 use rocketbot_interface::model::{Channel, ChannelMessage, Message, User};
 use sha2::{Digest, Sha256};
 use tokio;
-use tokio::sync::{Mutex, Notify, RwLock};
+use tokio::sync::{Mutex, Notify, RwLock, RwLockReadGuard};
 use tokio::sync::mpsc;
 use tokio_tungstenite::connect_async;
 use tokio_tungstenite::tungstenite::Message as WebSocketMessage;
+use url::Url;
 
 use crate::commands::{CommandConfiguration, parse_command};
 use crate::config::CONFIG;
@@ -42,16 +46,18 @@ const ID_LENGTH: usize = 17;
 struct ChannelDatabase {
     by_id: HashMap<String, Channel>,
     by_name: HashMap<String, Channel>,
+    users_by_id: RwLock<HashMap<String, HashSet<User>>>,
 }
 impl ChannelDatabase {
     fn new_empty() -> Self {
         Self {
             by_id: HashMap::new(),
             by_name: HashMap::new(),
+            users_by_id: RwLock::new(HashMap::new()),
         }
     }
 
-    fn register_channel(&mut self, channel: Channel) {
+    async fn register_channel(&mut self, channel: Channel) {
         // make sure we either don't know the channel at all or we know it fully
         // (ensure there is no pair of channels with different IDs but the same name)
         let know_id = self.by_id.contains_key(&channel.id);
@@ -64,7 +70,13 @@ impl ChannelDatabase {
         }
 
         self.by_id.insert(channel.id.clone(), channel.clone());
-        self.by_name.insert(channel.name.clone(), channel);
+        self.by_name.insert(channel.name.clone(), channel.clone());
+
+        {
+            let mut users_guard = self.users_by_id
+                .write().await;
+            users_guard.insert(channel.id.clone(), HashSet::new());
+        }
     }
 
     fn get_by_id(&self, id: &str) -> Option<&Channel> {
@@ -76,13 +88,52 @@ impl ChannelDatabase {
     }
 
     /// Returns `true` if the channel was known (and removed) and `false` if it was not known.
-    fn forget_by_id(&mut self, id: &str) -> bool {
+    async fn forget_by_id(&mut self, id: &str) -> bool {
         if let Some(channel) = self.by_id.remove(id) {
             self.by_name.remove(&channel.name);
+
+            {
+                let mut users_guard = self.users_by_id
+                    .write().await;
+                users_guard.remove(&channel.id);
+            }
+
             true
         } else {
             false
         }
+    }
+
+    async fn users_in_channel(&mut self, channel_id: &str) -> HashSet<User> {
+        let users_guard = self.users_by_id
+            .read().await;
+        if let Some(cu) = users_guard.get(channel_id) {
+            cu.clone()
+        } else {
+            HashSet::new()
+        }
+    }
+
+    async fn replace_users_in_channel(&mut self, channel_id: &str, new_users: HashSet<User>) {
+        let mut users_guard = self.users_by_id
+            .write().await;
+        users_guard.insert(channel_id.to_owned(), new_users);
+    }
+
+    async fn user_added_to_channel(&mut self, channel_id: &str, user: &User) {
+        let mut users_guard = self.users_by_id
+            .write().await;
+        users_guard.entry(channel_id.to_owned())
+            .or_insert_with(|| HashSet::new())
+            .insert(user.clone());
+    }
+
+    async fn user_removed_from_channel(&mut self, channel_id: &str, user_id: &str) {
+        let mut users_guard = self.users_by_id
+            .write().await;
+        users_guard.entry(channel_id.to_owned())
+            .or_insert_with(|| HashSet::new())
+            .retain(|u| u.id != user_id);
     }
 
     fn by_id(&self) -> &HashMap<String, Channel> {
@@ -91,6 +142,10 @@ impl ChannelDatabase {
 
     fn by_name(&self) -> &HashMap<String, Channel> {
         &self.by_name
+    }
+
+    async fn users_by_id<'a>(&'a self) -> RwLockReadGuard<'a, HashMap<String, HashSet<User>>> {
+        self.users_by_id.read().await
     }
 }
 
@@ -103,6 +158,7 @@ struct SharedConnectionState {
     rng: Mutex<StdRng>,
     command_config: CommandConfiguration,
     commands: RwLock<HashMap<String, CommandDefinition>>,
+    http_client: hyper::Client<HttpsConnector<HttpConnector>>,
 }
 impl SharedConnectionState {
     fn new(
@@ -113,6 +169,7 @@ impl SharedConnectionState {
         rng: Mutex<StdRng>,
         command_config: CommandConfiguration,
         commands: RwLock<HashMap<String, CommandDefinition>>,
+        http_client: hyper::Client<HttpsConnector<HttpConnector>>,
     ) -> Self {
         Self {
             outgoing_sender,
@@ -122,6 +179,7 @@ impl SharedConnectionState {
             rng,
             command_config,
             commands,
+            http_client,
         }
     }
 }
@@ -131,17 +189,20 @@ struct ConnectionState {
     shared_state: Arc<SharedConnectionState>,
     outgoing_receiver: mpsc::UnboundedReceiver<JsonValue>,
     my_user_id: Option<String>,
+    my_auth_token: Option<String>,
 }
 impl ConnectionState {
     fn new(
         shared_state: Arc<SharedConnectionState>,
         outgoing_receiver: mpsc::UnboundedReceiver<JsonValue>,
         my_user_id: Option<String>,
+        my_auth_token: Option<String>,
     ) -> ConnectionState {
         ConnectionState {
             shared_state,
             outgoing_receiver,
             my_user_id,
+            my_auth_token,
         }
     }
 }
@@ -270,6 +331,8 @@ pub(crate) async fn connect() -> Arc<ServerConnection> {
     let rng = Mutex::new(StdRng::from_entropy());
     let command_config = Default::default();
     let commands = RwLock::new(HashMap::new());
+    let http_client = hyper::Client::builder()
+        .build(HttpsConnector::with_native_roots());
 
     let shared_state = Arc::new(SharedConnectionState::new(
         outgoing_sender,
@@ -279,6 +342,7 @@ pub(crate) async fn connect() -> Arc<ServerConnection> {
         rng,
         command_config,
         commands,
+        http_client,
     ));
 
     let conn = Arc::new(ServerConnection::new(
@@ -287,6 +351,7 @@ pub(crate) async fn connect() -> Arc<ServerConnection> {
     let state = ConnectionState::new(
         shared_state,
         outgoing_receiver,
+        None,
         None,
     );
     let second_conn: Arc<ServerConnection> = Arc::clone(&conn);
@@ -416,12 +481,12 @@ async fn run_connection(mut state: &mut ConnectionState) -> Result<(), WebSocket
     Ok(())
 }
 
-async fn channel_joined(state: &mut ConnectionState, channel: Channel) {
+async fn channel_joined(mut state: &mut ConnectionState, channel: Channel) {
     {
         let mut cdb_write = state.shared_state.subscribed_channels
             .write().await;
         cdb_write
-            .register_channel(channel.clone());
+            .register_channel(channel.clone()).await;
     }
 
     // subscribe to messages in this room
@@ -436,6 +501,8 @@ async fn channel_joined(state: &mut ConnectionState, channel: Channel) {
     };
     state.shared_state.outgoing_sender.send(sub_body)
         .expect("failed to enqueue subscription message");
+
+    obtain_users_in_room(&mut state, &channel.id).await;
 }
 
 async fn channel_left(state: &mut ConnectionState, channel_id: &str) {
@@ -443,7 +510,7 @@ async fn channel_left(state: &mut ConnectionState, channel_id: &str) {
         let mut cdb_write = state.shared_state.subscribed_channels
             .write().await;
         cdb_write
-            .forget_by_id(channel_id);
+            .forget_by_id(channel_id).await;
     }
 
     // unsubscribe
@@ -495,11 +562,15 @@ async fn handle_received(body: &JsonValue, mut state: &mut ConnectionState) {
     } else if body["msg"] == "result" && body["id"] == LOGIN_MESSAGE_ID {
         // login successful
 
-        // store our ID
+        // store our ID and token
         let user_id = body["result"]["id"].as_str()
             .expect("user ID missing or not a string")
             .to_owned();
+        let auth_token = body["result"]["token"].as_str()
+            .expect("auth token missing or not a string")
+            .to_owned();
         state.my_user_id = Some(user_id.clone());
+        state.my_auth_token = Some(auth_token.clone());
 
         // subscribe to changes to our room state
         let subscribe_room_change_body = json::object! {
@@ -579,6 +650,12 @@ async fn handle_received(body: &JsonValue, mut state: &mut ConnectionState) {
                 },
                 Some(c) => c,
             };
+
+            if message_json["t"] == "au" || message_json["t"] == "ru" {
+                // add user/remove user
+                // update user lists
+                obtain_users_in_room(&mut state, &channel_id).await;
+            }
 
             let raw_message = message_json["msg"].to_string();
             let parsed_message = match parse_message(&message_json["md"]) {
@@ -683,5 +760,124 @@ async fn distribute_channel_message_commands(channel_message: &ChannelMessage, s
         for plugin in plugins.iter() {
             plugin.channel_command(&channel_message, &instance).await;
         }
+    }
+}
+
+async fn obtain_users_in_room(state: &mut ConnectionState, channel_id: &str) {
+    let user_id = if let Some(u) = &state.my_user_id { u } else { return };
+    let auth_token = if let Some(u) = &state.my_auth_token { u } else { return };
+    let mut users: HashSet<User> = HashSet::new();
+
+    let web_uri = {
+        let config_lock = CONFIG
+            .get().expect("no initial configuration set")
+            .read().await;
+        Url::parse(&config_lock.server.web_uri)
+            .expect("failed to parse web URI")
+    };
+    let mut channel_members_uri = web_uri.join("api/v1/channels.members")
+        .expect("failed to join API endpoint to URI");
+    channel_members_uri.query_pairs_mut()
+        .append_pair("roomId", channel_id)
+        .append_pair("count", "50");
+
+    let mut offset = 0usize;
+    loop {
+        let mut offset_uri = channel_members_uri.clone();
+        offset_uri.query_pairs_mut()
+            .append_pair("offset", &offset.to_string());
+
+        let request = hyper::Request::builder()
+            .method("GET")
+            .uri(offset_uri.as_str())
+            .header("X-User-Id", user_id)
+            .header("X-Auth-Token", auth_token)
+            .body(hyper::Body::empty())
+            .expect("failed to construct request");
+
+        let response_res = state.shared_state.http_client
+            .request(request).await;
+        let response = match response_res {
+            Ok(r) => r,
+            Err(e) => {
+                error!("error fetching channel {:?} users: {}", channel_id, e);
+                return;
+            },
+        };
+        let (parts, mut body) = response.into_parts();
+        let response_bytes = match hyper::body::to_bytes(&mut body).await {
+            Ok(b) => b.to_vec(),
+            Err(e) => {
+                error!("error getting bytes from response requesting channel {:?} users: {}", channel_id, e);
+                return;
+            },
+        };
+        let response_string = match String::from_utf8(response_bytes) {
+            Ok(s) => s,
+            Err(e) => {
+                error!("error decoding response requesting channel {:?} users: {}", channel_id, e);
+                return;
+            },
+        };
+
+        if parts.status != StatusCode::OK {
+            error!(
+                "error response {} while fetching channel {:?} users: {}",
+                parts.status, channel_id, response_string,
+            );
+            return;
+        }
+
+        let json_value = match json::parse(&response_string) {
+            Ok(v) => v,
+            Err(e) => {
+                error!("error parsing JSON while fetching channel {:?} users: {}", channel_id, e);
+                return;
+            },
+        };
+
+        let user_count = json_value["members"].members().len();
+        if user_count == 0 {
+            break;
+        }
+
+        for user_json in json_value["members"].members() {
+            let user_id = match user_json["_id"].as_str() {
+                Some(s) => s,
+                None => {
+                    error!("error getting user ID while fetching channel {:?} users", channel_id);
+                    return;
+                }
+            };
+            let username = match user_json["username"].as_str() {
+                Some(s) => s,
+                None => {
+                    error!("error getting username while fetching channel {:?} users", channel_id);
+                    return;
+                }
+            };
+            let nickname = match user_json["name"].as_str() {
+                Some(s) => s,
+                None => {
+                    error!("error getting user nickname while fetching channel {:?} users", channel_id);
+                    return;
+                }
+            };
+
+            let user = User::new(
+                user_id.to_owned(),
+                username.to_owned(),
+                nickname.to_owned(),
+            );
+            users.insert(user);
+        }
+
+        offset += user_count;
+    }
+
+    {
+        let mut chan_guard = state.shared_state.subscribed_channels
+            .write().await;
+        chan_guard.replace_users_in_channel(channel_id, users).await;
     }
 }

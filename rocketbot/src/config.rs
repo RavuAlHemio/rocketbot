@@ -23,6 +23,7 @@ pub(crate) struct Config {
 #[derive(Clone, Debug, Deserialize, Eq, Hash, PartialEq, Serialize)]
 pub(crate) struct ServerConfig {
     pub websocket_uri: String,
+    pub web_uri: String,
     pub username: String,
     pub password: String,
 }
