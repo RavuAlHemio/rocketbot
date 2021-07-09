@@ -2,7 +2,7 @@ pub mod grammar;
 pub mod parsing;
 
 
-use std::collections::HashMap;
+use std::collections::{HashMap, HashSet};
 use std::fs::File;
 use std::io::Read;
 use std::path::PathBuf;
@@ -10,6 +10,7 @@ use std::sync::{Arc, Weak};
 
 use async_trait::async_trait;
 use json::JsonValue;
+use log::error;
 use rand::SeedableRng;
 use rand::rngs::StdRng;
 use tokio::sync::Mutex;
@@ -18,7 +19,7 @@ use rocketbot_interface::commands::{CommandDefinition, CommandInstance};
 use rocketbot_interface::interfaces::{RocketBotInterface, RocketBotPlugin};
 use rocketbot_interface::model::ChannelMessage;
 
-use crate::grammar::{GeneratorState, Rulebook, TextGenerator};
+use crate::grammar::{GeneratorState, Rulebook};
 use crate::parsing::parse_grammar;
 
 
@@ -61,7 +62,7 @@ impl RocketBotPlugin for GrammarGenPlugin {
             };
 
             // parse the string
-            let rulebook = parse_grammar(&grammar_str)
+            let rulebook = parse_grammar(&grammar_name, &grammar_str)
                 .expect("failed to parse grammar");
 
             grammars.insert(grammar_name, rulebook);
@@ -92,25 +93,41 @@ impl RocketBotPlugin for GrammarGenPlugin {
             Some(i) => i,
         };
 
+        let chosen_nick_opt = if command.rest.len() > 0 {
+            Some(command.rest.as_str())
+        } else {
+            None
+        };
+        let channel_users_opt = interface
+            .obtain_users_in_channel(&channel_message.channel.name).await;
+        let channel_users = match channel_users_opt {
+            Some(cu) => cu,
+            None => {
+                error!("no user list for channel {}", channel_message.channel.name);
+                return;
+            },
+        };
+        let channel_nicks: HashSet<String> = channel_users.iter()
+            .map(|u| u.nickname.clone())
+            .collect();
+
         let grammar = match self.grammars.get(&command.name) {
             None => return,
             Some(g) => g,
         };
 
-        let top_rule = match grammar.rule_definitions.get(&command.name) {
-            None => return,
-            Some(tr) => tr,
-        };
+        let mut my_grammar = grammar.clone();
+        my_grammar.add_builtins(&channel_nicks, chosen_nick_opt);
 
         let conditions = command.flags.clone();
 
         let state = GeneratorState::new(
-            grammar.clone(),
+            my_grammar,
             conditions,
             Arc::clone(&self.rng),
         );
 
-        let phrase = match top_rule.top_production.generate(&state).await {
+        let phrase = match state.generate().await {
             None => return,
             Some(s) => s,
         };

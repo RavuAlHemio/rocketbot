@@ -18,7 +18,7 @@ use crate::grammar::{
 struct GrammarGenParser;
 
 
-pub fn parse_grammar(text: &str) -> Result<Rulebook, Error<Rule>> {
+pub fn parse_grammar(name: &str, text: &str) -> Result<Rulebook, Error<Rule>> {
     let pairs: Vec<Pair<'_, Rule>> = match GrammarGenParser::parse(Rule::ggrulebook, text) {
         Ok(p) => p,
         Err(e) => return Err(e),
@@ -26,7 +26,7 @@ pub fn parse_grammar(text: &str) -> Result<Rulebook, Error<Rule>> {
 
     assert_eq!(pairs.len(), 1);
 
-    Ok(parse_rulebook(&pairs[0]))
+    Ok(parse_rulebook(name, &pairs[0]))
 }
 
 fn parse_escaped_string(string_pair: &Pair<'_, Rule>) -> String {
@@ -81,7 +81,7 @@ fn parse_number(number_pair: &Pair<'_, Rule>) -> BigUint {
         .expect("failed to parse number")
 }
 
-fn parse_rulebook(rulebook_pair: &Pair<'_, Rule>) -> Rulebook {
+fn parse_rulebook(name: &str, rulebook_pair: &Pair<'_, Rule>) -> Rulebook {
     let inner = rulebook_pair.clone().into_inner();
 
     let mut rules: Vec<RuleDefinition> = inner
@@ -96,7 +96,7 @@ fn parse_rulebook(rulebook_pair: &Pair<'_, Rule>) -> Rulebook {
             panic!("duplicate rule definition named {}", rd.name);
         }
     }
-    Rulebook::new(rule_definitions)
+    Rulebook::new(name.to_owned(), rule_definitions)
 }
 
 fn parse_ruledef(ruledef_pair: &Pair<'_, Rule>) -> RuleDefinition {

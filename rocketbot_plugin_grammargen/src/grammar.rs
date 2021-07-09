@@ -28,6 +28,22 @@ impl GeneratorState {
             rng,
         }
     }
+
+    pub async fn verify_soundness(&self) -> Result<(), SoundnessError> {
+        let top_rule = match self.rulebook.rule_definitions.get(&self.rulebook.name) {
+            Some(tr) => tr,
+            None => return Err(SoundnessError::TopRuleNotFound(self.rulebook.name.clone())),
+        };
+        top_rule.top_production.verify_soundness(&self).await
+    }
+
+    pub async fn generate(&self) -> Option<String> {
+        let top_rule = match self.rulebook.rule_definitions.get(&self.rulebook.name) {
+            Some(tr) => tr,
+            None => return None,
+        };
+        top_rule.top_production.generate(&self).await
+    }
 }
 impl Clone for GeneratorState {
     fn clone(&self) -> Self {
@@ -44,6 +60,7 @@ impl Clone for GeneratorState {
 
 #[derive(Clone, Debug, Eq, Hash, PartialEq)]
 pub enum SoundnessError {
+    TopRuleNotFound(String),
     UnresolvedReference(String),
     NoAlternatives,
     ArgumentCountMismatch(String, usize, usize),
@@ -51,6 +68,8 @@ pub enum SoundnessError {
 impl fmt::Display for SoundnessError {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
+            SoundnessError::TopRuleNotFound(identifier)
+                => write!(f, "top rule {:?} not found", identifier),
             SoundnessError::UnresolvedReference(identifier)
                 => write!(f, "unresolved reference to {:?}", identifier),
             SoundnessError::NoAlternatives
@@ -71,15 +90,70 @@ pub trait TextGenerator : Debug + Sync + Send {
 
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub struct Rulebook {
+    pub name: String,
     pub rule_definitions: HashMap<String, RuleDefinition>,
 }
 impl Rulebook {
     pub fn new(
+        name: String,
         rule_definitions: HashMap<String, RuleDefinition>,
     ) -> Rulebook {
         Rulebook {
+            name,
             rule_definitions,
         }
+    }
+
+    pub fn add_builtins(&mut self, nicks: &HashSet<String>, chosen_nick: Option<&str>) {
+        let any_nick_production = Production::new(
+            nicks.iter().map(|n|
+                Alternative::new(
+                    Vec::new(),
+                    BigUint::from(1u32),
+                    vec![
+                        SequenceElement::new(
+                            SingleSequenceElement::new_string(n.to_owned()),
+                            SequenceElementCount::One,
+                        ),
+                    ],
+                ),
+            ).collect(),
+        );
+
+        self.rule_definitions.insert(
+            "__IRC_nick".to_owned(),
+            RuleDefinition::new(
+                "__IRC_nick".to_owned(),
+                Vec::new(),
+                any_nick_production.clone(),
+            ),
+        );
+
+        self.rule_definitions.insert(
+            "__IRC_chosen_nick".to_owned(),
+            RuleDefinition::new(
+                "__IRC_chosen_nick".to_owned(),
+                Vec::new(),
+                if let Some(cn) = chosen_nick {
+                    Production::new(
+                        vec![
+                            Alternative::new(
+                                Vec::new(),
+                                BigUint::from(1u32),
+                                vec![
+                                    SequenceElement::new(
+                                        SingleSequenceElement::new_string(cn.to_owned()),
+                                        SequenceElementCount::One,
+                                    ),
+                                ],
+                            ),
+                        ],
+                    )
+                } else {
+                    any_nick_production
+                },
+            ),
+        );
     }
 }
 
@@ -125,6 +199,11 @@ impl TextGenerator for Production {
                 state.conditions.contains(&cond.identifier) != cond.negated
             ))
             .collect();
+        if my_alternatives.len() == 1 {
+            // fast-path
+            return my_alternatives[0].generate(&state).await;
+        }
+
         let total_weight: BigUint = my_alternatives
             .iter()
             .map(|alt| &alt.weight)

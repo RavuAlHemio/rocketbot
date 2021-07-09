@@ -104,7 +104,7 @@ impl ChannelDatabase {
         }
     }
 
-    async fn users_in_channel(&mut self, channel_id: &str) -> HashSet<User> {
+    async fn users_in_channel(&self, channel_id: &str) -> HashSet<User> {
         let users_guard = self.users_by_id
             .read().await;
         if let Some(cu) = users_guard.get(channel_id) {
@@ -285,6 +285,17 @@ impl RocketBotInterface for ServerConnection {
             }
         }
         None
+    }
+
+    async fn obtain_users_in_channel(&self, channel_name: &str) -> Option<HashSet<User>> {
+        let chan_guard = self.shared_state.subscribed_channels
+            .read().await;
+        let chan = match chan_guard.get_by_name(channel_name) {
+            None => return None,
+            Some(c) => c,
+        };
+        let users = chan_guard.users_in_channel(&chan.id).await;
+        Some(users)
     }
 
     async fn register_channel_command(&self, command: &CommandDefinition) -> bool {

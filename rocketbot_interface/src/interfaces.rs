@@ -1,10 +1,11 @@
+use std::collections::HashSet;
 use std::sync::Weak;
 
 use async_trait::async_trait;
 use json::JsonValue;
 
 use crate::commands::{CommandDefinition, CommandInstance};
-use crate::model::{ChannelMessage, Message};
+use crate::model::{ChannelMessage, Message, User};
 
 
 /// Trait to be implemented by a RocketBot connection.
@@ -19,6 +20,10 @@ pub trait RocketBotInterface : Send + Sync {
     /// Attempts to resolve the username-like value to an actual username on the server. Potentially
     /// enlists the assistance of relevant plugins.
     async fn resolve_username(&self, username: &str) -> Option<String>;
+
+    /// Obtains the list of users in the channel with the given name. Returns `None` if the channel
+    /// is not known.
+    async fn obtain_users_in_channel(&self, channel_name: &str) -> Option<HashSet<User>>;
 
     /// Registers a command that is delivered when it is detected in a channel message. Returns
     /// `true` if the command was registered successfully and `false` if a command of that name

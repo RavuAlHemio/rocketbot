@@ -13,7 +13,7 @@ use tokio::sync::Mutex;
 
 use rocketbot_plugin_grammargen::grammar::{
     Alternative, GeneratorState, Production, RuleDefinition, SequenceElement, SequenceElementCount,
-    SingleSequenceElement, TextGenerator,
+    SingleSequenceElement,
 };
 use rocketbot_plugin_grammargen::parsing::parse_grammar;
 
@@ -41,7 +41,7 @@ async fn main() {
     };
 
     // parse the string
-    let mut rulebook = parse_grammar(&grammar_str)
+    let mut rulebook = parse_grammar(&grammar_name, &grammar_str)
         .expect("failed to parse grammar");
 
     // add builtins
@@ -76,21 +76,17 @@ async fn main() {
         ),
     );
 
-    let top_rule = rulebook.rule_definitions.get(&grammar_name)
-        .expect("failed to find top rule")
-        .clone();
-
     let state = GeneratorState::new(
         rulebook,
         HashSet::new(),
         Arc::new(Mutex::new(StdRng::from_entropy())),
     );
 
-    if let Err(soundness) = top_rule.top_production.verify_soundness(&state).await {
+    if let Err(soundness) = state.verify_soundness().await {
         println!("grammar failed soundness check: {}", soundness);
     } else {
         for _ in 0..100 {
-            let generated = top_rule.top_production.generate(&state).await;
+            let generated = state.generate().await;
             if let Some(s) = generated {
                 println!("> {}", s);
             } else {
