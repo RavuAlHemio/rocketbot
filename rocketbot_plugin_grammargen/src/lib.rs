@@ -119,7 +119,10 @@ impl RocketBotPlugin for GrammarGenPlugin {
         let mut my_grammar = grammar.clone();
         my_grammar.add_builtins(&channel_nicks, chosen_nick_opt);
 
-        let conditions = command.flags.clone();
+        let conditions: HashSet<String> = command.flags
+            .iter()
+            .map(|opt_name| format!("opt_{}", opt_name))
+            .collect();
 
         let state = GeneratorState::new(
             my_grammar,
