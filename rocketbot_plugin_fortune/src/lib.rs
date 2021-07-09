@@ -111,10 +111,11 @@ impl RocketBotPlugin for FortunePlugin {
                             .lock().await;
                         let index = rng_guard.gen_range(0..fortunes.len());
                         let fortune = &fortunes[index];
+                        let fortune_as_quote = format!(">{}", fortune.replace("\n", "\n>"));
                         interface
                             .send_channel_message(
                                 &channel_message.channel.name,
-                                fortune,
+                                &fortune_as_quote,
                             ).await;
                     }
                 },
@@ -135,10 +136,11 @@ impl RocketBotPlugin for FortunePlugin {
                     }
 
                     let fortune = &fortunes[index];
+                    let fortune_as_quote = format!(">{}", fortune.replace("\n", "\n>"));
                     interface
                         .send_channel_message(
                             &channel_message.channel.name,
-                            fortune,
+                            &fortune_as_quote,
                         ).await;
                     break;
                 }
