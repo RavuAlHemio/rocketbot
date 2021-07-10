@@ -2,7 +2,7 @@ use core::panic;
 use std::collections::{HashMap, HashSet};
 use std::collections::hash_map::Entry as HashMapEntry;
 use std::fmt::Write;
-use std::ops::DerefMut;
+use std::ops::{Deref, DerefMut};
 use std::sync::Arc;
 use std::time::Duration;
 
@@ -159,6 +159,7 @@ struct SharedConnectionState {
     command_config: CommandConfiguration,
     commands: RwLock<HashMap<String, CommandDefinition>>,
     http_client: hyper::Client<HttpsConnector<HttpConnector>>,
+    my_user_id: RwLock<Option<String>>,
 }
 impl SharedConnectionState {
     fn new(
@@ -170,6 +171,7 @@ impl SharedConnectionState {
         command_config: CommandConfiguration,
         commands: RwLock<HashMap<String, CommandDefinition>>,
         http_client: hyper::Client<HttpsConnector<HttpConnector>>,
+        my_user_id: RwLock<Option<String>>,
     ) -> Self {
         Self {
             outgoing_sender,
@@ -180,6 +182,7 @@ impl SharedConnectionState {
             command_config,
             commands,
             http_client,
+            my_user_id,
         }
     }
 }
@@ -188,20 +191,17 @@ impl SharedConnectionState {
 struct ConnectionState {
     shared_state: Arc<SharedConnectionState>,
     outgoing_receiver: mpsc::UnboundedReceiver<JsonValue>,
-    my_user_id: Option<String>,
     my_auth_token: Option<String>,
 }
 impl ConnectionState {
     fn new(
         shared_state: Arc<SharedConnectionState>,
         outgoing_receiver: mpsc::UnboundedReceiver<JsonValue>,
-        my_user_id: Option<String>,
         my_auth_token: Option<String>,
     ) -> ConnectionState {
         ConnectionState {
             shared_state,
             outgoing_receiver,
-            my_user_id,
             my_auth_token,
         }
     }
@@ -315,6 +315,15 @@ impl RocketBotInterface for ServerConnection {
     async fn register_private_message_command(&self, command: &CommandDefinition) -> bool {
         todo!();
     }
+
+    async fn is_my_user_id(&self, user_id: &str) -> bool {
+        let uid_guard = self.shared_state.my_user_id
+            .read().await;
+        match uid_guard.deref() {
+            Some(uid) => uid == user_id,
+            None => false,
+        }
+    }
 }
 
 
@@ -344,6 +353,7 @@ pub(crate) async fn connect() -> Arc<ServerConnection> {
     let commands = RwLock::new(HashMap::new());
     let http_client = hyper::Client::builder()
         .build(HttpsConnector::with_native_roots());
+    let my_user_id: RwLock<Option<String>> = RwLock::new(None);
 
     let shared_state = Arc::new(SharedConnectionState::new(
         outgoing_sender,
@@ -354,6 +364,7 @@ pub(crate) async fn connect() -> Arc<ServerConnection> {
         command_config,
         commands,
         http_client,
+        my_user_id,
     ));
 
     let conn = Arc::new(ServerConnection::new(
@@ -362,7 +373,6 @@ pub(crate) async fn connect() -> Arc<ServerConnection> {
     let state = ConnectionState::new(
         shared_state,
         outgoing_receiver,
-        None,
         None,
     );
     let second_conn: Arc<ServerConnection> = Arc::clone(&conn);
@@ -580,7 +590,10 @@ async fn handle_received(body: &JsonValue, mut state: &mut ConnectionState) {
         let auth_token = body["result"]["token"].as_str()
             .expect("auth token missing or not a string")
             .to_owned();
-        state.my_user_id = Some(user_id.clone());
+        {
+            let mut uid_guard = state.shared_state.my_user_id.write().await;
+            *uid_guard = Some(user_id.clone());
+        }
         state.my_auth_token = Some(auth_token.clone());
 
         // subscribe to changes to our room state
@@ -703,9 +716,12 @@ async fn handle_received(body: &JsonValue, mut state: &mut ConnectionState) {
             distribute_channel_message_commands(&message, &mut state).await;
         }
     } else if body["msg"] == "changed" && body["collection"] == "stream-notify-user" {
-        let my_user_id = match &state.my_user_id {
-            Some(muid) => muid.as_str(),
-            None => return,
+        let my_user_id = {
+            let uid_guard = state.shared_state.my_user_id.read().await;
+            match uid_guard.deref() {
+                Some(muid) => muid.clone(),
+                None => return,
+            }
         };
         let rooms_changed_event_name = format!("{}/rooms-changed", my_user_id);
 
@@ -775,7 +791,14 @@ async fn distribute_channel_message_commands(channel_message: &ChannelMessage, s
 }
 
 async fn obtain_users_in_room(state: &mut ConnectionState, channel_id: &str) {
-    let user_id = if let Some(u) = &state.my_user_id { u } else { return };
+    let user_id = {
+        let uid_guard = state.shared_state.my_user_id
+            .read().await;
+        match uid_guard.deref() {
+            Some(uid) => uid.clone(),
+            None => return,
+        }
+    };
     let auth_token = if let Some(u) = &state.my_auth_token { u } else { return };
     let mut users: HashSet<User> = HashSet::new();
 
@@ -801,7 +824,7 @@ async fn obtain_users_in_room(state: &mut ConnectionState, channel_id: &str) {
         let request = hyper::Request::builder()
             .method("GET")
             .uri(offset_uri.as_str())
-            .header("X-User-Id", user_id)
+            .header("X-User-Id", &user_id)
             .header("X-Auth-Token", auth_token)
             .body(hyper::Body::empty())
             .expect("failed to construct request");

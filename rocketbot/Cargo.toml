@@ -19,6 +19,7 @@ rocketbot_plugin_belch = { path = "../rocketbot_plugin_belch" }
 rocketbot_plugin_config_user_alias = { path = "../rocketbot_plugin_config_user_alias" }
 rocketbot_plugin_fortune = { path = "../rocketbot_plugin_fortune" }
 rocketbot_plugin_grammargen = { path = "../rocketbot_plugin_grammargen" }
+rocketbot_plugin_sed = { path = "../rocketbot_plugin_sed" }
 rocketbot_plugin_text_commands = { path = "../rocketbot_plugin_text_commands" }
 rocketbot_plugin_thanks = { path = "../rocketbot_plugin_thanks" }
 rocketbot_plugin_vaccine = { path = "../rocketbot_plugin_vaccine" }

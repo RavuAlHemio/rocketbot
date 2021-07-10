@@ -34,6 +34,9 @@ pub trait RocketBotInterface : Send + Sync {
     /// `true` if the command was registered successfully and `false` if a command of that name
     /// already exists.
     async fn register_private_message_command(&self, command: &CommandDefinition) -> bool;
+
+    /// Returns whether the given user ID is the bot's user ID.
+    async fn is_my_user_id(&self, user_id: &str) -> bool;
 }
 
 
