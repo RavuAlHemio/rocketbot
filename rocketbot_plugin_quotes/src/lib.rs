@@ -115,7 +115,7 @@ FROM quotes.quotes q
 LEFT OUTER JOIN quotes.quote_votes qv ON qv.quote_id = q.quote_id
 {{where_filter}}
 GROUP BY q.quote_id, q.timestamp, q.channel, q.author, q.message_type, q.body
-{{having filter}}
+{{having_filter}}
 ";
 
         let mut having_filter_pieces: Vec<String> = Vec::new();
