@@ -148,10 +148,6 @@ GROUP BY q.quote_id, q.timestamp, q.channel, q.author, q.message_type, q.body
             where_filter_values.push(&body_substring_like);
         }
 
-        let mut all_filter_pieces: Vec<String> = Vec::new();
-        all_filter_pieces.append(&mut having_filter_pieces);
-        all_filter_pieces.append(&mut where_filter_pieces);
-
         let mut all_filter_values: Vec<&(dyn ToSql + Sync)> = Vec::new();
         all_filter_values.append(&mut having_filter_values);
         all_filter_values.append(&mut where_filter_values);
@@ -159,13 +155,13 @@ GROUP BY q.quote_id, q.timestamp, q.channel, q.author, q.message_type, q.body
         let having_filter = if having_filter_pieces.len() == 0 {
             String::new()
         } else {
-            format!("HAVING {}", having_filter_pieces.join(", "))
+            format!("HAVING {}", having_filter_pieces.join(" AND "))
         };
 
         let where_filter = if where_filter_pieces.len() == 0 {
             String::new()
         } else {
-            format!("WHERE {}", where_filter_pieces.join(", "))
+            format!("WHERE {}", where_filter_pieces.join(" AND "))
         };
 
         let quote_query = quote_query_format
@@ -216,6 +212,7 @@ GROUP BY q.quote_id, q.timestamp, q.channel, q.author, q.message_type, q.body
 
     async fn post_quote(
         &self,
+        last_quote_id_per_channel_name: &mut HashMap<String, i64>,
         quote_and_vote_sum: &QuoteAndVoteSum,
         requestor_username: &str,
         channel_name: &str,
@@ -225,11 +222,9 @@ GROUP BY q.quote_id, q.timestamp, q.channel, q.author, q.message_type, q.body
             None => return,
             Some(i) => i,
         };
-        let mut state_guard = self.quotes_state
-            .lock().await;
 
         // remember last ID (for upquote/downquote commands)
-        state_guard.last_quote_id_per_channel_name.insert(
+        last_quote_id_per_channel_name.insert(
             channel_name.to_owned(),
             quote_and_vote_sum.quote.id,
         );
@@ -296,7 +291,9 @@ GROUP BY q.quote_id, q.timestamp, q.channel, q.author, q.message_type, q.body
                 .lock().await
                 .rng.gen_range(0..quote_count);
             let quote_and_vote_sum = &quotes_and_vote_sums[index];
+            let mut state_guard = self.quotes_state.lock().await;
             self.post_quote(
+                &mut state_guard.last_quote_id_per_channel_name,
                 quote_and_vote_sum,
                 requestor_username,
                 channel_name,
@@ -538,6 +535,7 @@ VALUES ($1, $2, $3, $4, $5)
                     {
                         let quote_and_vote_sum = &sq[*shuffled_index];
                         self.post_quote(
+                            &mut quotes_state.last_quote_id_per_channel_name,
                             quote_and_vote_sum,
                             sender_username,
                             channel_name,
@@ -576,6 +574,7 @@ VALUES ($1, $2, $3, $4, $5)
 
                         let quote_and_vote_sum = &fresh_quotes[0];
                         self.post_quote(
+                            &mut quotes_state.last_quote_id_per_channel_name,
                             quote_and_vote_sum,
                             sender_username,
                             channel_name,
