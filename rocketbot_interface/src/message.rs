@@ -1,12 +1,20 @@
 use std::fmt;
 
 
+fn concat_fragments(frags: &[InlineFragment]) -> String {
+    let strings: Vec<String> = frags.iter()
+        .map(|f| f.to_string())
+        .collect();
+    strings.concat()
+}
+
+
 #[derive(Clone, Debug, Eq, Hash, PartialEq)]
 pub enum InlineFragment {
     PlainText(String),
-    Bold(Box<InlineFragment>),
-    Strike(Box<InlineFragment>),
-    Italic(Box<InlineFragment>),
+    Bold(Vec<InlineFragment>),
+    Strike(Vec<InlineFragment>),
+    Italic(Vec<InlineFragment>),
     Link(String, Box<InlineFragment>),
     MentionChannel(String),
     MentionUser(String),
@@ -19,11 +27,11 @@ impl fmt::Display for InlineFragment {
             InlineFragment::PlainText(pt)
                 => write!(f, "{}", pt),
             InlineFragment::Bold(b)
-                => write!(f, "*{}*", b),
+                => write!(f, "*{}*", concat_fragments(b)),
             InlineFragment::Strike(s)
-                => write!(f, "~{}~", s),
+                => write!(f, "~{}~", concat_fragments(s)),
             InlineFragment::Italic(i)
-                => write!(f, "_{}_", i),
+                => write!(f, "_{}_", concat_fragments(i)),
             InlineFragment::Link(target, label)
                 => write!(f, "[{}]({})", label, target),
             InlineFragment::MentionChannel(tgt)

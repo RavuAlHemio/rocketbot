@@ -686,7 +686,10 @@ async fn handle_received(body: &JsonValue, mut state: &mut ConnectionState) {
             let parsed_message = match parse_message(&message_json["md"]) {
                 Ok(pm) => pm,
                 Err(e) => {
-                    error!("failed to parse message {:?} from structure {:?}: {}", raw_message, message_json["md"], e);
+                    error!(
+                        "failed to parse message {:?} from structure {:?}: {}",
+                        raw_message, message_json["md"].to_string(), e,
+                    );
                     return;
                 },
             };

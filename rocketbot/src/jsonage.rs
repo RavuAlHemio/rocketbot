@@ -188,11 +188,14 @@ fn parse_inline_fragment(inline: &JsonValue) -> Result<InlineFragment, MessagePa
             Ok(InlineFragment::PlainText(value))
         },
         "BOLD"|"STRIKE"|"ITALIC" => {
-            let content_box = Box::new(parse_inline_fragment(&inline["value"])?);
+            let mut fragments: Vec<InlineFragment> = Vec::new();
+            for fragment in inline["value"].members() {
+                fragments.push(parse_inline_fragment(fragment)?);
+            }
             let result = match inline_type {
-                "BOLD" => InlineFragment::Bold(content_box),
-                "STRIKE" => InlineFragment::Strike(content_box),
-                "ITALIC" => InlineFragment::Italic(content_box),
+                "BOLD" => InlineFragment::Bold(fragments),
+                "STRIKE" => InlineFragment::Strike(fragments),
+                "ITALIC" => InlineFragment::Italic(fragments),
                 _ => panic!("type does not match pre-filtered types; assume bug"),
             };
             Ok(result)
