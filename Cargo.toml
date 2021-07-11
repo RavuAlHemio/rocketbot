@@ -5,6 +5,7 @@ members = [
     "rocketbot_interface",
     "rocketbot_plugin_belch",
     "rocketbot_plugin_config_user_alias",
+    "rocketbot_plugin_dice",
     "rocketbot_plugin_fortune",
     "rocketbot_plugin_grammargen",
     "rocketbot_plugin_quotes",

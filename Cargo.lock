@@ -1132,6 +1132,7 @@ dependencies = [
  "rocketbot_interface",
  "rocketbot_plugin_belch",
  "rocketbot_plugin_config_user_alias",
+ "rocketbot_plugin_dice",
  "rocketbot_plugin_fortune",
  "rocketbot_plugin_grammargen",
  "rocketbot_plugin_quotes",
@@ -1191,6 +1192,21 @@ dependencies = [
  "json",
  "log",
  "rocketbot_interface",
+]
+
+[[package]]
+name = "rocketbot_plugin_dice"
+version = "0.1.0"
+dependencies = [
+ "async-trait",
+ "chrono",
+ "json",
+ "num-bigint",
+ "once_cell",
+ "rand",
+ "regex",
+ "rocketbot_interface",
+ "tokio",
 ]
 
 [[package]]
