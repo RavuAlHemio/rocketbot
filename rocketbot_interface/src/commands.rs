@@ -47,6 +47,31 @@ pub enum CommandValue {
     Integer(i64),
     Float(f64),
 }
+impl CommandValue {
+    pub fn as_str(&self) -> Option<&str> {
+        if let CommandValue::String(s) = self {
+            Some(&s)
+        } else {
+            None
+        }
+    }
+
+    pub fn as_i64(&self) -> Option<i64> {
+        if let CommandValue::Integer(i) = self {
+            Some(*i)
+        } else {
+            None
+        }
+    }
+
+    pub fn as_f64(&self) -> Option<f64> {
+        if let CommandValue::Float(f) = self {
+            Some(*f)
+        } else {
+            None
+        }
+    }
+}
 
 
 #[derive(Clone, Debug, PartialEq)]
