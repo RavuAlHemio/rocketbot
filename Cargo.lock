@@ -1134,6 +1134,7 @@ dependencies = [
  "rocketbot_plugin_config_user_alias",
  "rocketbot_plugin_fortune",
  "rocketbot_plugin_grammargen",
+ "rocketbot_plugin_quotes",
  "rocketbot_plugin_sed",
  "rocketbot_plugin_text_commands",
  "rocketbot_plugin_thanks",
@@ -1218,6 +1219,20 @@ dependencies = [
  "rand",
  "rocketbot_interface",
  "tokio",
+]
+
+[[package]]
+name = "rocketbot_plugin_quotes"
+version = "0.1.0"
+dependencies = [
+ "async-trait",
+ "chrono",
+ "json",
+ "log",
+ "rand",
+ "rocketbot_interface",
+ "tokio",
+ "tokio-postgres",
 ]
 
 [[package]]

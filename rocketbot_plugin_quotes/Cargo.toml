@@ -1,0 +1,14 @@
+[package]
+name = "rocketbot_plugin_quotes"
+version = "0.1.0"
+edition = "2018"
+
+[dependencies]
+async-trait = { version = "0.1" }
+chrono = { version = "0.4" }
+json = { version = "0.12" }
+log = { version = "0.4" }
+rand = { version = "0.8" }
+rocketbot_interface = { path = "../rocketbot_interface" }
+tokio = { version = "1.7" }
+tokio-postgres = { version = "0.7", features = ["with-chrono-0_4"] }
