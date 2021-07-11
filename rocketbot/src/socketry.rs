@@ -625,7 +625,8 @@ async fn handle_received(body: &JsonValue, mut state: &mut ConnectionState) {
     } else if body["msg"] == "result" && body["id"] == GET_ROOMS_MESSAGE_ID {
         // update our rooms
         for update_room in body["result"]["update"].members() {
-            if update_room["t"] != "c" {
+            // channel = "c", private channel = "p", direct = "p", omnichannel = "l"
+            if update_room["t"] != "c" && update_room["t"] != "p" {
                 // not a channel; skip
                 // TODO: private messages?
                 continue;
@@ -729,7 +730,7 @@ async fn handle_received(body: &JsonValue, mut state: &mut ConnectionState) {
             // somebody added us to a channel!
             // subscribe to its messages
             let update_room = &body["fields"]["args"][1];
-            if update_room["t"] != "c" {
+            if update_room["t"] != "c" && update_room["t"] != "p" {
                 // not a channel; skip
                 // TODO: private messages?
                 return;
