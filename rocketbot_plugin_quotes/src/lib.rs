@@ -156,13 +156,13 @@ GROUP BY q.quote_id, q.timestamp, q.channel, q.author, q.message_type, q.body
         all_filter_values.append(&mut having_filter_values);
         all_filter_values.append(&mut where_filter_values);
 
-        let having_filter = if having_filter_pieces.len() > 0 {
+        let having_filter = if having_filter_pieces.len() == 0 {
             String::new()
         } else {
             format!("HAVING {}", having_filter_pieces.join(", "))
         };
 
-        let where_filter = if where_filter_pieces.len() > 0 {
+        let where_filter = if where_filter_pieces.len() == 0 {
             String::new()
         } else {
             format!("WHERE {}", where_filter_pieces.join(", "))
