@@ -125,7 +125,7 @@ impl<T: ?Sized> Deref for RwLockReadGuard<'_, T> {
 }
 impl<T: ?Sized> Drop for RwLockReadGuard<'_, T> {
     fn drop(&mut self) {
-        debug!("Mutex: read-unlocking {}", self.identifier);
+        debug!("RwLock: read-unlocking {}", self.identifier);
     }
 }
 
@@ -154,6 +154,6 @@ impl<T: ?Sized> DerefMut for RwLockWriteGuard<'_, T> {
 }
 impl<T: ?Sized> Drop for RwLockWriteGuard<'_, T> {
     fn drop(&mut self) {
-        debug!("Mutex: write-unlocking {}", self.identifier);
+        debug!("RwLock: write-unlocking {}", self.identifier);
     }
 }
