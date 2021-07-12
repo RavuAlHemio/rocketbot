@@ -11,9 +11,9 @@ use json::JsonValue;
 use once_cell::sync::Lazy;
 use regex::Regex;
 use reqwest::IntoUrl;
+use rocketbot_interface::sync::Mutex;
 use serde::{Deserialize, Serialize};
 use serde::de::DeserializeOwned;
-use tokio::sync::Mutex;
 use url::Url;
 
 
@@ -286,7 +286,10 @@ impl GeoNamesClient {
         let username = config["username"]
             .as_str().expect("username missing or not representable as string")
             .to_owned();
-        let http_client = Mutex::new(reqwest::Client::new());
+        let http_client = Mutex::new(
+            "GeoNamesClient::http_client",
+            reqwest::Client::new(),
+        );
         let country_codes = CountryCodeMapping::load_from_file(Path::new("CountryCodes.json"))
             .expect("failed to load country code mappings");
 

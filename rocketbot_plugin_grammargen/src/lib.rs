@@ -13,11 +13,10 @@ use json::JsonValue;
 use log::error;
 use rand::SeedableRng;
 use rand::rngs::StdRng;
-use tokio::sync::Mutex;
-
 use rocketbot_interface::commands::{CommandDefinition, CommandInstance};
 use rocketbot_interface::interfaces::{RocketBotInterface, RocketBotPlugin};
 use rocketbot_interface::model::ChannelMessage;
+use rocketbot_interface::sync::Mutex;
 
 use crate::grammar::{GeneratorState, Rulebook};
 use crate::parsing::parse_grammar;
@@ -78,7 +77,10 @@ impl RocketBotPlugin for GrammarGenPlugin {
             my_interface.register_channel_command(&this_grammar_command).await;
         }
 
-        let rng = Arc::new(Mutex::new(StdRng::from_entropy()));
+        let rng = Arc::new(Mutex::new(
+            "GrammarGenPlugin::rng",
+            StdRng::from_entropy(),
+        ));
 
         GrammarGenPlugin {
             interface,

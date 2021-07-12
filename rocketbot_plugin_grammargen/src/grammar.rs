@@ -7,7 +7,7 @@ use num_bigint::{BigUint, RandBigInt};
 use num_traits::Zero;
 use rand::Rng;
 use rand::rngs::StdRng;
-use tokio::sync::Mutex;
+use rocketbot_interface::sync::Mutex;
 
 
 #[derive(Debug)]

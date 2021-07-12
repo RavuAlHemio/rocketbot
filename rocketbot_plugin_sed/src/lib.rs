@@ -10,7 +10,7 @@ use json::JsonValue;
 use log::info;
 use rocketbot_interface::interfaces::{RocketBotInterface, RocketBotPlugin};
 use rocketbot_interface::model::ChannelMessage;
-use tokio::sync::Mutex;
+use rocketbot_interface::sync::Mutex;
 
 use crate::commands::Transformer;
 use crate::parsing::parse_replacement_commands;
@@ -108,7 +108,10 @@ impl RocketBotPlugin for SedPlugin {
         let result_too_long_message = config["result_too_long_message"].as_str()
             .unwrap_or("(sorry, that's too long)").to_owned();
 
-        let channel_name_to_last_messages = Mutex::new(HashMap::new());
+        let channel_name_to_last_messages = Mutex::new(
+            "SedPlugin::channel_name_to_last_message",
+            HashMap::new(),
+        );
 
         SedPlugin {
             interface,

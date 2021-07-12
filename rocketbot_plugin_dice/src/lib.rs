@@ -14,7 +14,7 @@ use regex::{Captures, Regex};
 use rocketbot_interface::commands::{CommandDefinition, CommandInstance, CommandValueType};
 use rocketbot_interface::interfaces::{RocketBotInterface, RocketBotPlugin};
 use rocketbot_interface::model::ChannelMessage;
-use tokio::sync::Mutex;
+use rocketbot_interface::sync::Mutex;
 
 
 static ROLL_REGEX: Lazy<Regex> = Lazy::new(|| Regex::new(concat!(
@@ -509,8 +509,14 @@ impl RocketBotPlugin for DicePlugin {
         };
 
         let dice_config = DiceConfig::from(&config);
-        let rng = Mutex::new(StdRng::from_entropy());
-        let channel_name_to_cooldown_state = Mutex::new(HashMap::new());
+        let rng = Mutex::new(
+            "DicePlugin::rng",
+            StdRng::from_entropy(),
+        );
+        let channel_name_to_cooldown_state = Mutex::new(
+            "DicePlugin::channel_name_to_cooldown_state",
+            HashMap::new(),
+        );
 
         let roll_command = CommandDefinition::new(
             "roll".to_string(),

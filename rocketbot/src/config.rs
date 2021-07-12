@@ -2,8 +2,8 @@ use std::fs::File;
 use std::path::PathBuf;
 
 use once_cell::sync::OnceCell;
+use rocketbot_interface::sync::RwLock;
 use serde::{Deserialize, Serialize};
-use tokio::sync::RwLock;
 
 use crate::errors::ConfigError;
 use crate::jsonage::RocketBotJsonValue;
@@ -49,7 +49,7 @@ pub(crate) async fn load_config() -> Result<(), ConfigError> {
     match CONFIG.get() {
         None => {
             // initial setting
-            if let Err(_) = CONFIG.set(RwLock::new(config)) {
+            if let Err(_) = CONFIG.set(RwLock::new("CONFIG", config)) {
                 return Err(ConfigError::Setting);
             }
         },

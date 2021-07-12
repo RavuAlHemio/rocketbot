@@ -6,3 +6,5 @@ edition = "2018"
 [dependencies]
 async-trait = { version = "0.1" }
 json = { version = "0.12" }
+log = { version = "0.4" }
+tokio = { version = "1.7", features = ["sync"] }

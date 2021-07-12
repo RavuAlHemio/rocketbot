@@ -11,9 +11,9 @@ use log::error;
 use once_cell::sync::Lazy;
 use regex::Regex;
 use reqwest;
+use rocketbot_interface::sync::Mutex;
 use serde::de::DeserializeOwned;
 use serde_json;
-use tokio::sync::Mutex;
 
 use crate::interface::{WeatherError, WeatherProvider};
 use crate::providers::owm::model::{Forecast, StationReading, WeatherState};
@@ -261,8 +261,14 @@ impl WeatherProvider for OpenWeatherMapProvider {
                     .as_usize().expect("max_calls_per_minute is either missing or not representable as usize")
             )
         };
-        let last_queries = Mutex::new(BTreeSet::new());
-        let http_client = Mutex::new(reqwest::Client::new());
+        let last_queries = Mutex::new(
+            "OpenWeatherMapProvider::last_queries",
+            BTreeSet::new(),
+        );
+        let http_client = Mutex::new(
+            "OpenWeatherMapProvider::http_client",
+            reqwest::Client::new(),
+        );
 
         OpenWeatherMapProvider {
             api_key,

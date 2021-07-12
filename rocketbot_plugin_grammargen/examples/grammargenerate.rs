@@ -9,8 +9,7 @@ use std::sync::Arc;
 use num_bigint::BigUint;
 use rand::SeedableRng;
 use rand::rngs::StdRng;
-use tokio::sync::Mutex;
-
+use rocketbot_interface::sync::Mutex;
 use rocketbot_plugin_grammargen::grammar::{
     Alternative, GeneratorState, Production, RuleDefinition, SequenceElement, SequenceElementCount,
     SingleSequenceElement,
@@ -79,7 +78,10 @@ async fn main() {
     let state = GeneratorState::new(
         rulebook,
         HashSet::new(),
-        Arc::new(Mutex::new(StdRng::from_entropy())),
+        Arc::new(Mutex::new(
+            "GeneratorState",
+            StdRng::from_entropy(),
+        )),
     );
 
     if let Err(soundness) = state.verify_soundness().await {

@@ -19,9 +19,10 @@ use rand::rngs::StdRng;
 use rocketbot_interface::commands::CommandDefinition;
 use rocketbot_interface::interfaces::{RocketBotInterface, RocketBotPlugin};
 use rocketbot_interface::model::{Channel, ChannelMessage, Message, User};
+use rocketbot_interface::sync::{Mutex, RwLock, RwLockReadGuard};
 use sha2::{Digest, Sha256};
 use tokio;
-use tokio::sync::{Mutex, Notify, RwLock, RwLockReadGuard};
+use tokio::sync::Notify;
 use tokio::sync::mpsc;
 use tokio_tungstenite::connect_async;
 use tokio_tungstenite::tungstenite::Message as WebSocketMessage;
@@ -53,7 +54,10 @@ impl ChannelDatabase {
         Self {
             by_id: HashMap::new(),
             by_name: HashMap::new(),
-            users_by_id: RwLock::new(HashMap::new()),
+            users_by_id: RwLock::new(
+                "ChannelDatabase::users_by_id",
+                HashMap::new(),
+            ),
         }
     }
 
@@ -346,14 +350,29 @@ async fn generate_message_id<R: Rng>(rng_lock: &Mutex<R>) -> String {
 pub(crate) async fn connect() -> Arc<ServerConnection> {
     let (outgoing_sender, outgoing_receiver) = mpsc::unbounded_channel();
     let exit_notify = Notify::new();
-    let subscribed_channels = RwLock::new(ChannelDatabase::new_empty());
-    let plugins = RwLock::new(Vec::new());
-    let rng = Mutex::new(StdRng::from_entropy());
+    let subscribed_channels = RwLock::new(
+        "SharedConnectionState::subscribed_channels",
+        ChannelDatabase::new_empty(),
+    );
+    let plugins = RwLock::new(
+        "SharedConnectionState::plugins",
+        Vec::new(),
+    );
+    let rng = Mutex::new(
+        "SharedConnectionState::rng",
+        StdRng::from_entropy(),
+    );
     let command_config = Default::default();
-    let commands = RwLock::new(HashMap::new());
+    let commands = RwLock::new(
+        "SharedConnectionState::commands",
+        HashMap::new(),
+    );
     let http_client = hyper::Client::builder()
         .build(HttpsConnector::with_native_roots());
-    let my_user_id: RwLock<Option<String>> = RwLock::new(None);
+    let my_user_id: RwLock<Option<String>> = RwLock::new(
+        "SharedConnectionState::my_user_id",
+        None,
+    );
 
     let shared_state = Arc::new(SharedConnectionState::new(
         outgoing_sender,

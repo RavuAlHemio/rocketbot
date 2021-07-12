@@ -8,7 +8,7 @@ use rand::rngs::StdRng;
 use rocketbot_interface::commands::{CommandDefinition, CommandInstance};
 use rocketbot_interface::interfaces::{RocketBotInterface, RocketBotPlugin};
 use rocketbot_interface::model::ChannelMessage;
-use tokio::sync::Mutex;
+use rocketbot_interface::sync::Mutex;
 
 
 pub struct TextCommandsPlugin {
@@ -63,7 +63,10 @@ impl RocketBotPlugin for TextCommandsPlugin {
             &config["nicknamable_commands_responses"],
         ).await;
 
-        let rng = Mutex::new(StdRng::from_entropy());
+        let rng = Mutex::new(
+            "TextCommandsPlugin::rng",
+            StdRng::from_entropy(),
+        );
 
         TextCommandsPlugin {
             interface,

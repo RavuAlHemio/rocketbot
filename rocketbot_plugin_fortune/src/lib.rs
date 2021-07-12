@@ -8,11 +8,10 @@ use async_trait::async_trait;
 use json::JsonValue;
 use rand::{Rng, SeedableRng};
 use rand::rngs::StdRng;
-use tokio::sync::Mutex;
-
 use rocketbot_interface::commands::{CommandDefinition, CommandInstance};
 use rocketbot_interface::interfaces::{RocketBotInterface, RocketBotPlugin};
 use rocketbot_interface::model::ChannelMessage;
+use rocketbot_interface::sync::Mutex;
 
 
 pub struct FortunePlugin {
@@ -60,7 +59,10 @@ impl RocketBotPlugin for FortunePlugin {
             name_to_fortunes.insert(fortune_file_name, fortunes);
         }
 
-        let rng = Mutex::new(StdRng::from_entropy());
+        let rng = Mutex::new(
+            "FortunePlugin::rng",
+            StdRng::from_entropy(),
+        );
 
         FortunePlugin {
             interface,

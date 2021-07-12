@@ -14,7 +14,7 @@ use rand::seq::SliceRandom;
 use rocketbot_interface::commands::{CommandDefinition, CommandInstance};
 use rocketbot_interface::interfaces::{RocketBotInterface, RocketBotPlugin};
 use rocketbot_interface::model::ChannelMessage;
-use tokio::sync::Mutex;
+use rocketbot_interface::sync::Mutex;
 use tokio_postgres::NoTls;
 use tokio_postgres::types::ToSql;
 
@@ -660,17 +660,20 @@ impl RocketBotPlugin for QuotesPlugin {
         let vote_threshold = config["vote_threshold"]
             .as_i64().unwrap_or(-3);
 
-        let quotes_state = Mutex::new(QuotesState::new(
-            HashMap::new(),
-            HashMap::new(),
-            StdRng::from_entropy(),
-            None,
-            None,
-            None,
-            0,
-            0,
-            0,
-        ));
+        let quotes_state = Mutex::new(
+            "QuotesPlugin::quotes_state",
+            QuotesState::new(
+                HashMap::new(),
+                HashMap::new(),
+                StdRng::from_entropy(),
+                None,
+                None,
+                None,
+                0,
+                0,
+                0,
+            ),
+        );
 
         let addquote_command = CommandDefinition::new(
             "addquote".to_owned(),

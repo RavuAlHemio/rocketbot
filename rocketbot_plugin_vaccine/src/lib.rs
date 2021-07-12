@@ -13,7 +13,7 @@ use num_traits::ToPrimitive;
 use rocketbot_interface::commands::{CommandDefinition, CommandInstance};
 use rocketbot_interface::interfaces::{RocketBotInterface, RocketBotPlugin};
 use rocketbot_interface::model::ChannelMessage;
-use tokio::sync::RwLock;
+use rocketbot_interface::sync::RwLock;
 
 use crate::database::{VaccinationStats, VaccineDatabase};
 
@@ -75,12 +75,15 @@ impl RocketBotPlugin for VaccinePlugin {
             .as_str().expect("vaccine_csv_uri missing or not a string")
             .to_owned();
 
-        let vaccine_database = RwLock::new(match VaccineDatabase::new_from_url(&vaccine_csv_uri).await {
-            Ok(d) => d,
-            Err(e) => {
-                panic!("initial database population failed: {}", e);
+        let vaccine_database = RwLock::new(
+            "VaccinePlugin::vaccine_database",
+            match VaccineDatabase::new_from_url(&vaccine_csv_uri).await {
+                Ok(d) => d,
+                Err(e) => {
+                    panic!("initial database population failed: {}", e);
+                },
             },
-        });
+        );
 
         let vaccine_command = CommandDefinition::new(
             "vaccine".to_owned(),
