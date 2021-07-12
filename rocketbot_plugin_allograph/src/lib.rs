@@ -37,13 +37,30 @@ impl LocalReplacerRegex {
 }
 
 
+#[derive(Debug)]
+struct InnerState {
+    pub cooldowns_per_channel: HashMap<String, Vec<usize>>,
+    pub rng: StdRng,
+}
+impl InnerState {
+    pub fn new(
+        cooldowns_per_channel: HashMap<String, Vec<usize>>,
+        rng: StdRng,
+    ) -> Self {
+        Self {
+            cooldowns_per_channel,
+            rng,
+        }
+    }
+}
+
+
 pub struct AllographPlugin {
     interface: Weak<dyn RocketBotInterface>,
     probability_percent: u8,
     replacer_regexes: Vec<LocalReplacerRegex>,
     cooldown_increase_per_hit: usize,
-    cooldowns_per_channel: Mutex<HashMap<String, Vec<usize>>>,
-    rng: Mutex<StdRng>,
+    inner_state: Mutex<InnerState>,
 }
 #[async_trait]
 impl RocketBotPlugin for AllographPlugin {
@@ -89,22 +106,20 @@ impl RocketBotPlugin for AllographPlugin {
             0
         };
 
-        let cooldowns_per_channel = Mutex::new(
-            "AllographPlugin::cooldowns_per_channel",
-            HashMap::new(),
-        );
-        let rng = Mutex::new(
-            "AllographPlugin::rng",
-            StdRng::from_entropy(),
+        let inner_state = Mutex::new(
+            "AllographPlugin::inner_state",
+            InnerState::new(
+                HashMap::new(),
+                StdRng::from_entropy(),
+            ),
         );
 
         AllographPlugin {
             interface,
             probability_percent,
             replacer_regexes,
-            cooldowns_per_channel,
             cooldown_increase_per_hit,
-            rng,
+            inner_state,
         }
     }
 
@@ -118,9 +133,11 @@ impl RocketBotPlugin for AllographPlugin {
         let channel_name = &channel_message.channel.name;
         let sender_nickname = &channel_message.message.sender.nickname;
 
-        let mut cooldown_guard = self.cooldowns_per_channel
+        let mut state_guard = self.inner_state
             .lock().await;
-        let channel_cooldowns = cooldown_guard
+        let inner_state = &mut *state_guard;
+
+        let channel_cooldowns = inner_state.cooldowns_per_channel
             .entry(channel_name.clone())
             .or_insert_with(|| vec![0usize; self.replacer_regexes.len()]);
 
@@ -139,8 +156,7 @@ impl RocketBotPlugin for AllographPlugin {
                     if channel_cooldowns[i] == 0 {
                         // cold, apply it!
                         if replacement.additional_probability_percent < 100 {
-                            let mut rng_guard = self.rng.lock().await;
-                            let add_prob = rng_guard.gen_range(0..100);
+                            let add_prob = inner_state.rng.gen_range(0..100);
                             if add_prob < replacement.additional_probability_percent {
                                 changing_body = replaced;
                             }
@@ -162,8 +178,7 @@ impl RocketBotPlugin for AllographPlugin {
             } else {
                 // no cooldowns
                 if replacement.additional_probability_percent < 100 {
-                    let mut rng_guard = self.rng.lock().await;
-                    let add_prob = rng_guard.gen_range(0..100);
+                    let add_prob = inner_state.rng.gen_range(0..100);
                     if add_prob < replacement.additional_probability_percent {
                         changing_body = replaced;
                     }
@@ -177,8 +192,7 @@ impl RocketBotPlugin for AllographPlugin {
             return;
         }
 
-        let mut rng_guard = self.rng.lock().await;
-        let main_prob = rng_guard.gen_range(0..100);
+        let main_prob = inner_state.rng.gen_range(0..100);
         if main_prob < self.probability_percent {
             debug!("{} < {}; posting {:?}", main_prob, self.probability_percent, changing_body);
             interface.send_channel_message(
