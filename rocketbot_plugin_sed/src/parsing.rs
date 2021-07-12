@@ -114,7 +114,7 @@ fn parse_sub_flags(flags: &str) -> Option<SubFlags> {
     ))
 }
 
-fn transform_replacement_string(replacement_string_sed: &str) -> String {
+fn transform_replacement_string(replacement_string_sed: &str, cap_group_count: usize) -> Option<String> {
     let mut ret = String::with_capacity(replacement_string_sed.len());
 
     let mut escaping = false;
@@ -131,8 +131,14 @@ fn transform_replacement_string(replacement_string_sed: &str) -> String {
             escaping = false;
         } else if c >= '0' && c <= '9' && escaping {
             // group reference
-            ret.push('$');
+            let group_number = (c as usize) - ('0' as usize);
+            if group_number >= cap_group_count {
+                return None;
+            }
+
+            ret.push_str("${");
             ret.push(c);
+            ret.push('}');
             escaping = false;
         } else {
             ret.push(c);
@@ -140,7 +146,7 @@ fn transform_replacement_string(replacement_string_sed: &str) -> String {
         }
     }
 
-    ret
+    Some(ret)
 }
 
 #[derive(Clone, Debug, Eq, Hash, PartialEq)]
@@ -169,7 +175,6 @@ enum ParserState {
     AwaitingPattern,
     AwaitingReplacement,
     AwaitingFlags,
-    Finished,
 }
 
 fn take_replacement_command(mut full_command: &str) -> TakenReplacementCommand {
@@ -394,8 +399,6 @@ fn make_substitute_command(command: &GenericReplacementCommand) -> Option<SedCom
         Some(sf) => sf,
     };
 
-    let replacement_string = transform_replacement_string(&command.new_string);
-
     let flagged_regex_string = if sub_flags.options.len() > 0 {
         format!("(?{}){}", sub_flags.options, command.old_string)
     } else {
@@ -407,6 +410,22 @@ fn make_substitute_command(command: &GenericReplacementCommand) -> Option<SedCom
             return None;
         },
         Ok(r) => r,
+    };
+
+    let replacement_string_opt = transform_replacement_string(
+        &command.new_string,
+        flagged_regex.captures_len(),
+    );
+    let replacement_string = match replacement_string_opt {
+        Some(rs) => rs,
+        None => {
+            info!(
+                "error in replacement string {:?} for pattern {:?}",
+                command.new_string,
+                flagged_regex_string,
+            );
+            return None;
+        },
     };
 
     Some(SedCommand::Substitute(SubstituteCommand::new(
