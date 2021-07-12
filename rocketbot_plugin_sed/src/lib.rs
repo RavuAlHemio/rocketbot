@@ -40,6 +40,11 @@ impl SedPlugin {
             return true;
         }
 
+        if channel_message.message.is_by_bot {
+            // avoid botloops
+            return true;
+        }
+
         let last_messages = {
             // find the message to perform a replacement in
             let messages_guard = self.channel_name_to_last_messages
