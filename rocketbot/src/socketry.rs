@@ -265,6 +265,9 @@ impl RocketBotInterface for ServerConnection {
                     _id: message_id.clone(),
                     rid: channel.id.clone(),
                     msg: message,
+                    bot: {
+                        i: "RavuAlHemio/rocketbot",
+                    },
                 },
             ],
         };
