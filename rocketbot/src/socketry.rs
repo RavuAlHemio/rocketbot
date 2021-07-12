@@ -241,19 +241,30 @@ impl Clone for ServerConnection {
 }
 #[async_trait]
 impl RocketBotInterface for ServerConnection {
-    async fn send_channel_message(&self, channel: &str, message: &str) {
+    async fn send_channel_message(&self, channel_name: &str, message: &str) {
         // make an ID for this message
         let channel_opt = {
             let cdb_guard = self.shared_state.subscribed_channels
                 .read().await;
-            cdb_guard.get_by_name(channel).map(|c| c.clone())
+            cdb_guard.get_by_name(channel_name).map(|c| c.clone())
         };
         let channel = if let Some(c) = channel_opt {
             c
         } else {
-            warn!("trying to send message to unknown channel {:?}", channel);
+            warn!("trying to send message to unknown channel {:?}", channel_name);
             return;
         };
+
+        {
+            // let the plugins review and possibly block the message
+            let plugins = self.shared_state.plugins
+                .read().await;
+            for plugin in plugins.iter() {
+                if !plugin.outgoing_channel_message(channel_name, message).await {
+                    return;
+                }
+            }
+        }
 
         let message_id = generate_message_id(&self.shared_state.rng).await;
         let message_body = json::object! {
