@@ -1,0 +1,8 @@
+[package]
+name = "rocketbot_regex_replace"
+version = "0.1.0"
+edition = "2018"
+
+[dependencies]
+once_cell = { version = "1.8" }
+regex = { version = "1.5" }

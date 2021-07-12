@@ -3,6 +3,7 @@ members = [
     "rocketbot",
     "rocketbot_geonames",
     "rocketbot_interface",
+    "rocketbot_plugin_allograph",
     "rocketbot_plugin_belch",
     "rocketbot_plugin_config_user_alias",
     "rocketbot_plugin_dice",
@@ -15,4 +16,5 @@ members = [
     "rocketbot_plugin_vaccine",
     "rocketbot_plugin_version",
     "rocketbot_plugin_weather",
+    "rocketbot_regex_replace",
 ]

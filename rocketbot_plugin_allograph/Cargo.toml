@@ -1,0 +1,13 @@
+[package]
+name = "rocketbot_plugin_allograph"
+version = "0.1.0"
+edition = "2018"
+
+[dependencies]
+async-trait = { version = "0.1" }
+json = { version = "0.12" }
+log = { version = "0.4" }
+rand = { version = "0.8" }
+regex = { version = "1.5" }
+rocketbot_interface = { path = "../rocketbot_interface" }
+rocketbot_regex_replace = { path = "../rocketbot_regex_replace" }

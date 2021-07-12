@@ -1130,6 +1130,7 @@ dependencies = [
  "once_cell",
  "rand",
  "rocketbot_interface",
+ "rocketbot_plugin_allograph",
  "rocketbot_plugin_belch",
  "rocketbot_plugin_config_user_alias",
  "rocketbot_plugin_dice",
@@ -1175,6 +1176,19 @@ dependencies = [
  "json",
  "log",
  "tokio",
+]
+
+[[package]]
+name = "rocketbot_plugin_allograph"
+version = "0.1.0"
+dependencies = [
+ "async-trait",
+ "json",
+ "log",
+ "rand",
+ "regex",
+ "rocketbot_interface",
+ "rocketbot_regex_replace",
 ]
 
 [[package]]
@@ -1334,6 +1348,14 @@ dependencies = [
  "serde",
  "serde_json",
  "tokio",
+]
+
+[[package]]
+name = "rocketbot_regex_replace"
+version = "0.1.0"
+dependencies = [
+ "once_cell",
+ "regex",
 ]
 
 [[package]]
