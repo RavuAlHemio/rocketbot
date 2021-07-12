@@ -725,6 +725,7 @@ async fn handle_received(body: &JsonValue, mut state: &mut ConnectionState) {
                     ),
                     raw_message,
                     parsed_message,
+                    message_json["bot"].is_object(),
                 ),
                 channel,
             );

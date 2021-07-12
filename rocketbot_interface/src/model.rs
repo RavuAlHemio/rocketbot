@@ -46,17 +46,20 @@ pub struct Message {
     pub sender: User,
     pub raw: String,
     pub parsed: Vec<MessageFragment>,
+    pub is_by_bot: bool,
 }
 impl Message {
     pub fn new(
         sender: User,
         raw: String,
         parsed: Vec<MessageFragment>,
+        is_by_bot: bool,
     ) -> Self {
         Self {
             sender,
             raw,
             parsed,
+            is_by_bot,
         }
     }
 }
