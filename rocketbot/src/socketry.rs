@@ -680,7 +680,24 @@ async fn handle_received(body: &JsonValue, mut state: &mut ConnectionState) {
         for message_json in body["fields"]["args"].members() {
             if message_json.has_key("editedAt") {
                 // TODO: handle edited messages?
-                return;
+                continue;
+            }
+
+            let sender_id = match message_json["u"]["_id"].as_str() {
+                Some(sid) => sid,
+                None => continue,
+            };
+            let my_user_id = {
+                let my_uid_guard = state.shared_state.my_user_id
+                    .read().await;
+                match my_uid_guard.deref() {
+                    Some(muid) => muid.clone(),
+                    None => continue,
+                }
+            };
+            if sender_id == my_user_id {
+                // don't process messages from myself
+                continue;
             }
 
             let channel_id = message_json["rid"].to_string();
@@ -693,7 +710,7 @@ async fn handle_received(body: &JsonValue, mut state: &mut ConnectionState) {
                 None => {
                     // TODO: proactively look up channel?
                     warn!("message from unknown channel {:?}", channel_id);
-                    return;
+                    continue;
                 },
                 Some(c) => c,
             };
@@ -712,7 +729,7 @@ async fn handle_received(body: &JsonValue, mut state: &mut ConnectionState) {
                         "failed to parse message {:?} from structure {:?}: {}",
                         raw_message, message_json["md"].to_string(), e,
                     );
-                    return;
+                    continue;
                 },
             };
 
