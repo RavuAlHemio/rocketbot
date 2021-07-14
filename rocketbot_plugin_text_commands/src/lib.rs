@@ -18,7 +18,7 @@ pub struct TextCommandsPlugin {
     rng: Mutex<StdRng>,
 }
 impl TextCommandsPlugin {
-    async fn collect_commands(my_interface: Arc<dyn RocketBotInterface>, config_dict: &JsonValue) -> HashMap<String, Vec<String>> {
+    async fn collect_commands(my_interface: Arc<dyn RocketBotInterface>, config_dict: &JsonValue, nicknamable: bool) -> HashMap<String, Vec<String>> {
         let mut commands_responses = HashMap::new();
         for (command, variant) in config_dict.entries() {
             let responses: Vec<String> = variant.members()
@@ -35,8 +35,10 @@ impl TextCommandsPlugin {
             commands_responses.insert(command_name.clone(), responses);
 
             let mut random_flags = HashSet::new();
-            random_flags.insert("r".to_owned());
-            random_flags.insert("random".to_owned());
+            if nicknamable {
+                random_flags.insert("r".to_owned());
+                random_flags.insert("random".to_owned());
+            }
 
             let command = CommandDefinition::new(
                 command_name,
@@ -60,11 +62,13 @@ impl RocketBotPlugin for TextCommandsPlugin {
         let commands_responses = TextCommandsPlugin::collect_commands(
             Arc::clone(&my_interface),
             &config["commands_responses"],
+            false,
         ).await;
 
         let nicknamable_commands_responses = TextCommandsPlugin::collect_commands(
             Arc::clone(&my_interface),
             &config["nicknamable_commands_responses"],
+            true,
         ).await;
 
         let rng = Mutex::new(
