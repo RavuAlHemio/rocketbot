@@ -130,7 +130,10 @@ fn best_guess_case(string_to_case: &str, case_template: &str) -> String {
     let chars_to_case: Vec<char> = string_to_case.chars().collect();
     let case_template_chars: Vec<char> = case_template.chars().collect();
 
-    assert!(case_template_chars.len() > 1);
+    if case_template_chars.len() < 2 {
+        return string_to_case.to_owned();
+    }
+
     assert!(chars_to_case.len() > 0);
 
     let first_upper = case_template_chars[0].is_uppercase();
