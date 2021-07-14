@@ -6,7 +6,7 @@ use std::collections::{HashMap, HashSet};
 use std::fs::File;
 use std::io::Read;
 use std::path::PathBuf;
-use std::sync::{Arc, Weak};
+use std::sync::{Arc, Mutex, Weak};
 
 use async_trait::async_trait;
 use json::JsonValue;
@@ -16,7 +16,6 @@ use rand::rngs::StdRng;
 use rocketbot_interface::commands::{CommandDefinition, CommandInstance};
 use rocketbot_interface::interfaces::{RocketBotInterface, RocketBotPlugin};
 use rocketbot_interface::model::ChannelMessage;
-use rocketbot_interface::sync::Mutex;
 
 use crate::grammar::{GeneratorState, Rulebook};
 use crate::parsing::parse_grammar;
@@ -78,7 +77,6 @@ impl RocketBotPlugin for GrammarGenPlugin {
         }
 
         let rng = Arc::new(Mutex::new(
-            "GrammarGenPlugin::rng",
             StdRng::from_entropy(),
         ));
 
@@ -126,13 +124,13 @@ impl RocketBotPlugin for GrammarGenPlugin {
             .map(|opt_name| format!("opt_{}", opt_name))
             .collect();
 
-        let state = GeneratorState::new(
+        let mut state = GeneratorState::new(
             my_grammar,
             conditions,
             Arc::clone(&self.rng),
         );
 
-        let phrase = match state.generate().await {
+        let phrase = match state.generate() {
             None => return,
             Some(s) => s,
         };

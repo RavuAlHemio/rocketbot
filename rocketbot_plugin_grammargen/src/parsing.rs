@@ -7,10 +7,7 @@ use pest::error::Error;
 use pest::iterators::Pair;
 use pest_derive::Parser;
 
-use crate::grammar::{
-    Alternative, Condition, Production, Rulebook, RuleDefinition, SequenceElement,
-    SequenceElementCount, SingleSequenceElement,
-};
+use crate::grammar::{Alternative, Condition, Production, Rulebook, RuleDefinition};
 
 
 #[derive(Parser)]
@@ -165,7 +162,12 @@ fn parse_production(prod_pair: &Pair<'_, Rule>) -> Production {
         alternatives.push(alternative);
     }
 
-    Production::new(alternatives)
+    if alternatives.len() == 1 && alternatives[0].conditions.len() == 0 {
+        // trivial case
+        alternatives.remove(0).inner
+    } else {
+        Production::Choice { options: alternatives }
+    }
 }
 
 fn parse_alternative(alt_pair: &Pair<'_, Rule>) -> Alternative {
@@ -191,10 +193,16 @@ fn parse_alternative(alt_pair: &Pair<'_, Rule>) -> Alternative {
         }
     }
 
+    let inner = if sequence.len() == 1 {
+        sequence.remove(0)
+    } else {
+        Production::Sequence { prods: sequence }
+    };
+
     Alternative::new(
         conditions,
         weight,
-        sequence,
+        inner,
     )
 }
 
@@ -225,33 +233,34 @@ fn parse_weight(weight_pair: &Pair<'_, Rule>) -> BigUint {
     number
 }
 
-fn parse_sequence_elem(seq_elem_pair: &Pair<'_, Rule>) -> SequenceElement {
+fn parse_sequence_elem(seq_elem_pair: &Pair<'_, Rule>) -> Production {
     let mut inner = seq_elem_pair.clone().into_inner();
 
     let single_elem_pair = inner.next().expect("no single sequence element");
     let single_elem = parse_single_sequence_elem(&single_elem_pair);
 
-    let mut count = SequenceElementCount::One;
-
     if let Some(kleene) = inner.next() {
-        match kleene.as_str() {
+        return match kleene.as_str() {
             "*" => {
-                count = SequenceElementCount::ZeroOrMore;
+                Production::Kleene {
+                    at_least_one: false,
+                    inner: Box::new(single_elem),
+                }
             },
             "+" => {
-                count = SequenceElementCount::OneOrMore;
+                Production::Kleene {
+                    at_least_one: true,
+                    inner: Box::new(single_elem),
+                }
             },
             other => panic!("unexpected single-sequence count symbol: {}", other),
         };
     }
 
-    SequenceElement::new(
-        single_elem,
-        count,
-    )
+    single_elem
 }
 
-fn parse_single_sequence_elem(sse_pair: &Pair<'_, Rule>) -> SingleSequenceElement {
+fn parse_single_sequence_elem(sse_pair: &Pair<'_, Rule>) -> Production {
     let mut inner = sse_pair.clone().into_inner();
 
     let elem_pair = inner.next().expect("no element");
@@ -262,9 +271,7 @@ fn parse_single_sequence_elem(sse_pair: &Pair<'_, Rule>) -> SingleSequenceElemen
             let production_pair = innerer.next().expect("no production");
             let production = parse_production(&production_pair);
 
-            SingleSequenceElement::Parenthesized {
-                production,
-            }
+            production
         },
         Rule::optional => {
             let mut innerer = elem_pair.clone().into_inner();
@@ -280,9 +287,9 @@ fn parse_single_sequence_elem(sse_pair: &Pair<'_, Rule>) -> SingleSequenceElemen
 
             let production = parse_production(&next_pair);
 
-            SingleSequenceElement::Optional {
+            Production::Optional {
                 weight,
-                production,
+                inner: Box::new(production),
             }
         },
         Rule::call_params => {
@@ -301,25 +308,25 @@ fn parse_single_sequence_elem(sse_pair: &Pair<'_, Rule>) -> SingleSequenceElemen
                 arguments.push(arg);
             }
 
-            SingleSequenceElement::Call {
-                identifier,
-                arguments,
+            Production::Call {
+                name: identifier,
+                args: arguments,
             }
         },
         Rule::identifier => {
             let identifier = parse_identifier(&elem_pair);
             let arguments = Vec::new();
 
-            SingleSequenceElement::Call {
-                identifier,
-                arguments,
+            Production::Call {
+                name: identifier,
+                args: arguments,
             }
         },
         Rule::escaped_string => {
             let value = parse_escaped_string(&elem_pair);
 
-            SingleSequenceElement::String {
-                value,
+            Production::String {
+                string: value,
             }
         },
         other => panic!("unexpected single sequence element: {:?}", other),

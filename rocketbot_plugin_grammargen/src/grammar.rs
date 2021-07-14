@@ -1,13 +1,11 @@
 use std::collections::{HashMap, HashSet};
 use std::fmt::{self, Debug};
-use std::sync::Arc;
+use std::sync::{Arc, Mutex};
 
-use async_trait::async_trait;
 use num_bigint::{BigUint, RandBigInt};
 use num_traits::Zero;
 use rand::Rng;
 use rand::rngs::StdRng;
-use rocketbot_interface::sync::Mutex;
 
 
 #[derive(Debug)]
@@ -29,20 +27,20 @@ impl GeneratorState {
         }
     }
 
-    pub async fn verify_soundness(&self) -> Result<(), SoundnessError> {
+    pub fn verify_soundness(&mut self) -> Result<(), SoundnessError> {
         let top_rule = match self.rulebook.rule_definitions.get(&self.rulebook.name) {
-            Some(tr) => tr,
+            Some(tr) => tr.clone(),
             None => return Err(SoundnessError::TopRuleNotFound(self.rulebook.name.clone())),
         };
-        top_rule.top_production.verify_soundness(&self).await
+        top_rule.top_production.verify_soundness(self)
     }
 
-    pub async fn generate(&self) -> Option<String> {
+    pub fn generate(&mut self) -> Option<String> {
         let top_rule = match self.rulebook.rule_definitions.get(&self.rulebook.name) {
-            Some(tr) => tr,
+            Some(tr) => tr.clone(),
             None => return None,
         };
-        top_rule.top_production.generate(&self).await
+        top_rule.top_production.generate(self)
     }
 }
 impl Clone for GeneratorState {
@@ -82,10 +80,9 @@ impl fmt::Display for SoundnessError {
 impl std::error::Error for SoundnessError {
 }
 
-#[async_trait]
 pub trait TextGenerator : Debug + Sync + Send {
-    async fn generate(&self, state: &GeneratorState) -> Option<String>;
-    async fn verify_soundness(&self, state: &GeneratorState) -> Result<(), SoundnessError>;
+    fn generate(&self, state: &mut GeneratorState) -> Option<String>;
+    fn verify_soundness(&self, state: &mut GeneratorState) -> Result<(), SoundnessError>;
 }
 
 #[derive(Clone, Debug, Eq, PartialEq)]
@@ -105,20 +102,15 @@ impl Rulebook {
     }
 
     pub fn add_builtins(&mut self, nicks: &HashSet<String>, chosen_nick: Option<&str>) {
-        let any_nick_production = Production::new(
-            nicks.iter().map(|n|
-                Alternative::new(
+        let any_nick_production = Production::Choice {
+            options: nicks.iter()
+                .map(|n| Alternative::new(
                     Vec::new(),
                     BigUint::from(1u32),
-                    vec![
-                        SequenceElement::new(
-                            SingleSequenceElement::new_string(n.to_owned()),
-                            SequenceElementCount::One,
-                        ),
-                    ],
-                ),
-            ).collect(),
-        );
+                    Production::String { string: n.clone() },
+                ))
+                .collect(),
+        };
 
         self.rule_definitions.insert(
             "__IRC_nick".to_owned(),
@@ -135,20 +127,7 @@ impl Rulebook {
                 "__IRC_chosen_nick".to_owned(),
                 Vec::new(),
                 if let Some(cn) = chosen_nick {
-                    Production::new(
-                        vec![
-                            Alternative::new(
-                                Vec::new(),
-                                BigUint::from(1u32),
-                                vec![
-                                    SequenceElement::new(
-                                        SingleSequenceElement::new_string(cn.to_owned()),
-                                        SequenceElementCount::One,
-                                    ),
-                                ],
-                            ),
-                        ],
-                    )
+                    Production::String { string: cn.to_owned() }
                 } else {
                     any_nick_production
                 },
@@ -178,76 +157,200 @@ impl RuleDefinition {
 }
 
 #[derive(Clone, Debug, Eq, Hash, PartialEq)]
-pub struct Production {
-    pub alternatives: Vec<Alternative>,
+pub enum Production {
+    String { string: String },
+    Sequence { prods: Vec<Production> },
+    Choice { options: Vec<Alternative> },
+    Optional { weight: BigUint, inner: Box<Production> },
+    Kleene { at_least_one: bool, inner: Box<Production> },
+    Call { name: String, args: Vec<Production> },
 }
-impl Production {
-    pub fn new(
-        alternatives: Vec<Alternative>,
-    ) -> Production {
-        Production {
-            alternatives,
-        }
-    }
-}
-#[async_trait]
 impl TextGenerator for Production {
-    async fn generate(&self, state: &GeneratorState) -> Option<String> {
-        let my_alternatives: Vec<&Alternative> = self.alternatives
-            .iter()
-            .filter(|alt| alt.conditions.iter().all(|cond|
-                state.conditions.contains(&cond.identifier) != cond.negated
-            ))
-            .collect();
-        if my_alternatives.len() == 1 {
-            // fast-path
-            return my_alternatives[0].generate(&state).await;
+    fn generate(&self, state: &mut GeneratorState) -> Option<String> {
+        match self {
+            Production::String { string } => Some(string.clone()),
+            Production::Sequence { prods } => {
+                let mut ret = String::new();
+                for prod in prods {
+                    let piece = match prod.generate(state) {
+                        Some(s) => s,
+                        None => return None,
+                    };
+                    ret.push_str(&piece);
+                }
+                Some(ret)
+            },
+            Production::Choice { options } => {
+                let my_alternatives: Vec<&Alternative> = options
+                    .iter()
+                    .filter(|alt| alt.conditions.iter().all(|cond|
+                        state.conditions.contains(&cond.identifier) != cond.negated
+                    ))
+                    .collect();
+                if my_alternatives.len() == 1 {
+                    // fast-path
+                    return my_alternatives[0].generate(state);
+                }
+
+                let total_weight: BigUint = my_alternatives
+                    .iter()
+                    .map(|alt| &alt.weight)
+                    .sum();
+
+                if total_weight == Zero::zero() {
+                    // this branch has been "sawed off"
+                    return None;
+                }
+
+                let mut random_weight = {
+                    let mut rng_guard = state.rng.lock().unwrap();
+                    rng_guard.gen_biguint_range(&Zero::zero(), &total_weight)
+                };
+
+                for alternative in my_alternatives {
+                    if random_weight >= alternative.weight {
+                        random_weight -= &alternative.weight;
+                        continue;
+                    }
+
+                    return alternative.generate(state)
+                }
+
+                unreachable!();
+            },
+            Production::Optional { weight, inner } => {
+                let hundred = BigUint::from(100u8);
+
+                let rand_val = {
+                    let mut rng_guard = state.rng.lock().unwrap();
+                    rng_guard.gen_biguint_range(&Zero::zero(), &hundred)
+                };
+
+                if &rand_val < weight {
+                    inner.generate(state)
+                } else {
+                    Some(String::new())
+                }
+            },
+            Production::Kleene { at_least_one, inner } => {
+                let mut ret = String::new();
+
+                if *at_least_one {
+                    let element = match inner.generate(state) {
+                        Some(s) => s,
+                        None => return None,
+                    };
+                    ret.push_str(&element);
+                }
+
+                loop {
+                    let rand_bool: bool = {
+                        let mut rng_guard = state.rng.lock().unwrap();
+                        rng_guard.gen()
+                    };
+                    if rand_bool {
+                        break;
+                    }
+                    let element = match inner.generate(state) {
+                        Some(s) => s,
+                        None => return None,
+                    };
+                    ret.push_str(&element);
+                }
+
+                Some(ret)
+            },
+            Production::Call { name, args } => {
+                if let Some(rule) = state.rulebook.rule_definitions.get(name) {
+                    assert_eq!(rule.param_names.len(), args.len());
+
+                    // link up arguments with their values
+                    let mut sub_state = state.clone();
+                    for (param_name, arg) in rule.param_names.iter().zip(args.iter()) {
+                        sub_state.rulebook.rule_definitions.insert(
+                            param_name.clone(),
+                            RuleDefinition::new(
+                                param_name.clone(),
+                                Vec::new(),
+                                arg.clone(),
+                            ),
+                        );
+                    }
+
+                    // generate
+                    rule.top_production.generate(&mut sub_state)
+                } else {
+                    // call to undefined function
+                    None
+                }
+            },
         }
-
-        let total_weight: BigUint = my_alternatives
-            .iter()
-            .map(|alt| &alt.weight)
-            .sum();
-
-        if total_weight == Zero::zero() {
-            // this branch has been "sawed off"
-            return None;
-        }
-
-        let mut random_weight = {
-            let mut rng_guard = state.rng
-                .lock().await;
-            rng_guard.gen_biguint_range(&Zero::zero(), &total_weight)
-        };
-
-        for alternative in my_alternatives {
-            if random_weight >= alternative.weight {
-                random_weight -= &alternative.weight;
-                continue;
-            }
-
-            return alternative.generate(&state).await;
-        }
-
-        unreachable!();
     }
 
-    async fn verify_soundness(&self, state: &GeneratorState) -> Result<(), SoundnessError> {
-        let my_alternatives: Vec<&Alternative> = self.alternatives
-            .iter()
-            .filter(|alt| alt.conditions.iter().all(|cond|
-                state.conditions.contains(&cond.identifier) != cond.negated
-            ))
-            .collect();
-        if my_alternatives.len() == 0 {
-            Err(SoundnessError::NoAlternatives)
-        } else {
-            for alt in my_alternatives {
-                if let Err(e) = alt.verify_soundness(&state).await {
-                    return Err(e);
+    fn verify_soundness(&self, state: &mut GeneratorState) -> Result<(), SoundnessError> {
+        match self {
+            Production::String { string: _ } => Ok(()),
+            Production::Sequence { prods } => {
+                for prod in prods {
+                    if let Err(e) = prod.verify_soundness(state) {
+                        return Err(e);
+                    }
                 }
-            }
-            Ok(())
+                Ok(())
+            },
+            Production::Choice { options } => {
+                let my_alternatives: Vec<&Alternative> = options
+                    .iter()
+                    .filter(|alt| alt.conditions.iter().all(|cond|
+                        state.conditions.contains(&cond.identifier) != cond.negated
+                    ))
+                    .collect();
+                if my_alternatives.len() == 0 {
+                    Err(SoundnessError::NoAlternatives)
+                } else {
+                    for alt in my_alternatives {
+                        if let Err(e) = alt.verify_soundness(state) {
+                            return Err(e);
+                        }
+                    }
+                    Ok(())
+                }
+            },
+            Production::Optional { weight:_, inner } => {
+                inner.verify_soundness(state)
+            },
+            Production::Kleene { at_least_one: _, inner } => {
+                inner.verify_soundness(state)
+            },
+            Production::Call { name, args } => {
+                if let Some(rule) = state.rulebook.rule_definitions.get(name) {
+                    if rule.param_names.len() != args.len() {
+                        return Err(SoundnessError::ArgumentCountMismatch(
+                            name.clone(),
+                            rule.param_names.len(),
+                            args.len(),
+                        ));
+                    }
+
+                    let mut sub_state = state.clone();
+                    for (param_name, arg) in rule.param_names.iter().zip(args.iter()) {
+                        sub_state.rulebook.rule_definitions.insert(
+                            param_name.clone(),
+                            RuleDefinition::new(
+                                param_name.clone(),
+                                Vec::new(),
+                                arg.clone(),
+                            ),
+                        );
+                    }
+
+                    // recurse
+                    rule.top_production.verify_soundness(&mut sub_state)
+                } else {
+                    // rule definition not found
+                    Err(SoundnessError::UnresolvedReference(name.clone()))
+                }
+            },
         }
     }
 }
@@ -256,43 +359,29 @@ impl TextGenerator for Production {
 pub struct Alternative {
     pub conditions: Vec<Condition>,
     pub weight: BigUint,
-    pub sequence: Vec<SequenceElement>,
+    pub inner: Production,
 }
 impl Alternative {
     pub fn new(
         conditions: Vec<Condition>,
         weight: BigUint,
-        sequence: Vec<SequenceElement>,
+        inner: Production,
     ) -> Alternative {
         Alternative {
             conditions,
             weight,
-            sequence,
+            inner,
         }
     }
 }
-#[async_trait]
 impl TextGenerator for Alternative {
-    async fn generate(&self, state: &GeneratorState) -> Option<String> {
+    fn generate(&self, state: &mut GeneratorState) -> Option<String> {
         // weighting and conditioning is performed one level above (Production)
-        let mut ret = String::new();
-        for element in &self.sequence {
-            let piece = match element.generate(&state).await {
-                Some(s) => s,
-                None => return None,
-            };
-            ret.push_str(&piece);
-        }
-        Some(ret)
+        self.inner.generate(state)
     }
 
-    async fn verify_soundness(&self, state: &GeneratorState) -> Result<(), SoundnessError> {
-        for element in &self.sequence {
-            if let Err(e) = element.verify_soundness(&state).await {
-                return Err(e);
-            }
-        }
-        Ok(())
+    fn verify_soundness(&self, state: &mut GeneratorState) -> Result<(), SoundnessError> {
+        self.inner.verify_soundness(state)
     }
 }
 
@@ -309,224 +398,6 @@ impl Condition {
         Condition {
             negated,
             identifier,
-        }
-    }
-}
-
-#[derive(Clone, Debug, Eq, Hash, PartialEq)]
-pub enum SequenceElementCount {
-    One,
-    OneOrMore,
-    ZeroOrMore,
-}
-
-#[derive(Clone, Debug, Eq, Hash, PartialEq)]
-pub struct SequenceElement {
-    pub element: SingleSequenceElement,
-    pub count: SequenceElementCount,
-}
-impl SequenceElement {
-    pub fn new(
-        element: SingleSequenceElement,
-        count: SequenceElementCount,
-    ) -> SequenceElement {
-        SequenceElement {
-            element,
-            count,
-        }
-    }
-}
-#[async_trait]
-impl TextGenerator for SequenceElement {
-    async fn generate(&self, state: &GeneratorState) -> Option<String> {
-        if self.count == SequenceElementCount::One {
-            return self.element.generate(&state).await;
-        }
-
-        let mut ret = String::new();
-
-        if self.count == SequenceElementCount::OneOrMore {
-            let element = match self.element.generate(&state).await {
-                Some(s) => s,
-                None => return None,
-            };
-            ret.push_str(&element);
-        } else {
-            assert_eq!(self.count, SequenceElementCount::ZeroOrMore);
-        }
-
-        {
-            let mut rng_guard = state.rng
-                .lock().await;
-            loop {
-                let rand_bool: bool = rng_guard.gen();
-                if rand_bool {
-                    break;
-                }
-                let element = match self.element.generate(&state).await {
-                    Some(s) => s,
-                    None => return None,
-                };
-                ret.push_str(&element);
-            }
-        }
-
-        Some(ret)
-    }
-
-    async fn verify_soundness(&self, state: &GeneratorState) -> Result<(), SoundnessError> {
-        self.element.verify_soundness(&state).await
-    }
-}
-
-#[derive(Clone, Debug, Eq, Hash, PartialEq)]
-pub enum SingleSequenceElement {
-    Parenthesized {
-        production: Production,
-     },
-    Optional {
-        weight: BigUint,
-        production: Production,
-    },
-    Call {
-        identifier: String,
-        arguments: Vec<Production>,
-    },
-    String {
-        value: String,
-    },
-}
-impl SingleSequenceElement {
-    pub fn new_parenthesized(
-        production: Production,
-    ) -> SingleSequenceElement {
-        SingleSequenceElement::Parenthesized {
-            production,
-        }
-    }
-
-    pub fn new_optional(
-        weight: BigUint,
-        production: Production,
-    ) -> SingleSequenceElement {
-        SingleSequenceElement::Optional {
-            weight,
-            production,
-        }
-    }
-
-    pub fn new_call(
-        identifier: String,
-        arguments: Vec<Production>,
-    ) -> SingleSequenceElement {
-        SingleSequenceElement::Call {
-            identifier,
-            arguments,
-        }
-    }
-
-    pub fn new_string(
-        value: String,
-    ) -> SingleSequenceElement {
-        SingleSequenceElement::String {
-            value,
-        }
-    }
-}
-#[async_trait]
-impl TextGenerator for SingleSequenceElement {
-    async fn generate(&self, state: &GeneratorState) -> Option<String> {
-        match self {
-            SingleSequenceElement::Parenthesized { production } => {
-                production.generate(&state).await
-            },
-            SingleSequenceElement::Optional { weight, production } => {
-                let hundred = BigUint::from(100u8);
-
-                let rand_val = {
-                    let mut rng_guard = state.rng
-                        .lock().await;
-                    rng_guard.gen_biguint_range(&Zero::zero(), &hundred)
-                };
-
-                if &rand_val < weight {
-                    production.generate(&state).await
-                } else {
-                    Some(String::new())
-                }
-            },
-            SingleSequenceElement::Call { identifier, arguments } => {
-                if let Some(rule) = state.rulebook.rule_definitions.get(identifier) {
-                    assert_eq!(rule.param_names.len(), arguments.len());
-
-                    // link up arguments with their values
-                    let mut sub_state = state.clone();
-                    for (param_name, arg) in rule.param_names.iter().zip(arguments.iter()) {
-                        sub_state.rulebook.rule_definitions.insert(
-                            param_name.clone(),
-                            RuleDefinition::new(
-                                param_name.clone(),
-                                Vec::new(),
-                                arg.clone(),
-                            ),
-                        );
-                    }
-
-                    // generate
-                    rule.top_production.generate(&sub_state).await
-                } else {
-                    // call to undefined function
-                    None
-                }
-            },
-            SingleSequenceElement::String { value } => {
-                // finally, something simple to generate :-D
-                Some(value.clone())
-            },
-        }
-    }
-
-    async fn verify_soundness(&self, state: &GeneratorState) -> Result<(), SoundnessError> {
-        match self {
-            SingleSequenceElement::Parenthesized { production } => {
-                production.verify_soundness(&state).await
-            },
-            SingleSequenceElement::Optional { production, .. } => {
-                production.verify_soundness(&state).await
-            },
-            SingleSequenceElement::Call { identifier, arguments } => {
-                if let Some(rule) = state.rulebook.rule_definitions.get(identifier) {
-                    if rule.param_names.len() != arguments.len() {
-                        return Err(SoundnessError::ArgumentCountMismatch(
-                            identifier.clone(),
-                            rule.param_names.len(),
-                            arguments.len(),
-                        ));
-                    }
-
-                    let mut sub_state = state.clone();
-                    for (param_name, arg) in rule.param_names.iter().zip(arguments.iter()) {
-                        sub_state.rulebook.rule_definitions.insert(
-                            param_name.clone(),
-                            RuleDefinition::new(
-                                param_name.clone(),
-                                Vec::new(),
-                                arg.clone(),
-                            ),
-                        );
-                    }
-
-                    // recurse
-                    rule.top_production.verify_soundness(&sub_state).await
-                } else {
-                    // rule definition not found
-                    Err(SoundnessError::UnresolvedReference(identifier.clone()))
-                }
-            },
-            SingleSequenceElement::String { .. } => {
-                // constant strings are always sound
-                Ok(())
-            },
         }
     }
 }

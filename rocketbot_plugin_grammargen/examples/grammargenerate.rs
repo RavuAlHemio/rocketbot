@@ -4,16 +4,11 @@ use std::ffi::OsString;
 use std::fs::File;
 use std::io::Read;
 use std::path::PathBuf;
-use std::sync::Arc;
+use std::sync::{Arc, Mutex};
 
-use num_bigint::BigUint;
 use rand::SeedableRng;
 use rand::rngs::StdRng;
-use rocketbot_interface::sync::Mutex;
-use rocketbot_plugin_grammargen::grammar::{
-    Alternative, GeneratorState, Production, RuleDefinition, SequenceElement, SequenceElementCount,
-    SingleSequenceElement,
-};
+use rocketbot_plugin_grammargen::grammar::{GeneratorState, Production, RuleDefinition};
 use rocketbot_plugin_grammargen::parsing::parse_grammar;
 
 
@@ -44,20 +39,7 @@ async fn main() {
         .expect("failed to parse grammar");
 
     // add builtins
-    let nick_production = Production::new(
-        vec![
-            Alternative::new(
-                Vec::new(),
-                BigUint::from(1u32),
-                vec![
-                    SequenceElement::new(
-                        SingleSequenceElement::new_string("SampleNick".to_owned()),
-                        SequenceElementCount::One,
-                    )
-                ],
-            )
-        ],
-    );
+    let nick_production = Production::String { string: "SampleNick".to_owned() };
     rulebook.rule_definitions.insert(
         "__IRC_nick".to_owned(),
         RuleDefinition::new(
@@ -75,20 +57,19 @@ async fn main() {
         ),
     );
 
-    let state = GeneratorState::new(
+    let mut state = GeneratorState::new(
         rulebook,
         HashSet::new(),
         Arc::new(Mutex::new(
-            "GeneratorState",
             StdRng::from_entropy(),
         )),
     );
 
-    if let Err(soundness) = state.verify_soundness().await {
+    if let Err(soundness) = state.verify_soundness() {
         println!("grammar failed soundness check: {}", soundness);
     } else {
         for _ in 0..100 {
-            let generated = state.generate().await;
+            let generated = state.generate();
             if let Some(s) = generated {
                 println!("> {}", s);
             } else {
