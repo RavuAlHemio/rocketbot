@@ -34,9 +34,13 @@ impl TextCommandsPlugin {
             let command_name = command.to_owned();
             commands_responses.insert(command_name.clone(), responses);
 
+            let mut random_flags = HashSet::new();
+            random_flags.insert("r".to_owned());
+            random_flags.insert("random".to_owned());
+
             let command = CommandDefinition::new(
                 command_name,
-                Some(HashSet::new()),
+                Some(random_flags),
                 HashMap::new(),
                 0
             );
@@ -116,7 +120,7 @@ impl RocketBotPlugin for TextCommandsPlugin {
             let target = if channel_members.len() == 0 {
                 // fallback to sender
                 channel_message.message.sender.username.clone()
-            } else if command.rest == "-r" || command.rest == "--random" {
+            } else if command.flags.contains("r") || command.flags.contains("random") {
                 // pick a user randomly
                 let mut rng_guard = self.rng.lock().await;
                 let index = rng_guard.gen_range(0..channel_members.len());
