@@ -84,32 +84,38 @@ fn case_string_numbered(string_to_case: &str, case_template_group: usize, state:
 }
 
 fn case_string(string_to_case: &str, case_template: &str, state: &ReplacementState) -> String {
-    if string_to_case.len() == 0 {
-        return String::new();
-    }
-
-    if case_template.len() == string_to_case.len() {
-        one_to_one_case(string_to_case, case_template)
-    } else if case_template.len() == 0 {
-        string_to_case.to_owned()
-    } else if case_template.len() == 1 {
-        if case_template.chars().nth(0).unwrap().is_uppercase() {
-            string_to_case.to_uppercase()
-        } else {
-            string_to_case.to_lowercase()
-        }
-    } else {
-        best_guess_case(string_to_case, case_template)
-    }
-}
-
-fn one_to_one_case(string_to_case: &str, case_template: &str) -> String {
     let chars_to_case: Vec<char> = string_to_case.chars().collect();
     let case_template_chars: Vec<char> = case_template.chars().collect();
 
+    case_chars(&chars_to_case, &case_template_chars)
+}
+
+fn case_chars(chars_to_case: &[char], case_template_chars: &[char]) -> String {
+    if chars_to_case.len() == 0 {
+        return String::new();
+    }
+
+    if case_template_chars.len() == chars_to_case.len() {
+        one_to_one_case(chars_to_case, case_template_chars)
+    } else if case_template_chars.len() == 0 {
+        chars_to_case.iter().collect()
+    } else if case_template_chars.len() == 1 {
+        if case_template_chars[0].is_uppercase() {
+            let s: String = chars_to_case.iter().collect();
+            s.to_uppercase()
+        } else {
+            let s: String = chars_to_case.iter().collect();
+            s.to_lowercase()
+        }
+    } else {
+        best_guess_case(chars_to_case, case_template_chars)
+    }
+}
+
+fn one_to_one_case(chars_to_case: &[char], case_template_chars: &[char]) -> String {
     assert_eq!(chars_to_case.len(), case_template_chars.len());
 
-    let mut ret = String::with_capacity(string_to_case.len());
+    let mut ret = String::with_capacity(chars_to_case.len());
     for (cc, tc) in chars_to_case.iter().zip(case_template_chars.iter()) {
         if tc.is_uppercase() {
             for u in cc.to_uppercase() {
@@ -126,12 +132,9 @@ fn one_to_one_case(string_to_case: &str, case_template: &str) -> String {
     ret
 }
 
-fn best_guess_case(string_to_case: &str, case_template: &str) -> String {
-    let chars_to_case: Vec<char> = string_to_case.chars().collect();
-    let case_template_chars: Vec<char> = case_template.chars().collect();
-
+fn best_guess_case(chars_to_case: &[char], case_template_chars: &[char]) -> String {
     if case_template_chars.len() < 2 {
-        return string_to_case.to_owned();
+        return chars_to_case.iter().collect();
     }
 
     assert!(chars_to_case.len() > 0);
@@ -147,7 +150,8 @@ fn best_guess_case(string_to_case: &str, case_template: &str) -> String {
 
     if first_upper && second_upper {
         // AA
-        string_to_case.to_uppercase()
+        let s: String = chars_to_case.iter().collect();
+        s.to_uppercase()
     } else if first_upper && second_lower {
         // Aa
         format!(
@@ -164,10 +168,11 @@ fn best_guess_case(string_to_case: &str, case_template: &str) -> String {
         )
     } else if first_lower && second_lower {
         // aa
-        string_to_case.to_lowercase()
+        let s: String = chars_to_case.iter().collect();
+        s.to_lowercase()
     } else {
         // 0a, 0A, a0, A0
-        string_to_case.to_owned()
+        chars_to_case.iter().collect()
     }
 }
 
