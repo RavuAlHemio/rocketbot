@@ -4,7 +4,7 @@ mod placeholders;
 
 use std::collections::HashMap;
 
-use regex::{Captures, Regex};
+use regex::{Captures, Match, Regex};
 
 use crate::compiler::{CompilationError, compile};
 use crate::placeholders::{Placeholder, ReplacementState};
@@ -39,6 +39,10 @@ impl ReplacerRegex {
             replacement_string,
             placeholders,
         ))
+    }
+
+    pub fn find_at<'a>(&self, text: &'a str, start: usize) -> Option<Match<'a>> {
+        self.regex.find_at(text, start)
     }
 
     pub fn replace(

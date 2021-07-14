@@ -1133,6 +1133,7 @@ dependencies = [
  "rocketbot_plugin_allograph",
  "rocketbot_plugin_belch",
  "rocketbot_plugin_calc",
+ "rocketbot_plugin_catchword",
  "rocketbot_plugin_config_user_alias",
  "rocketbot_plugin_dice",
  "rocketbot_plugin_fortune",
@@ -1198,7 +1199,6 @@ version = "0.1.0"
 dependencies = [
  "async-trait",
  "json",
- "log",
  "rocketbot_interface",
 ]
 
@@ -1215,6 +1215,19 @@ dependencies = [
  "pest_derive",
  "rocketbot_interface",
  "tokio",
+]
+
+[[package]]
+name = "rocketbot_plugin_catchword"
+version = "0.1.0"
+dependencies = [
+ "async-trait",
+ "json",
+ "log",
+ "rand",
+ "regex",
+ "rocketbot_interface",
+ "rocketbot_regex_replace",
 ]
 
 [[package]]

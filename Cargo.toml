@@ -6,6 +6,7 @@ members = [
     "rocketbot_plugin_allograph",
     "rocketbot_plugin_belch",
     "rocketbot_plugin_calc",
+    "rocketbot_plugin_catchword",
     "rocketbot_plugin_config_user_alias",
     "rocketbot_plugin_dice",
     "rocketbot_plugin_fortune",
