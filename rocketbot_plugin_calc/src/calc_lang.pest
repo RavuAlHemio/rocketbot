@@ -1,0 +1,51 @@
+WHITESPACE =
+    _{ " " // Space
+    | "\u{09}" // Tab
+    | "\u{0A}" // New Line
+    | "\u{0D}" // Carriage Return
+    | "\u{0C}" // Form Feed
+    | "\u{0B}" // Vertical Tab
+    }
+
+decimal = @{ ('0'..'9')+ ~ "." ~ ('0'..'9')+ }
+identifier = @{ ('A'..'Z' | 'a'..'z') ~ ('A'..'Z' | 'a'..'z' | '0'..'9' | "_")* }
+integer = @{ integer10 | integer16 | integer8 | integer2 }
+integer10 = @{ ('0'..'9' | "_")+ }
+integer16 = @{ "0x" ~ ('0'..'9' | 'A'..'F' | 'a'..'f' | "_")+ }
+integer8 = @{ "0o" ~ ('0'..'7' | "_")+ }
+integer2 = @{ "0b" ~ ("0" | "1" | "_")+ }
+
+full_expression = { SOI ~ expression ~ EOI }
+
+bor_op = { "|" }
+bxor_op = { "^" }
+band_op = { "&" }
+addsub_op = { "+" | "-" }
+muldivrem_op = { "//" | "/" | "*" | "%" }
+pow_op = { "**" }
+neg_op = { "-" }
+fac_op = { "!" }
+
+expression = { bor_expression }
+bor_expression = { bxor_expression ~ (bor_op ~ bxor_expression)* }
+bxor_expression = { band_expression ~ (bxor_op ~ band_expression)* }
+band_expression = { addsub_expression ~ (band_op ~ addsub_expression)* }
+addsub_expression = { muldivrem_expression ~ (addsub_op ~ muldivrem_expression)* }
+muldivrem_expression = { pow_expression ~ (muldivrem_op ~ pow_expression)* }
+pow_expression = { neg_expression ~ (pow_op ~ neg_expression)* }
+neg_expression = { neg_op* ~ fac_expression }
+fac_expression = { atom_expression ~ fac_op* }
+atom_expression =
+    { call_expression
+    | identifier
+    | parens_expression
+    | integer_expression
+    | decimal_expression
+    }
+call_expression = { identifier ~ "(" ~ arglist? ~ ")" }
+parens_expression = { "(" ~ expression ~ ")" }
+integer_expression = { integer }
+decimal_expression = { decimal }
+
+
+arglist = { expression ~ ("," ~ expression)* }
