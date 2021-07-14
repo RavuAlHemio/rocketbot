@@ -40,6 +40,7 @@ pub(crate) enum Placeholder {
     LastMatchGroup,
     CasingNamedMatchGroup(String, String),
     CasingNumberedMatchGroup(String, usize),
+    Shorten(String, usize),
 }
 impl Placeholder {
     pub fn replace(&self, state: &ReplacementState) -> String {
@@ -66,6 +67,8 @@ impl Placeholder {
                 => case_string_named(string_to_case, case_template_group, &state),
             Placeholder::CasingNumberedMatchGroup(string_to_case, case_template_group)
                 => case_string_numbered(string_to_case, *case_template_group, &state),
+            Placeholder::Shorten(group_name, length)
+                => shorten(group_name, *length, &state),
         }
     }
 }
@@ -163,4 +166,9 @@ fn best_guess_case(string_to_case: &str, case_template: &str) -> String {
         // 0a, 0A, a0, A0
         string_to_case.to_owned()
     }
+}
+
+fn shorten(group_name: &str, length: usize, state: &ReplacementState) -> String {
+    let match_str = state.regex_match.name(group_name).unwrap().as_str();
+    match_str.chars().take(length).collect()
 }

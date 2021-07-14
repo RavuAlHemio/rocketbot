@@ -12,6 +12,9 @@ static CASING_REGEX: Lazy<Regex> = Lazy::new(|| Regex::new(
 static LOOKUP_REGEX: Lazy<Regex> = Lazy::new(|| Regex::new(
     "^\\$lookup\\$(?P<key>.+)$"
 ).expect("failed to compile lookup regex"));
+static SHORTEN_REGEX: Lazy<Regex> = Lazy::new(|| Regex::new(
+    "^\\$shorten\\$(?P<key>.+)\\$(?P<len>0|[1-9][0-9]*)$"
+).expect("failed to compile shorten regex"));
 
 
 #[derive(Clone, Copy, Debug, Eq, Hash, PartialEq)]
@@ -30,6 +33,7 @@ pub enum CompilationError {
     TrailingDollarCharacter,
     CaseUnknownCapturingGroup(String),
     UnknownCapturingGroup(String),
+    ShortenTooLong,
 }
 impl fmt::Display for CompilationError {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
@@ -44,6 +48,8 @@ impl fmt::Display for CompilationError {
                 => write!(f, "case match references unknown capturing group named {:?}", s),
             CompilationError::UnknownCapturingGroup(s)
                 => write!(f, "unknown capturing group named {:?}", s),
+            CompilationError::ShortenTooLong
+                => write!(f, "shortening length too long"),
         }
     }
 }
@@ -178,6 +184,28 @@ fn process_named_group(group_name: &str, regex: &Regex, placeholders: &mut Vec<P
 
         placeholders.push(Placeholder::Lookup(
             key.to_owned(),
+        ));
+        return Ok(());
+    }
+
+    if let Some(lookup_match) = SHORTEN_REGEX.captures(group_name) {
+        let group_name = lookup_match.name("key").unwrap().as_str();
+        let len: usize = match lookup_match.name("len").unwrap().as_str().parse() {
+            Ok(u) => u,
+            Err(e) => return Err(CompilationError::ShortenTooLong),
+        };
+
+        let any_such_named_capture = regex
+            .capture_names()
+            .filter_map(|cn| cn)
+            .any(|cn| cn == group_name);
+        if !any_such_named_capture {
+            return Err(CompilationError::UnknownCapturingGroup(group_name.to_owned()));
+        }
+
+        placeholders.push(Placeholder::Shorten(
+            group_name.to_owned(),
+            len,
         ));
         return Ok(());
     }
