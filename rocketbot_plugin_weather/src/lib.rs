@@ -210,4 +210,12 @@ impl RocketBotPlugin for WeatherPlugin {
             self.handle_weather_command(channel_message, command).await
         }
     }
+
+    async fn get_command_help(&self, command_name: &str) -> Option<String> {
+        if command_name == "weather" || command_name == "lweather" {
+            Some(include_str!("../help/weather.md").to_owned())
+        } else {
+            None
+        }
+    }
 }

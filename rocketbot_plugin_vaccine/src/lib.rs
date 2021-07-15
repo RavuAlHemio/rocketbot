@@ -219,6 +219,14 @@ impl RocketBotPlugin for VaccinePlugin {
             &response,
         ).await;
     }
+
+    async fn get_command_help(&self, command_name: &str) -> Option<String> {
+        if command_name == "vaccine" {
+            Some(include_str!("../help/vaccine.md").to_owned())
+        } else {
+            None
+        }
+    }
 }
 
 #[cfg(test)]

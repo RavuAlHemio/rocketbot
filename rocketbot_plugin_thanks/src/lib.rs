@@ -481,4 +481,20 @@ impl RocketBotPlugin for ThanksPlugin {
             self.handle_topgrateful(channel_message, command).await
         }
     }
+
+    async fn get_command_help(&self, command_name: &str) -> Option<String> {
+        if command_name == "thank" || command_name == "thanks" || command_name == "thx" {
+            Some(include_str!("../help/thank.md").to_owned())
+        } else if command_name == "thanked" {
+            Some(include_str!("../help/thanked.md").to_owned())
+        } else if command_name == "grateful" {
+            Some(include_str!("../help/grateful.md").to_owned())
+        } else if command_name == "topthanked" {
+            Some(include_str!("../help/topthanked.md").to_owned())
+        } else if command_name == "topgrateful" {
+            Some(include_str!("../help/topgrateful.md").to_owned())
+        } else {
+            None
+        }
+    }
 }

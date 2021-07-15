@@ -9,8 +9,9 @@ use rocketbot_interface::interfaces::{RocketBotInterface, RocketBotPlugin};
 use rocketbot_interface::model::ChannelMessage;
 
 
-fn replace_config_placeholders(original: &str, command_config: &CommandConfiguration) -> String {
+fn replace_config_placeholders(original: &str, command_name: &str, command_config: &CommandConfiguration) -> String {
     original
+        .replace("{cmd}", command_name)
         .replace("{cpfx}", &command_config.command_prefix)
         .replace("{sopfx}", &command_config.short_option_prefix)
         .replace("{lopfx}", &command_config.long_option_prefix)
@@ -59,11 +60,15 @@ impl RocketBotPlugin for HelpPlugin {
         let channel_name = &channel_message.channel.name;
 
         if command.name == "help" {
+            // get information on command configuration
+            let command_config = interface.get_command_configuration().await;
+
             let target_command_name = command.rest.trim();
             if target_command_name.len() > 0 {
                 let help = interface.get_command_help(target_command_name).await;
                 if let Some(h) = &help {
-                    interface.send_channel_message(channel_name, h).await;
+                    let h_replaced = replace_config_placeholders(&h, target_command_name, &command_config);
+                    interface.send_channel_message(channel_name, &h_replaced).await;
                 }
 
                 // output nothing if the command is not known
@@ -71,16 +76,13 @@ impl RocketBotPlugin for HelpPlugin {
             } else {
                 let mut usage_to_descr: BTreeMap<String, (String, String)> = BTreeMap::new();
 
-                // get information on command configuration
-                let command_config = interface.get_command_configuration().await;
-
                 // get all regular commands and usages
                 for defn in &interface.get_defined_commands().await {
                     usage_to_descr.insert(
                         defn.name.clone(),
                         (
-                            replace_config_placeholders(&defn.usage, &command_config),
-                            replace_config_placeholders(&defn.description, &command_config),
+                            replace_config_placeholders(&defn.usage, &defn.name, &command_config),
+                            replace_config_placeholders(&defn.description, &defn.name, &command_config),
                         ),
                     );
                 }
@@ -90,8 +92,8 @@ impl RocketBotPlugin for HelpPlugin {
                     usage_to_descr.insert(
                         name.clone(),
                         (
-                            replace_config_placeholders(usage, &command_config),
-                            replace_config_placeholders(description, &command_config),
+                            replace_config_placeholders(usage, name, &command_config),
+                            replace_config_placeholders(description, name, &command_config),
                         ),
                     );
                 }
@@ -132,6 +134,16 @@ impl RocketBotPlugin for HelpPlugin {
                     &format!("`{}` \u{2013} {}", usage.unwrap(), description.unwrap()),
                 ).await;
             }
+        }
+    }
+
+    async fn get_command_help(&self, command_name: &str) -> Option<String> {
+        if command_name == "help" {
+            Some(include_str!("../help/help.md").to_owned())
+        } else if command_name == "usage" {
+            Some(include_str!("../help/usage.md").to_owned())
+        } else {
+            None
         }
     }
 }

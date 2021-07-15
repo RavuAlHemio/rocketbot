@@ -141,4 +141,12 @@ impl RocketBotPlugin for GrammarGenPlugin {
             &phrase,
         ).await;
     }
+
+    async fn get_command_help(&self, command_name: &str) -> Option<String> {
+        if self.grammars.contains_key(command_name) {
+            Some(include_str!("../help/grammargen.md").to_owned())
+        } else {
+            None
+        }
+    }
 }

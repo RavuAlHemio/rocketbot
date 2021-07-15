@@ -153,4 +153,14 @@ impl RocketBotPlugin for TextCommandsPlugin {
             ).await;
         }
     }
+
+    async fn get_command_help(&self, command_name: &str) -> Option<String> {
+        if self.commands_responses.contains_key(command_name) {
+            Some(include_str!("../help/textcommand.md").to_owned())
+        } else if self.nicknamable_commands_responses.contains_key(command_name) {
+            Some(include_str!("../help/nicktextcommand.md").to_owned())
+        } else {
+            None
+        }
+    }
 }

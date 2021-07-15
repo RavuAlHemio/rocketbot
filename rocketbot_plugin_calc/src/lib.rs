@@ -128,4 +128,12 @@ impl RocketBotPlugin for CalcPlugin {
             self.handle_calc(channel_message, command).await
         }
     }
+
+    async fn get_command_help(&self, command_name: &str) -> Option<String> {
+        if command_name == "calc" {
+            Some(include_str!("../help/calc.md").to_owned())
+        } else {
+            None
+        }
+    }
 }

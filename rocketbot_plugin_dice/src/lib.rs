@@ -612,4 +612,34 @@ impl RocketBotPlugin for DicePlugin {
             self.handle_some_year(channel_message, command).await;
         }
     }
+
+    async fn get_command_help(&self, command_name: &str) -> Option<String> {
+        if command_name == "roll" {
+            Some(include_str!("../help/roll.md").to_owned())
+        } else if command_name == "yn" {
+            Some(include_str!("../help/yn.md").to_owned())
+        } else if command_name == "decide" || command_name == "shuffle" {
+            let separator_lines: String = self.config.decision_splitters.iter()
+                .map(|ds| format!("* `{}`", ds))
+                .collect::<Vec<String>>()
+                .join("\n");
+
+            let base_help = if command_name == "decide" {
+                include_str!("../help/decide.md")
+            } else if command_name == "shuffle" {
+                include_str!("../help/shuffle.md")
+            } else {
+                unreachable!()
+            };
+
+            Some(base_help.replace("{separators}", &separator_lines))
+        } else if command_name == "someyear" {
+            Some(
+                include_str!("../help/someyear.md")
+                    .replace("{defwiki}", &self.config.default_wikipedia_language)
+            )
+        } else {
+            None
+        }
+    }
 }

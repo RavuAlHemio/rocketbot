@@ -796,4 +796,24 @@ impl RocketBotPlugin for QuotesPlugin {
             self.handle_vote(channel_message, command).await
         }
     }
+
+    async fn get_command_help(&self, command_name: &str) -> Option<String> {
+        if command_name == "addquote" {
+            Some(include_str!("../help/addquote.md").to_owned())
+        } else if command_name == "remember" {
+            Some(include_str!("../help/remember.md").to_owned())
+        } else if command_name == "quote" {
+            Some(include_str!("../help/quote.md").to_owned())
+        } else if command_name == "quoteuser" {
+            Some(include_str!("../help/quoteuser.md").to_owned())
+        } else if command_name == "nextquote" {
+            Some(include_str!("../help/nextquote.md").to_owned())
+        } else if command_name == "upquote" || command_name == "uq" {
+            Some(include_str!("../help/upquote.md").to_owned())
+        } else if command_name == "downquote" || command_name == "dq" {
+            Some(include_str!("../help/downquote.md").to_owned())
+        } else {
+            None
+        }
+    }
 }

@@ -151,4 +151,21 @@ impl RocketBotPlugin for FortunePlugin {
             }
         }
     }
+
+    async fn get_command_help(&self, command_name: &str) -> Option<String> {
+        if command_name == "fortune" {
+            let mut fortune_groups: Vec<String> = self.name_to_fortunes.keys()
+                .map(|k| format!("`{}`", k))
+                .collect();
+            fortune_groups.sort();
+            let fortune_group_string = fortune_groups.join(", ");
+
+            Some(
+                include_str!("../help/fortune.md")
+                    .replace("{fortune_groups}", &fortune_group_string)
+            )
+        } else {
+            None
+        }
+    }
 }

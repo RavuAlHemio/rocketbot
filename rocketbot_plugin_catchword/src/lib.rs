@@ -165,4 +165,12 @@ impl RocketBotPlugin for CatchwordPlugin {
             &ret,
         ).await;
     }
+
+    async fn get_command_help(&self, command_name: &str) -> Option<String> {
+        if self.catchments.contains_key(command_name) {
+            Some(include_str!("../help/catchment.md").to_owned())
+        } else {
+            None
+        }
+    }
 }

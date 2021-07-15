@@ -62,4 +62,12 @@ impl RocketBotPlugin for VersionPlugin {
             &format!("rocketbot revision {}", this_version),
         ).await;
     }
+
+    async fn get_command_help(&self, command_name: &str) -> Option<String> {
+        if command_name == "version" {
+            Some(include_str!("../help/version.md").to_owned())
+        } else {
+            None
+        }
+    }
 }
