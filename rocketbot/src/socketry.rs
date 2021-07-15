@@ -334,6 +334,43 @@ impl RocketBotInterface for ServerConnection {
         todo!();
     }
 
+    async fn get_defined_commands(&self) -> Vec<CommandDefinition> {
+        let commands_guard = self.shared_state.commands
+            .read().await;
+        let mut commands: Vec<CommandDefinition> = commands_guard.values()
+            .map(|cd| cd.clone())
+            .collect();
+        commands.sort_unstable_by_key(|cd| cd.name.clone());
+        commands
+    }
+
+    async fn get_additional_commands_usages(&self) -> HashMap<String, String> {
+        let mut ret = HashMap::new();
+        {
+            let plugins = self.shared_state.plugins
+                .read().await;
+            for plugin in plugins.iter() {
+                let mut commands_usages = plugin.get_additional_commands_usages().await;
+                ret.extend(commands_usages.drain());
+            }
+        }
+        ret
+    }
+
+    async fn get_command_help(&self, name: &str) -> Option<String> {
+        // ask all plugins, stop at the first non-None result
+        {
+            let plugins = self.shared_state.plugins
+                .read().await;
+            for plugin in plugins.iter() {
+                if let Some(un) = plugin.get_command_help(name).await {
+                    return Some(un);
+                }
+            }
+        }
+        None
+    }
+
     async fn is_my_user_id(&self, user_id: &str) -> bool {
         let uid_guard = self.shared_state.my_user_id
             .read().await;

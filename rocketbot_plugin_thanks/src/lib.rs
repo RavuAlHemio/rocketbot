@@ -411,6 +411,8 @@ impl RocketBotPlugin for ThanksPlugin {
             Some(HashSet::new()),
             HashMap::new(),
             1,
+            "{cpfx}thanks|{cpfx}thank|{cpfx}thx USERNAME [REASON]".to_owned(),
+            "Thanks a user.".to_owned(),
         );
         let thank_command = thanks_command.copy_named("thank");
         let thx_command = thanks_command.copy_named("thx");
@@ -423,12 +425,16 @@ impl RocketBotPlugin for ThanksPlugin {
             Some(HashSet::new()),
             HashMap::new(),
             1,
+            "{cpfx}thanked USERNAME".to_owned(),
+            "Displays how often the given user has been thanked.".to_owned(),
         );
         let grateful_command = CommandDefinition::new(
             "grateful".to_owned(),
             Some(HashSet::new()),
             HashMap::new(),
             1,
+            "{cpfx}grateful USERNAME".to_owned(),
+            "Displays how often the given user has thanked others.".to_owned(),
         );
         my_interface.register_channel_command(&thanked_command).await;
         my_interface.register_channel_command(&grateful_command).await;
@@ -438,12 +444,16 @@ impl RocketBotPlugin for ThanksPlugin {
             Some(HashSet::new()),
             HashMap::new(),
             0,
+            "{cpfx}topthanked".to_owned(),
+            "Displays the top thanked users to the knowledge of this bot.".to_owned(),
         );
         let topgrateful_command = CommandDefinition::new(
             "topgrateful".to_owned(),
             Some(HashSet::new()),
             HashMap::new(),
             0,
+            "{cpfx}topgrateful".to_owned(),
+            "Displays the top grateful users to the knowledge of this bot.".to_owned(),
         );
         my_interface.register_channel_command(&topthanked_command).await;
         my_interface.register_channel_command(&topgrateful_command).await;

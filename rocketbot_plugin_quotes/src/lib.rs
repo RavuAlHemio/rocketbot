@@ -680,6 +680,8 @@ impl RocketBotPlugin for QuotesPlugin {
             Some(HashSet::new()),
             HashMap::new(),
             0,
+            "{cpfx}addquote QUOTE".to_owned(),
+            "Adds the given quote to the quote database.".to_owned(),
         );
         my_interface.register_channel_command(&addquote_command).await;
 
@@ -688,6 +690,8 @@ impl RocketBotPlugin for QuotesPlugin {
             Some(HashSet::new()),
             HashMap::new(),
             1,
+            "{cpfx}remember USERNAME SUBSTRING".to_owned(),
+            "Adds a recent utterance of the given user to the quote database.".to_owned(),
         );
         my_interface.register_channel_command(&remember_command).await;
 
@@ -701,6 +705,8 @@ impl RocketBotPlugin for QuotesPlugin {
             Some(quote_flags.clone()),
             HashMap::new(),
             0,
+            "{cpfx}quote [{lopfx}any|{lopfx}bad] [{sopfx}r] [SUBSTRING]".to_owned(),
+            "Outputs a random quote containing the given substring.".to_owned(),
         );
         my_interface.register_channel_command(&quote_command).await;
 
@@ -709,6 +715,8 @@ impl RocketBotPlugin for QuotesPlugin {
             Some(quote_flags.clone()),
             HashMap::new(),
             1,
+            "{cpfx}quoteuser [{lopfx}any|{lopfx}bad] [{sopfx}r] USERNAME [SUBSTRING]".to_owned(),
+            "Outputs a random quote from the given user containing the given substring.".to_owned(),
         );
         my_interface.register_channel_command(&quoteuser_command).await;
 
@@ -717,6 +725,8 @@ impl RocketBotPlugin for QuotesPlugin {
             Some(quote_flags.clone()),
             HashMap::new(),
             0,
+            "{cpfx}nextquote [{lopfx}any|{lopfx}bad]".to_owned(),
+            "Displays the next quote from a pre-shuffled list of quotes.".to_owned(),
         );
         my_interface.register_channel_command(&nextquote_command).await;
 
@@ -725,6 +735,8 @@ impl RocketBotPlugin for QuotesPlugin {
             Some(quote_flags.clone()),
             HashMap::new(),
             0,
+            "{cpfx}uq|{cpfx}upquote|{cpfx}dq|{cpfx}downquote".to_owned(),
+            "Updates the most recently added or displayed quote with a positive or a negative vote from you.".to_owned(),
         );
         let uq_command = upquote_command.copy_named("uq");
         let downquote_command = upquote_command.copy_named("downquote");

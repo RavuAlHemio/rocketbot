@@ -523,6 +523,8 @@ impl RocketBotPlugin for DicePlugin {
             Some(HashSet::new()),
             HashMap::new(),
             0,
+            "{cpfx}roll DICE [DICE ...]".to_owned(),
+            "Rolls one or more dice.".to_owned(),
         );
         my_interface.register_channel_command(&roll_command).await;
 
@@ -531,6 +533,8 @@ impl RocketBotPlugin for DicePlugin {
             Some(HashSet::new()),
             HashMap::new(),
             0,
+            "{cpfx}yn [QUESTION]".to_owned(),
+            "Helps you make a decision (or not) by answering a yes/no question.".to_owned(),
         );
         my_interface.register_channel_command(&yn_command).await;
 
@@ -539,6 +543,8 @@ impl RocketBotPlugin for DicePlugin {
             Some(HashSet::new()),
             HashMap::new(),
             0,
+            "{cpfx}decide OPTION or OPTION [or OPTION...]".to_owned(),
+            "Helps you make a decision (or not) by choosing one of multiple options.".to_owned(),
         );
         my_interface.register_channel_command(&decide_command).await;
 
@@ -547,6 +553,8 @@ impl RocketBotPlugin for DicePlugin {
             Some(HashSet::new()),
             HashMap::new(),
             0,
+            "{cpfx}shuffle OPTION or OPTION [or OPTION...]".to_owned(),
+            "Helps you prioritize by shuffling the options.".to_owned(),
         );
         my_interface.register_channel_command(&shuffle_command).await;
 
@@ -558,6 +566,8 @@ impl RocketBotPlugin for DicePlugin {
             Some(HashSet::new()),
             wikipedia_options,
             0,
+            "{cpfx}someyear [{lopfx}wikipedia WP]".to_owned(),
+            "Selects a random year and links to its Wikipedia article.".to_owned(),
         );
         my_interface.register_channel_command(&some_year_command).await;
 

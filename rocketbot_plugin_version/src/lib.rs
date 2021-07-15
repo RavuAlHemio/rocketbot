@@ -28,6 +28,8 @@ impl RocketBotPlugin for VersionPlugin {
             Some(HashSet::new()),
             HashMap::new(),
             0,
+            "{cpfx}version".to_owned(),
+            "Outputs the currently running version of the bot.".to_owned(),
         );
         my_interface.register_channel_command(&version_command).await;
 

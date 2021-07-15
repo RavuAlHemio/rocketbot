@@ -41,10 +41,16 @@ impl TextCommandsPlugin {
             }
 
             let command = CommandDefinition::new(
-                command_name,
+                command_name.clone(),
                 Some(random_flags),
                 HashMap::new(),
-                0
+                0,
+                if nicknamable { format!("{{cpfx}}{} [{{lopfx}}random|NICKNAME]", command_name) } else { format!("{{cpfx}}{}", command_name) },
+                if nicknamable {
+                    "Responds to the given text command, inserting a nickname at a predefined location.".to_owned()
+                } else {
+                    "Responds to the given text command.".to_owned()
+                },
             );
             my_interface.register_channel_command(&command).await;
         }

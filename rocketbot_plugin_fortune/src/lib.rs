@@ -32,6 +32,8 @@ impl RocketBotPlugin for FortunePlugin {
             Some(HashSet::new()),
             HashMap::new(),
             0,
+            "{cpfx}fortune [GROUP]".to_owned(),
+            "Selects and displays a random fortune, optionally from a specific group.".to_owned(),
         );
         my_interface.register_channel_command(&fortune_command).await;
 

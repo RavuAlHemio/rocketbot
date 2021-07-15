@@ -160,6 +160,8 @@ impl RocketBotPlugin for WeatherPlugin {
             Some(HashSet::new()),
             HashMap::new(),
             0,
+            "{cpfx}weather|{cpfx}lweather [LOCATION]".to_owned(),
+            "Displays the current weather as well as a forecast for the given location.".to_owned(),
         );
         let lweather_command = weather_command.copy_named("lweather");
         my_interface.register_channel_command(&weather_command).await;

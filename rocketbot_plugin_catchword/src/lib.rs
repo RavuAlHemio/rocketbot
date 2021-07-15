@@ -82,6 +82,8 @@ impl RocketBotPlugin for CatchwordPlugin {
                 Some(HashSet::new()),
                 HashMap::new(),
                 0,
+                format!("{{cpfx}}{} PHRASE", catch_name),
+                "Performs replacements in the PHRASE according to preconfigured rules.".to_owned(),
             )).await;
         }
 

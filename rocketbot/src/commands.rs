@@ -270,6 +270,8 @@ mod tests {
             Some(HashSet::new()),
             HashMap::new(),
             0,
+            "{cpfx}bloop [STUFF]".to_owned(),
+            "Bloops.".to_owned(),
         );
         let cmd_inst = perform_test(
             &command,
@@ -290,6 +292,8 @@ mod tests {
             Some(HashSet::new()),
             HashMap::new(),
             0,
+            "{cpfx}bloop [STUFF]".to_owned(),
+            "Bloops.".to_owned(),
         );
         let cmd_inst = perform_test(
             &command,
@@ -310,6 +314,8 @@ mod tests {
             Some(HashSet::new()),
             HashMap::new(),
             1,
+            "{cpfx}bloop [STUFF]".to_owned(),
+            "Bloops.".to_owned(),
         );
         let cmd_inst = perform_test(
             &command,

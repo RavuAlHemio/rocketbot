@@ -15,6 +15,13 @@ pub struct CommandDefinition {
     pub flags: Option<HashSet<String>>,
     pub options: HashMap<String, CommandValueType>,
     pub arg_count: usize,
+
+    /// The following placeholders may be used in the usage string:
+    /// `{cpfx}`: command prefix
+    /// `{sopfx}`: short option prefix
+    /// `{lopfx}`: long option prefix
+    pub usage: String,
+    pub description: String,
 }
 impl CommandDefinition {
     /// Pass `None` to `flags` to receive any and all flags specified by the user. Pass a `Some`
@@ -24,12 +31,16 @@ impl CommandDefinition {
         flags: Option<HashSet<String>>,
         options: HashMap<String, CommandValueType>,
         arg_count: usize,
+        usage: String,
+        description: String,
     ) -> CommandDefinition {
         CommandDefinition {
             name,
             flags,
             options,
             arg_count,
+            usage,
+            description,
         }
     }
 

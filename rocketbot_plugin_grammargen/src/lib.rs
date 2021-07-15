@@ -72,6 +72,8 @@ impl RocketBotPlugin for GrammarGenPlugin {
                 None,
                 HashMap::new(),
                 0,
+                format!("{{cpfx}}{} [NICKNAME]", grammar_name),
+                "Produces a phrase from the given grammar.".to_owned(),
             );
             my_interface.register_channel_command(&this_grammar_command).await;
         }

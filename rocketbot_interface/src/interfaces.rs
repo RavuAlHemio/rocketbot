@@ -1,4 +1,4 @@
-use std::collections::HashSet;
+use std::collections::{HashMap, HashSet};
 use std::sync::Weak;
 
 use async_trait::async_trait;
@@ -35,6 +35,18 @@ pub trait RocketBotInterface : Send + Sync {
     /// already exists.
     async fn register_private_message_command(&self, command: &CommandDefinition) -> bool;
 
+    /// Obtains a vector of all currently defined commands using the `rocketbot_interface::command`
+    /// infrastructure.
+    async fn get_defined_commands(&self) -> Vec<CommandDefinition>;
+
+    /// Obtains a map of custom commands not defined using the `rocketbot_interface::command` from
+    /// all plugins.
+    async fn get_additional_commands_usages(&self) -> HashMap<String, String>;
+
+    /// Obtains detailed help information for the given command (by requesting it using
+    /// `RocketBotPlugin::get_command_help` from all active plugins), or `None` if it is not found.
+    async fn get_command_help(&self, name: &str) -> Option<String>;
+
     /// Returns whether the given user ID is the bot's user ID.
     async fn is_my_user_id(&self, user_id: &str) -> bool;
 }
@@ -70,4 +82,12 @@ pub trait RocketBotPlugin: Send + Sync {
 
     /// Called if a command has been issued in a private message.
     async fn private_message_command(&self, _message: &Message, _command: &CommandInstance) {}
+
+    /// Called if a list of commands is requested; used to supply usage information for commands
+    /// not handled using the `rocketbot_interface::command` infrastructure.
+    async fn get_additional_commands_usages(&self) -> HashMap<String, String> { HashMap::new() }
+
+    /// Called if detailed help information is requested for a given command. Should return `None`
+    /// if the plugin doesn't provide this command.
+    async fn get_command_help(&self, _command_name: &str) -> Option<String> { None }
 }

@@ -90,6 +90,8 @@ impl RocketBotPlugin for VaccinePlugin {
             Some(HashSet::new()),
             HashMap::new(),
             0,
+            "{cpfx}vaccine [STATE]".to_owned(),
+            "Displays the number of vaccinated people in the given Austrian state or for all of Austria.".to_owned(),
         );
         my_interface.register_channel_command(&vaccine_command).await;
 
