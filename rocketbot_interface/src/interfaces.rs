@@ -4,7 +4,7 @@ use std::sync::Weak;
 use async_trait::async_trait;
 use json::JsonValue;
 
-use crate::commands::{CommandDefinition, CommandInstance};
+use crate::commands::{CommandConfiguration, CommandDefinition, CommandInstance};
 use crate::model::{ChannelMessage, Message, User};
 
 
@@ -35,13 +35,17 @@ pub trait RocketBotInterface : Send + Sync {
     /// already exists.
     async fn register_private_message_command(&self, command: &CommandDefinition) -> bool;
 
+    /// Obtains a copy of the command configuration currently in operation.
+    async fn get_command_configuration(&self) -> CommandConfiguration;
+
     /// Obtains a vector of all currently defined commands using the `rocketbot_interface::command`
     /// infrastructure.
     async fn get_defined_commands(&self) -> Vec<CommandDefinition>;
 
     /// Obtains a map of custom commands not defined using the `rocketbot_interface::command` from
-    /// all plugins.
-    async fn get_additional_commands_usages(&self) -> HashMap<String, String>;
+    /// all plugins. The key is the command name and the value is a tuple of usage information and
+    /// description.
+    async fn get_additional_commands_usages(&self) -> HashMap<String, (String, String)>;
 
     /// Obtains detailed help information for the given command (by requesting it using
     /// `RocketBotPlugin::get_command_help` from all active plugins), or `None` if it is not found.
@@ -84,8 +88,9 @@ pub trait RocketBotPlugin: Send + Sync {
     async fn private_message_command(&self, _message: &Message, _command: &CommandInstance) {}
 
     /// Called if a list of commands is requested; used to supply usage information for commands
-    /// not handled using the `rocketbot_interface::command` infrastructure.
-    async fn get_additional_commands_usages(&self) -> HashMap<String, String> { HashMap::new() }
+    /// not handled using the `rocketbot_interface::command` infrastructure. The key of each entry
+    /// is the command name and the value is a tuple of usage information and description.
+    async fn get_additional_commands_usages(&self) -> HashMap<String, (String, String)> { HashMap::new() }
 
     /// Called if detailed help information is requested for a given command. Should return `None`
     /// if the plugin doesn't provide this command.

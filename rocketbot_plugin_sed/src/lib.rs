@@ -143,4 +143,33 @@ impl RocketBotPlugin for SedPlugin {
             self.remember_message(&channel_message).await;
         }
     }
+
+    async fn get_additional_commands_usages(&self) -> HashMap<String, (String, String)> {
+        let mut ret = HashMap::new();
+        ret.insert(
+            "s".to_owned(),
+            (
+                "s/old/new/".to_owned(),
+                "Replaces `old` with `new` in the most recent matching message. Type `{cpfx}help s` for details.".to_owned(),
+            ),
+        );
+        ret.insert(
+            "tr".to_owned(),
+            (
+                "tr/abc/def/".to_owned(),
+                "Transposes letters `abc` to letters `def` in the most recent matching message. Type `{cpfx}help tr` for details.".to_owned(),
+            ),
+        );
+        ret
+    }
+
+    async fn get_command_help(&self, command_name: &str) -> Option<String> {
+        if command_name == "s" {
+            Some(include_str!("../help/s.md").to_owned())
+        } else if command_name == "tr" {
+            Some(include_str!("../help/tr.md").to_owned())
+        } else {
+            None
+        }
+    }
 }

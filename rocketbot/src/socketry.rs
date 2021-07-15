@@ -16,7 +16,7 @@ use log::{debug, error, log_enabled, warn};
 use rand::{Rng, SeedableRng};
 use rand::distributions::{Distribution, Uniform};
 use rand::rngs::StdRng;
-use rocketbot_interface::commands::CommandDefinition;
+use rocketbot_interface::commands::{CommandConfiguration, CommandDefinition};
 use rocketbot_interface::interfaces::{RocketBotInterface, RocketBotPlugin};
 use rocketbot_interface::model::{Channel, ChannelMessage, Message, User};
 use rocketbot_interface::sync::{Mutex, RwLock, RwLockReadGuard};
@@ -28,7 +28,7 @@ use tokio_tungstenite::connect_async;
 use tokio_tungstenite::tungstenite::Message as WebSocketMessage;
 use url::Url;
 
-use crate::commands::{CommandConfiguration, parse_command};
+use crate::commands::parse_command;
 use crate::config::CONFIG;
 use crate::errors::WebSocketError;
 use crate::jsonage::parse_message;
@@ -334,6 +334,10 @@ impl RocketBotInterface for ServerConnection {
         todo!();
     }
 
+    async fn get_command_configuration(&self) -> CommandConfiguration {
+        self.shared_state.command_config.clone()
+    }
+
     async fn get_defined_commands(&self) -> Vec<CommandDefinition> {
         let commands_guard = self.shared_state.commands
             .read().await;
@@ -344,7 +348,7 @@ impl RocketBotInterface for ServerConnection {
         commands
     }
 
-    async fn get_additional_commands_usages(&self) -> HashMap<String, String> {
+    async fn get_additional_commands_usages(&self) -> HashMap<String, (String, String)> {
         let mut ret = HashMap::new();
         {
             let plugins = self.shared_state.plugins

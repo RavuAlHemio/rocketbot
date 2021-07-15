@@ -2,44 +2,10 @@ use std::collections::{HashMap, HashSet};
 
 use log::{debug, warn};
 use rocketbot_interface::commands::{
-    CommandDefinition, CommandInstance, CommandValue, CommandValueType,
+    CommandConfiguration, CommandDefinition, CommandInstance, CommandValue, CommandValueType,
 };
 
 use crate::string_utils::SplitChunk;
-
-
-#[derive(Clone, Debug, Eq, Hash, PartialEq)]
-pub(crate) struct CommandConfiguration {
-    pub command_prefix: String,
-    pub short_option_prefix: String,
-    pub long_option_prefix: String,
-    pub stop_parse_option: String,
-}
-impl CommandConfiguration {
-    pub fn new(
-        command_prefix: String,
-        short_option_prefix: String,
-        long_option_prefix: String,
-        stop_parse_option: String,
-    ) -> CommandConfiguration {
-        CommandConfiguration {
-            command_prefix,
-            short_option_prefix,
-            long_option_prefix,
-            stop_parse_option,
-        }
-    }
-}
-impl Default for CommandConfiguration {
-    fn default() -> Self {
-        CommandConfiguration::new(
-            String::from("!"),
-            String::from("-"),
-            String::from("--"),
-            String::from("--"),
-        )
-    }
-}
 
 
 #[derive(Clone, Copy, Debug, Eq, Hash, PartialEq)]
