@@ -342,23 +342,40 @@ impl RocketBotInterface for ServerConnection {
         self.shared_state.command_config.clone()
     }
 
-    async fn get_defined_commands(&self) -> Vec<CommandDefinition> {
+    async fn get_defined_commands(&self, plugin: Option<&str>) -> Vec<CommandDefinition> {
         let commands_guard = self.shared_state.commands
             .read().await;
         let mut commands: Vec<CommandDefinition> = commands_guard.values()
+            .filter(|cd|
+                if let Some(p) = plugin {
+                    if let Some(cdpn) = &cd.plugin_name {
+                        cdpn == p
+                    } else {
+                        true
+                    }
+                } else {
+                    true
+                }
+            )
             .map(|cd| cd.clone())
             .collect();
         commands.sort_unstable_by_key(|cd| cd.name.clone());
         commands
     }
 
-    async fn get_additional_commands_usages(&self) -> HashMap<String, (String, String)> {
+    async fn get_additional_commands_usages(&self, plugin: Option<&str>) -> HashMap<String, (String, String)> {
         let mut ret = HashMap::new();
         {
-            let plugins = self.shared_state.plugins
+            let loaded_plugins = self.shared_state.plugins
                 .read().await;
-            for plugin in plugins.iter() {
-                let mut commands_usages = plugin.get_additional_commands_usages().await;
+            for loaded_plugin in loaded_plugins.iter() {
+                if let Some(po) = plugin {
+                    let plugin_name = loaded_plugin.plugin_name().await;
+                    if po != plugin_name {
+                        continue;
+                    }
+                }
+                let mut commands_usages = loaded_plugin.get_additional_commands_usages().await;
                 ret.extend(commands_usages.drain());
             }
         }

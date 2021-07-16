@@ -39,13 +39,13 @@ pub trait RocketBotInterface : Send + Sync {
     async fn get_command_configuration(&self) -> CommandConfiguration;
 
     /// Obtains a vector of all currently defined commands using the `rocketbot_interface::command`
-    /// infrastructure.
-    async fn get_defined_commands(&self) -> Vec<CommandDefinition>;
+    /// infrastructure. If `plugin` is not `None`, only returns commands for that plugin.
+    async fn get_defined_commands(&self, plugin: Option<&str>) -> Vec<CommandDefinition>;
 
     /// Obtains a map of custom commands not defined using the `rocketbot_interface::command` from
     /// all plugins. The key is the command name and the value is a tuple of usage information and
-    /// description.
-    async fn get_additional_commands_usages(&self) -> HashMap<String, (String, String)>;
+    /// description. If `plugin` is not `None`, only returns commands for that plugin.
+    async fn get_additional_commands_usages(&self, plugin: Option<&str>) -> HashMap<String, (String, String)>;
 
     /// Obtains detailed help information for the given command (by requesting it using
     /// `RocketBotPlugin::get_command_help` from all active plugins), or `None` if it is not found.
