@@ -137,7 +137,7 @@ impl RocketBotPlugin for AllographPlugin {
 
         let original_body = &channel_message.message.raw;
         let channel_name = &channel_message.channel.name;
-        let sender_nickname = &channel_message.message.sender.nickname;
+        let sender_nickname = channel_message.message.sender.nickname_or_username();
 
         let mut state_guard = self.inner_state
             .lock().await;
@@ -148,7 +148,7 @@ impl RocketBotPlugin for AllographPlugin {
             .or_insert_with(|| vec![0usize; self.replacer_regexes.len()]);
 
         let mut lookups: HashMap<String, String> = HashMap::new();
-        lookups.insert("username".to_owned(), sender_nickname.clone());
+        lookups.insert("username".to_owned(), sender_nickname.to_owned());
 
         let mut changing_body = original_body.clone();
         for (i, replacement) in self.replacer_regexes.iter().enumerate() {

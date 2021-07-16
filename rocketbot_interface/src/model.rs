@@ -1,3 +1,4 @@
+use chrono::{DateTime, Utc};
 use crate::message::MessageFragment;
 
 
@@ -5,13 +6,13 @@ use crate::message::MessageFragment;
 pub struct User {
     pub id: String,
     pub username: String,
-    pub nickname: String,
+    pub nickname: Option<String>,
 }
 impl User {
     pub fn new(
         id: String,
         username: String,
-        nickname: String,
+        nickname: Option<String>,
     ) -> Self {
         Self {
             id,
@@ -19,19 +20,23 @@ impl User {
             nickname,
         }
     }
+
+    pub fn nickname_or_username(&self) -> &str {
+        self.nickname.as_ref().unwrap_or(&self.username)
+    }
 }
 
 #[derive(Clone, Debug, Eq, Hash, PartialEq)]
 pub struct Channel {
     pub id: String,
     pub name: String,
-    pub frontend_name: String,
+    pub frontend_name: Option<String>,
 }
 impl Channel {
     pub fn new(
         id: String,
         name: String,
-        frontend_name: String,
+        frontend_name: Option<String>,
     ) -> Self {
         Self {
             id,
@@ -42,7 +47,26 @@ impl Channel {
 }
 
 #[derive(Clone, Debug, Eq, Hash, PartialEq)]
+pub struct EditInfo {
+    pub timestamp: DateTime<Utc>,
+    pub editor: User,
+}
+impl EditInfo {
+    pub fn new(
+        timestamp: DateTime<Utc>,
+        editor: User,
+    ) -> Self {
+        Self {
+            timestamp,
+            editor,
+        }
+    }
+}
+
+#[derive(Clone, Debug, Eq, Hash, PartialEq)]
 pub struct Message {
+    pub id: String,
+    pub timestamp: DateTime<Utc>,
     pub sender: User,
     pub raw: String,
     pub parsed: Vec<MessageFragment>,
@@ -50,12 +74,16 @@ pub struct Message {
 }
 impl Message {
     pub fn new(
+        id: String,
+        timestamp: DateTime<Utc>,
         sender: User,
         raw: String,
         parsed: Vec<MessageFragment>,
         is_by_bot: bool,
     ) -> Self {
         Self {
+            id,
+            timestamp,
             sender,
             raw,
             parsed,

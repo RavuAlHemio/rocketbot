@@ -7,6 +7,7 @@ use std::sync::Arc;
 use std::time::Duration;
 
 use async_trait::async_trait;
+use chrono::{TimeZone, Utc};
 use futures_util::{SinkExt, StreamExt};
 use hyper::StatusCode;
 use hyper::client::HttpConnector;
@@ -794,7 +795,7 @@ async fn handle_received(body: &serde_json::Value, mut state: &mut ConnectionSta
             let channel = Channel::new(
                 room_id.to_owned(),
                 name.to_owned(),
-                frontend_name.to_owned(),
+                Some(frontend_name.to_owned()),
             );
 
             channel_joined(&mut state, channel).await;
@@ -854,6 +855,7 @@ async fn handle_received(body: &serde_json::Value, mut state: &mut ConnectionSta
                 obtain_users_in_room(&mut state, &channel_id).await;
             }
 
+            let message_id = as_str_or_continue!(message_json["_id"]);
             let raw_message = as_str_or_continue!(message_json["msg"]);
             let parsed_message = match parse_message(&message_json["md"]) {
                 Ok(pm) => pm,
@@ -866,16 +868,27 @@ async fn handle_received(body: &serde_json::Value, mut state: &mut ConnectionSta
                 },
             };
 
+            let timestamp_unix = match message_json["ts"]["$date"].as_i64() {
+                Some(ts) => ts,
+                None => {
+                    error!("message is missing timestamp; skipping");
+                    continue;
+                },
+            };
+            let timestamp = Utc.timestamp(timestamp_unix, 0);
+
             let u_id = as_str_or_continue!(message_json["u"]["_id"]);
             let username = as_str_or_continue!(message_json["u"]["username"]);
             let nickname = as_str_or_continue!(message_json["u"]["name"]);
 
             let message = ChannelMessage::new(
                 Message::new(
+                    message_id.to_owned(),
+                    timestamp,
                     User::new(
                         u_id.to_owned(),
                         username.to_owned(),
-                        nickname.to_owned(),
+                        Some(nickname.to_owned()),
                     ),
                     raw_message.to_owned(),
                     parsed_message,
@@ -922,7 +935,7 @@ async fn handle_received(body: &serde_json::Value, mut state: &mut ConnectionSta
             let channel = Channel::new(
                 room_id.to_owned(),
                 room_name.to_owned(),
-                room_name.to_owned(), // fname is missing for some reason
+                None, // fname is missing for some reason
             );
 
             channel_joined(&mut state, channel).await;
@@ -1084,7 +1097,7 @@ async fn obtain_users_in_room(state: &mut ConnectionState, channel_id: &str) {
             let user = User::new(
                 user_id.to_owned(),
                 username.to_owned(),
-                nickname.to_owned(),
+                Some(nickname.to_owned()),
             );
             users.insert(user);
         }
