@@ -37,6 +37,7 @@ use crate::string_utils::{SplitChunk, split_whitespace};
 
 
 static LOGIN_MESSAGE_ID: &'static str = "login4242";
+static GET_SETTINGS_MESSAGE_ID: &'static str = "settings4242";
 static GET_ROOMS_MESSAGE_ID: &'static str = "rooms4242";
 static SUBSCRIBE_ROOMS_MESSAGE_ID: &'static str = "roomchanges4242";
 static SEND_MESSAGE_MESSAGE_ID: &'static str = "sendmessage4242";
@@ -164,6 +165,7 @@ struct SharedConnectionState {
     commands: RwLock<HashMap<String, CommandDefinition>>,
     http_client: hyper::Client<HttpsConnector<HttpConnector>>,
     my_user_id: RwLock<Option<String>>,
+    max_message_length: RwLock<Option<usize>>,
 }
 impl SharedConnectionState {
     fn new(
@@ -176,6 +178,7 @@ impl SharedConnectionState {
         commands: RwLock<HashMap<String, CommandDefinition>>,
         http_client: hyper::Client<HttpsConnector<HttpConnector>>,
         my_user_id: RwLock<Option<String>>,
+        max_message_length: RwLock<Option<usize>>,
     ) -> Self {
         Self {
             outgoing_sender,
@@ -187,6 +190,7 @@ impl SharedConnectionState {
             commands,
             http_client,
             my_user_id,
+            max_message_length,
         }
     }
 }
@@ -383,6 +387,12 @@ impl RocketBotInterface for ServerConnection {
             None => false,
         }
     }
+
+    async fn get_maximum_message_length(&self) -> Option<usize> {
+        let mml_guard = self.shared_state.max_message_length
+            .read().await;
+        *mml_guard
+    }
 }
 
 
@@ -428,6 +438,10 @@ pub(crate) async fn connect() -> Arc<ServerConnection> {
         "SharedConnectionState::my_user_id",
         None,
     );
+    let max_message_length: RwLock<Option<usize>> = RwLock::new(
+        "SharedConnectionState::max_message_length",
+        None,
+    );
 
     let shared_state = Arc::new(SharedConnectionState::new(
         outgoing_sender,
@@ -439,6 +453,7 @@ pub(crate) async fn connect() -> Arc<ServerConnection> {
         commands,
         http_client,
         my_user_id,
+        max_message_length,
     ));
 
     let conn = Arc::new(ServerConnection::new(
@@ -683,6 +698,15 @@ async fn handle_received(body: &JsonValue, mut state: &mut ConnectionState) {
         state.shared_state.outgoing_sender.send(subscribe_room_change_body)
             .expect("failed to enqueue room update subscription message");
 
+        // get the server's settings
+        let get_settings_body = json::object! {
+            msg: "method",
+            method: "public-settings/get",
+            id: GET_SETTINGS_MESSAGE_ID,
+        };
+        state.shared_state.outgoing_sender.send(get_settings_body)
+            .expect("failed to enqueue get-settings message");
+
         // get which rooms we are currently in
         let room_list_body = json::object! {
             msg: "method",
@@ -696,6 +720,17 @@ async fn handle_received(body: &JsonValue, mut state: &mut ConnectionState) {
         };
         state.shared_state.outgoing_sender.send(room_list_body)
             .expect("failed to enqueue room list message");
+    } else if body["msg"] == "result" && body["id"] == GET_SETTINGS_MESSAGE_ID {
+        let settings = &body["result"];
+        for entry in settings.members() {
+            if entry["_id"] == "Message_MaxAllowedSize" {
+                if let Some(mas) = entry["value"].as_usize() {
+                    let mut mml_guard = state.shared_state.max_message_length
+                        .write().await;
+                    *mml_guard = Some(mas);
+                }
+            }
+        }
     } else if body["msg"] == "result" && body["id"] == GET_ROOMS_MESSAGE_ID {
         // update our rooms
         for update_room in body["result"]["update"].members() {

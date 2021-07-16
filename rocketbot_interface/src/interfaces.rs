@@ -53,6 +53,9 @@ pub trait RocketBotInterface : Send + Sync {
 
     /// Returns whether the given user ID is the bot's user ID.
     async fn is_my_user_id(&self, user_id: &str) -> bool;
+
+    /// Returns the maximum message length on the current server, or `None` if it is not known.
+    async fn get_maximum_message_length(&self) -> Option<usize>;
 }
 
 
