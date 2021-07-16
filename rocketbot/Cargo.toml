@@ -23,6 +23,7 @@ rocketbot_plugin_config_user_alias = { path = "../rocketbot_plugin_config_user_a
 rocketbot_plugin_dice = { path = "../rocketbot_plugin_dice" }
 rocketbot_plugin_fortune = { path = "../rocketbot_plugin_fortune" }
 rocketbot_plugin_grammargen = { path = "../rocketbot_plugin_grammargen" }
+rocketbot_plugin_group_pressure = { path = "../rocketbot_plugin_group_pressure" }
 rocketbot_plugin_help = { path = "../rocketbot_plugin_help" }
 rocketbot_plugin_quotes = { path = "../rocketbot_plugin_quotes" }
 rocketbot_plugin_sed = { path = "../rocketbot_plugin_sed" }

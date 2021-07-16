@@ -1156,6 +1156,7 @@ dependencies = [
  "rocketbot_plugin_dice",
  "rocketbot_plugin_fortune",
  "rocketbot_plugin_grammargen",
+ "rocketbot_plugin_group_pressure",
  "rocketbot_plugin_help",
  "rocketbot_plugin_quotes",
  "rocketbot_plugin_sed",
@@ -1301,6 +1302,15 @@ dependencies = [
  "rand",
  "rocketbot_interface",
  "tokio",
+]
+
+[[package]]
+name = "rocketbot_plugin_group_pressure"
+version = "0.1.0"
+dependencies = [
+ "async-trait",
+ "json",
+ "rocketbot_interface",
 ]
 
 [[package]]
