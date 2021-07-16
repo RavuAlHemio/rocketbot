@@ -46,6 +46,24 @@ static ID_ALPHABET: &'static str = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqr
 const ID_LENGTH: usize = 17;
 
 
+macro_rules! as_str_or_continue {
+    ($val:expr) => {
+        match $val.as_str() {
+            Some(v) => v,
+            None => continue,
+        }
+    };
+}
+
+macro_rules! as_str_or_return {
+    ($val:expr) => {
+        match $val.as_str() {
+            Some(v) => v,
+            None => return,
+        }
+    };
+}
+
 struct ChannelDatabase {
     by_id: HashMap<String, Channel>,
     by_name: HashMap<String, Channel>,
@@ -768,11 +786,15 @@ async fn handle_received(body: &serde_json::Value, mut state: &mut ConnectionSta
                 continue;
             }
 
+            let room_id = as_str_or_continue!(update_room["_id"]);
+            let name = as_str_or_continue!(update_room["name"]);
+            let frontend_name = as_str_or_continue!(update_room["fname"]);
+
             // remember this room
             let channel = Channel::new(
-                update_room["_id"].to_string(),
-                update_room["name"].to_string(),
-                update_room["fname"].to_string(),
+                room_id.to_owned(),
+                name.to_owned(),
+                frontend_name.to_owned(),
             );
 
             channel_joined(&mut state, channel).await;
@@ -797,10 +819,7 @@ async fn handle_received(body: &serde_json::Value, mut state: &mut ConnectionSta
                 continue;
             }
 
-            let sender_id = match message_json["u"]["_id"].as_str() {
-                Some(sid) => sid,
-                None => continue,
-            };
+            let sender_id = as_str_or_continue!(message_json["u"]["_id"]);
             let my_user_id = {
                 let my_uid_guard = state.shared_state.my_user_id
                     .read().await;
@@ -814,7 +833,7 @@ async fn handle_received(body: &serde_json::Value, mut state: &mut ConnectionSta
                 continue;
             }
 
-            let channel_id = message_json["rid"].to_string();
+            let channel_id = as_str_or_continue!(message_json["rid"]);
             let channel_opt = {
                 let chandb_read = state.shared_state.subscribed_channels
                     .read().await;
@@ -835,7 +854,7 @@ async fn handle_received(body: &serde_json::Value, mut state: &mut ConnectionSta
                 obtain_users_in_room(&mut state, &channel_id).await;
             }
 
-            let raw_message = message_json["msg"].to_string();
+            let raw_message = as_str_or_continue!(message_json["msg"]);
             let parsed_message = match parse_message(&message_json["md"]) {
                 Ok(pm) => pm,
                 Err(e) => {
@@ -847,14 +866,18 @@ async fn handle_received(body: &serde_json::Value, mut state: &mut ConnectionSta
                 },
             };
 
+            let u_id = as_str_or_continue!(message_json["u"]["_id"]);
+            let username = as_str_or_continue!(message_json["u"]["username"]);
+            let nickname = as_str_or_continue!(message_json["u"]["name"]);
+
             let message = ChannelMessage::new(
                 Message::new(
                     User::new(
-                        message_json["u"]["_id"].to_string(),
-                        message_json["u"]["username"].to_string(),
-                        message_json["u"]["name"].to_string(),
+                        u_id.to_owned(),
+                        username.to_owned(),
+                        nickname.to_owned(),
                     ),
-                    raw_message,
+                    raw_message.to_owned(),
                     parsed_message,
                     message_json["bot"].is_object(),
                 ),
@@ -894,10 +917,12 @@ async fn handle_received(body: &serde_json::Value, mut state: &mut ConnectionSta
             }
 
             // remember this room
+            let room_id = as_str_or_return!(update_room["_id"]);
+            let room_name = as_str_or_return!(update_room["name"]);
             let channel = Channel::new(
-                update_room["_id"].to_string(),
-                update_room["name"].to_string(),
-                update_room["name"].to_string(), // fname is missing for some reason
+                room_id.to_owned(),
+                room_name.to_owned(),
+                room_name.to_owned(), // fname is missing for some reason
             );
 
             channel_joined(&mut state, channel).await;
