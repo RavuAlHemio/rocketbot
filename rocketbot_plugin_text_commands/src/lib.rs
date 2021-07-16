@@ -42,6 +42,7 @@ impl TextCommandsPlugin {
 
             let command = CommandDefinition::new(
                 command_name.clone(),
+                "text_commands".to_owned(),
                 Some(random_flags),
                 HashMap::new(),
                 0,

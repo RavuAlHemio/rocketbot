@@ -408,6 +408,7 @@ impl RocketBotPlugin for ThanksPlugin {
 
         let thanks_command = CommandDefinition::new(
             "thanks".to_owned(),
+            "thanks".to_owned(),
             Some(HashSet::new()),
             HashMap::new(),
             1,
@@ -422,6 +423,7 @@ impl RocketBotPlugin for ThanksPlugin {
 
         let thanked_command = CommandDefinition::new(
             "thanked".to_owned(),
+            "thanks".to_owned(),
             Some(HashSet::new()),
             HashMap::new(),
             1,
@@ -430,6 +432,7 @@ impl RocketBotPlugin for ThanksPlugin {
         );
         let grateful_command = CommandDefinition::new(
             "grateful".to_owned(),
+            "thanks".to_owned(),
             Some(HashSet::new()),
             HashMap::new(),
             1,
@@ -441,6 +444,7 @@ impl RocketBotPlugin for ThanksPlugin {
 
         let topthanked_command = CommandDefinition::new(
             "topthanked".to_owned(),
+            "thanks".to_owned(),
             Some(HashSet::new()),
             HashMap::new(),
             0,
@@ -449,6 +453,7 @@ impl RocketBotPlugin for ThanksPlugin {
         );
         let topgrateful_command = CommandDefinition::new(
             "topgrateful".to_owned(),
+            "thanks".to_owned(),
             Some(HashSet::new()),
             HashMap::new(),
             0,

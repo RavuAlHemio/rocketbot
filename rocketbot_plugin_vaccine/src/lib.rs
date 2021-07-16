@@ -87,6 +87,7 @@ impl RocketBotPlugin for VaccinePlugin {
 
         let vaccine_command = CommandDefinition::new(
             "vaccine".to_owned(),
+            "vaccine".to_owned(),
             Some(HashSet::new()),
             HashMap::new(),
             0,

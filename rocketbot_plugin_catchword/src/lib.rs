@@ -79,6 +79,7 @@ impl RocketBotPlugin for CatchwordPlugin {
         for catch_name in catchments.keys() {
             my_interface.register_channel_command(&CommandDefinition::new(
                 catch_name.clone(),
+                "catchword".to_owned(),
                 Some(HashSet::new()),
                 HashMap::new(),
                 0,

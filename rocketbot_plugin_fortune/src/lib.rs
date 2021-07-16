@@ -29,6 +29,7 @@ impl RocketBotPlugin for FortunePlugin {
 
         let fortune_command = CommandDefinition::new(
             "fortune".to_owned(),
+            "fortune".to_owned(),
             Some(HashSet::new()),
             HashMap::new(),
             0,

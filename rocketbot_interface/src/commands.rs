@@ -12,6 +12,7 @@ pub enum CommandValueType {
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub struct CommandDefinition {
     pub name: String,
+    pub plugin_name: Option<String>,
     pub flags: Option<HashSet<String>>,
     pub options: HashMap<String, CommandValueType>,
     pub arg_count: usize,
@@ -28,6 +29,7 @@ impl CommandDefinition {
     /// value with an empty `HashSet<String>` to declare that the command does not take any flags.
     pub fn new(
         name: String,
+        plugin_name: String,
         flags: Option<HashSet<String>>,
         options: HashMap<String, CommandValueType>,
         arg_count: usize,
@@ -36,6 +38,7 @@ impl CommandDefinition {
     ) -> CommandDefinition {
         CommandDefinition {
             name,
+            plugin_name: Some(plugin_name),
             flags,
             options,
             arg_count,

@@ -677,6 +677,7 @@ impl RocketBotPlugin for QuotesPlugin {
 
         let addquote_command = CommandDefinition::new(
             "addquote".to_owned(),
+            "quotes".to_owned(),
             Some(HashSet::new()),
             HashMap::new(),
             0,
@@ -687,6 +688,7 @@ impl RocketBotPlugin for QuotesPlugin {
 
         let remember_command = CommandDefinition::new(
             "remember".to_owned(),
+            "quotes".to_owned(),
             Some(HashSet::new()),
             HashMap::new(),
             1,
@@ -702,6 +704,7 @@ impl RocketBotPlugin for QuotesPlugin {
 
         let quote_command = CommandDefinition::new(
             "quote".to_owned(),
+            "quotes".to_owned(),
             Some(quote_flags.clone()),
             HashMap::new(),
             0,
@@ -712,6 +715,7 @@ impl RocketBotPlugin for QuotesPlugin {
 
         let quoteuser_command = CommandDefinition::new(
             "quoteuser".to_owned(),
+            "quotes".to_owned(),
             Some(quote_flags.clone()),
             HashMap::new(),
             1,
@@ -722,6 +726,7 @@ impl RocketBotPlugin for QuotesPlugin {
 
         let nextquote_command = CommandDefinition::new(
             "nextquote".to_owned(),
+            "quotes".to_owned(),
             Some(quote_flags.clone()),
             HashMap::new(),
             0,
@@ -732,6 +737,7 @@ impl RocketBotPlugin for QuotesPlugin {
 
         let upquote_command = CommandDefinition::new(
             "upquote".to_owned(),
+            "quotes".to_owned(),
             Some(quote_flags.clone()),
             HashMap::new(),
             0,

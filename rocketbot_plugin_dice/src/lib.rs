@@ -520,6 +520,7 @@ impl RocketBotPlugin for DicePlugin {
 
         let roll_command = CommandDefinition::new(
             "roll".to_string(),
+            "dice".to_owned(),
             Some(HashSet::new()),
             HashMap::new(),
             0,
@@ -530,6 +531,7 @@ impl RocketBotPlugin for DicePlugin {
 
         let yn_command = CommandDefinition::new(
             "yn".to_string(),
+            "dice".to_owned(),
             Some(HashSet::new()),
             HashMap::new(),
             0,
@@ -540,6 +542,7 @@ impl RocketBotPlugin for DicePlugin {
 
         let decide_command = CommandDefinition::new(
             "decide".to_string(),
+            "dice".to_owned(),
             Some(HashSet::new()),
             HashMap::new(),
             0,
@@ -550,6 +553,7 @@ impl RocketBotPlugin for DicePlugin {
 
         let shuffle_command = CommandDefinition::new(
             "shuffle".to_string(),
+            "dice".to_owned(),
             Some(HashSet::new()),
             HashMap::new(),
             0,
@@ -563,6 +567,7 @@ impl RocketBotPlugin for DicePlugin {
         wikipedia_options.insert("wikipedia".to_string(), CommandValueType::String);
         let some_year_command = CommandDefinition::new(
             "someyear".to_string(),
+            "dice".to_owned(),
             Some(HashSet::new()),
             wikipedia_options,
             0,

@@ -25,6 +25,7 @@ impl RocketBotPlugin for VersionPlugin {
 
         let version_command = CommandDefinition::new(
             "version".to_owned(),
+            "version".to_owned(),
             Some(HashSet::new()),
             HashMap::new(),
             0,

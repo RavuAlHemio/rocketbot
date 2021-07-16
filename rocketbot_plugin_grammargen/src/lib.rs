@@ -69,6 +69,7 @@ impl RocketBotPlugin for GrammarGenPlugin {
         for grammar_name in grammars.keys() {
             let this_grammar_command = CommandDefinition::new(
                 grammar_name.clone(),
+                "grammargen".to_owned(),
                 None,
                 HashMap::new(),
                 0,

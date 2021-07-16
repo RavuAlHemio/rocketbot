@@ -31,6 +31,7 @@ impl RocketBotPlugin for HelpPlugin {
 
         my_interface.register_channel_command(&CommandDefinition::new(
             "help".to_owned(),
+            "help".to_owned(),
             Some(HashSet::new()),
             HashMap::new(),
             0,
@@ -39,6 +40,7 @@ impl RocketBotPlugin for HelpPlugin {
         )).await;
         my_interface.register_channel_command(&CommandDefinition::new(
             "usage".to_owned(),
+            "help".to_owned(),
             Some(HashSet::new()),
             HashMap::new(),
             0,

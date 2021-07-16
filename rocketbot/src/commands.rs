@@ -233,6 +233,7 @@ mod tests {
     fn test_empty() {
         let command = CommandDefinition::new(
             "bloop".into(),
+            "bloop".to_owned(),
             Some(HashSet::new()),
             HashMap::new(),
             0,
@@ -255,6 +256,7 @@ mod tests {
     fn test_rest() {
         let command = CommandDefinition::new(
             "bloop".into(),
+            "bloop".to_owned(),
             Some(HashSet::new()),
             HashMap::new(),
             0,
@@ -277,6 +279,7 @@ mod tests {
     fn test_single_arg() {
         let command = CommandDefinition::new(
             "bloop".into(),
+            "bloop".to_owned(),
             Some(HashSet::new()),
             HashMap::new(),
             1,

@@ -109,6 +109,7 @@ impl RocketBotPlugin for CalcPlugin {
 
         my_interface.register_channel_command(&CommandDefinition::new(
             "calc".to_owned(),
+            "calc".to_owned(),
             Some(HashSet::new()),
             HashMap::new(),
             0,
