@@ -4,3 +4,67 @@ pub mod interfaces;
 pub mod message;
 pub mod model;
 pub mod sync;
+
+
+use std::convert::TryInto;
+use std::slice;
+
+use once_cell::sync::Lazy;
+use serde_json;
+
+
+static EMPTY_MAP: Lazy<serde_json::Map<String, serde_json::Value>> = Lazy::new(|| serde_json::Map::new());
+
+
+macro_rules! uint_conv {
+    ($fn_name:ident, $target_type:ty) => {
+        fn $fn_name(&self) -> Option<$target_type> {
+            self.as_u64()
+                .map(|u| u.try_into().ok()).flatten()
+        }
+    };
+}
+
+
+pub trait JsonValueExtensions {
+    fn as_u8(&self) -> Option<u8>;
+    fn as_u32(&self) -> Option<u32>;
+    fn as_usize(&self) -> Option<usize>;
+    fn entries(&self) -> Option<serde_json::map::Iter>;
+    fn members(&self) -> Option<slice::Iter<serde_json::Value>>;
+    fn has_key(&self, key: &str) -> bool;
+
+    fn entries_or_empty(&self) -> serde_json::map::Iter {
+        match self.entries() {
+            Some(i) => i,
+            None => EMPTY_MAP.iter(),
+        }
+    }
+
+    fn members_or_empty(&self) -> slice::Iter<serde_json::Value> {
+        match self.members() {
+            Some(i) => i,
+            None => [].iter(),
+        }
+    }
+}
+impl JsonValueExtensions for serde_json::Value {
+    uint_conv!(as_u8, u8);
+    uint_conv!(as_u32, u32);
+    uint_conv!(as_usize, usize);
+
+    fn entries(&self) -> Option<serde_json::map::Iter> {
+        self.as_object().map(|o| o.iter())
+    }
+
+    fn members(&self) -> Option<slice::Iter<serde_json::Value>> {
+        self.as_array().map(|o| o.iter())
+    }
+
+    fn has_key(&self, key: &str) -> bool {
+        match self.as_object() {
+            Some(o) => o.contains_key(key),
+            None => false,
+        }
+    }
+}

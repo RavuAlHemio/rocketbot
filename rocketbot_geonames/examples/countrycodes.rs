@@ -2,9 +2,9 @@
 // from Wikidata
 use std::fs::File;
 
-use json::JsonValue;
 use minidom::Element;
 use reqwest;
+use serde_json;
 use url::Url;
 
 
@@ -136,11 +136,11 @@ async fn main() {
             continue;
         }
 
-        let mut country = JsonValue::new_object();
-        country["country"] = JsonValue::Null;
-        country["plate"] = JsonValue::Null;
-        country["alpha2"] = JsonValue::Null;
-        country["alpha3"] = JsonValue::Null;
+        let mut country = serde_json::json!({});
+        country["country"] = serde_json::Value::Null;
+        country["plate"] = serde_json::Value::Null;
+        country["alpha2"] = serde_json::Value::Null;
+        country["alpha3"] = serde_json::Value::Null;
 
         for binding_elem in result_elem.children() {
             if !binding_elem.is("binding", SPARQL_NS) {
@@ -153,10 +153,10 @@ async fn main() {
                 .text();
 
             match name {
-                "countryLabel" => { country["country"] = JsonValue::String(literal_value) },
-                "platecode" => { country["plate"] = JsonValue::String(literal_value) },
-                "alpha2code" => { country["alpha2"] = JsonValue::String(literal_value) },
-                "alpha3code" => { country["alpha3"] = JsonValue::String(literal_value) },
+                "countryLabel" => { country["country"] = serde_json::Value::String(literal_value) },
+                "platecode" => { country["plate"] = serde_json::Value::String(literal_value) },
+                "alpha2code" => { country["alpha2"] = serde_json::Value::String(literal_value) },
+                "alpha3code" => { country["alpha3"] = serde_json::Value::String(literal_value) },
                 _ => {},
             };
         }
@@ -169,12 +169,12 @@ async fn main() {
         c["alpha2"].as_str().map(|s| s.to_owned()),
     ));
 
-    let countries_json = JsonValue::Array(countries);
+    let countries_json = serde_json::Value::Array(countries);
 
     {
         let mut file = File::create("CountryCodes.json")
             .expect("failed to create file");
-        countries_json.write_pretty(&mut file, 2)
+        serde_json::to_writer_pretty(&mut file, &countries_json)
             .expect("failed to write file");
     }
 }

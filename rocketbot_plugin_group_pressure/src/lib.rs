@@ -2,11 +2,11 @@ use std::collections::{HashMap, HashSet, VecDeque};
 use std::sync::Weak;
 
 use async_trait::async_trait;
-use json::JsonValue;
-
+use rocketbot_interface::JsonValueExtensions;
 use rocketbot_interface::interfaces::{RocketBotInterface, RocketBotPlugin};
 use rocketbot_interface::model::ChannelMessage;
 use rocketbot_interface::sync::Mutex;
+use serde_json;
 
 
 pub struct GroupPressurePlugin {
@@ -17,7 +17,7 @@ pub struct GroupPressurePlugin {
 }
 #[async_trait]
 impl RocketBotPlugin for GroupPressurePlugin {
-    async fn new(interface: Weak<dyn RocketBotInterface>, config: JsonValue) -> Self {
+    async fn new(interface: Weak<dyn RocketBotInterface>, config: serde_json::Value) -> Self {
         let channel_name_to_recent_messages = Mutex::new(
             "GroupPressurePlugin::channel_name_to_recent_messages",
             HashMap::new(),

@@ -4,9 +4,9 @@ use std::path::PathBuf;
 use once_cell::sync::OnceCell;
 use rocketbot_interface::sync::RwLock;
 use serde::{Deserialize, Serialize};
+use serde_json;
 
 use crate::errors::ConfigError;
-use crate::jsonage::RocketBotJsonValue;
 
 
 pub(crate) static CONFIG_FILE_NAME: OnceCell<PathBuf> = OnceCell::new();
@@ -33,7 +33,7 @@ pub(crate) struct ServerConfig {
 pub(crate) struct PluginConfig {
     pub name: String,
     pub enabled: bool,
-    pub config: RocketBotJsonValue,
+    pub config: serde_json::Value,
 }
 
 

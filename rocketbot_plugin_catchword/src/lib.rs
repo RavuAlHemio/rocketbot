@@ -2,16 +2,17 @@ use std::collections::{HashMap, HashSet};
 use std::sync::Weak;
 
 use async_trait::async_trait;
-use json::JsonValue;
 use log::debug;
 use rand::{Rng, SeedableRng};
 use rand::rngs::StdRng;
 use regex::{Match, Regex};
+use rocketbot_interface::JsonValueExtensions;
 use rocketbot_interface::commands::{CommandDefinition, CommandInstance};
 use rocketbot_interface::interfaces::{RocketBotInterface, RocketBotPlugin};
 use rocketbot_interface::model::ChannelMessage;
 use rocketbot_interface::sync::Mutex;
 use rocketbot_regex_replace::ReplacerRegex;
+use serde_json;
 
 
 struct Replacement {
@@ -38,7 +39,7 @@ pub struct CatchwordPlugin {
 }
 #[async_trait]
 impl RocketBotPlugin for CatchwordPlugin {
-    async fn new(interface: Weak<dyn RocketBotInterface>, config: JsonValue) -> CatchwordPlugin {
+    async fn new(interface: Weak<dyn RocketBotInterface>, config: serde_json::Value) -> CatchwordPlugin {
         let my_interface = match interface.upgrade() {
             None => panic!("interface is gone"),
             Some(i) => i,
@@ -46,10 +47,10 @@ impl RocketBotPlugin for CatchwordPlugin {
 
         let mut catchments = HashMap::new();
 
-        for (catch_name, catch_configs) in config["catchments"].entries() {
+        for (catch_name, catch_configs) in config["catchments"].entries().expect("catchments is not an object") {
             let mut replacements = Vec::new();
 
-            for repl_config in catch_configs.members() {
+            for repl_config in catch_configs.members().expect("catchments entry is not an array") {
                 let regex_str = repl_config["regex_string"]
                     .as_str().expect("regex missing or not a string");
                 let regex = Regex::new(regex_str)

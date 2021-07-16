@@ -4,17 +4,18 @@ use std::sync::Weak;
 
 use async_trait::async_trait;
 use chrono::{Datelike, Local};
-use json::JsonValue;
 use num_bigint::BigInt;
 use once_cell::sync::Lazy;
 use rand::{Rng, SeedableRng};
 use rand::seq::SliceRandom;
 use rand::rngs::StdRng;
 use regex::{Captures, Regex};
+use rocketbot_interface::JsonValueExtensions;
 use rocketbot_interface::commands::{CommandDefinition, CommandInstance, CommandValueType};
 use rocketbot_interface::interfaces::{RocketBotInterface, RocketBotPlugin};
 use rocketbot_interface::model::ChannelMessage;
 use rocketbot_interface::sync::Mutex;
+use serde_json;
 
 
 static ROLL_REGEX: Lazy<Regex> = Lazy::new(|| Regex::new(concat!(
@@ -31,26 +32,27 @@ static SEPARATOR_REGEX: Lazy<Regex> = Lazy::new(|| Regex::new(
 ).expect("failed to compile separator regex"));
 
 
-fn strings_from_json<T: FromIterator<String>>(json: &JsonValue) -> T {
+fn strings_from_json<T: FromIterator<String>>(json: &serde_json::Value) -> T {
     if json.is_null() {
         std::iter::empty()
             .collect()
     } else {
         json.members()
+            .expect("not an array")
             .filter_map(|m| m.as_str().map(|s| s.to_owned()))
             .collect()
     }
 }
-fn string_from_json(json: &JsonValue, default: &str) -> String {
+fn string_from_json(json: &serde_json::Value, default: &str) -> String {
     json.as_str().unwrap_or(default).to_owned()
 }
-fn u8_from_json(json: &JsonValue, default: u8) -> u8 {
+fn u8_from_json(json: &serde_json::Value, default: u8) -> u8 {
     json.as_u8().unwrap_or(default)
 }
-fn u64_from_json(json: &JsonValue, default: u64) -> u64 {
+fn u64_from_json(json: &serde_json::Value, default: u64) -> u64 {
     json.as_u64().unwrap_or(default)
 }
-fn opt_u64_from_json(upper_json: &JsonValue, key: &str, default: Option<u64>) -> Option<u64> {
+fn opt_u64_from_json(upper_json: &serde_json::Value, key: &str, default: Option<u64>) -> Option<u64> {
     if !upper_json.has_key(key) {
         default
     } else {
@@ -64,7 +66,7 @@ fn opt_u64_from_json(upper_json: &JsonValue, key: &str, default: Option<u64>) ->
         }
     }
 }
-fn usize_from_json(json: &JsonValue, default: usize) -> usize {
+fn usize_from_json(json: &serde_json::Value, default: usize) -> usize {
     json.as_usize().unwrap_or(default)
 }
 
@@ -85,8 +87,8 @@ struct DiceConfig {
     pub cooldown_upper_boundary: Option<u64>,
     pub default_wikipedia_language: String,
 }
-impl From<&JsonValue> for DiceConfig {
-    fn from(jv: &JsonValue) -> Self {
+impl From<&serde_json::Value> for DiceConfig {
+    fn from(jv: &serde_json::Value) -> Self {
         let channels: HashSet<String> = strings_from_json(&jv["channels"]);
         let obstinate_answers: Vec<String> = strings_from_json(&jv["obstinate_answers"]);
         let yes_no_answers: Vec<String> = strings_from_json(&jv["yes_no_answers"]);
@@ -502,7 +504,7 @@ impl DicePlugin {
 }
 #[async_trait]
 impl RocketBotPlugin for DicePlugin {
-    async fn new(interface: Weak<dyn RocketBotInterface>, config: JsonValue) -> DicePlugin {
+    async fn new(interface: Weak<dyn RocketBotInterface>, config: serde_json::Value) -> DicePlugin {
         let my_interface = match interface.upgrade() {
             None => panic!("interface is gone"),
             Some(i) => i,

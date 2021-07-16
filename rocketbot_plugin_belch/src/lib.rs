@@ -1,10 +1,9 @@
 use std::sync::Weak;
 
 use async_trait::async_trait;
-use json::JsonValue;
-
 use rocketbot_interface::interfaces::{RocketBotInterface, RocketBotPlugin};
 use rocketbot_interface::model::ChannelMessage;
+use serde_json;
 
 
 pub struct BelchPlugin {
@@ -12,7 +11,7 @@ pub struct BelchPlugin {
 }
 #[async_trait]
 impl RocketBotPlugin for BelchPlugin {
-    async fn new(interface: Weak<dyn RocketBotInterface>, _config: JsonValue) -> Self {
+    async fn new(interface: Weak<dyn RocketBotInterface>, _config: serde_json::Value) -> Self {
         BelchPlugin {
             interface,
         }

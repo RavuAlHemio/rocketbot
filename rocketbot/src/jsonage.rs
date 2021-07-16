@@ -1,183 +1,11 @@
-use std::convert::TryFrom;
-use std::fmt;
-
-use json::JsonValue;
+use rocketbot_interface::JsonValueExtensions;
 use rocketbot_interface::message::{Checkbox, InlineFragment, ListItem, MessageFragment};
-use serde::{Deserialize, Deserializer, Serialize, Serializer};
-use serde::de::Visitor;
-use serde::ser::{SerializeMap, SerializeSeq};
+use serde_json;
 
 use crate::errors::MessageParsingError;
 
 
-#[derive(Clone, Debug, Eq, PartialEq)]
-pub(crate) struct RocketBotJsonValue(JsonValue);
-impl From<JsonValue> for RocketBotJsonValue {
-    fn from(val: JsonValue) -> Self {
-        RocketBotJsonValue(val)
-    }
-}
-impl Serialize for RocketBotJsonValue {
-    fn serialize<S: Serializer>(&self, serializer: S) -> Result<S::Ok, S::Error> {
-        match &self.0 {
-            JsonValue::Array(arr) => {
-                let mut seq = serializer.serialize_seq(Some(arr.len()))?;
-                for elem in arr {
-                    let rbjv: RocketBotJsonValue = elem.clone().into();
-                    seq.serialize_element(&rbjv)?;
-                }
-                seq.end()
-            },
-            JsonValue::Boolean(b) => {
-                serializer.serialize_bool(*b)
-            },
-            JsonValue::Null => {
-                serializer.serialize_none()
-            },
-            JsonValue::Number(num) => {
-                if let Ok(u) = u64::try_from(*num) {
-                    serializer.serialize_u64(u)
-                } else if let Ok(i) = i64::try_from(*num) {
-                    serializer.serialize_i64(i)
-                } else {
-                    serializer.serialize_f64(f64::from(*num))
-                }
-            },
-            JsonValue::Object(obj) => {
-                let mut map = serializer.serialize_map(Some(obj.len()))?;
-                for (k, v) in obj.iter() {
-                    let rbjv: RocketBotJsonValue = v.clone().into();
-                    map.serialize_entry(k, &rbjv)?;
-                }
-                map.end()
-            },
-            JsonValue::Short(s) => {
-                serializer.serialize_str(s.as_str())
-            },
-            JsonValue::String(s) => {
-                serializer.serialize_str(s.as_str())
-            },
-        }
-    }
-}
-impl<'de> Deserialize<'de> for RocketBotJsonValue {
-    fn deserialize<D: Deserializer<'de>>(deserializer: D) -> Result<Self, D::Error> {
-        deserializer.deserialize_any(JsonValueVisitor)
-    }
-}
-impl From<RocketBotJsonValue> for JsonValue {
-    fn from(v: RocketBotJsonValue) -> Self {
-        v.0
-    }
-}
-
-
-struct JsonValueVisitor;
-
-impl<'de> Visitor<'de> for JsonValueVisitor {
-    type Value = RocketBotJsonValue;
-
-    fn expecting(&self, formatter: &mut fmt::Formatter) -> fmt::Result {
-        formatter.write_str("a value representable in JSON")
-    }
-
-    fn visit_bool<E: serde::de::Error>(self, v: bool) -> Result<Self::Value, E> {
-        Ok(RocketBotJsonValue(JsonValue::Boolean(v)))
-    }
-
-    fn visit_i8<E: serde::de::Error>(self, v: i8) -> Result<Self::Value, E> {
-        let number = json::number::Number::from(v);
-        Ok(RocketBotJsonValue(JsonValue::Number(number)))
-    }
-
-    fn visit_i16<E: serde::de::Error>(self, v: i16) -> Result<Self::Value, E> {
-        let number = json::number::Number::from(v);
-        Ok(RocketBotJsonValue(JsonValue::Number(number)))
-    }
-
-    fn visit_i32<E: serde::de::Error>(self, v: i32) -> Result<Self::Value, E> {
-        let number = json::number::Number::from(v);
-        Ok(RocketBotJsonValue(JsonValue::Number(number)))
-    }
-
-    fn visit_i64<E: serde::de::Error>(self, v: i64) -> Result<Self::Value, E> {
-        let number = json::number::Number::from(v);
-        Ok(RocketBotJsonValue(JsonValue::Number(number)))
-    }
-
-    fn visit_u8<E: serde::de::Error>(self, v: u8) -> Result<Self::Value, E> {
-        let number = json::number::Number::from(v);
-        Ok(RocketBotJsonValue(JsonValue::Number(number)))
-    }
-
-    fn visit_u16<E: serde::de::Error>(self, v: u16) -> Result<Self::Value, E> {
-        let number = json::number::Number::from(v);
-        Ok(RocketBotJsonValue(JsonValue::Number(number)))
-    }
-
-    fn visit_u32<E: serde::de::Error>(self, v: u32) -> Result<Self::Value, E> {
-        let number = json::number::Number::from(v);
-        Ok(RocketBotJsonValue(JsonValue::Number(number)))
-    }
-
-    fn visit_u64<E: serde::de::Error>(self, v: u64) -> Result<Self::Value, E> {
-        let number = json::number::Number::from(v);
-        Ok(RocketBotJsonValue(JsonValue::Number(number)))
-    }
-
-    fn visit_f32<E: serde::de::Error>(self, v: f32) -> Result<Self::Value, E> {
-        let number = json::number::Number::from(v);
-        Ok(RocketBotJsonValue(JsonValue::Number(number)))
-    }
-
-    fn visit_f64<E: serde::de::Error>(self, v: f64) -> Result<Self::Value, E> {
-        let number = json::number::Number::from(v);
-        Ok(RocketBotJsonValue(JsonValue::Number(number)))
-    }
-
-    fn visit_str<E: serde::de::Error>(self, v: &str) -> Result<Self::Value, E> {
-        Ok(RocketBotJsonValue(JsonValue::String(v.into())))
-    }
-
-    fn visit_string<E: serde::de::Error>(self, v: String) -> Result<Self::Value, E> {
-        Ok(RocketBotJsonValue(JsonValue::String(v)))
-    }
-
-    fn visit_seq<A: serde::de::SeqAccess<'de>>(self, mut seq: A) -> Result<Self::Value, A::Error> {
-        let mut vals = match seq.size_hint() {
-            Some(n) => Vec::with_capacity(n),
-            None => Vec::new(),
-        };
-
-        while let Some(v) = seq.next_element()? {
-            let v2: RocketBotJsonValue = v;
-            vals.push(v2.0);
-        }
-
-        Ok(RocketBotJsonValue(JsonValue::Array(vals)))
-    }
-
-    fn visit_map<A: serde::de::MapAccess<'de>>(self, mut map: A) -> Result<Self::Value, A::Error> {
-        let mut obj = match map.size_hint() {
-            Some(n) => json::object::Object::with_capacity(n),
-            None => json::object::Object::new(),
-        };
-
-        while let Some((k, v)) = map.next_entry()? {
-            let k2: String = k;
-            let v2: RocketBotJsonValue = v;
-            obj.insert(&k2, v2.0);
-        }
-
-        Ok(RocketBotJsonValue(JsonValue::Object(obj)))
-    }
-
-    fn visit_unit<E: serde::de::Error>(self) -> Result<Self::Value, E> {
-        Ok(RocketBotJsonValue(JsonValue::Null))
-    }
-}
-
-fn parse_inline_fragment(inline: &JsonValue) -> Result<InlineFragment, MessageParsingError> {
+fn parse_inline_fragment(inline: &serde_json::Value) -> Result<InlineFragment, MessageParsingError> {
     let inline_type = inline["type"].as_str()
         .ok_or(MessageParsingError::TypeNotString)?;
     match inline_type {
@@ -189,7 +17,7 @@ fn parse_inline_fragment(inline: &JsonValue) -> Result<InlineFragment, MessagePa
         },
         "BOLD"|"STRIKE"|"ITALIC" => {
             let mut fragments: Vec<InlineFragment> = Vec::new();
-            for fragment in inline["value"].members() {
+            for fragment in inline["value"].members().ok_or(MessageParsingError::InnerValueNotList)? {
                 fragments.push(parse_inline_fragment(fragment)?);
             }
             let result = match inline_type {
@@ -238,11 +66,11 @@ fn parse_inline_fragment(inline: &JsonValue) -> Result<InlineFragment, MessagePa
     }
 }
 
-fn parse_list_item(item: &JsonValue) -> Result<ListItem, MessageParsingError> {
+fn parse_list_item(item: &serde_json::Value) -> Result<ListItem, MessageParsingError> {
     match item["type"].as_str().ok_or(MessageParsingError::TypeNotString)? {
         "LIST_ITEM" => {
             let mut fragments: Vec<InlineFragment> = Vec::new();
-            for fragment in item["value"].members() {
+            for fragment in item["value"].members().ok_or(MessageParsingError::InnerValueNotList)? {
                 fragments.push(parse_inline_fragment(fragment)?);
             }
             Ok(ListItem {
@@ -255,14 +83,14 @@ fn parse_list_item(item: &JsonValue) -> Result<ListItem, MessageParsingError> {
     }
 }
 
-fn parse_checkbox(item: &JsonValue) -> Result<Checkbox, MessageParsingError> {
+fn parse_checkbox(item: &serde_json::Value) -> Result<Checkbox, MessageParsingError> {
     match item["type"].as_str().ok_or(MessageParsingError::TypeNotString)? {
         "TASK" => {
             let checked = item["status"].as_bool()
                 .ok_or(MessageParsingError::TaskStatusNotBool)?;
 
             let mut fragments: Vec<InlineFragment> = Vec::new();
-            for fragment in item["value"].members() {
+            for fragment in item["value"].members().ok_or(MessageParsingError::InnerValueNotList)? {
                 fragments.push(parse_inline_fragment(fragment)?);
             }
             Ok(Checkbox {
@@ -276,7 +104,7 @@ fn parse_checkbox(item: &JsonValue) -> Result<Checkbox, MessageParsingError> {
     }
 }
 
-fn parse_code_line(item: &JsonValue) -> Result<InlineFragment, MessageParsingError> {
+fn parse_code_line(item: &serde_json::Value) -> Result<InlineFragment, MessageParsingError> {
     match item["type"].as_str().ok_or(MessageParsingError::TypeNotString)? {
         "CODE_LINE" => {
             parse_inline_fragment(&item["value"])
@@ -287,11 +115,11 @@ fn parse_code_line(item: &JsonValue) -> Result<InlineFragment, MessageParsingErr
     }
 }
 
-fn parse_paragraph_fragment(paragraph: &JsonValue) -> Result<MessageFragment, MessageParsingError> {
+fn parse_paragraph_fragment(paragraph: &serde_json::Value) -> Result<MessageFragment, MessageParsingError> {
     match paragraph["type"].as_str().ok_or(MessageParsingError::TypeNotString)? {
         "BIG_EMOJI" => {
             let mut emoji: Vec<String> = Vec::new();
-            for big_emoji in paragraph["value"].members() {
+            for big_emoji in paragraph["value"].members().ok_or(MessageParsingError::InnerValueNotList)? {
                 let emoji_string = big_emoji["value"]["value"].as_str()
                     .ok_or(MessageParsingError::BigEmojiValueNotString)?
                     .to_owned();
@@ -301,7 +129,7 @@ fn parse_paragraph_fragment(paragraph: &JsonValue) -> Result<MessageFragment, Me
         },
         "UNORDERED_LIST" => {
             let mut items: Vec<ListItem> = Vec::new();
-            for item in paragraph["value"].members() {
+            for item in paragraph["value"].members().ok_or(MessageParsingError::InnerValueNotList)? {
                 let list_item = parse_list_item(item)?;
                 items.push(list_item);
             }
@@ -309,7 +137,7 @@ fn parse_paragraph_fragment(paragraph: &JsonValue) -> Result<MessageFragment, Me
         },
         "QUOTE" => {
             let mut items: Vec<MessageFragment> = Vec::new();
-            for item in paragraph["value"].members() {
+            for item in paragraph["value"].members().ok_or(MessageParsingError::InnerValueNotList)? {
                 let fragment = parse_paragraph_fragment(item)?;
                 items.push(fragment);
             }
@@ -317,7 +145,7 @@ fn parse_paragraph_fragment(paragraph: &JsonValue) -> Result<MessageFragment, Me
         },
         "TASKS" => {
             let mut tasks: Vec<Checkbox> = Vec::new();
-            for item in paragraph["value"].members() {
+            for item in paragraph["value"].members().ok_or(MessageParsingError::InnerValueNotList)? {
                 let task = parse_checkbox(item)?;
                 tasks.push(task);
             }
@@ -325,7 +153,7 @@ fn parse_paragraph_fragment(paragraph: &JsonValue) -> Result<MessageFragment, Me
         },
         "ORDERED_LIST" => {
             let mut items: Vec<ListItem> = Vec::new();
-            for item in paragraph["value"].members() {
+            for item in paragraph["value"].members().ok_or(MessageParsingError::InnerValueNotList)? {
                 let list_item = parse_list_item(item)?;
                 items.push(list_item);
             }
@@ -333,7 +161,7 @@ fn parse_paragraph_fragment(paragraph: &JsonValue) -> Result<MessageFragment, Me
         },
         "PARAGRAPH" => {
             let mut fragments: Vec<InlineFragment> = Vec::new();
-            for frag in paragraph["value"].members() {
+            for frag in paragraph["value"].members().ok_or(MessageParsingError::InnerValueNotList)? {
                 let fragment = parse_inline_fragment(frag)?;
                 fragments.push(fragment);
             }
@@ -345,7 +173,7 @@ fn parse_paragraph_fragment(paragraph: &JsonValue) -> Result<MessageFragment, Me
                 .to_owned();
 
             let mut lines: Vec<InlineFragment> = Vec::new();
-            for line in paragraph["value"].members() {
+            for line in paragraph["value"].members().ok_or(MessageParsingError::InnerValueNotList)? {
                 let parsed_line = parse_code_line(line)?;
                 lines.push(parsed_line);
             }
@@ -356,7 +184,7 @@ fn parse_paragraph_fragment(paragraph: &JsonValue) -> Result<MessageFragment, Me
                 .ok_or(MessageParsingError::HeadingLevelNotU32)?;
 
             let mut fragments: Vec<InlineFragment> = Vec::new();
-            for fragment in paragraph["value"].members() {
+            for fragment in paragraph["value"].members().ok_or(MessageParsingError::InnerValueNotList)? {
                 let parsed_line = parse_inline_fragment(fragment)?;
                 fragments.push(parsed_line);
             }
@@ -368,9 +196,9 @@ fn parse_paragraph_fragment(paragraph: &JsonValue) -> Result<MessageFragment, Me
     }
 }
 
-pub(crate) fn parse_message(paragraphs: &JsonValue) -> Result<Vec<MessageFragment>, MessageParsingError> {
+pub(crate) fn parse_message(paragraphs: &serde_json::Value) -> Result<Vec<MessageFragment>, MessageParsingError> {
     let mut ret: Vec<MessageFragment> = Vec::new();
-    for pm in paragraphs.members() {
+    for pm in paragraphs.members().ok_or(MessageParsingError::InnerValueNotList)? {
         let fragment = parse_paragraph_fragment(pm)?;
         ret.push(fragment);
     }

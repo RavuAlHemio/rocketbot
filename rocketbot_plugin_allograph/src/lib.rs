@@ -2,15 +2,16 @@ use std::collections::HashMap;
 use std::sync::Weak;
 
 use async_trait::async_trait;
-use json::JsonValue;
 use log::debug;
 use rand::{Rng, SeedableRng};
 use rand::rngs::StdRng;
 use regex::Regex;
+use rocketbot_interface::JsonValueExtensions;
 use rocketbot_interface::interfaces::{RocketBotInterface, RocketBotPlugin};
 use rocketbot_interface::model::ChannelMessage;
 use rocketbot_interface::sync::Mutex;
 use rocketbot_regex_replace::ReplacerRegex;
+use serde_json;
 
 
 #[derive(Debug)]
@@ -64,10 +65,11 @@ pub struct AllographPlugin {
 }
 #[async_trait]
 impl RocketBotPlugin for AllographPlugin {
-    async fn new(interface: Weak<dyn RocketBotInterface>, config: JsonValue) -> Self {
+    async fn new(interface: Weak<dyn RocketBotInterface>, config: serde_json::Value) -> Self {
         let probability_percent = config["probability_percent"].as_u8()
             .expect("probability_percent missing or not representable as u8");
         let replacer_regexes: Vec<LocalReplacerRegex> = config["replacements"].members()
+            .expect("replacements is not a list")
             .map(|repl| LocalReplacerRegex::new(
                 ReplacerRegex::compile_new(
                     Regex::new(

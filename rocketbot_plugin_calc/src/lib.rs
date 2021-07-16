@@ -8,11 +8,12 @@ use std::sync::Weak;
 use std::time::{Duration, Instant};
 
 use async_trait::async_trait;
-use json::JsonValue;
 use log::error;
+use rocketbot_interface::JsonValueExtensions;
 use rocketbot_interface::commands::{CommandDefinition, CommandInstance};
 use rocketbot_interface::interfaces::{RocketBotInterface, RocketBotPlugin};
 use rocketbot_interface::model::ChannelMessage;
+use serde_json;
 
 use crate::ast::{AstNode, SimplificationState};
 use crate::grimoire::{get_canonical_constants, get_canonical_functions};
@@ -96,7 +97,7 @@ impl CalcPlugin {
 }
 #[async_trait]
 impl RocketBotPlugin for CalcPlugin {
-    async fn new(interface: Weak<dyn RocketBotInterface>, config: JsonValue) -> CalcPlugin {
+    async fn new(interface: Weak<dyn RocketBotInterface>, config: serde_json::Value) -> CalcPlugin {
         let my_interface = match interface.upgrade() {
             None => panic!("interface is gone"),
             Some(i) => i,

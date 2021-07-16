@@ -6,7 +6,6 @@ use std::sync::Weak;
 
 use async_trait::async_trait;
 use chrono::{NaiveDate, Utc};
-use json::JsonValue;
 use log::error;
 use num_bigint::BigUint;
 use num_traits::ToPrimitive;
@@ -14,6 +13,7 @@ use rocketbot_interface::commands::{CommandDefinition, CommandInstance};
 use rocketbot_interface::interfaces::{RocketBotInterface, RocketBotPlugin};
 use rocketbot_interface::model::ChannelMessage;
 use rocketbot_interface::sync::RwLock;
+use serde_json;
 
 use crate::database::{VaccinationStats, VaccineDatabase};
 
@@ -62,7 +62,7 @@ pub struct VaccinePlugin {
 }
 #[async_trait]
 impl RocketBotPlugin for VaccinePlugin {
-    async fn new(interface: Weak<dyn RocketBotInterface>, config: JsonValue) -> Self {
+    async fn new(interface: Weak<dyn RocketBotInterface>, config: serde_json::Value) -> Self {
         let my_interface = match interface.upgrade() {
             None => panic!("interface is gone"),
             Some(i) => i,

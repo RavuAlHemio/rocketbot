@@ -6,14 +6,15 @@ use std::collections::{HashMap, HashSet};
 use std::sync::Weak;
 
 use async_trait::async_trait;
-use json::JsonValue;
 use log::warn;
 use once_cell::sync::Lazy;
 use regex::Regex;
 use rocketbot_geonames::GeoNamesClient;
+use rocketbot_interface::JsonValueExtensions;
 use rocketbot_interface::commands::{CommandDefinition, CommandInstance};
 use rocketbot_interface::interfaces::{RocketBotInterface, RocketBotPlugin};
 use rocketbot_interface::model::ChannelMessage;
+use serde_json;
 
 use crate::interface::WeatherProvider;
 
@@ -148,7 +149,7 @@ impl WeatherPlugin {
 }
 #[async_trait]
 impl RocketBotPlugin for WeatherPlugin {
-    async fn new(interface: Weak<dyn RocketBotInterface>, config: JsonValue) -> Self {
+    async fn new(interface: Weak<dyn RocketBotInterface>, config: serde_json::Value) -> Self {
         // register commands
         let my_interface = match interface.upgrade() {
             None => panic!("interface is gone"),
@@ -173,6 +174,7 @@ impl RocketBotPlugin for WeatherPlugin {
             .to_owned();
 
         let location_aliases: HashMap<String, String> = config["location_aliases"].entries()
+            .expect("location_aliases is not an object")
             .map(|(k, v)| {
                 let key = k.to_owned();
                 let value = v.as_str().expect("location alias is not a string")
@@ -182,7 +184,7 @@ impl RocketBotPlugin for WeatherPlugin {
             .collect();
 
         let mut providers = Vec::new();
-        for provider_entry in config["providers"].members() {
+        for provider_entry in config["providers"].members().expect("providers is not a list") {
             let name = provider_entry["name"]
                 .as_str().expect("provider name missing or not representable as a string");
             let provider_config = provider_entry["config"].clone();

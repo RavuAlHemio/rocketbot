@@ -64,6 +64,7 @@ pub(crate) enum MessageParsingError {
     LinkValueNotSinglePlainText,
     LinkValuePlainTextNotString,
     TargetValueNotSinglePlainText(String),
+    InnerValueNotList,
 }
 
 impl fmt::Display for MessageParsingError {
@@ -89,6 +90,8 @@ impl fmt::Display for MessageParsingError {
                 => write!(f, "link value's plaintext entry is either missing or not a string"),
             MessageParsingError::TargetValueNotSinglePlainText(value_type)
                 => write!(f, "{} value is not a single plaintext entry", value_type),
+            MessageParsingError::InnerValueNotList
+                => write!(f, "inner value is not a list"),
         }
     }
 }

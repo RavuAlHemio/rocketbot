@@ -6,11 +6,11 @@ use std::collections::{BTreeSet, BTreeMap};
 use async_trait::async_trait;
 use bytes::Buf;
 use chrono::{Date, Datelike, DateTime, Duration, TimeZone, Utc, Weekday};
-use json::JsonValue;
 use log::error;
 use once_cell::sync::Lazy;
 use regex::Regex;
 use reqwest;
+use rocketbot_interface::JsonValueExtensions;
 use rocketbot_interface::sync::Mutex;
 use serde::de::DeserializeOwned;
 use serde_json;
@@ -249,7 +249,7 @@ impl OpenWeatherMapProvider {
 }
 #[async_trait]
 impl WeatherProvider for OpenWeatherMapProvider {
-    async fn new(config: JsonValue) -> Self {
+    async fn new(config: serde_json::Value) -> Self {
         let api_key = config["api_key"]
             .as_str().expect("api_key is either missing or not a string")
             .to_owned();

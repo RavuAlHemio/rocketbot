@@ -6,11 +6,12 @@ use std::collections::HashMap;
 use std::sync::{Arc, Weak};
 
 use async_trait::async_trait;
-use json::JsonValue;
 use log::info;
+use rocketbot_interface::JsonValueExtensions;
 use rocketbot_interface::interfaces::{RocketBotInterface, RocketBotPlugin};
 use rocketbot_interface::model::ChannelMessage;
 use rocketbot_interface::sync::Mutex;
+use serde_json;
 
 use crate::commands::Transformer;
 use crate::parsing::parse_replacement_commands;
@@ -107,7 +108,7 @@ impl SedPlugin {
 }
 #[async_trait]
 impl RocketBotPlugin for SedPlugin {
-    async fn new(interface: Weak<dyn RocketBotInterface>, config: JsonValue) -> Self {
+    async fn new(interface: Weak<dyn RocketBotInterface>, config: serde_json::Value) -> Self {
         let remember_last_messages = config["remember_last_messages"].as_usize().unwrap_or(50);
         let max_result_length = config["max_result_length"].as_usize().unwrap_or(1024);
         let result_too_long_message = config["result_too_long_message"].as_str()

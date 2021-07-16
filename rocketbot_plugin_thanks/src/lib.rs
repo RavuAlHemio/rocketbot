@@ -4,13 +4,13 @@ use std::sync::Weak;
 
 use async_trait::async_trait;
 use chrono::Utc;
-use json::JsonValue;
 use log::{error, info};
-use tokio_postgres::{self, NoTls};
-
+use rocketbot_interface::JsonValueExtensions;
 use rocketbot_interface::commands::{CommandDefinition, CommandInstance};
 use rocketbot_interface::interfaces::{RocketBotInterface, RocketBotPlugin};
 use rocketbot_interface::model::ChannelMessage;
+use serde_json;
+use tokio_postgres::{self, NoTls};
 
 
 pub struct ThanksPlugin {
@@ -399,7 +399,7 @@ impl ThanksPlugin {
 }
 #[async_trait]
 impl RocketBotPlugin for ThanksPlugin {
-    async fn new(interface: Weak<dyn RocketBotInterface>, config: JsonValue) -> Self {
+    async fn new(interface: Weak<dyn RocketBotInterface>, config: serde_json::Value) -> Self {
         // register commands
         let my_interface = match interface.upgrade() {
             None => panic!("interface is gone"),

@@ -2,11 +2,10 @@ use std::collections::{BTreeMap, HashMap, HashSet};
 use std::sync::Weak;
 
 use async_trait::async_trait;
-use json::JsonValue;
-
 use rocketbot_interface::commands::{CommandConfiguration, CommandDefinition, CommandInstance};
 use rocketbot_interface::interfaces::{RocketBotInterface, RocketBotPlugin};
 use rocketbot_interface::model::ChannelMessage;
+use serde_json;
 
 
 fn replace_config_placeholders(original: &str, command_name: &str, command_config: &CommandConfiguration) -> String {
@@ -63,7 +62,7 @@ impl HelpPlugin {
 }
 #[async_trait]
 impl RocketBotPlugin for HelpPlugin {
-    async fn new(interface: Weak<dyn RocketBotInterface>, _config: JsonValue) -> Self {
+    async fn new(interface: Weak<dyn RocketBotInterface>, _config: serde_json::Value) -> Self {
         let my_interface = match interface.upgrade() {
             None => panic!("interface is gone"),
             Some(i) => i,

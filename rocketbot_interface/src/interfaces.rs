@@ -2,7 +2,7 @@ use std::collections::{HashMap, HashSet};
 use std::sync::Weak;
 
 use async_trait::async_trait;
-use json::JsonValue;
+use serde_json::Value;
 
 use crate::commands::{CommandConfiguration, CommandDefinition, CommandInstance};
 use crate::model::{ChannelMessage, Message, User};
@@ -67,7 +67,7 @@ pub trait RocketBotInterface : Send + Sync {
 pub trait RocketBotPlugin: Send + Sync {
     /// Instantiates this plugin and provides it with an interface to communicate with the bot (and
     /// the server to which it is connected).
-    async fn new(interface: Weak<dyn RocketBotInterface>, config: JsonValue) -> Self where Self: Sized;
+    async fn new(interface: Weak<dyn RocketBotInterface>, config: Value) -> Self where Self: Sized;
 
     /// Returns the plugin's name.
     async fn plugin_name(&self) -> String;

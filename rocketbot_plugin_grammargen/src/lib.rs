@@ -9,13 +9,14 @@ use std::path::PathBuf;
 use std::sync::{Arc, Mutex, Weak};
 
 use async_trait::async_trait;
-use json::JsonValue;
 use log::error;
 use rand::SeedableRng;
 use rand::rngs::StdRng;
+use rocketbot_interface::JsonValueExtensions;
 use rocketbot_interface::commands::{CommandDefinition, CommandInstance};
 use rocketbot_interface::interfaces::{RocketBotInterface, RocketBotPlugin};
 use rocketbot_interface::model::ChannelMessage;
+use serde_json;
 
 use crate::grammar::{GeneratorState, Rulebook};
 use crate::parsing::parse_grammar;
@@ -28,7 +29,7 @@ pub struct GrammarGenPlugin {
 }
 #[async_trait]
 impl RocketBotPlugin for GrammarGenPlugin {
-    async fn new(interface: Weak<dyn RocketBotInterface>, config: JsonValue) -> Self {
+    async fn new(interface: Weak<dyn RocketBotInterface>, config: serde_json::Value) -> Self {
         let my_interface = match interface.upgrade() {
             None => panic!("interface is gone"),
             Some(i) => i,
@@ -37,7 +38,7 @@ impl RocketBotPlugin for GrammarGenPlugin {
         let mut grammars = HashMap::new();
 
         // load grammars
-        for grammar_path_value in config["grammars"].members() {
+        for grammar_path_value in config["grammars"].members().expect("grammars not a list") {
             let grammar_path_str = grammar_path_value
                 .as_str().expect("grammar path not a string");
             let grammar_path = PathBuf::from(grammar_path_str);

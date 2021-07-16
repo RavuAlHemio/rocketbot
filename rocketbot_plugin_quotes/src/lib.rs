@@ -11,10 +11,12 @@ use log::error;
 use rand::{Rng, SeedableRng};
 use rand::rngs::StdRng;
 use rand::seq::SliceRandom;
+use rocketbot_interface::JsonValueExtensions;
 use rocketbot_interface::commands::{CommandDefinition, CommandInstance};
 use rocketbot_interface::interfaces::{RocketBotInterface, RocketBotPlugin};
 use rocketbot_interface::model::ChannelMessage;
 use rocketbot_interface::sync::Mutex;
+use serde_json;
 use tokio_postgres::NoTls;
 use tokio_postgres::types::ToSql;
 
@@ -646,7 +648,7 @@ ON CONFLICT (quote_id, voter_lowercase) DO UPDATE SET points = excluded.points
 }
 #[async_trait]
 impl RocketBotPlugin for QuotesPlugin {
-    async fn new(interface: Weak<dyn RocketBotInterface>, config: json::JsonValue) -> Self where Self: Sized {
+    async fn new(interface: Weak<dyn RocketBotInterface>, config: serde_json::Value) -> Self where Self: Sized {
         let my_interface = match interface.upgrade() {
             None => panic!("interface is gone"),
             Some(i) => i,

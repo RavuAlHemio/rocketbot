@@ -5,7 +5,6 @@ edition = "2018"
 
 [dependencies]
 async-trait = { version = "0.1" }
-json = { version = "0.12" }
 log = { version = "0.4" }
 num-bigint = { version = "0.4", features = ["rand"] }
 num-traits = { version = "0.2" }
@@ -13,6 +12,7 @@ pest = { version = "2.1" }
 pest_derive = { version = "2.1" }
 rand = { version = "0.8" }
 rocketbot_interface = { path = "../rocketbot_interface" }
+serde_json = { version = "1.0" }
 tokio = { version = "1.7", features = ["sync"] }
 
 [dev-dependencies]

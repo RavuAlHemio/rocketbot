@@ -7,13 +7,14 @@ use std::path::Path;
 
 use bytes::Buf;
 use chrono::{DateTime, TimeZone, Utc};
-use json::JsonValue;
 use once_cell::sync::Lazy;
 use regex::Regex;
 use reqwest::IntoUrl;
+use rocketbot_interface::JsonValueExtensions;
 use rocketbot_interface::sync::Mutex;
 use serde::{Deserialize, Serialize};
 use serde::de::DeserializeOwned;
+use serde_json;
 use url::Url;
 
 
@@ -35,7 +36,8 @@ pub enum GeoNamesError {
     InvalidCountryCode,
     NoResult,
     ReadingFile(io::Error),
-    CountryCodeParsing(json::Error),
+    CountryCodeParsing(serde_json::Error),
+    CountryCodesNotList,
 }
 impl fmt::Display for GeoNamesError {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
@@ -60,6 +62,8 @@ impl fmt::Display for GeoNamesError {
                 => write!(f, "error reading file: {}", e),
             GeoNamesError::CountryCodeParsing(e)
                 => write!(f, "error parsing country code file: {}", e),
+            GeoNamesError::CountryCodesNotList
+                => write!(f, "country code structure is not a list"),
         }
     }
 }
@@ -226,14 +230,14 @@ impl CountryCodeMapping {
         file.read_to_string(&mut text)
             .map_err(|e| GeoNamesError::OpeningFile(e))?;
 
-        let json: JsonValue = json::parse(&text)
+        let json: serde_json::Value = serde_json::from_str(&text)
             .map_err(|e| GeoNamesError::CountryCodeParsing(e))?;
 
         let mut alpha2 = HashSet::new();
         let mut license_plate_to_alpha2 = HashMap::new();
         let mut alpha3_to_alpha2 = HashMap::new();
 
-        for item in json.members() {
+        for item in json.members().ok_or(GeoNamesError::CountryCodesNotList)? {
             let my_alpha2: String = item["alpha2"]
                 .as_str().expect("alpha2 is missing or not a string")
                 .to_owned();
@@ -282,7 +286,7 @@ pub struct GeoNamesClient {
     country_codes: CountryCodeMapping,
 }
 impl GeoNamesClient {
-    pub fn new(config: &JsonValue) -> GeoNamesClient {
+    pub fn new(config: &serde_json::Value) -> GeoNamesClient {
         let username = config["username"]
             .as_str().expect("username missing or not representable as string")
             .to_owned();

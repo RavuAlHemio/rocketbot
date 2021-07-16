@@ -11,15 +11,16 @@ use futures_util::{SinkExt, StreamExt};
 use hyper::StatusCode;
 use hyper::client::HttpConnector;
 use hyper_rustls::HttpsConnector;
-use json::JsonValue;
-use log::{debug, error, log_enabled, warn};
+use log::{debug, error, warn};
 use rand::{Rng, SeedableRng};
 use rand::distributions::{Distribution, Uniform};
 use rand::rngs::StdRng;
+use rocketbot_interface::JsonValueExtensions;
 use rocketbot_interface::commands::{CommandConfiguration, CommandDefinition};
 use rocketbot_interface::interfaces::{RocketBotInterface, RocketBotPlugin};
 use rocketbot_interface::model::{Channel, ChannelMessage, Message, User};
 use rocketbot_interface::sync::{Mutex, RwLock, RwLockReadGuard};
+use serde_json;
 use sha2::{Digest, Sha256};
 use tokio;
 use tokio::sync::Notify;
@@ -156,7 +157,7 @@ impl ChannelDatabase {
 
 
 struct SharedConnectionState {
-    outgoing_sender: mpsc::UnboundedSender<JsonValue>,
+    outgoing_sender: mpsc::UnboundedSender<serde_json::Value>,
     exit_notify: Notify,
     plugins: RwLock<Vec<Box<dyn RocketBotPlugin>>>,
     subscribed_channels: RwLock<ChannelDatabase>,
@@ -169,7 +170,7 @@ struct SharedConnectionState {
 }
 impl SharedConnectionState {
     fn new(
-        outgoing_sender: mpsc::UnboundedSender<JsonValue>,
+        outgoing_sender: mpsc::UnboundedSender<serde_json::Value>,
         exit_notify: Notify,
         plugins: RwLock<Vec<Box<dyn RocketBotPlugin>>>,
         subscribed_channels: RwLock<ChannelDatabase>,
@@ -198,13 +199,13 @@ impl SharedConnectionState {
 
 struct ConnectionState {
     shared_state: Arc<SharedConnectionState>,
-    outgoing_receiver: mpsc::UnboundedReceiver<JsonValue>,
+    outgoing_receiver: mpsc::UnboundedReceiver<serde_json::Value>,
     my_auth_token: Option<String>,
 }
 impl ConnectionState {
     fn new(
         shared_state: Arc<SharedConnectionState>,
-        outgoing_receiver: mpsc::UnboundedReceiver<JsonValue>,
+        outgoing_receiver: mpsc::UnboundedReceiver<serde_json::Value>,
         my_auth_token: Option<String>,
     ) -> ConnectionState {
         ConnectionState {
@@ -227,7 +228,7 @@ impl ServerConnection {
         }
     }
 
-    pub fn send(&self, message: JsonValue) {
+    pub fn send(&self, message: serde_json::Value) {
         self.shared_state.outgoing_sender.send(message)
             .expect("failed to enqueue message");
     }
@@ -271,21 +272,21 @@ impl RocketBotInterface for ServerConnection {
         }
 
         let message_id = generate_message_id(&self.shared_state.rng).await;
-        let message_body = json::object! {
-            msg: "method",
-            method: "sendMessage",
-            id: SEND_MESSAGE_MESSAGE_ID,
-            params: [
+        let message_body = serde_json::json!({
+            "msg": "method",
+            "method": "sendMessage",
+            "id": SEND_MESSAGE_MESSAGE_ID,
+            "params": [
                 {
-                    _id: message_id.clone(),
-                    rid: channel.id.clone(),
-                    msg: message,
-                    bot: {
-                        i: "RavuAlHemio/rocketbot",
+                    "_id": message_id.clone(),
+                    "rid": channel.id.clone(),
+                    "msg": message,
+                    "bot": {
+                        "i": "RavuAlHemio/rocketbot",
                     },
                 },
             ],
-        };
+        });
 
         self.shared_state.outgoing_sender.send(message_body)
             .expect("failed to enqueue channel message");
@@ -554,11 +555,11 @@ async fn run_connection(mut state: &mut ConnectionState) -> Result<(), WebSocket
         .map_err(|e| WebSocketError::Connecting(e))?;
 
     // connect!
-    let connect_message = json::object! {
-        msg: "connect",
-        version: "1",
-        support: ["1"]
-    };
+    let connect_message = serde_json::json!({
+        "msg": "connect",
+        "version": "1",
+        "support": ["1"]
+    });
     state.shared_state.outgoing_sender.send(connect_message)
         .expect("failed to enqueue connect message");
 
@@ -588,7 +589,7 @@ async fn run_connection(mut state: &mut ConnectionState) -> Result<(), WebSocket
                 if let WebSocketMessage::Text(body_string) = msg {
                     debug!("message received: {:?}", body_string);
 
-                    let body: JsonValue = match json::parse(&body_string) {
+                    let body: serde_json::Value = match serde_json::from_str(&body_string) {
                         Ok(b) => b,
                         Err(e) => {
                             error!("failed to parse message {:?} ({}) -- skipping", body_string, e);
@@ -604,11 +605,9 @@ async fn run_connection(mut state: &mut ConnectionState) -> Result<(), WebSocket
                     Some(c) => c,
                 };
 
-                if log_enabled!(log::Level::Debug) {
-                    debug!("sending message: {:?}", content.dump());
-                }
-
-                let msg = WebSocketMessage::Text(content.dump());
+                let content_text = content.to_string();
+                debug!("sending message: {:?}", content_text);
+                let msg = WebSocketMessage::Text(content_text);
                 if let Err(e) = stream.send(msg).await {
                     return Err(WebSocketError::SendingMessage(e));
                 }
@@ -628,15 +627,15 @@ async fn channel_joined(mut state: &mut ConnectionState, channel: Channel) {
     }
 
     // subscribe to messages in this room
-    let sub_body = json::object! {
-        msg: "sub",
-        id: format!("sub_{}", channel.id),
-        name: "stream-room-messages",
-        params: [
+    let sub_body = serde_json::json!({
+        "msg": "sub",
+        "id": format!("sub_{}", channel.id),
+        "name": "stream-room-messages",
+        "params": [
             channel.id.clone(),
             false,
         ],
-    };
+    });
     state.shared_state.outgoing_sender.send(sub_body)
         .expect("failed to enqueue subscription message");
 
@@ -652,18 +651,18 @@ async fn channel_left(state: &mut ConnectionState, channel_id: &str) {
     }
 
     // unsubscribe
-    let unsub_body = json::object! {
-        msg: "unsub",
-        id: format!("sub_{}", channel_id),
-    };
+    let unsub_body = serde_json::json!({
+        "msg": "unsub",
+        "id": format!("sub_{}", channel_id),
+    });
     state.shared_state.outgoing_sender.send(unsub_body)
         .expect("failed to enqueue unsubscription message");
 }
 
-async fn handle_received(body: &JsonValue, mut state: &mut ConnectionState) {
+async fn handle_received(body: &serde_json::Value, mut state: &mut ConnectionState) {
     if body["msg"] == "ping" {
         // answer with a pong
-        let pong_body = json::object! {msg: "pong"};
+        let pong_body = serde_json::json!({"msg": "pong"});
         state.shared_state.outgoing_sender.send(pong_body)
             .expect("failed to enqueue pong message");
     } else if body["msg"] == "connected" {
@@ -679,22 +678,22 @@ async fn handle_received(body: &JsonValue, mut state: &mut ConnectionState) {
         };
         let password_sha256 = sha256_hexdigest(password.as_bytes());
 
-        let login_body = json::object! {
-            msg: "method",
-            method: "login",
-            id: LOGIN_MESSAGE_ID,
-            params: [
+        let login_body = serde_json::json!({
+            "msg": "method",
+            "method": "login",
+            "id": LOGIN_MESSAGE_ID,
+            "params": [
                 {
-                    user: {
-                        username: username.clone(),
+                    "user": {
+                        "username": username.clone(),
                     },
-                    password: {
-                        digest: password_sha256.clone(),
-                        algorithm: "sha-256",
+                    "password": {
+                        "digest": password_sha256.clone(),
+                        "algorithm": "sha-256",
                     },
                 },
             ],
-        };
+        });
         state.shared_state.outgoing_sender.send(login_body)
             .expect("failed to enqueue login message");
     } else if body["msg"] == "result" && body["id"] == LOGIN_MESSAGE_ID {
@@ -714,43 +713,43 @@ async fn handle_received(body: &JsonValue, mut state: &mut ConnectionState) {
         state.my_auth_token = Some(auth_token.clone());
 
         // subscribe to changes to our room state
-        let subscribe_room_change_body = json::object! {
-            msg: "sub",
-            id: SUBSCRIBE_ROOMS_MESSAGE_ID,
-            name: "stream-notify-user",
-            params: [
+        let subscribe_room_change_body = serde_json::json!({
+            "msg": "sub",
+            "id": SUBSCRIBE_ROOMS_MESSAGE_ID,
+            "name": "stream-notify-user",
+            "params": [
                 format!("{}/rooms-changed", user_id),
                 false,
             ],
-        };
+        });
         state.shared_state.outgoing_sender.send(subscribe_room_change_body)
             .expect("failed to enqueue room update subscription message");
 
         // get the server's settings
-        let get_settings_body = json::object! {
-            msg: "method",
-            method: "public-settings/get",
-            id: GET_SETTINGS_MESSAGE_ID,
-        };
+        let get_settings_body = serde_json::json!({
+            "msg": "method",
+            "method": "public-settings/get",
+            "id": GET_SETTINGS_MESSAGE_ID,
+        });
         state.shared_state.outgoing_sender.send(get_settings_body)
             .expect("failed to enqueue get-settings message");
 
         // get which rooms we are currently in
-        let room_list_body = json::object! {
-            msg: "method",
-            method: "rooms/get",
-            id: GET_ROOMS_MESSAGE_ID,
-            params: [
+        let room_list_body = serde_json::json!({
+            "msg": "method",
+            "method": "rooms/get",
+            "id": GET_ROOMS_MESSAGE_ID,
+            "params": [
                 {
                     "$date": 0,
                 },
             ],
-        };
+        });
         state.shared_state.outgoing_sender.send(room_list_body)
             .expect("failed to enqueue room list message");
     } else if body["msg"] == "result" && body["id"] == GET_SETTINGS_MESSAGE_ID {
         let settings = &body["result"];
-        for entry in settings.members() {
+        for entry in settings.members_or_empty() {
             if entry["_id"] == "Message_MaxAllowedSize" {
                 if let Some(mas) = entry["value"].as_usize() {
                     let mut mml_guard = state.shared_state.max_message_length
@@ -761,7 +760,7 @@ async fn handle_received(body: &JsonValue, mut state: &mut ConnectionState) {
         }
     } else if body["msg"] == "result" && body["id"] == GET_ROOMS_MESSAGE_ID {
         // update our rooms
-        for update_room in body["result"]["update"].members() {
+        for update_room in body["result"]["update"].members_or_empty() {
             // channel = "c", private channel = "p", direct = "p", omnichannel = "l"
             if update_room["t"] != "c" && update_room["t"] != "p" {
                 // not a channel; skip
@@ -778,7 +777,7 @@ async fn handle_received(body: &JsonValue, mut state: &mut ConnectionState) {
 
             channel_joined(&mut state, channel).await;
         }
-        for remove_room in body["result"]["remove"].members() {
+        for remove_room in body["result"]["remove"].members_or_empty() {
             let room_id = match remove_room["_id"].as_str() {
                 Some(s) => s,
                 None => {
@@ -792,7 +791,7 @@ async fn handle_received(body: &JsonValue, mut state: &mut ConnectionState) {
     } else if body["msg"] == "changed" && body["collection"] == "stream-room-messages" {
         // we got a message! (probably)
 
-        for message_json in body["fields"]["args"].members() {
+        for message_json in body["fields"]["args"].members_or_empty() {
             if message_json.has_key("editedAt") {
                 // TODO: handle edited messages?
                 continue;
@@ -1021,7 +1020,7 @@ async fn obtain_users_in_room(state: &mut ConnectionState, channel_id: &str) {
             return;
         }
 
-        let json_value = match json::parse(&response_string) {
+        let json_value: serde_json::Value = match serde_json::from_str(&response_string) {
             Ok(v) => v,
             Err(e) => {
                 error!("error parsing JSON while fetching channel {:?} users: {}", channel_id, e);
@@ -1029,12 +1028,12 @@ async fn obtain_users_in_room(state: &mut ConnectionState, channel_id: &str) {
             },
         };
 
-        let user_count = json_value["members"].members().len();
+        let user_count = json_value["members"].members_or_empty().len();
         if user_count == 0 {
             break;
         }
 
-        for user_json in json_value["members"].members() {
+        for user_json in json_value["members"].members_or_empty() {
             let user_id = match user_json["_id"].as_str() {
                 Some(s) => s,
                 None => {

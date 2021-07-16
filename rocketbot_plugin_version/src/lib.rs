@@ -2,10 +2,10 @@ use std::collections::{HashMap, HashSet};
 use std::sync::Weak;
 
 use async_trait::async_trait;
-use json::JsonValue;
 use rocketbot_interface::commands::{CommandDefinition, CommandInstance};
 use rocketbot_interface::interfaces::{RocketBotInterface, RocketBotPlugin};
 use rocketbot_interface::model::ChannelMessage;
+use serde_json;
 
 
 // should be filled in by CI/CD during a build
@@ -17,7 +17,7 @@ pub struct VersionPlugin {
 }
 #[async_trait]
 impl RocketBotPlugin for VersionPlugin {
-    async fn new(interface: Weak<dyn RocketBotInterface>, _config: JsonValue) -> Self {
+    async fn new(interface: Weak<dyn RocketBotInterface>, _config: serde_json::Value) -> Self {
         let my_interface = match interface.upgrade() {
             None => panic!("interface is gone"),
             Some(i) => i,

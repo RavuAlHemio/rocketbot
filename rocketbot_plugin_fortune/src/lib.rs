@@ -5,13 +5,14 @@ use std::path::Path;
 use std::sync::Weak;
 
 use async_trait::async_trait;
-use json::JsonValue;
 use rand::{Rng, SeedableRng};
 use rand::rngs::StdRng;
+use rocketbot_interface::JsonValueExtensions;
 use rocketbot_interface::commands::{CommandDefinition, CommandInstance};
 use rocketbot_interface::interfaces::{RocketBotInterface, RocketBotPlugin};
 use rocketbot_interface::model::ChannelMessage;
 use rocketbot_interface::sync::Mutex;
+use serde_json;
 
 
 pub struct FortunePlugin {
@@ -21,7 +22,7 @@ pub struct FortunePlugin {
 }
 #[async_trait]
 impl RocketBotPlugin for FortunePlugin {
-    async fn new(interface: Weak<dyn RocketBotInterface>, config: JsonValue) -> Self {
+    async fn new(interface: Weak<dyn RocketBotInterface>, config: serde_json::Value) -> Self {
         let my_interface = match interface.upgrade() {
             None => panic!("interface is gone"),
             Some(i) => i,
@@ -39,7 +40,7 @@ impl RocketBotPlugin for FortunePlugin {
         my_interface.register_channel_command(&fortune_command).await;
 
         let mut name_to_fortunes = HashMap::new();
-        for fortune_file_path_value in config["fortune_files"].members() {
+        for fortune_file_path_value in config["fortune_files"].members().expect("fortune_files not a list") {
             let fortune_file_path = fortune_file_path_value
                 .as_str().expect("entry in fortune_files is not a string");
             let fortune_file_name: String = Path::new(fortune_file_path)

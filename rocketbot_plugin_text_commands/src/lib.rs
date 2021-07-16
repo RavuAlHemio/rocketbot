@@ -2,13 +2,14 @@ use std::collections::{HashMap, HashSet};
 use std::sync::{Arc, Weak};
 
 use async_trait::async_trait;
-use json::JsonValue;
 use rand::{Rng, SeedableRng};
 use rand::rngs::StdRng;
+use rocketbot_interface::JsonValueExtensions;
 use rocketbot_interface::commands::{CommandDefinition, CommandInstance};
 use rocketbot_interface::interfaces::{RocketBotInterface, RocketBotPlugin};
 use rocketbot_interface::model::ChannelMessage;
 use rocketbot_interface::sync::Mutex;
+use serde_json;
 
 
 pub struct TextCommandsPlugin {
@@ -18,10 +19,11 @@ pub struct TextCommandsPlugin {
     rng: Mutex<StdRng>,
 }
 impl TextCommandsPlugin {
-    async fn collect_commands(my_interface: Arc<dyn RocketBotInterface>, config_dict: &JsonValue, nicknamable: bool) -> HashMap<String, Vec<String>> {
+    async fn collect_commands(my_interface: Arc<dyn RocketBotInterface>, config_dict: &serde_json::Value, nicknamable: bool) -> HashMap<String, Vec<String>> {
         let mut commands_responses = HashMap::new();
-        for (command, variant) in config_dict.entries() {
+        for (command, variant) in config_dict.entries().expect("command structure is not a dict") {
             let responses: Vec<String> = variant.members()
+                .expect("responses structure is not a list")
                 .map(|s|
                     s.as_str()
                         .expect("variant is not a string")
@@ -60,7 +62,7 @@ impl TextCommandsPlugin {
 }
 #[async_trait]
 impl RocketBotPlugin for TextCommandsPlugin {
-    async fn new(interface: Weak<dyn RocketBotInterface>, config: JsonValue) -> Self {
+    async fn new(interface: Weak<dyn RocketBotInterface>, config: serde_json::Value) -> Self {
         let my_interface = match interface.upgrade() {
             None => panic!("interface is gone"),
             Some(i) => i,
