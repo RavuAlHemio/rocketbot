@@ -1317,6 +1317,18 @@ dependencies = [
 ]
 
 [[package]]
+name = "rocketbot_plugin_logger"
+version = "0.1.0"
+dependencies = [
+ "async-trait",
+ "log",
+ "rocketbot_interface",
+ "serde_json",
+ "tokio",
+ "tokio-postgres",
+]
+
+[[package]]
 name = "rocketbot_plugin_quotes"
 version = "0.1.0"
 dependencies = [
