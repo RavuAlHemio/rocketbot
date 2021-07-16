@@ -468,6 +468,10 @@ impl RocketBotPlugin for ThanksPlugin {
         }
     }
 
+    async fn plugin_name(&self) -> String {
+        "thanks".to_owned()
+    }
+
     async fn channel_command(&self, channel_message: &ChannelMessage, command: &CommandInstance) {
         if command.name == "thank" || command.name == "thanks" || command.name == "thx" {
             self.handle_thank(channel_message, command).await

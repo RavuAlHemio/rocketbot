@@ -579,6 +579,10 @@ impl RocketBotPlugin for DicePlugin {
         }
     }
 
+    async fn plugin_name(&self) -> String {
+        "dice".to_owned()
+    }
+
     async fn channel_message(&self, channel_message: &ChannelMessage) {
         let channel_name = &channel_message.channel.name;
 

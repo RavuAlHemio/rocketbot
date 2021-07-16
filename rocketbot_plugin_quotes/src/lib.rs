@@ -755,6 +755,10 @@ impl RocketBotPlugin for QuotesPlugin {
         }
     }
 
+    async fn plugin_name(&self) -> String {
+        "quotes".to_owned()
+    }
+
     async fn channel_message(&self, channel_message: &ChannelMessage) {
         let potential_quote = Quote::new(
             -1,

@@ -123,6 +123,10 @@ impl RocketBotPlugin for CalcPlugin {
         }
     }
 
+    async fn plugin_name(&self) -> String {
+        "calc".to_owned()
+    }
+
     async fn channel_command(&self, channel_message: &ChannelMessage, command: &CommandInstance) {
         if command.name == "calc" {
             self.handle_calc(channel_message, command).await

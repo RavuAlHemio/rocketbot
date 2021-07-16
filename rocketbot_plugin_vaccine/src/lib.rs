@@ -103,6 +103,10 @@ impl RocketBotPlugin for VaccinePlugin {
         }
     }
 
+    async fn plugin_name(&self) -> String {
+        "vaccine".to_owned()
+    }
+
     async fn channel_command(&self, channel_message: &ChannelMessage, command: &CommandInstance) {
         let interface = match self.interface.upgrade() {
             None => return,

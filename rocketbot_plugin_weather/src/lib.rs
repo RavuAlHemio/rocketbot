@@ -205,6 +205,10 @@ impl RocketBotPlugin for WeatherPlugin {
         }
     }
 
+    async fn plugin_name(&self) -> String {
+        "weather".to_owned()
+    }
+
     async fn channel_command(&self, channel_message: &ChannelMessage, command: &CommandInstance) {
         if command.name == "weather" || command.name == "lweather" {
             self.handle_weather_command(channel_message, command).await

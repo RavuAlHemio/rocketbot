@@ -26,6 +26,10 @@ impl RocketBotPlugin for ConfigUserAliasPlugin {
         }
     }
 
+    async fn plugin_name(&self) -> String {
+        "config_user_alias".to_owned()
+    }
+
     async fn username_resolution(&self, username: &str) -> Option<String> {
         let alias_lower = username.to_lowercase();
         self.lowercase_alias_to_username.get(&alias_lower).map(|un| un.clone())

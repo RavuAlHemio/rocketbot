@@ -18,6 +18,10 @@ impl RocketBotPlugin for BelchPlugin {
         }
     }
 
+    async fn plugin_name(&self) -> String {
+        "belch".to_owned()
+    }
+
     async fn channel_message(&self, channel_message: &ChannelMessage) {
         if channel_message.message.raw == "!burp" {
             let interface = match self.interface.upgrade() {
