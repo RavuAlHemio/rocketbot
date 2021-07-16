@@ -19,7 +19,7 @@ use rand::rngs::StdRng;
 use rocketbot_interface::JsonValueExtensions;
 use rocketbot_interface::commands::{CommandConfiguration, CommandDefinition};
 use rocketbot_interface::interfaces::{RocketBotInterface, RocketBotPlugin};
-use rocketbot_interface::model::{Channel, ChannelMessage, Message, User};
+use rocketbot_interface::model::{Channel, ChannelMessage, EditInfo, Message, User};
 use rocketbot_interface::sync::{Mutex, RwLock, RwLockReadGuard};
 use serde_json;
 use sha2::{Digest, Sha256};
@@ -815,11 +815,6 @@ async fn handle_received(body: &serde_json::Value, mut state: &mut ConnectionSta
         // we got a message! (probably)
 
         for message_json in body["fields"]["args"].members_or_empty() {
-            if message_json.has_key("editedAt") {
-                // TODO: handle edited messages?
-                continue;
-            }
-
             let sender_id = as_str_or_continue!(message_json["u"]["_id"]);
             let my_user_id = {
                 let my_uid_guard = state.shared_state.my_user_id
@@ -881,6 +876,34 @@ async fn handle_received(body: &serde_json::Value, mut state: &mut ConnectionSta
             let username = as_str_or_continue!(message_json["u"]["username"]);
             let nickname = as_str_or_continue!(message_json["u"]["name"]);
 
+            let edit_info = if message_json.has_key("editedAt") {
+                // message has been edited
+
+                // when?
+                let edit_timestamp_unix = match message_json["editedAt"]["$date"].as_i64() {
+                    Some(ts) => ts,
+                    None => {
+                        error!("edited message is missing timestamp; skipping");
+                        continue;
+                    }
+                };
+                let edit_timestamp = Utc.timestamp(edit_timestamp_unix, 0);
+
+                let editor_id = as_str_or_continue!(message_json["editedBy"]["_id"]);
+                let editor_username = as_str_or_continue!(message_json["editedBy"]["username"]);
+
+                Some(EditInfo::new(
+                    edit_timestamp,
+                    User::new(
+                        editor_id.to_owned(),
+                        editor_username.to_owned(),
+                        None,
+                    ),
+                ))
+            } else {
+                None
+            };
+
             let message = ChannelMessage::new(
                 Message::new(
                     message_id.to_owned(),
@@ -893,6 +916,7 @@ async fn handle_received(body: &serde_json::Value, mut state: &mut ConnectionSta
                     raw_message.to_owned(),
                     parsed_message,
                     message_json["bot"].is_object(),
+                    edit_info,
                 ),
                 channel,
             );
@@ -902,12 +926,18 @@ async fn handle_received(body: &serde_json::Value, mut state: &mut ConnectionSta
                 let plugins = state.shared_state.plugins
                     .read().await;
                 for plugin in plugins.iter() {
-                    plugin.channel_message(&message).await;
+                    if message.message.edit_info.is_some() {
+                        plugin.channel_message_edited(&message).await;
+                    } else {
+                        plugin.channel_message(&message).await;
+                    }
                 }
             }
 
-            // parse commands if there are any
-            distribute_channel_message_commands(&message, &mut state).await;
+            if message.message.edit_info.is_none() {
+                // parse commands if there are any (not on edited messages!)
+                distribute_channel_message_commands(&message, &mut state).await;
+            }
         }
     } else if body["msg"] == "changed" && body["collection"] == "stream-notify-user" {
         let my_user_id = {

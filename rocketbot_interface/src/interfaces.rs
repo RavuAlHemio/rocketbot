@@ -75,6 +75,9 @@ pub trait RocketBotPlugin: Send + Sync {
     /// Called if a textual message has been received in a channel.
     async fn channel_message(&self, _channel_message: &ChannelMessage) {}
 
+    /// Called if a textual message in a channel has been edited.
+    async fn channel_message_edited(&self, _channel_message: &ChannelMessage) {}
+
     /// Called if a textual message has been received directly from another user.
     async fn private_message(&self, _message: &Message) {}
 

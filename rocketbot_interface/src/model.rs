@@ -71,6 +71,7 @@ pub struct Message {
     pub raw: String,
     pub parsed: Vec<MessageFragment>,
     pub is_by_bot: bool,
+    pub edit_info: Option<EditInfo>,
 }
 impl Message {
     pub fn new(
@@ -80,6 +81,7 @@ impl Message {
         raw: String,
         parsed: Vec<MessageFragment>,
         is_by_bot: bool,
+        edit_info: Option<EditInfo>,
     ) -> Self {
         Self {
             id,
@@ -88,6 +90,7 @@ impl Message {
             raw,
             parsed,
             is_by_bot,
+            edit_info,
         }
     }
 }
