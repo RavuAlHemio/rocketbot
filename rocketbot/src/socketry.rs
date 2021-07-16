@@ -388,6 +388,17 @@ impl RocketBotInterface for ServerConnection {
         }
     }
 
+    async fn get_plugin_names(&self) -> Vec<String> {
+        let plugins = self.shared_state.plugins
+            .read().await;
+        let mut plugin_names = Vec::new();
+        for plugin in plugins.iter() {
+            let name = plugin.plugin_name().await;
+            plugin_names.push(name);
+        }
+        plugin_names
+    }
+
     async fn get_maximum_message_length(&self) -> Option<usize> {
         let mml_guard = self.shared_state.max_message_length
             .read().await;
