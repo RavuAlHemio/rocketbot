@@ -222,7 +222,7 @@ impl OpenWeatherMapProvider {
         }
 
         let mut ret = String::new();
-        readings.sort_by_key(|sr| -sr.unix_timestamp);
+        readings.sort_unstable_by_key(|sr| -sr.unix_timestamp);
         let newest_reading: &StationReading = &readings[0];
 
         // current temperature

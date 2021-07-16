@@ -100,7 +100,7 @@ impl RocketBotPlugin for FortunePlugin {
                     let mut fortune_groups: Vec<String> = self.name_to_fortunes.keys()
                         .map(|k| format!("`{}`", k))
                         .collect();
-                    fortune_groups.sort();
+                    fortune_groups.sort_unstable();
                     let fortune_group_string = fortune_groups.join(", ");
 
                     interface
@@ -162,7 +162,7 @@ impl RocketBotPlugin for FortunePlugin {
             let mut fortune_groups: Vec<String> = self.name_to_fortunes.keys()
                 .map(|k| format!("`{}`", k))
                 .collect();
-            fortune_groups.sort();
+            fortune_groups.sort_unstable();
             let fortune_group_string = fortune_groups.join(", ");
 
             Some(

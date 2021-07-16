@@ -164,7 +164,7 @@ async fn main() {
         countries.push(country);
     }
 
-    countries.sort_by_key(|c| (
+    countries.sort_unstable_by_key(|c| (
         c["alpha3"].as_str().map(|s| s.to_owned()),
         c["alpha2"].as_str().map(|s| s.to_owned()),
     ));
