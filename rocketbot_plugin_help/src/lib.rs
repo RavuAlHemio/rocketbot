@@ -137,10 +137,11 @@ impl RocketBotPlugin for HelpPlugin {
                 if let Some(max_len) = interface.get_maximum_message_length().await {
                     if all_usages.len() > max_len {
                         // full list is too long
-                        let plugin_names: Vec<String> = interface.get_plugin_names().await
+                        let mut plugin_names: Vec<String> = interface.get_plugin_names().await
                             .iter()
                             .map(|pn| format!("`{}`", pn))
                             .collect();
+                        plugin_names.sort_unstable();
                         let plugin_name_string = plugin_names.join(", ");
 
                         let help_message = format!(
