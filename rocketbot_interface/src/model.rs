@@ -1,4 +1,8 @@
+use std::convert::TryFrom;
+
 use chrono::{DateTime, Utc};
+
+use crate::errors::ChannelTypeParseError;
 use crate::message::MessageFragment;
 
 
@@ -26,22 +30,55 @@ impl User {
     }
 }
 
+#[derive(Clone, Copy, Debug, Eq, Hash, PartialEq)]
+pub enum ChannelType {
+    Channel,
+    Group,
+    PrivateConversation,
+    Omnichannel,
+}
+impl TryFrom<&str> for ChannelType {
+    type Error = ChannelTypeParseError;
+    fn try_from(value: &str) -> Result<Self, Self::Error> {
+        match value {
+            "c" => Ok(ChannelType::Channel),
+            "p" => Ok(ChannelType::Group),
+            "d" => Ok(ChannelType::PrivateConversation),
+            "l" => Ok(ChannelType::Omnichannel),
+            o => Err(ChannelTypeParseError(o.to_owned())),
+        }
+    }
+}
+impl From<ChannelType> for &'static str {
+    fn from(ct: ChannelType) -> Self {
+        match ct {
+            ChannelType::Channel => "c",
+            ChannelType::Group => "p",
+            ChannelType::PrivateConversation => "d",
+            ChannelType::Omnichannel => "l",
+        }
+    }
+}
+
 #[derive(Clone, Debug, Eq, Hash, PartialEq)]
 pub struct Channel {
     pub id: String,
     pub name: String,
     pub frontend_name: Option<String>,
+    pub channel_type: ChannelType,
 }
 impl Channel {
     pub fn new(
         id: String,
         name: String,
         frontend_name: Option<String>,
+        channel_type: ChannelType,
     ) -> Self {
         Self {
             id,
             name,
             frontend_name,
+            channel_type,
         }
     }
 }

@@ -19,7 +19,7 @@ use rand::rngs::StdRng;
 use rocketbot_interface::JsonValueExtensions;
 use rocketbot_interface::commands::{CommandConfiguration, CommandDefinition};
 use rocketbot_interface::interfaces::{RocketBotInterface, RocketBotPlugin};
-use rocketbot_interface::model::{Channel, ChannelMessage, EditInfo, Message, User};
+use rocketbot_interface::model::{Channel, ChannelMessage, ChannelType, EditInfo, Message, User};
 use rocketbot_interface::sync::{Mutex, RwLock, RwLockReadGuard};
 use serde_json;
 use sha2::{Digest, Sha256};
@@ -666,7 +666,7 @@ async fn channel_joined(mut state: &mut ConnectionState, channel: Channel) {
     state.shared_state.outgoing_sender.send(sub_body)
         .expect("failed to enqueue subscription message");
 
-    obtain_users_in_room(&mut state, &channel.id).await;
+    obtain_users_in_room(&mut state, &channel).await;
 }
 
 async fn channel_left(state: &mut ConnectionState, channel_id: &str) {
@@ -790,12 +790,16 @@ async fn handle_received(body: &serde_json::Value, mut state: &mut ConnectionSta
     } else if body["msg"] == "result" && body["id"] == GET_ROOMS_MESSAGE_ID {
         // update our rooms
         for update_room in body["result"]["update"].members_or_empty() {
-            // channel = "c", private channel = "p", direct = "p", omnichannel = "l"
-            if update_room["t"] != "c" && update_room["t"] != "p" {
-                // not a channel; skip
-                // TODO: private messages?
-                continue;
-            }
+            // channel = "c", private channel = "p", direct = "d", omnichannel = "l"
+            let channel_type = match update_room["t"].as_str() {
+                Some("c") => ChannelType::Channel,
+                Some("p") => ChannelType::Group,
+                _ => {
+                    // not a channel; skip
+                    // TODO: private messages
+                    continue;
+                },
+            };
 
             let room_id = as_str_or_continue!(update_room["_id"]);
             let name = as_str_or_continue!(update_room["name"]);
@@ -808,6 +812,7 @@ async fn handle_received(body: &serde_json::Value, mut state: &mut ConnectionSta
                 room_id.to_owned(),
                 name.to_owned(),
                 frontend_name,
+                channel_type,
             );
 
             channel_joined(&mut state, channel).await;
@@ -855,7 +860,7 @@ async fn handle_received(body: &serde_json::Value, mut state: &mut ConnectionSta
             if message_json["t"] == "au" || message_json["t"] == "ru" {
                 // add user/remove user
                 // update user lists
-                obtain_users_in_room(&mut state, &channel_id).await;
+                obtain_users_in_room(&mut state, &channel).await;
             }
 
             let message_id = as_str_or_continue!(message_json["_id"]);
@@ -965,11 +970,15 @@ async fn handle_received(body: &serde_json::Value, mut state: &mut ConnectionSta
             // somebody added us to a channel!
             // subscribe to its messages
             let update_room = &body["fields"]["args"][1];
-            if update_room["t"] != "c" && update_room["t"] != "p" {
-                // not a channel; skip
-                // TODO: private messages?
-                return;
-            }
+            let channel_type = match update_room["t"].as_str() {
+                Some("c") => ChannelType::Channel,
+                Some("p") => ChannelType::Group,
+                _ => {
+                    // not a channel; skip
+                    // TODO: private messages
+                    return;
+                },
+            };
 
             // remember this room
             let room_id = as_str_or_return!(update_room["_id"]);
@@ -978,6 +987,7 @@ async fn handle_received(body: &serde_json::Value, mut state: &mut ConnectionSta
                 room_id.to_owned(),
                 room_name.to_owned(),
                 None, // fname is missing for some reason
+                channel_type,
             );
 
             channel_joined(&mut state, channel).await;
@@ -1028,7 +1038,7 @@ async fn distribute_channel_message_commands(channel_message: &ChannelMessage, s
     }
 }
 
-async fn obtain_users_in_room(state: &mut ConnectionState, channel_id: &str) {
+async fn obtain_users_in_room(state: &mut ConnectionState, channel: &Channel) {
     let user_id = {
         let uid_guard = state.shared_state.my_user_id
             .read().await;
@@ -1047,10 +1057,15 @@ async fn obtain_users_in_room(state: &mut ConnectionState, channel_id: &str) {
         Url::parse(&config_lock.server.web_uri)
             .expect("failed to parse web URI")
     };
-    let mut channel_members_uri = web_uri.join("api/v1/channels.members")
+    let uri_path = match channel.channel_type {
+        ChannelType::Channel => "api/v1/channels.members",
+        ChannelType::Group => "api/v1/groups.members",
+        _ => return,
+    };
+    let mut channel_members_uri = web_uri.join(uri_path)
         .expect("failed to join API endpoint to URI");
     channel_members_uri.query_pairs_mut()
-        .append_pair("roomId", channel_id)
+        .append_pair("roomId", &channel.id)
         .append_pair("count", "50");
 
     let mut offset = 0usize;
@@ -1072,7 +1087,7 @@ async fn obtain_users_in_room(state: &mut ConnectionState, channel_id: &str) {
         let response = match response_res {
             Ok(r) => r,
             Err(e) => {
-                error!("error fetching channel {:?} users: {}", channel_id, e);
+                error!("error fetching channel {:?} users: {}", &channel.id, e);
                 return;
             },
         };
@@ -1080,14 +1095,14 @@ async fn obtain_users_in_room(state: &mut ConnectionState, channel_id: &str) {
         let response_bytes = match hyper::body::to_bytes(&mut body).await {
             Ok(b) => b.to_vec(),
             Err(e) => {
-                error!("error getting bytes from response requesting channel {:?} users: {}", channel_id, e);
+                error!("error getting bytes from response requesting channel {:?} users: {}", &channel.id, e);
                 return;
             },
         };
         let response_string = match String::from_utf8(response_bytes) {
             Ok(s) => s,
             Err(e) => {
-                error!("error decoding response requesting channel {:?} users: {}", channel_id, e);
+                error!("error decoding response requesting channel {:?} users: {}", &channel.id, e);
                 return;
             },
         };
@@ -1095,7 +1110,7 @@ async fn obtain_users_in_room(state: &mut ConnectionState, channel_id: &str) {
         if parts.status != StatusCode::OK {
             error!(
                 "error response {} while fetching channel {:?} users: {}",
-                parts.status, channel_id, response_string,
+                parts.status, &channel.id, response_string,
             );
             return;
         }
@@ -1103,7 +1118,7 @@ async fn obtain_users_in_room(state: &mut ConnectionState, channel_id: &str) {
         let json_value: serde_json::Value = match serde_json::from_str(&response_string) {
             Ok(v) => v,
             Err(e) => {
-                error!("error parsing JSON while fetching channel {:?} users: {}", channel_id, e);
+                error!("error parsing JSON while fetching channel {:?} users: {}", &channel.id, e);
                 return;
             },
         };
@@ -1117,21 +1132,21 @@ async fn obtain_users_in_room(state: &mut ConnectionState, channel_id: &str) {
             let user_id = match user_json["_id"].as_str() {
                 Some(s) => s,
                 None => {
-                    error!("error getting user ID while fetching channel {:?} users", channel_id);
+                    error!("error getting user ID while fetching channel {:?} users", &channel.id);
                     return;
                 }
             };
             let username = match user_json["username"].as_str() {
                 Some(s) => s,
                 None => {
-                    error!("error getting username while fetching channel {:?} users", channel_id);
+                    error!("error getting username while fetching channel {:?} users", &channel.id);
                     return;
                 }
             };
             let nickname = match user_json["name"].as_str() {
                 Some(s) => s,
                 None => {
-                    error!("error getting user nickname while fetching channel {:?} users", channel_id);
+                    error!("error getting user nickname while fetching channel {:?} users", &channel.id);
                     return;
                 }
             };
@@ -1150,6 +1165,6 @@ async fn obtain_users_in_room(state: &mut ConnectionState, channel_id: &str) {
     {
         let mut chan_guard = state.shared_state.subscribed_channels
             .write().await;
-        chan_guard.replace_users_in_channel(channel_id, users).await;
+        chan_guard.replace_users_in_channel(&channel.id, users).await;
     }
 }

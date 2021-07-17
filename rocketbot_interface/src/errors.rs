@@ -19,3 +19,12 @@ impl fmt::Display for PluginLoadError {
 }
 impl Error for PluginLoadError {
 }
+
+
+#[derive(Clone, Debug, Eq, Hash, PartialEq)]
+pub struct ChannelTypeParseError(pub String);
+impl fmt::Display for ChannelTypeParseError {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        write!(f, "unknown channel type {:?}", self.0)
+    }
+}
