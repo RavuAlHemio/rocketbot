@@ -836,10 +836,6 @@ async fn handle_received(body: &serde_json::Value, mut state: &mut ConnectionSta
                     None => continue,
                 }
             };
-            if sender_id == my_user_id {
-                // don't process messages from myself
-                continue;
-            }
 
             let channel_id = as_str_or_continue!(message_json["rid"]);
             let channel_opt = {
@@ -942,6 +938,8 @@ async fn handle_received(body: &serde_json::Value, mut state: &mut ConnectionSta
                 for plugin in plugins.iter() {
                     if message.message.edit_info.is_some() {
                         plugin.channel_message_edited(&message).await;
+                    } else if sender_id == my_user_id {
+                        plugin.channel_message_delivered(&message).await;
                     } else {
                         plugin.channel_message(&message).await;
                     }

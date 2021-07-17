@@ -72,16 +72,26 @@ pub trait RocketBotPlugin: Send + Sync {
     /// Returns the plugin's name.
     async fn plugin_name(&self) -> String;
 
-    /// Called if a textual message has been received in a channel.
+    /// Called if a textual message has been received in a channel whose author is not the bot.
     async fn channel_message(&self, _channel_message: &ChannelMessage) {}
 
-    /// Called if a textual message in a channel has been edited.
+    /// Called if a textual message has been received in a channel whose author is the bot.
+    async fn channel_message_delivered(&self, _channel_message: &ChannelMessage) {}
+
+    /// Called if a textual message in a channel has been edited (whether or not the original author
+    /// is the bot).
     async fn channel_message_edited(&self, _channel_message: &ChannelMessage) {}
 
     /// Called if a textual message has been received directly from another user.
     async fn private_message(&self, _message: &Message) {}
 
-    /// Called if a textual message is being sent in a channel. The plugin can return `false` to
+    /// Called if a textual message has been delivered directly to another user.
+    async fn private_message_delivered(&self, _message: &Message) {}
+
+    /// Called if a textual message in a private conversation with another user has been edited.
+    async fn private_message_edited(&self, _message: &Message) {}
+
+    /// Called if a textual message is being sent to a channel. The plugin can return `false` to
     /// prevent the message from being sent.
     async fn outgoing_channel_message(&self, _channel_name: &str, _message: &str) -> bool { true }
 

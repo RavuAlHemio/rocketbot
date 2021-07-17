@@ -25,24 +25,8 @@ impl LoggerPlugin {
         });
         Ok(client)
     }
-}
-#[async_trait]
-impl RocketBotPlugin for LoggerPlugin {
-    async fn new(_interface: Weak<dyn RocketBotInterface>, config: serde_json::Value) -> Self {
-        let db_conn_string = config["db_conn_string"].as_str()
-            .expect("db_conn_string missing or not a string")
-            .to_owned();
 
-        LoggerPlugin {
-            db_conn_string,
-        }
-    }
-
-    async fn plugin_name(&self) -> String {
-        "logger".to_owned()
-    }
-
-    async fn channel_message(&self, channel_message: &ChannelMessage) {
+    async fn channel_message_received_or_delivered(&self, channel_message: &ChannelMessage) {
         let db_conn = match self.connect_db().await {
             Ok(dbc) => dbc,
             Err(e) => {
@@ -104,6 +88,30 @@ impl RocketBotPlugin for LoggerPlugin {
             error!("failed to insert message revision: {}", e);
             return;
         }
+    }
+}
+#[async_trait]
+impl RocketBotPlugin for LoggerPlugin {
+    async fn new(_interface: Weak<dyn RocketBotInterface>, config: serde_json::Value) -> Self {
+        let db_conn_string = config["db_conn_string"].as_str()
+            .expect("db_conn_string missing or not a string")
+            .to_owned();
+
+        LoggerPlugin {
+            db_conn_string,
+        }
+    }
+
+    async fn plugin_name(&self) -> String {
+        "logger".to_owned()
+    }
+
+    async fn channel_message(&self, channel_message: &ChannelMessage) {
+        self.channel_message_received_or_delivered(channel_message).await
+    }
+
+    async fn channel_message_delivered(&self, channel_message: &ChannelMessage) {
+        self.channel_message_received_or_delivered(channel_message).await
     }
 
     async fn channel_message_edited(&self, channel_message: &ChannelMessage) {
