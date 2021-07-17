@@ -799,13 +799,15 @@ async fn handle_received(body: &serde_json::Value, mut state: &mut ConnectionSta
 
             let room_id = as_str_or_continue!(update_room["_id"]);
             let name = as_str_or_continue!(update_room["name"]);
-            let frontend_name = as_str_or_continue!(update_room["fname"]);
+            let frontend_name = update_room["fname"]
+                .as_str()
+                .map(|s| s.to_owned());
 
             // remember this room
             let channel = Channel::new(
                 room_id.to_owned(),
                 name.to_owned(),
-                Some(frontend_name.to_owned()),
+                frontend_name,
             );
 
             channel_joined(&mut state, channel).await;
@@ -884,7 +886,9 @@ async fn handle_received(body: &serde_json::Value, mut state: &mut ConnectionSta
 
             let u_id = as_str_or_continue!(message_json["u"]["_id"]);
             let username = as_str_or_continue!(message_json["u"]["username"]);
-            let nickname = as_str_or_continue!(message_json["u"]["name"]);
+            let nickname = message_json["u"]["name"]
+                .as_str()
+                .map(|s| s.to_owned());
 
             let edit_info = if message_json.has_key("editedAt") {
                 // message has been edited
@@ -921,7 +925,7 @@ async fn handle_received(body: &serde_json::Value, mut state: &mut ConnectionSta
                     User::new(
                         u_id.to_owned(),
                         username.to_owned(),
-                        Some(nickname.to_owned()),
+                        nickname,
                     ),
                     raw_message.to_owned(),
                     parsed_message,
