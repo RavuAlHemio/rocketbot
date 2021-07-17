@@ -51,7 +51,10 @@ macro_rules! as_str_or_continue {
     ($val:expr) => {
         match $val.as_str() {
             Some(v) => v,
-            None => continue,
+            None => {
+                debug!("{} missing or not a string; skipping value", stringify!($val));
+                continue;
+            },
         }
     };
 }
@@ -60,7 +63,10 @@ macro_rules! as_str_or_return {
     ($val:expr) => {
         match $val.as_str() {
             Some(v) => v,
-            None => return,
+            None => {
+                debug!("{} missing or not a string; returning early", stringify!($val));
+                return;
+            },
         }
     };
 }
@@ -638,6 +644,8 @@ async fn run_connection(mut state: &mut ConnectionState) -> Result<(), WebSocket
 }
 
 async fn channel_joined(mut state: &mut ConnectionState, channel: Channel) {
+    debug!("joined channel {:?}; subscribing to messages", channel.id);
+
     {
         let mut cdb_write = state.shared_state.subscribed_channels
             .write().await;
@@ -662,6 +670,8 @@ async fn channel_joined(mut state: &mut ConnectionState, channel: Channel) {
 }
 
 async fn channel_left(state: &mut ConnectionState, channel_id: &str) {
+    debug!("left channel {:?}; unsubscribing from messages", channel_id);
+
     {
         let mut cdb_write = state.shared_state.subscribed_channels
             .write().await;
