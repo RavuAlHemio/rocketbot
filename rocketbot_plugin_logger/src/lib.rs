@@ -56,7 +56,7 @@ impl RocketBotPlugin for LoggerPlugin {
             "
                 INSERT INTO logger.channel (channel_id, channel_name)
                 VALUES ($1, $2)
-                ON CONFLICT channel_id DO NOTHING
+                ON CONFLICT (channel_id) DO NOTHING
             ",
             &[
                 &channel_message.channel.id,
