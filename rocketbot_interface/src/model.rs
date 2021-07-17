@@ -2,6 +2,7 @@ use std::convert::TryFrom;
 
 use chrono::{DateTime, Utc};
 
+use crate::is_sorted_no_dupes;
 use crate::errors::ChannelTypeParseError;
 use crate::message::MessageFragment;
 
@@ -34,7 +35,6 @@ impl User {
 pub enum ChannelType {
     Channel,
     Group,
-    PrivateConversation,
     Omnichannel,
 }
 impl TryFrom<&str> for ChannelType {
@@ -43,7 +43,6 @@ impl TryFrom<&str> for ChannelType {
         match value {
             "c" => Ok(ChannelType::Channel),
             "p" => Ok(ChannelType::Group),
-            "d" => Ok(ChannelType::PrivateConversation),
             "l" => Ok(ChannelType::Omnichannel),
             o => Err(ChannelTypeParseError(o.to_owned())),
         }
@@ -54,7 +53,6 @@ impl From<ChannelType> for &'static str {
         match ct {
             ChannelType::Channel => "c",
             ChannelType::Group => "p",
-            ChannelType::PrivateConversation => "d",
             ChannelType::Omnichannel => "l",
         }
     }
@@ -79,6 +77,27 @@ impl Channel {
             name,
             frontend_name,
             channel_type,
+        }
+    }
+}
+
+#[derive(Clone, Debug, Eq, Hash, PartialEq)]
+pub struct PrivateConversation {
+    pub id: String,
+    pub other_participants: Vec<User>,
+}
+impl PrivateConversation {
+    pub fn new(
+        id: String,
+        other_participants: Vec<User>,
+    ) -> Self {
+        if !is_sorted_no_dupes(other_participants.iter().map(|u| &u.id)) {
+            panic!("other_participants must be sorted by id");
+        }
+
+        Self {
+            id,
+            other_participants,
         }
     }
 }
@@ -145,6 +164,23 @@ impl ChannelMessage {
         Self {
             message,
             channel,
+        }
+    }
+}
+
+#[derive(Clone, Debug, Eq, Hash, PartialEq)]
+pub struct PrivateMessage {
+    pub message: Message,
+    pub conversation: PrivateConversation,
+}
+impl PrivateMessage {
+    pub fn new(
+        message: Message,
+        conversation: PrivateConversation,
+    ) -> Self {
+        Self {
+            message,
+            conversation,
         }
     }
 }

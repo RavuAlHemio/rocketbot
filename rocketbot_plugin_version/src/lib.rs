@@ -2,9 +2,10 @@ use std::collections::{HashMap, HashSet};
 use std::sync::Weak;
 
 use async_trait::async_trait;
+use log::warn;
 use rocketbot_interface::commands::{CommandDefinition, CommandInstance};
 use rocketbot_interface::interfaces::{RocketBotInterface, RocketBotPlugin};
-use rocketbot_interface::model::ChannelMessage;
+use rocketbot_interface::model::{ChannelMessage, PrivateMessage};
 use serde_json;
 
 
@@ -33,6 +34,7 @@ impl RocketBotPlugin for VersionPlugin {
             "Outputs the currently running version of the bot.".to_owned(),
         );
         my_interface.register_channel_command(&version_command).await;
+        my_interface.register_private_message_command(&version_command).await;
 
         VersionPlugin {
             interface,
@@ -57,6 +59,7 @@ impl RocketBotPlugin for VersionPlugin {
         let unset_version_string = concat!("{{", "VERSION", "}}");
 
         let this_version = if VERSION_STRING == unset_version_string {
+            warn!("version requested but unknown!");
             "unknown"
         } else {
             VERSION_STRING
@@ -64,6 +67,32 @@ impl RocketBotPlugin for VersionPlugin {
 
         interface.send_channel_message(
             &channel_message.channel.name,
+            &format!("rocketbot revision {}", this_version),
+        ).await;
+    }
+
+    async fn private_command(&self, private_message: &PrivateMessage, command: &CommandInstance) {
+        let interface = match self.interface.upgrade() {
+            None => return,
+            Some(i) => i,
+        };
+
+        if command.name != "version" {
+            return;
+        }
+
+        // use concat! to hide this string from CI/CD, lest it be replaced too
+        let unset_version_string = concat!("{{", "VERSION", "}}");
+
+        let this_version = if VERSION_STRING == unset_version_string {
+            warn!("version requested but unknown!");
+            "unknown"
+        } else {
+            VERSION_STRING
+        };
+
+        interface.send_private_message(
+            &private_message.conversation.id,
             &format!("rocketbot revision {}", this_version),
         ).await;
     }

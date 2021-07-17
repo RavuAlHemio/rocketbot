@@ -5,7 +5,7 @@ use async_trait::async_trait;
 use serde_json::Value;
 
 use crate::commands::{CommandConfiguration, CommandDefinition, CommandInstance};
-use crate::model::{ChannelMessage, Message, User};
+use crate::model::{Channel, ChannelMessage, PrivateConversation, PrivateMessage, User};
 
 
 /// Trait to be implemented by a RocketBot connection.
@@ -14,8 +14,11 @@ pub trait RocketBotInterface : Send + Sync {
     /// Sends a textual message to a channel.
     async fn send_channel_message(&self, channel_name: &str, message: &str);
 
+    /// Sends a textual message to a private conversation.
+    async fn send_private_message(&self, conversation_id: &str, message: &str);
+
     /// Sends a textual message to a person.
-    async fn send_private_message(&self, username: &str, message: &str);
+    async fn send_private_message_to_user(&self, username: &str, message: &str);
 
     /// Attempts to resolve the username-like value to an actual username on the server. Potentially
     /// enlists the assistance of relevant plugins.
@@ -38,14 +41,27 @@ pub trait RocketBotInterface : Send + Sync {
     /// Obtains a copy of the command configuration currently in operation.
     async fn get_command_configuration(&self) -> CommandConfiguration;
 
-    /// Obtains a vector of all currently defined commands using the `rocketbot_interface::command`
-    /// infrastructure. If `plugin` is not `None`, only returns commands for that plugin.
-    async fn get_defined_commands(&self, plugin: Option<&str>) -> Vec<CommandDefinition>;
+    /// Obtains a vector of all currently defined channel commands using the
+    /// `rocketbot_interface::command` infrastructure. If `plugin` is not `None`, only returns
+    /// commands for that plugin.
+    async fn get_defined_channel_commands(&self, plugin: Option<&str>) -> Vec<CommandDefinition>;
 
-    /// Obtains a map of custom commands not defined using the `rocketbot_interface::command` from
-    /// all plugins. The key is the command name and the value is a tuple of usage information and
-    /// description. If `plugin` is not `None`, only returns commands for that plugin.
-    async fn get_additional_commands_usages(&self, plugin: Option<&str>) -> HashMap<String, (String, String)>;
+    /// Obtains a vector of all currently defined private message commands using the
+    /// `rocketbot_interface::command` infrastructure. If `plugin` is not `None`, only returns
+    /// commands for that plugin.
+    async fn get_defined_private_message_commands(&self, plugin: Option<&str>) -> Vec<CommandDefinition>;
+
+    /// Obtains a map of custom channel commands not defined using the
+    /// `rocketbot_interface::command` infrastructure from all plugins. The key is the command name
+    /// and the value is a tuple of usage information and description. If `plugin` is not `None`,
+    /// only returns commands for that plugin.
+    async fn get_additional_channel_commands_usages(&self, plugin: Option<&str>) -> HashMap<String, (String, String)>;
+
+    /// Obtains a map of custom private message commands not defined using the
+    /// `rocketbot_interface::command` infrastructure from all plugins. The key is the command name
+    /// and the value is a tuple of usage information and description. If `plugin` is not `None`,
+    /// only returns commands for that plugin.
+    async fn get_additional_private_message_commands_usages(&self, plugin: Option<&str>) -> HashMap<String, (String, String)>;
 
     /// Obtains detailed help information for the given command (by requesting it using
     /// `RocketBotPlugin::get_command_help` from all active plugins), or `None` if it is not found.
@@ -82,37 +98,45 @@ pub trait RocketBotPlugin: Send + Sync {
     /// is the bot).
     async fn channel_message_edited(&self, _channel_message: &ChannelMessage) {}
 
-    /// Called if a textual message has been received directly from another user.
-    async fn private_message(&self, _message: &Message) {}
-
-    /// Called if a textual message has been delivered directly to another user.
-    async fn private_message_delivered(&self, _message: &Message) {}
-
-    /// Called if a textual message in a private conversation with another user has been edited.
-    async fn private_message_edited(&self, _message: &Message) {}
-
     /// Called if a textual message is being sent to a channel. The plugin can return `false` to
     /// prevent the message from being sent.
-    async fn outgoing_channel_message(&self, _channel_name: &str, _message: &str) -> bool { true }
+    async fn outgoing_channel_message(&self, _channel: &Channel, _message: &str) -> bool { true }
 
-    /// Called if a textual message is being sent directly to another user. The plugin can return
-    /// `false` to prevent the message from being sent.
-    async fn outgoing_private_message(&self, _username: &str, _message: &str) -> bool { true }
+    /// Called if a command has been issued in a channel.
+    async fn channel_command(&self, _channel_message: &ChannelMessage, _command: &CommandInstance) {}
+
+    /// Called if a textual private message has been received whose author is not the bot.
+    async fn private_message(&self, _private_message: &PrivateMessage) {}
+
+    /// Called if a textual private message has been received whose author is the bot.
+    async fn private_message_delivered(&self, _private_message: &PrivateMessage) {}
+
+    /// Called if a textual private message has been edited (whether or not the original author is
+    /// the bot).
+    async fn private_message_edited(&self, _private_message: &PrivateMessage) {}
+
+    /// Called if a textual private message is being sent. The plugin can return `false` to prevent
+    /// the message from being sent.
+    async fn outgoing_private_message(&self, _conversation: &PrivateConversation, _message: &str) -> bool { true }
+
+    /// Called if a command has been issued in a private message.
+    async fn private_command(&self, _private_message: &PrivateMessage, _command: &CommandInstance) {}
 
     /// Called if another plugin has requested to resolve a username-like value to an actual
     /// username on the server.
     async fn username_resolution(&self, _username: &str) -> Option<String> { None }
 
-    /// Called if a command has been issued in a channel.
-    async fn channel_command(&self, _channel_message: &ChannelMessage, _command: &CommandInstance) {}
+    /// Called if a list of channel commands is requested; used to supply usage information for
+    /// commands not handled using the `rocketbot_interface::command` infrastructure. The key of
+    /// each entry is the command name and the value is a tuple of usage information and
+    /// description.
+    async fn get_additional_channel_commands_usages(&self) -> HashMap<String, (String, String)> { HashMap::new() }
 
-    /// Called if a command has been issued in a private message.
-    async fn private_message_command(&self, _message: &Message, _command: &CommandInstance) {}
-
-    /// Called if a list of commands is requested; used to supply usage information for commands
-    /// not handled using the `rocketbot_interface::command` infrastructure. The key of each entry
-    /// is the command name and the value is a tuple of usage information and description.
-    async fn get_additional_commands_usages(&self) -> HashMap<String, (String, String)> { HashMap::new() }
+    /// Called if a list of private message commands is requested; used to supply usage information
+    /// for commands not handled using the `rocketbot_interface::command` infrastructure. The key of
+    /// each entry is the command name and the value is a tuple of usage information and
+    /// description.
+    async fn get_additional_private_message_commands_usages(&self) -> HashMap<String, (String, String)> { HashMap::new() }
 
     /// Called if detailed help information is requested for a given command. Should return `None`
     /// if the plugin doesn't provide this command.

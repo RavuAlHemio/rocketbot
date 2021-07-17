@@ -149,7 +149,7 @@ impl RocketBotPlugin for SedPlugin {
         }
     }
 
-    async fn get_additional_commands_usages(&self) -> HashMap<String, (String, String)> {
+    async fn get_additional_channel_commands_usages(&self) -> HashMap<String, (String, String)> {
         let mut ret = HashMap::new();
         ret.insert(
             "s".to_owned(),

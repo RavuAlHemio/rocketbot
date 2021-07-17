@@ -1401,6 +1401,7 @@ name = "rocketbot_plugin_version"
 version = "0.1.0"
 dependencies = [
  "async-trait",
+ "log",
  "rocketbot_interface",
  "serde_json",
  "tokio",

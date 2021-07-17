@@ -33,6 +33,7 @@ pub trait JsonValueExtensions {
     fn entries(&self) -> Option<serde_json::map::Iter>;
     fn members(&self) -> Option<slice::Iter<serde_json::Value>>;
     fn has_key(&self, key: &str) -> bool;
+    fn as_str_or_empty(&self) -> &str;
 
     fn entries_or_empty(&self) -> serde_json::map::Iter {
         match self.entries() {
@@ -67,4 +68,41 @@ impl JsonValueExtensions for serde_json::Value {
             None => false,
         }
     }
+
+    fn as_str_or_empty(&self) -> &str {
+        self.as_str().unwrap_or("")
+    }
+}
+
+
+pub fn is_sorted<T: Ord, I: Iterator<Item = T>>(mut iterator: I) -> bool {
+    let mut prev = match iterator.next() {
+        None => return true, // vacuous truth
+        Some(p) => p,
+    };
+
+    while let Some(next) = iterator.next() {
+        if prev > next {
+            return false;
+        }
+        prev = next;
+    }
+
+    true
+}
+
+pub fn is_sorted_no_dupes<T: Ord, I: Iterator<Item = T>>(mut iterator: I) -> bool {
+    let mut prev = match iterator.next() {
+        None => return true, // vacuous truth
+        Some(p) => p,
+    };
+
+    while let Some(next) = iterator.next() {
+        if prev >= next {
+            return false;
+        }
+        prev = next;
+    }
+
+    true
 }

@@ -30,7 +30,7 @@ impl HelpPlugin {
         let mut usage_to_descr: BTreeMap<String, (String, String)> = BTreeMap::new();
 
         // get all regular commands and usages
-        for defn in &interface.get_defined_commands(plugin).await {
+        for defn in &interface.get_defined_channel_commands(plugin).await {
             usage_to_descr.insert(
                 defn.name.clone(),
                 (
@@ -41,7 +41,7 @@ impl HelpPlugin {
         }
 
         // get special commands and usages
-        for (name, (usage, description)) in &interface.get_additional_commands_usages(plugin).await {
+        for (name, (usage, description)) in &interface.get_additional_channel_commands_usages(plugin).await {
             usage_to_descr.insert(
                 name.clone(),
                 (
@@ -170,7 +170,7 @@ impl RocketBotPlugin for HelpPlugin {
             let mut usage: Option<String> = None;
             let mut description: Option<String> = None;
 
-            for defn in &interface.get_defined_commands(None).await {
+            for defn in &interface.get_defined_channel_commands(None).await {
                 if defn.name == target_command_name {
                     usage = Some(replace_config_placeholders(&defn.usage, &defn.name, &command_config));
                     description = Some(replace_config_placeholders(&defn.description, &defn.name, &command_config));
@@ -179,7 +179,7 @@ impl RocketBotPlugin for HelpPlugin {
             }
 
             if usage.is_none() || description.is_none() {
-                let additionals = interface.get_additional_commands_usages(None).await;
+                let additionals = interface.get_additional_channel_commands_usages(None).await;
                 if let Some((u, d)) = additionals.get(target_command_name) {
                     usage = Some(replace_config_placeholders(&u, &target_command_name, &command_config));
                     description = Some(replace_config_placeholders(&d, &target_command_name, &command_config));
