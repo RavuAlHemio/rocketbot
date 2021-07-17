@@ -112,11 +112,9 @@ impl RocketBotPlugin for HelpPlugin {
         };
 
         let channel_name = &channel_message.channel.name;
+        let command_config = interface.get_command_configuration().await;
 
         if command.name == "help" {
-            // get information on command configuration
-            let command_config = interface.get_command_configuration().await;
-
             let target_command_name = command.rest.trim();
             if target_command_name.len() > 0 {
                 let help = interface.get_command_help(target_command_name).await;
@@ -174,8 +172,8 @@ impl RocketBotPlugin for HelpPlugin {
 
             for defn in &interface.get_defined_commands(None).await {
                 if defn.name == target_command_name {
-                    usage = Some(defn.usage.clone());
-                    description = Some(defn.description.clone());
+                    usage = Some(replace_config_placeholders(&defn.usage, &defn.name, &command_config));
+                    description = Some(replace_config_placeholders(&defn.description, &defn.name, &command_config));
                     break;
                 }
             }
@@ -183,8 +181,8 @@ impl RocketBotPlugin for HelpPlugin {
             if usage.is_none() || description.is_none() {
                 let additionals = interface.get_additional_commands_usages(None).await;
                 if let Some((u, d)) = additionals.get(target_command_name) {
-                    usage = Some(u.clone());
-                    description = Some(d.clone());
+                    usage = Some(replace_config_placeholders(&u, &target_command_name, &command_config));
+                    description = Some(replace_config_placeholders(&d, &target_command_name, &command_config));
                 }
             }
 
