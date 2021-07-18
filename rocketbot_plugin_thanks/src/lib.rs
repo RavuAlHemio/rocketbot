@@ -43,10 +43,13 @@ impl ThanksPlugin {
             Err(_e) => return,
         };
 
-        let raw_target = &command.args[0];
+        let mut raw_target = command.args[0].as_str();
+        if raw_target.starts_with("@") {
+            raw_target = &raw_target[1..];
+        }
         let target = match interface.resolve_username(&raw_target).await {
             Some(u) => u,
-            None => raw_target.clone(),
+            None => raw_target.to_owned(),
         };
 
         let now = Utc::now();
@@ -131,10 +134,13 @@ impl ThanksPlugin {
             Err(_e) => return,
         };
 
-        let raw_target = &command.args[0];
+        let mut raw_target = command.args[0].as_str();
+        if raw_target.starts_with("@") {
+            raw_target = &raw_target[1..];
+        }
         let target = match interface.resolve_username(&raw_target).await {
             Some(u) => u,
-            None => raw_target.clone(),
+            None => raw_target.to_owned(),
         };
 
         let target_lower = target.to_lowercase();
@@ -222,10 +228,13 @@ impl ThanksPlugin {
             Err(_e) => return,
         };
 
-        let raw_target = &command.args[0];
+        let mut raw_target = command.args[0].as_str();
+        if raw_target.starts_with("@") {
+            raw_target = &raw_target[1..];
+        }
         let target = match interface.resolve_username(&raw_target).await {
             Some(u) => u,
-            None => raw_target.clone(),
+            None => raw_target.to_owned(),
         };
 
         let target_lower = target.to_lowercase();
