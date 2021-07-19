@@ -1,0 +1,12 @@
+[package]
+name = "rocketbot_plugin_new_year"
+version = "0.1.0"
+edition = "2018"
+
+[dependencies]
+async-trait = { version = "0.1" }
+chrono = { version = "0.4" }
+log = { version = "0.4" }
+rocketbot_interface = { path = "../rocketbot_interface" }
+serde_json = { version = "1.0" }
+tokio = { version = "1.7", features = ["sync"] }
