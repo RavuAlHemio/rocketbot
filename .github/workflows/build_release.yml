@@ -1,29 +1,6 @@
-name: rocketbot build
+name: rocketbot build release
 on: [push]
 jobs:
-  build-arch-debug:
-    runs-on: ubuntu-latest
-    container: archlinux:base-devel
-    steps:
-      - name: update packages
-        run: pacman -Syu --noconfirm
-      - name: install packages
-        run: pacman -S --needed --noconfirm cargo git python-toml
-      - name: check out repository code
-        uses: actions/checkout@v2
-      - name: verify no plugin omissions
-        run: 'python3 cicd/plugincheck.py'
-      - name: update version
-        run: 'sed -i -e "s/{{VERSION}}/`git rev-parse HEAD`/" rocketbot_plugin_version/src/lib.rs'
-      - name: run debug build
-        run: cargo build
-      - name: run debug tests
-        run: cargo test
-      - name: upload debug binary
-        uses: actions/upload-artifact@v2
-        with:
-          name: rocketbot-debug
-          path: target/debug/rocketbot
   build-arch-release:
     runs-on: ubuntu-latest
     container: archlinux:base-devel
