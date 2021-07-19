@@ -8,9 +8,11 @@ jobs:
       - name: update packages
         run: pacman -Syu --noconfirm
       - name: install packages
-        run: pacman -S --needed --noconfirm cargo git
+        run: pacman -S --needed --noconfirm cargo git python-toml
       - name: check out repository code
         uses: actions/checkout@v2
+      - name: verify no plugin omissions
+        run: 'python3 cicd/plugincheck.py'
       - name: update version
         run: 'sed -i -e "s/{{VERSION}}/`git rev-parse HEAD`/" rocketbot_plugin_version/src/lib.rs'
       - name: run debug build
@@ -32,6 +34,8 @@ jobs:
         run: pacman -S --needed --noconfirm cargo git
       - name: check out repository code
         uses: actions/checkout@v2
+      - name: verify no plugin omissions
+        run: 'python3 cicd/plugincheck.py'
       - name: update version
         run: 'sed -i -e "s/{{VERSION}}/`git rev-parse HEAD`/" rocketbot_plugin_version/src/lib.rs'
       - name: run release build
