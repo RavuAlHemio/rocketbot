@@ -8,7 +8,7 @@ use std::sync::Arc;
 use std::time::Duration;
 
 use async_trait::async_trait;
-use chrono::{TimeZone, Utc};
+use chrono::{DateTime, TimeZone, Utc};
 use futures_util::{SinkExt, StreamExt};
 use hyper::StatusCode;
 use hyper::client::HttpConnector;
@@ -185,6 +185,7 @@ struct SharedConnectionState {
     my_user_id: RwLock<Option<String>>,
     max_message_length: RwLock<Option<usize>>,
     username_to_initial_private_message: Mutex<HashMap<String, String>>,
+    new_timer_sender: mpsc::UnboundedSender<(DateTime<Utc>, serde_json::Value)>,
 }
 impl SharedConnectionState {
     fn new(
@@ -200,6 +201,7 @@ impl SharedConnectionState {
         my_user_id: RwLock<Option<String>>,
         max_message_length: RwLock<Option<usize>>,
         username_to_initial_private_message: Mutex<HashMap<String, String>>,
+        new_timer_sender: mpsc::UnboundedSender<(DateTime<Utc>, serde_json::Value)>,
     ) -> Self {
         Self {
             outgoing_sender,
@@ -214,6 +216,7 @@ impl SharedConnectionState {
             my_user_id,
             max_message_length,
             username_to_initial_private_message,
+            new_timer_sender,
         }
     }
 }
@@ -223,17 +226,23 @@ struct ConnectionState {
     shared_state: Arc<SharedConnectionState>,
     outgoing_receiver: mpsc::UnboundedReceiver<serde_json::Value>,
     my_auth_token: Option<String>,
+    timers: Vec<(DateTime<Utc>, serde_json::Value)>,
+    new_timer_receiver: mpsc::UnboundedReceiver<(DateTime<Utc>, serde_json::Value)>,
 }
 impl ConnectionState {
     fn new(
         shared_state: Arc<SharedConnectionState>,
         outgoing_receiver: mpsc::UnboundedReceiver<serde_json::Value>,
         my_auth_token: Option<String>,
+        timers: Vec<(DateTime<Utc>, serde_json::Value)>,
+        new_timer_receiver: mpsc::UnboundedReceiver<(DateTime<Utc>, serde_json::Value)>,
     ) -> ConnectionState {
         ConnectionState {
             shared_state,
             outgoing_receiver,
             my_auth_token,
+            timers,
+            new_timer_receiver,
         }
     }
 }
@@ -515,6 +524,12 @@ impl RocketBotInterface for ServerConnection {
             .read().await;
         *mml_guard
     }
+
+    async fn register_timer(&self, timestamp: DateTime<Utc>, custom_data: serde_json::Value) {
+        if let Err(e) = self.shared_state.new_timer_sender.send((timestamp, custom_data)) {
+            error!("error registering new timer: {}", e);
+        }
+    }
 }
 
 
@@ -572,6 +587,7 @@ pub(crate) async fn connect() -> Arc<ServerConnection> {
         "SharedConnectionState::username_to_initial_private_message",
         HashMap::new(),
     );
+    let (new_timer_sender, new_timer_receiver) = mpsc::unbounded_channel();
 
     let shared_state = Arc::new(SharedConnectionState::new(
         outgoing_sender,
@@ -586,6 +602,7 @@ pub(crate) async fn connect() -> Arc<ServerConnection> {
         my_user_id,
         max_message_length,
         username_to_initial_private_message,
+        new_timer_sender,
     ));
 
     let conn = Arc::new(ServerConnection::new(
@@ -595,6 +612,8 @@ pub(crate) async fn connect() -> Arc<ServerConnection> {
         shared_state,
         outgoing_receiver,
         None,
+        Vec::new(),
+        new_timer_receiver,
     );
     let second_conn: Arc<ServerConnection> = Arc::clone(&conn);
     let generic_conn: Arc<dyn RocketBotInterface> = second_conn;
@@ -667,6 +686,18 @@ async fn run_connection(mut state: &mut ConnectionState) -> Result<(), WebSocket
         .expect("failed to enqueue connect message");
 
     loop {
+        // calculate the duration to the next timer
+        let (next_timer_dur, next_timer_info) = if let Some((timestamp, info)) = state.timers.get(0) {
+            let now = Utc::now();
+            // saturate down to zero if the timestamp has already elapsed
+            let duration = timestamp.signed_duration_since(now)
+                .to_std()
+                .unwrap_or(Duration::from_secs(0));
+            (duration, info.clone())
+        } else {
+            (Duration::MAX, serde_json::Value::Null)
+        };
+
         tokio::select! {
             _ = state.shared_state.exit_notify.notified() => {
                 debug!("graceful exit requested");
@@ -714,7 +745,29 @@ async fn run_connection(mut state: &mut ConnectionState) -> Result<(), WebSocket
                 if let Err(e) = stream.send(msg).await {
                     return Err(WebSocketError::SendingMessage(e));
                 }
-            }
+            },
+            _ = tokio::time::sleep(next_timer_dur), if next_timer_dur != Duration::MAX => {
+                debug!("timer elapsed: {:?}", next_timer_info);
+
+                // deliver the timer
+                deliver_timer(&next_timer_info, &state).await;
+            },
+            new_timer_opt = state.new_timer_receiver.recv() => {
+                if let Some(new_timer) = new_timer_opt {
+                    debug!("new timer received: at {} with info {:?}", new_timer.0, new_timer.1);
+
+                    // ensure vector sorted ascending by timestamp
+                    state.timers.push(new_timer);
+                    state.timers.sort_unstable_by_key(|t| t.0);
+
+                    // on the next loop; the freshest timer will be chosen
+                } else {
+                    error!("lost the timer channel!");
+
+                    // break out, lest we loop infinitely, receiving None every time
+                    break;
+                }
+            },
         };
     }
 
@@ -1242,6 +1295,15 @@ async fn handle_received(body: &serde_json::Value, mut state: &mut ConnectionSta
                 ipm_guard.remove(succ);
             }
         }
+    }
+}
+
+async fn deliver_timer(info: &serde_json::Value, state: &ConnectionState) {
+    let plugins = state.shared_state.plugins
+        .read().await;
+    debug!("distributing timer {:?} among plugins", info);
+    for plugin in plugins.iter() {
+        plugin.timer_elapsed(info).await;
     }
 }
 

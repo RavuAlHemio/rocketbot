@@ -2,7 +2,8 @@ use std::collections::{HashMap, HashSet};
 use std::sync::Weak;
 
 use async_trait::async_trait;
-use serde_json::Value;
+use chrono::{DateTime, Utc};
+use serde_json;
 
 use crate::commands::{CommandConfiguration, CommandDefinition, CommandInstance};
 use crate::model::{Channel, ChannelMessage, PrivateConversation, PrivateMessage, User};
@@ -75,6 +76,10 @@ pub trait RocketBotInterface : Send + Sync {
 
     /// Returns the maximum message length on the current server, or `None` if it is not known.
     async fn get_maximum_message_length(&self) -> Option<usize>;
+
+    /// Registers a timer with the bot. Once the given timestamp is reached, a call to
+    /// `RocketBotPlugin::timer_elapsed` with the contents of `custom_data` is made.
+    async fn register_timer(&self, timestamp: DateTime<Utc>, custom_data: serde_json::Value);
 }
 
 
@@ -83,7 +88,7 @@ pub trait RocketBotInterface : Send + Sync {
 pub trait RocketBotPlugin: Send + Sync {
     /// Instantiates this plugin and provides it with an interface to communicate with the bot (and
     /// the server to which it is connected).
-    async fn new(interface: Weak<dyn RocketBotInterface>, config: Value) -> Self where Self: Sized;
+    async fn new(interface: Weak<dyn RocketBotInterface>, config: serde_json::Value) -> Self where Self: Sized;
 
     /// Returns the plugin's name.
     async fn plugin_name(&self) -> String;
@@ -141,4 +146,8 @@ pub trait RocketBotPlugin: Send + Sync {
     /// Called if detailed help information is requested for a given command. Should return `None`
     /// if the plugin doesn't provide this command.
     async fn get_command_help(&self, _command_name: &str) -> Option<String> { None }
+
+    /// Called when a timer, registered previously using `RocketBotInterface::register_timer`,
+    /// elapses.
+    async fn timer_elapsed(&self, _custom_data: &serde_json::Value) {}
 }
