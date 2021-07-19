@@ -31,7 +31,7 @@ jobs:
       - name: update packages
         run: pacman -Syu --noconfirm
       - name: install packages
-        run: pacman -S --needed --noconfirm cargo git
+        run: pacman -S --needed --noconfirm cargo git python-toml
       - name: check out repository code
         uses: actions/checkout@v2
       - name: verify no plugin omissions
