@@ -44,6 +44,8 @@ pub(crate) async fn load_plugins(iface: Weak<dyn RocketBotInterface>) -> Vec<Box
                 Box::new(rocketbot_plugin_help::HelpPlugin::new(iface_weak, inner_config).await)
             } else if plugin_config.name == "logger" {
                 Box::new(rocketbot_plugin_logger::LoggerPlugin::new(iface_weak, inner_config).await)
+            } else if plugin_config.name == "new_year" {
+                Box::new(rocketbot_plugin_new_year::NewYearPlugin::new(iface_weak, inner_config).await)
             } else if plugin_config.name == "quotes" {
                 Box::new(rocketbot_plugin_quotes::QuotesPlugin::new(iface_weak, inner_config).await)
             } else if plugin_config.name == "sed" {
