@@ -32,6 +32,17 @@ def main():
     for plug_full_name in glob.glob(f"{PREFIX}*"):
         plug_name = plug_full_name[len(PREFIX):]
 
+        try:
+            with open(os.path.join(plug_full_name, "Cargo.toml"), "r", encoding="utf-8") as f:
+                plugin_cargo_config = toml.load(f)
+        except FileNotFoundError:
+            print(f"{plug_name!r} does not have a Cargo.toml")
+            bad = True
+
+        if plugin_cargo_config["package"]["name"] != plug_full_name:
+            print(f"{plug_name!r} has an incorrect name (expected {plug_full_name!r}, got {plugin_cargo_config['package']['name']!r}")
+            bad = True
+
         # ensure it is part of the workspace
         if plug_full_name not in top_cargo_config["workspace"]["members"]:
             print(f"{plug_name!r} is missing in the top-level Cargo.toml")
