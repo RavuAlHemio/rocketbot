@@ -41,7 +41,7 @@ def main():
         if plug_def is None:
             print(f"{plug_name!r} is missing as a dependency in the rocketbot Cargo.toml")
             bad = True
-        if plug_def.get("path", "") != f"../{plug_full_name}":
+        elif plug_def.get("path", "") != f"../{plug_full_name}":
             print(f"{plug_name!r} has an invalid path in the rocketbot Cargo.toml")
             bad = True
 
