@@ -806,6 +806,9 @@ async fn run_connection(mut state: &mut ConnectionState) -> Result<(), WebSocket
 
                 // deliver the timer
                 deliver_timer(&next_timer_info, &state).await;
+
+                // remove it
+                state.timers.remove(0);
             },
             new_timer_opt = state.new_timer_receiver.recv() => {
                 if let Some(new_timer) = new_timer_opt {
