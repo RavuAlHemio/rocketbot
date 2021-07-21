@@ -184,3 +184,19 @@ impl PrivateMessage {
         }
     }
 }
+
+#[derive(Clone, Copy, Debug, Eq, Hash, PartialEq)]
+pub enum ChannelTextType {
+    Description,
+    Announcement,
+    Topic,
+}
+impl AsRef<str> for ChannelTextType {
+    fn as_ref(&self) -> &str {
+        match self {
+            ChannelTextType::Description => "description",
+            ChannelTextType::Announcement => "announcement",
+            ChannelTextType::Topic => "topic",
+        }
+    }
+}

@@ -21,7 +21,8 @@ use rocketbot_interface::JsonValueExtensions;
 use rocketbot_interface::commands::{CommandConfiguration, CommandDefinition};
 use rocketbot_interface::interfaces::{RocketBotInterface, RocketBotPlugin};
 use rocketbot_interface::model::{
-    Channel, ChannelMessage, ChannelType, EditInfo, Message, PrivateConversation, PrivateMessage, User,
+    Channel, ChannelMessage, ChannelTextType, ChannelType, EditInfo, Message, PrivateConversation,
+    PrivateMessage, User,
 };
 use rocketbot_interface::sync::{Mutex, RwLock};
 use serde_json;
@@ -186,6 +187,7 @@ struct SharedConnectionState {
     max_message_length: RwLock<Option<usize>>,
     username_to_initial_private_message: Mutex<HashMap<String, String>>,
     new_timer_sender: mpsc::UnboundedSender<(DateTime<Utc>, serde_json::Value)>,
+    channel_id_to_texts: RwLock<HashMap<(String, ChannelTextType), String>>,
 }
 impl SharedConnectionState {
     fn new(
@@ -202,6 +204,7 @@ impl SharedConnectionState {
         max_message_length: RwLock<Option<usize>>,
         username_to_initial_private_message: Mutex<HashMap<String, String>>,
         new_timer_sender: mpsc::UnboundedSender<(DateTime<Utc>, serde_json::Value)>,
+        channel_id_to_texts: RwLock<HashMap<(String, ChannelTextType), String>>,
     ) -> Self {
         Self {
             outgoing_sender,
@@ -217,6 +220,7 @@ impl SharedConnectionState {
             max_message_length,
             username_to_initial_private_message,
             new_timer_sender,
+            channel_id_to_texts,
         }
     }
 }
@@ -530,6 +534,52 @@ impl RocketBotInterface for ServerConnection {
             error!("error registering new timer: {}", e);
         }
     }
+
+    async fn get_channel_text(&self, channel_name: &str, text_type: ChannelTextType) -> Option<String> {
+        let channel_id = {
+            let channel_guard = self.shared_state.subscribed_channels
+                .read().await;
+            if let Some(channel) = channel_guard.get_channel_by_name(channel_name) {
+                channel.id.clone()
+            } else {
+                return None;
+            }
+        };
+
+        let text_guard = self.shared_state.channel_id_to_texts
+            .read().await;
+        text_guard.get(&(channel_id, text_type))
+            .map(|s| s.clone())
+    }
+
+    async fn set_channel_text(&self, channel_name: &str, text_type: ChannelTextType, text: &str) {
+        let channel_id = {
+            let channel_guard = self.shared_state.subscribed_channels
+                .read().await;
+            if let Some(channel) = channel_guard.get_channel_by_name(channel_name) {
+                channel.id.clone()
+            } else {
+                return;
+            }
+        };
+        let realtime_api_text_type = match text_type {
+            ChannelTextType::Announcement => "roomAnnouncement",
+            ChannelTextType::Description => "roomDescription",
+            ChannelTextType::Topic => "roomTopic",
+        };
+        let message_body = serde_json::json!({
+            "msg": "method",
+            "method": "saveRoomSettings",
+            "id": format!("set_text_{}", channel_id),
+            "params": [
+                channel_id,
+                realtime_api_text_type,
+                text,
+            ],
+        });
+        self.shared_state.outgoing_sender.send(message_body)
+            .expect("failed to enqueue change-channel-text message");
+    }
 }
 
 
@@ -588,6 +638,10 @@ pub(crate) async fn connect() -> Arc<ServerConnection> {
         HashMap::new(),
     );
     let (new_timer_sender, new_timer_receiver) = mpsc::unbounded_channel();
+    let channel_id_to_texts = RwLock::new(
+        "SharedConnectionState::channel_id_to_texts",
+        HashMap::new(),
+    );
 
     let shared_state = Arc::new(SharedConnectionState::new(
         outgoing_sender,
@@ -603,6 +657,7 @@ pub(crate) async fn connect() -> Arc<ServerConnection> {
         max_message_length,
         username_to_initial_private_message,
         new_timer_sender,
+        channel_id_to_texts,
     ));
 
     let conn = Arc::new(ServerConnection::new(
@@ -1054,6 +1109,20 @@ async fn handle_received(body: &serde_json::Value, mut state: &mut ConnectionSta
                     channel_type,
                 );
 
+                {
+                    let mut room_text_guard = state.shared_state.channel_id_to_texts
+                        .write().await;
+                    if let Some(announcement) = update_room["announcement"].as_str() {
+                        room_text_guard.insert((room_id.to_owned(), ChannelTextType::Announcement), announcement.to_owned());
+                    }
+                    if let Some(description) = update_room["description"].as_str() {
+                        room_text_guard.insert((room_id.to_owned(), ChannelTextType::Description), description.to_owned());
+                    }
+                    if let Some(topic) = update_room["topic"].as_str() {
+                        room_text_guard.insert((room_id.to_owned(), ChannelTextType::Topic), topic.to_owned());
+                    }
+                }
+
                 channel_joined(&mut state, channel).await;
             } else if update_room["t"] == "d" {
                 let participant_usernames = update_room["usernames"].members_or_empty();
@@ -1128,6 +1197,21 @@ async fn handle_received(body: &serde_json::Value, mut state: &mut ConnectionSta
                     // add user/remove user
                     // update user lists
                     obtain_users_in_room(&mut state, &channel).await;
+                } else if message_json["t"] == "room_changed_announcement" || message_json["t"] == "room_changed_description" || message_json["t"] == "room_changed_topic" {
+                    let text_type = match message_json["t"].as_str().expect("message type is not a string even though it is") {
+                        "room_changed_announcement" => ChannelTextType::Announcement,
+                        "room_changed_description" => ChannelTextType::Description,
+                        "room_changed_topic" => ChannelTextType::Topic,
+                        _ => unreachable!(),
+                    };
+                    let mut text_guard = state.shared_state.channel_id_to_texts
+                        .write().await;
+                    if let Some(msg) = message_json["msg"].as_str() {
+                        text_guard.insert((channel.id.clone(), text_type), msg.to_owned());
+                    } else {
+                        text_guard.remove(&(channel.id.clone(), text_type));
+                    }
+                    continue;
                 }
 
                 let message = match message_from_json(message_json) {

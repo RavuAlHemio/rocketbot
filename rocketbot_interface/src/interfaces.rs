@@ -6,7 +6,9 @@ use chrono::{DateTime, Utc};
 use serde_json;
 
 use crate::commands::{CommandConfiguration, CommandDefinition, CommandInstance};
-use crate::model::{Channel, ChannelMessage, PrivateConversation, PrivateMessage, User};
+use crate::model::{
+    Channel, ChannelMessage, ChannelTextType, PrivateConversation, PrivateMessage, User,
+};
 
 
 /// Trait to be implemented by a RocketBot connection.
@@ -80,6 +82,12 @@ pub trait RocketBotInterface : Send + Sync {
     /// Registers a timer with the bot. Once the given timestamp is reached, a call to
     /// `RocketBotPlugin::timer_elapsed` with the contents of `custom_data` is made.
     async fn register_timer(&self, timestamp: DateTime<Utc>, custom_data: serde_json::Value);
+
+    /// Obtains the given textual property of the given channel.
+    async fn get_channel_text(&self, channel_name: &str, text_type: ChannelTextType) -> Option<String>;
+
+    /// Sets the given textual property of the given channel to the given value.
+    async fn set_channel_text(&self, channel_name: &str, text_type: ChannelTextType, text: &str);
 }
 
 
