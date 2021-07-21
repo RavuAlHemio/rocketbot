@@ -2,6 +2,7 @@ use std::sync::{Arc, Weak};
 
 use async_trait::async_trait;
 use chrono::{DateTime, TimeZone, Timelike, Utc};
+use log::debug;
 use regex::Regex;
 use rocketbot_interface::JsonValueExtensions;
 use rocketbot_interface::interfaces::{RocketBotInterface, RocketBotPlugin};
@@ -40,6 +41,7 @@ async fn register_topic_timer(interface: Arc<dyn RocketBotInterface>, base_times
     if next_occurrence < now {
         next_occurrence = next_occurrence + chrono::Duration::days(1);
     }
+    debug!("next occurrence of timer with index {}: {:?}", index, next_occurrence);
     let custom_data = serde_json::json!(["topic_timer", index]);
     interface.register_timer(next_occurrence, custom_data).await;
 }
