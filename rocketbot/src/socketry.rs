@@ -1197,6 +1197,7 @@ async fn handle_received(body: &serde_json::Value, mut state: &mut ConnectionSta
                     // add user/remove user
                     // update user lists
                     obtain_users_in_room(&mut state, &channel).await;
+                    continue;
                 } else if message_json["t"] == "room_changed_announcement" || message_json["t"] == "room_changed_description" || message_json["t"] == "room_changed_topic" {
                     let text_type = match message_json["t"].as_str().expect("message type is not a string even though it is") {
                         "room_changed_announcement" => ChannelTextType::Announcement,
