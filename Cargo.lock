@@ -1157,6 +1157,7 @@ dependencies = [
  "rocketbot_plugin_sed",
  "rocketbot_plugin_text_commands",
  "rocketbot_plugin_thanks",
+ "rocketbot_plugin_topic_timer",
  "rocketbot_plugin_vaccine",
  "rocketbot_plugin_version",
  "rocketbot_plugin_weather",
@@ -1391,6 +1392,18 @@ dependencies = [
  "serde_json",
  "tokio",
  "tokio-postgres",
+]
+
+[[package]]
+name = "rocketbot_plugin_topic_timer"
+version = "0.1.0"
+dependencies = [
+ "async-trait",
+ "chrono",
+ "log",
+ "regex",
+ "rocketbot_interface",
+ "serde_json",
 ]
 
 [[package]]

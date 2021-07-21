@@ -54,6 +54,8 @@ pub(crate) async fn load_plugins(iface: Weak<dyn RocketBotInterface>) -> Vec<Box
                 Box::new(rocketbot_plugin_text_commands::TextCommandsPlugin::new(iface_weak, inner_config).await)
             } else if plugin_config.name == "thanks" {
                 Box::new(rocketbot_plugin_thanks::ThanksPlugin::new(iface_weak, inner_config).await)
+            } else if plugin_config.name == "topic_timer" {
+                Box::new(rocketbot_plugin_topic_timer::TopicTimerPlugin::new(iface_weak, inner_config).await)
             } else if plugin_config.name == "vaccine" {
                 Box::new(rocketbot_plugin_vaccine::VaccinePlugin::new(iface_weak, inner_config).await)
             } else if plugin_config.name == "version" {
