@@ -103,7 +103,7 @@ impl ChannelDatabase {
         self.channel_by_id.get(id)
     }
 
-    fn get_by_name(&self, name: &str) -> Option<&Channel> {
+    fn get_channel_by_name(&self, name: &str) -> Option<&Channel> {
         self.channel_by_name.get(name)
     }
 
@@ -281,7 +281,7 @@ impl RocketBotInterface for ServerConnection {
         let channel_opt = {
             let cdb_guard = self.shared_state.subscribed_channels
                 .read().await;
-            cdb_guard.get_by_name(channel_name).map(|c| c.clone())
+            cdb_guard.get_channel_by_name(channel_name).map(|c| c.clone())
         };
         let channel = if let Some(c) = channel_opt {
             c
@@ -363,7 +363,7 @@ impl RocketBotInterface for ServerConnection {
     async fn obtain_users_in_channel(&self, channel_name: &str) -> Option<HashSet<User>> {
         let chan_guard = self.shared_state.subscribed_channels
             .read().await;
-        let chan = match chan_guard.get_by_name(channel_name) {
+        let chan = match chan_guard.get_channel_by_name(channel_name) {
             None => return None,
             Some(c) => c,
         };
