@@ -1118,6 +1118,14 @@ async fn handle_received(body: &serde_json::Value, mut state: &mut ConnectionSta
                 },
             };
 
+            // update last-message timestamp if it is newer than what we currently have
+            if let Some(last_seen_rocket) = update_room["lm"]["$date"].as_i64() {
+                let last_seen = rocketchat_timestamp_to_datetime(last_seen_rocket);
+                if state.last_seen_message_timestamp < last_seen {
+                    state.last_seen_message_timestamp = last_seen;
+                }
+            }
+
             // channel = "c", private channel = "p", direct = "d", omnichannel = "l"
             if update_room["t"] == "c" || update_room["t"] == "p" {
                 let channel_type: ChannelType = update_room["t"]
