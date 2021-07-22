@@ -232,6 +232,7 @@ struct ConnectionState {
     my_auth_token: Option<String>,
     timers: Vec<(DateTime<Utc>, serde_json::Value)>,
     new_timer_receiver: mpsc::UnboundedReceiver<(DateTime<Utc>, serde_json::Value)>,
+    last_seen_message_timestamp: DateTime<Utc>,
 }
 impl ConnectionState {
     fn new(
@@ -240,6 +241,7 @@ impl ConnectionState {
         my_auth_token: Option<String>,
         timers: Vec<(DateTime<Utc>, serde_json::Value)>,
         new_timer_receiver: mpsc::UnboundedReceiver<(DateTime<Utc>, serde_json::Value)>,
+        last_seen_message_timestamp: DateTime<Utc>,
     ) -> ConnectionState {
         ConnectionState {
             shared_state,
@@ -247,6 +249,7 @@ impl ConnectionState {
             my_auth_token,
             timers,
             new_timer_receiver,
+            last_seen_message_timestamp,
         }
     }
 }
@@ -669,6 +672,9 @@ pub(crate) async fn connect() -> Arc<ServerConnection> {
         None,
         Vec::new(),
         new_timer_receiver,
+        Utc
+            .ymd(1969, 1, 1)
+            .and_hms(0, 0, 0),
     );
     let second_conn: Arc<ServerConnection> = Arc::clone(&conn);
     let generic_conn: Arc<dyn RocketBotInterface> = second_conn;
@@ -982,6 +988,26 @@ async fn channel_left(state: &mut ConnectionState, channel_id: &str) {
         .expect("failed to enqueue unsubscription message");
 }
 
+fn message_is_current(state: &mut ConnectionState, message: &Message) -> bool {
+    let mut message_timestamp = message.timestamp;
+    if let Some(ei) = &message.edit_info {
+        if message_timestamp < ei.timestamp {
+            message_timestamp = ei.timestamp;
+        }
+    } else if message_timestamp <= state.last_seen_message_timestamp {
+        // message is not edited but it's old => assume it has been updated; don't deliver it
+        debug!(
+            "message timestamp {} <= last-seen timestamp {} -> not delivering message {:?}",
+            message_timestamp, state.last_seen_message_timestamp, message.id,
+        );
+        return false;
+    }
+
+    state.last_seen_message_timestamp = message_timestamp;
+
+    true
+}
+
 async fn handle_received(body: &serde_json::Value, mut state: &mut ConnectionState) {
     if body["msg"] == "ping" {
         // answer with a pong
@@ -1230,6 +1256,10 @@ async fn handle_received(body: &serde_json::Value, mut state: &mut ConnectionSta
                     },
                 };
 
+                if !message_is_current(&mut state, &message) {
+                    continue;
+                }
+
                 let channel_message = ChannelMessage::new(
                     message,
                     channel,
@@ -1263,6 +1293,10 @@ async fn handle_received(body: &serde_json::Value, mut state: &mut ConnectionSta
                         continue;
                     },
                 };
+
+                if !message_is_current(&mut state, &message) {
+                    continue;
+                }
 
                 let private_message = PrivateMessage::new(
                     message,
