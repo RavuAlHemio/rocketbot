@@ -851,8 +851,8 @@ async fn do_send_any_message(shared_state: &SharedConnectionState, target_id: &s
         ],
     });
     if let Some(impersonation) = message.impersonation {
-        message_body["params"].insert("alias".to_owned(), serde_json::Value::String(impersonation.nickname));
-        message_body["params"].insert("avatar".to_owned(), serde_json::Value::String(impersonation.avatar_url));
+        message_body["params"][0].insert("alias".to_owned(), serde_json::Value::String(impersonation.nickname));
+        message_body["params"][0].insert("avatar".to_owned(), serde_json::Value::String(impersonation.avatar_url));
     }
     shared_state.outgoing_sender.send(message_body)
         .expect("failed to enqueue channel message");
