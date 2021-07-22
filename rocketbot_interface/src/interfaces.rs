@@ -7,7 +7,8 @@ use serde_json;
 
 use crate::commands::{CommandConfiguration, CommandDefinition, CommandInstance};
 use crate::model::{
-    Channel, ChannelMessage, ChannelTextType, PrivateConversation, PrivateMessage, User,
+    Channel, ChannelMessage, ChannelTextType, OutgoingMessage, PrivateConversation, PrivateMessage,
+    User,
 };
 
 
@@ -15,13 +16,31 @@ use crate::model::{
 #[async_trait]
 pub trait RocketBotInterface : Send + Sync {
     /// Sends a textual message to a channel.
-    async fn send_channel_message(&self, channel_name: &str, message: &str);
+    async fn send_channel_message(&self, channel_name: &str, message: &str) {
+        let message_object = OutgoingMessage::new(message.to_owned(), None);
+        self.send_channel_message_advanced(channel_name, message_object).await
+    }
 
     /// Sends a textual message to a private conversation.
-    async fn send_private_message(&self, conversation_id: &str, message: &str);
+    async fn send_private_message(&self, conversation_id: &str, message: &str) {
+        let message_object = OutgoingMessage::new(message.to_owned(), None);
+        self.send_private_message_advanced(conversation_id, message_object).await
+    }
 
     /// Sends a textual message to a person.
-    async fn send_private_message_to_user(&self, username: &str, message: &str);
+    async fn send_private_message_to_user(&self, username: &str, message: &str) {
+        let message_object = OutgoingMessage::new(message.to_owned(), None);
+        self.send_private_message_to_user_advanced(username, message_object).await
+    }
+
+    /// Sends a textual message to a channel, allowing for advanced options.
+    async fn send_channel_message_advanced(&self, channel_name: &str, message: OutgoingMessage);
+
+    /// Sends a textual message to a private conversation, allowing for advanced options.
+    async fn send_private_message_advanced(&self, conversation_id: &str, message: OutgoingMessage);
+
+    /// Sends a textual message to a person, allowing for advanced options.
+    async fn send_private_message_to_user_advanced(&self, username: &str, message: OutgoingMessage);
 
     /// Attempts to resolve the username-like value to an actual username on the server. Potentially
     /// enlists the assistance of relevant plugins.
@@ -113,7 +132,7 @@ pub trait RocketBotPlugin: Send + Sync {
 
     /// Called if a textual message is being sent to a channel. The plugin can return `false` to
     /// prevent the message from being sent.
-    async fn outgoing_channel_message(&self, _channel: &Channel, _message: &str) -> bool { true }
+    async fn outgoing_channel_message(&self, _channel: &Channel, _message: &OutgoingMessage) -> bool { true }
 
     /// Called if a command has been issued in a channel.
     async fn channel_command(&self, _channel_message: &ChannelMessage, _command: &CommandInstance) {}
@@ -130,7 +149,7 @@ pub trait RocketBotPlugin: Send + Sync {
 
     /// Called if a textual private message is being sent. The plugin can return `false` to prevent
     /// the message from being sent.
-    async fn outgoing_private_message(&self, _conversation: &PrivateConversation, _message: &str) -> bool { true }
+    async fn outgoing_private_message(&self, _conversation: &PrivateConversation, _message: &OutgoingMessage) -> bool { true }
 
     /// Called if a command has been issued in a private message.
     async fn private_command(&self, _private_message: &PrivateMessage, _command: &CommandInstance) {}

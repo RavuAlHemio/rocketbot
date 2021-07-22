@@ -200,3 +200,39 @@ impl AsRef<str> for ChannelTextType {
         }
     }
 }
+
+
+#[derive(Clone, Debug, Eq, Hash, PartialEq)]
+pub struct ImpersonationInfo {
+    pub avatar_url: String,
+    pub nickname: String,
+}
+impl ImpersonationInfo {
+    pub fn new(
+        avatar_url: String,
+        nickname: String,
+    ) -> Self {
+        Self {
+            avatar_url,
+            nickname,
+        }
+    }
+}
+
+
+#[derive(Clone, Debug, Eq, Hash, PartialEq)]
+pub struct OutgoingMessage {
+    pub body: String,
+    pub impersonation: Option<ImpersonationInfo>,
+}
+impl OutgoingMessage {
+    pub fn new(
+        body: String,
+        impersonation: Option<ImpersonationInfo>,
+    ) -> Self {
+        Self {
+            body,
+            impersonation,
+        }
+    }
+}

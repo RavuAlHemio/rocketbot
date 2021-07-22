@@ -48,6 +48,8 @@ pub trait JsonValueExtensions {
             None => [].iter(),
         }
     }
+
+    fn insert(&mut self, key: String, val: serde_json::Value) -> Option<serde_json::Value>;
 }
 impl JsonValueExtensions for serde_json::Value {
     uint_conv!(as_u8, u8);
@@ -71,6 +73,14 @@ impl JsonValueExtensions for serde_json::Value {
 
     fn as_str_or_empty(&self) -> &str {
         self.as_str().unwrap_or("")
+    }
+
+    fn insert(&mut self, key: String, val: serde_json::Value) -> Option<serde_json::Value> {
+        if let serde_json::Value::Object(map) = self {
+            map.insert(key, val)
+        } else {
+            panic!("this is not an object value")
+        }
     }
 }
 

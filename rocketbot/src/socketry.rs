@@ -21,8 +21,8 @@ use rocketbot_interface::JsonValueExtensions;
 use rocketbot_interface::commands::{CommandConfiguration, CommandDefinition};
 use rocketbot_interface::interfaces::{RocketBotInterface, RocketBotPlugin};
 use rocketbot_interface::model::{
-    Channel, ChannelMessage, ChannelTextType, ChannelType, EditInfo, Message, PrivateConversation,
-    PrivateMessage, User,
+    Channel, ChannelMessage, ChannelTextType, ChannelType, EditInfo, Message, OutgoingMessage,
+    PrivateConversation, PrivateMessage, User,
 };
 use rocketbot_interface::sync::{Mutex, RwLock};
 use serde_json;
@@ -185,7 +185,7 @@ struct SharedConnectionState {
     http_client: hyper::Client<HttpsConnector<HttpConnector>>,
     my_user_id: RwLock<Option<String>>,
     max_message_length: RwLock<Option<usize>>,
-    username_to_initial_private_message: Mutex<HashMap<String, String>>,
+    username_to_initial_private_message: Mutex<HashMap<String, OutgoingMessage>>,
     new_timer_sender: mpsc::UnboundedSender<(DateTime<Utc>, serde_json::Value)>,
     channel_id_to_texts: RwLock<HashMap<(String, ChannelTextType), String>>,
 }
@@ -202,7 +202,7 @@ impl SharedConnectionState {
         http_client: hyper::Client<HttpsConnector<HttpConnector>>,
         my_user_id: RwLock<Option<String>>,
         max_message_length: RwLock<Option<usize>>,
-        username_to_initial_private_message: Mutex<HashMap<String, String>>,
+        username_to_initial_private_message: Mutex<HashMap<String, OutgoingMessage>>,
         new_timer_sender: mpsc::UnboundedSender<(DateTime<Utc>, serde_json::Value)>,
         channel_id_to_texts: RwLock<HashMap<(String, ChannelTextType), String>>,
     ) -> Self {
@@ -281,7 +281,7 @@ impl Clone for ServerConnection {
 }
 #[async_trait]
 impl RocketBotInterface for ServerConnection {
-    async fn send_channel_message(&self, channel_name: &str, message: &str) {
+    async fn send_channel_message_advanced(&self, channel_name: &str, message: OutgoingMessage) {
         let channel_opt = {
             let cdb_guard = self.shared_state.subscribed_channels
                 .read().await;
@@ -297,7 +297,7 @@ impl RocketBotInterface for ServerConnection {
         do_send_channel_message(&self.shared_state, &channel, message).await;
     }
 
-    async fn send_private_message(&self, conversation_id: &str, message: &str) {
+    async fn send_private_message_advanced(&self, conversation_id: &str, message: OutgoingMessage) {
         let convo_opt = {
             let cdb_guard = self.shared_state.subscribed_channels
                 .read().await;
@@ -313,7 +313,7 @@ impl RocketBotInterface for ServerConnection {
         do_send_private_message(&self.shared_state, &convo, message).await;
     }
 
-    async fn send_private_message_to_user(&self, username: &str, message: &str) {
+    async fn send_private_message_to_user_advanced(&self, username: &str, message: OutgoingMessage) {
         // find the channel with that user
         let pc_opt = {
             let channel_guard = self.shared_state.subscribed_channels
@@ -332,7 +332,7 @@ impl RocketBotInterface for ServerConnection {
             {
                 let mut initpm_guard = self.shared_state.username_to_initial_private_message
                     .lock().await;
-                initpm_guard.insert(username.to_owned(), message.to_owned());
+                initpm_guard.insert(username.to_owned(), message);
             }
 
             // create a new PM channel
@@ -832,10 +832,10 @@ async fn run_connection(mut state: &mut ConnectionState) -> Result<(), WebSocket
     Ok(())
 }
 
-async fn do_send_any_message(shared_state: &SharedConnectionState, target_id: &str, message: &str) {
+async fn do_send_any_message(shared_state: &SharedConnectionState, target_id: &str, message: OutgoingMessage) {
     // make an ID for this message
     let message_id = generate_message_id(&shared_state.rng).await;
-    let message_body = serde_json::json!({
+    let mut message_body = serde_json::json!({
         "msg": "method",
         "method": "sendMessage",
         "id": SEND_MESSAGE_MESSAGE_ID,
@@ -843,25 +843,29 @@ async fn do_send_any_message(shared_state: &SharedConnectionState, target_id: &s
             {
                 "_id": message_id,
                 "rid": target_id,
-                "msg": message,
+                "msg": message.body,
                 "bot": {
                     "i": "RavuAlHemio/rocketbot",
                 },
             },
         ],
     });
+    if let Some(impersonation) = message.impersonation {
+        message_body["params"].insert("alias".to_owned(), serde_json::Value::String(impersonation.nickname));
+        message_body["params"].insert("avatar".to_owned(), serde_json::Value::String(impersonation.avatar_url));
+    }
     shared_state.outgoing_sender.send(message_body)
         .expect("failed to enqueue channel message");
 }
 
-async fn do_send_channel_message(shared_state: &SharedConnectionState, channel: &Channel, message: &str) {
+async fn do_send_channel_message(shared_state: &SharedConnectionState, channel: &Channel, message: OutgoingMessage) {
     {
         // let the plugins review and possibly block the message
         let plugins = shared_state.plugins
             .read().await;
         debug!("asking plugins to review a message");
         for plugin in plugins.iter() {
-            if !plugin.outgoing_channel_message(&channel, message).await {
+            if !plugin.outgoing_channel_message(&channel, &message).await {
                 return;
             }
         }
@@ -870,14 +874,14 @@ async fn do_send_channel_message(shared_state: &SharedConnectionState, channel: 
     do_send_any_message(shared_state, &channel.id, message).await
 }
 
-async fn do_send_private_message(shared_state: &SharedConnectionState, convo: &PrivateConversation, message: &str) {
+async fn do_send_private_message(shared_state: &SharedConnectionState, convo: &PrivateConversation, message: OutgoingMessage) {
     {
         // let the plugins review and possibly block the message
         let plugins = shared_state.plugins
             .read().await;
         debug!("asking plugins to review a message");
         for plugin in plugins.iter() {
-            if !plugin.outgoing_private_message(&convo, message).await {
+            if !plugin.outgoing_private_message(&convo, &message).await {
                 return;
             }
         }
@@ -1374,7 +1378,7 @@ async fn handle_received(body: &serde_json::Value, mut state: &mut ConnectionSta
                     .map(|cid| channel_guard.get_private_conversation_by_id(&cid))
                     .flatten();
                 if let Some(convo) = convo_opt {
-                    do_send_private_message(&state.shared_state, convo, initial_message).await;
+                    do_send_private_message(&state.shared_state, convo, initial_message.clone()).await;
                     successful_usernames.insert(username.to_owned());
                 }
             }
