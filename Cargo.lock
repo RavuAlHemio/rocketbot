@@ -1155,6 +1155,7 @@ dependencies = [
  "rocketbot_plugin_new_year",
  "rocketbot_plugin_quotes",
  "rocketbot_plugin_sed",
+ "rocketbot_plugin_sockpuppet",
  "rocketbot_plugin_text_commands",
  "rocketbot_plugin_thanks",
  "rocketbot_plugin_topic_timer",
@@ -1368,6 +1369,17 @@ dependencies = [
  "rocketbot_interface",
  "serde_json",
  "tokio",
+]
+
+[[package]]
+name = "rocketbot_plugin_sockpuppet"
+version = "0.1.0"
+dependencies = [
+ "async-trait",
+ "log",
+ "percent-encoding",
+ "rocketbot_interface",
+ "serde_json",
 ]
 
 [[package]]
