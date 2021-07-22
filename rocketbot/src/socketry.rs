@@ -17,7 +17,7 @@ use log::{debug, error, warn};
 use rand::{Rng, SeedableRng};
 use rand::distributions::{Distribution, Uniform};
 use rand::rngs::StdRng;
-use rocketbot_interface::JsonValueExtensions;
+use rocketbot_interface::{JsonValueExtensions, rocketchat_timestamp_to_datetime};
 use rocketbot_interface::commands::{CommandConfiguration, CommandDefinition};
 use rocketbot_interface::interfaces::{RocketBotInterface, RocketBotPlugin};
 use rocketbot_interface::model::{
@@ -1459,14 +1459,14 @@ fn message_from_json(message_json: &serde_json::Value) -> Option<Message> {
         },
     };
 
-    let timestamp_unix = match message_json["ts"]["$date"].as_i64() {
+    let timestamp_rocket = match message_json["ts"]["$date"].as_i64() {
         Some(ts) => ts,
         None => {
             error!("message is missing timestamp; skipping");
             return None;
         },
     };
-    let timestamp = Utc.timestamp(timestamp_unix, 0);
+    let timestamp = rocketchat_timestamp_to_datetime(timestamp_rocket);
 
     let u_id = match message_json["u"]["_id"].as_str() {
         Some(v) => v,
@@ -1490,14 +1490,14 @@ fn message_from_json(message_json: &serde_json::Value) -> Option<Message> {
         // message has been edited
 
         // when?
-        let edit_timestamp_unix = match message_json["editedAt"]["$date"].as_i64() {
+        let edit_timestamp_rocket = match message_json["editedAt"]["$date"].as_i64() {
             Some(ts) => ts,
             None => {
                 error!("edited message is missing timestamp; skipping");
                 return None;
             }
         };
-        let edit_timestamp = Utc.timestamp(edit_timestamp_unix, 0);
+        let edit_timestamp = rocketchat_timestamp_to_datetime(edit_timestamp_rocket);
 
         let editor_id = match message_json["editedBy"]["_id"].as_str() {
             Some(v) => v,

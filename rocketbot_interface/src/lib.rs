@@ -9,6 +9,7 @@ pub mod sync;
 use std::convert::TryInto;
 use std::slice;
 
+use chrono::{DateTime, TimeZone, Utc};
 use once_cell::sync::Lazy;
 use serde_json;
 
@@ -115,4 +116,9 @@ pub fn is_sorted_no_dupes<T: Ord, I: Iterator<Item = T>>(mut iterator: I) -> boo
     }
 
     true
+}
+
+pub fn rocketchat_timestamp_to_datetime(timestamp: i64) -> DateTime<Utc> {
+    let timestamp_nsecs: u32 = ((timestamp % 1_000) * 1_000_000).try_into().unwrap();
+    Utc.timestamp(timestamp / 1_000, timestamp_nsecs)
 }
