@@ -2,7 +2,6 @@ use std::collections::{HashMap, HashSet};
 use std::sync::Weak;
 
 use async_trait::async_trait;
-use percent_encoding::{percent_encode, NON_ALPHANUMERIC};
 use rocketbot_interface::JsonValueExtensions;
 use rocketbot_interface::commands::{CommandDefinition, CommandInstance, CommandValueType};
 use rocketbot_interface::interfaces::{RocketBotInterface, RocketBotPlugin};
@@ -78,10 +77,9 @@ impl RocketBotPlugin for SockpuppetPlugin {
                     .filter(|u| u.username == imp_username)
                     .nth(0);
                 if let Some(target_user) = target_user_opt {
-                    let avatar_frag = percent_encode(&target_user.username.as_bytes(), NON_ALPHANUMERIC);
                     Some(ImpersonationInfo::new(
-                        format!("/avatar/{}", avatar_frag),
-                        target_user.nickname_or_username().to_owned(),
+                        format!("/avatar/{}", target_user.username),
+                        target_user.username.clone(),
                     ))
                 } else {
                     None
