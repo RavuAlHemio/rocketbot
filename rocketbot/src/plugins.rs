@@ -66,6 +66,15 @@ pub(crate) async fn load_plugins(iface: Weak<dyn RocketBotInterface>) -> Vec<Box
                 panic!("unknown plugin {}", plugin_config.name);
             };
 
+            let self_reported_name = plugin.plugin_name().await;
+            if !self_reported_name.starts_with(&plugin_config.name) {
+                panic!(
+                    "plugin {:?} claims to be {:?}; self-reported name must start with config name",
+                    plugin_config.name,
+                    self_reported_name,
+                );
+            }
+
             plugins.push(plugin);
         }
 
