@@ -47,7 +47,7 @@ impl WeatherPlugin {
             Some(i) => i,
         };
 
-        let show_loc_name = command.name == "weather";
+        let show_loc_name = command.name == "weather" || command.name == "wetter";
 
         let mut location: &str = &command.rest;
         if location.len() == 0 {
@@ -166,8 +166,12 @@ impl RocketBotPlugin for WeatherPlugin {
             "Displays the current weather as well as a forecast for the given location.".to_owned(),
         );
         let lweather_command = weather_command.copy_named("lweather");
+        let wetter_command = weather_command.copy_named("wetter");
+        let owetter_command = weather_command.copy_named("owetter");
         my_interface.register_channel_command(&weather_command).await;
         my_interface.register_channel_command(&lweather_command).await;
+        my_interface.register_channel_command(&wetter_command).await;
+        my_interface.register_channel_command(&owetter_command).await;
 
         let default_location = config["default_location"]
             .as_str().expect("default_location is missing or not a string")
@@ -213,13 +217,13 @@ impl RocketBotPlugin for WeatherPlugin {
     }
 
     async fn channel_command(&self, channel_message: &ChannelMessage, command: &CommandInstance) {
-        if command.name == "weather" || command.name == "lweather" {
+        if command.name == "weather" || command.name == "lweather" || command.name == "wetter" || command.name == "owetter" {
             self.handle_weather_command(channel_message, command).await
         }
     }
 
     async fn get_command_help(&self, command_name: &str) -> Option<String> {
-        if command_name == "weather" || command_name == "lweather" {
+        if command_name == "weather" || command_name == "lweather" || command_name == "wetter" || command_name == "owetter" {
             Some(include_str!("../help/weather.md").to_owned())
         } else {
             None
