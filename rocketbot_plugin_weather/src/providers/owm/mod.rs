@@ -58,9 +58,9 @@ fn format_duration(mut duration: Duration) -> String {
 
     let mut o_tempora_o_mores: Vec<(i64, String)> = vec![
         time_tuple(duration.num_days(), "day", "days"),
-        time_tuple(duration.num_hours(), "hour", "hours"),
-        time_tuple(duration.num_minutes(), "minute", "minutes"),
-        time_tuple(duration.num_seconds(), "second", "seconds"),
+        time_tuple(duration.num_hours() % 24, "hour", "hours"),
+        time_tuple(duration.num_minutes() % 60, "minute", "minutes"),
+        time_tuple(duration.num_seconds() % 60, "second", "seconds"),
     ];
 
     // remove the empty large units
