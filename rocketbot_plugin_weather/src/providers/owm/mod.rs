@@ -6,7 +6,7 @@ use std::collections::{BTreeSet, BTreeMap};
 use async_trait::async_trait;
 use bytes::Buf;
 use chrono::{Date, Datelike, DateTime, Duration, TimeZone, Utc, Weekday};
-use log::error;
+use log::{debug, error};
 use once_cell::sync::Lazy;
 use regex::Regex;
 use reqwest;
@@ -182,6 +182,8 @@ impl OpenWeatherMapProvider {
     }
 
     async fn get_and_populate_json<T: DeserializeOwned>(&self, uri: &str) -> Result<T, WeatherError> {
+        debug!("obtaining weather data from {}", uri);
+
         let client_guard = self.http_client
             .lock().await;
         let response = client_guard
