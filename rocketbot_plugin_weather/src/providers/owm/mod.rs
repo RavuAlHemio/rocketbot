@@ -154,6 +154,7 @@ impl ForecastSummary {
 pub(crate) struct OpenWeatherMapProvider {
     api_key: String,
     max_calls_per_minute: Option<usize>,
+    weather_station_look_back_minutes: i64,
     last_queries: Mutex<BTreeSet<DateTime<Utc>>>,
     http_client: Mutex<reqwest::Client>,
 }
@@ -205,11 +206,11 @@ impl OpenWeatherMapProvider {
 
     async fn get_weather_description_for_weather_station(&self, weather_station_id: &str) -> String {
         let now_time = Utc::now().timestamp();
-        let one_hour_ago_time = now_time - (60*60);
+        let lookback_time = now_time - (self.weather_station_look_back_minutes * 60);
 
         let weather_uri = format!(
             "https://api.openweathermap.org/data/3.0/measurements?station_id={}&type=m&limit=10&from={}&to={}&appid={}",
-            weather_station_id, one_hour_ago_time, now_time, self.api_key,
+            weather_station_id, lookback_time, now_time, self.api_key,
         );
         let mut readings: Vec<StationReading> = match self.get_and_populate_json(&weather_uri).await {
             Ok(cw) => cw,
@@ -263,6 +264,12 @@ impl WeatherProvider for OpenWeatherMapProvider {
                     .as_usize().expect("max_calls_per_minute is either missing or not representable as usize")
             )
         };
+        let weather_station_look_back_minutes = if config["weather_station_look_back_minutes"].is_null() {
+            8*60
+        } else {
+            config["weather_station_look_back_minutes"]
+                .as_i64().expect("weather_station_look_back_minutes is not representable as usize")
+        };
         let last_queries = Mutex::new(
             "OpenWeatherMapProvider::last_queries",
             BTreeSet::new(),
@@ -275,6 +282,7 @@ impl WeatherProvider for OpenWeatherMapProvider {
         OpenWeatherMapProvider {
             api_key,
             max_calls_per_minute,
+            weather_station_look_back_minutes,
             last_queries,
             http_client,
         }
