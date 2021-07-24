@@ -57,6 +57,7 @@ pub struct VaccinePlugin {
     interface: Weak<dyn RocketBotInterface>,
     default_target: String,
     vaccine_csv_uri: String,
+    max_age_h: i64,
 
     vaccine_database: RwLock<VaccineDatabase>,
 }
@@ -74,6 +75,8 @@ impl RocketBotPlugin for VaccinePlugin {
         let vaccine_csv_uri = config["vaccine_csv_uri"]
             .as_str().expect("vaccine_csv_uri missing or not a string")
             .to_owned();
+        let max_age_h = config["max_age_h"]
+            .as_i64().expect("max_age_h missing or not an i64");
 
         let vaccine_database = RwLock::new(
             "VaccinePlugin::vaccine_database",
@@ -100,6 +103,7 @@ impl RocketBotPlugin for VaccinePlugin {
             interface,
             default_target,
             vaccine_csv_uri,
+            max_age_h,
             vaccine_database,
         }
     }
@@ -131,7 +135,7 @@ impl RocketBotPlugin for VaccinePlugin {
                 .read().await;
             Utc::now() - db_guard.corona_timestamp
         };
-        if update_delta.num_days() > 0 {
+        if update_delta.num_hours() > self.max_age_h {
             match VaccineDatabase::new_from_url(&self.vaccine_csv_uri).await {
                 Ok(d) => {
                     let mut db_guard = self.vaccine_database
