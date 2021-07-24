@@ -204,7 +204,7 @@ impl RocketBotPlugin for VaccinePlugin {
         response.push_str(&format!("@{} {}: ", channel_message.message.sender.username, state_name));
         response.push_str(&format_stat(
             &freshest_entries[0].vaccinations,
-            delta.as_ref().map(|d| &d.partially_immune),
+            delta.as_ref().map(|d| &d.vaccinations),
             None,
             "vaccinations",
         ));
