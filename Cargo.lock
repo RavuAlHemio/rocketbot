@@ -1147,6 +1147,7 @@ dependencies = [
  "rocketbot_plugin_catchword",
  "rocketbot_plugin_config_user_alias",
  "rocketbot_plugin_dice",
+ "rocketbot_plugin_fact",
  "rocketbot_plugin_fortune",
  "rocketbot_plugin_grammargen",
  "rocketbot_plugin_group_pressure",
@@ -1272,6 +1273,24 @@ dependencies = [
  "rocketbot_interface",
  "serde_json",
  "tokio",
+]
+
+[[package]]
+name = "rocketbot_plugin_fact"
+version = "0.1.0"
+dependencies = [
+ "async-trait",
+ "bytes",
+ "log",
+ "percent-encoding",
+ "rand",
+ "regex",
+ "reqwest",
+ "rocketbot_interface",
+ "serde",
+ "serde_json",
+ "tokio",
+ "url",
 ]
 
 [[package]]
