@@ -5,12 +5,19 @@ use bytes::Buf;
 use rand::{RngCore, Rng};
 use regex::Regex;
 use rocketbot_interface::sync::Mutex;
-use percent_encoding::{NON_ALPHANUMERIC, percent_encode};
+use percent_encoding::{AsciiSet, NON_ALPHANUMERIC, percent_encode};
 use serde::{Deserialize, Serialize};
 use serde_json;
 use url::Url;
 
 use crate::interface::{FactError, FactProvider};
+
+
+pub const MEDIAWIKI_URL_SAFE: &AsciiSet = &NON_ALPHANUMERIC
+    .remove(b'-')
+    .remove(b'.')
+    .remove(b'_')
+    .remove(b'~');
 
 
 #[derive(Clone, Debug, Deserialize, Serialize)]
@@ -125,7 +132,7 @@ fn transform_wikitext_links(config: &Config, wikitext: &str) -> String {
         uri_builder = cap_builder;
 
         // URL-encode
-        let url_encoded = percent_encode(uri_builder.as_bytes(), NON_ALPHANUMERIC)
+        let url_encoded = percent_encode(uri_builder.as_bytes(), MEDIAWIKI_URL_SAFE)
             .to_string();
 
         let link_uri = match config.wikitext_link_base_uri.join(&url_encoded) {
