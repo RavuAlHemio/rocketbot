@@ -129,7 +129,7 @@ impl BeepeeReader {
             Some(n) => {
                 let kg: f64 = (*n.mass.numer() as f64) / (*n.mass.denom() as f64);
                 Some(format!(
-                    "{:.02} kg at {}",
+                    "{:.01} kg at {}",
                     kg, n.timestamp.format("%Y-%m-%d %H:%M:%S"),
                 ))
             },
