@@ -17,6 +17,7 @@ members = [
     "rocketbot_plugin_logger",
     "rocketbot_plugin_new_year",
     "rocketbot_plugin_quotes",
+    "rocketbot_plugin_randreact",
     "rocketbot_plugin_sed",
     "rocketbot_plugin_sockpuppet",
     "rocketbot_plugin_text_commands",

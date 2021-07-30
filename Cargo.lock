@@ -1167,6 +1167,7 @@ dependencies = [
  "rocketbot_plugin_logger",
  "rocketbot_plugin_new_year",
  "rocketbot_plugin_quotes",
+ "rocketbot_plugin_randreact",
  "rocketbot_plugin_sed",
  "rocketbot_plugin_sockpuppet",
  "rocketbot_plugin_text_commands",
@@ -1388,6 +1389,18 @@ dependencies = [
  "serde_json",
  "tokio",
  "tokio-postgres",
+]
+
+[[package]]
+name = "rocketbot_plugin_randreact"
+version = "0.1.0"
+dependencies = [
+ "async-trait",
+ "log",
+ "rand",
+ "rocketbot_interface",
+ "serde_json",
+ "tokio",
 ]
 
 [[package]]
