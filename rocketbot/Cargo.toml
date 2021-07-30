@@ -35,6 +35,7 @@ rocketbot_plugin_topic_timer = { path = "../rocketbot_plugin_topic_timer" }
 rocketbot_plugin_thanks = { path = "../rocketbot_plugin_thanks" }
 rocketbot_plugin_vaccine = { path = "../rocketbot_plugin_vaccine" }
 rocketbot_plugin_version = { path = "../rocketbot_plugin_version" }
+rocketbot_plugin_vitals = { path = "../rocketbot_plugin_vitals" }
 rocketbot_plugin_weather = { path = "../rocketbot_plugin_weather" }
 serde = { version = "1.0", features = ["derive"] }
 serde_json = { version = "1.0" }
