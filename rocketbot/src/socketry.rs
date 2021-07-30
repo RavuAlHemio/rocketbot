@@ -593,6 +593,36 @@ impl RocketBotInterface for ServerConnection {
             .read().await;
         emoji_guard.deref().clone()
     }
+
+    async fn add_reaction(&self, message_id: &str, emoji_short_name: &str) {
+        let message_body = serde_json::json!({
+            "msg": "method",
+            "method": "setReaction",
+            "id": "nvm",
+            "params": [
+                format!(":{}:", emoji_short_name),
+                message_id,
+                true,
+            ],
+        });
+        self.shared_state.outgoing_sender.send(message_body)
+            .expect("failed to enqueue add-reaction message");
+    }
+
+    async fn remove_reaction(&self, message_id: &str, emoji_short_name: &str) {
+        let message_body = serde_json::json!({
+            "msg": "method",
+            "method": "setReaction",
+            "id": "nvm",
+            "params": [
+                format!(":{}:", emoji_short_name),
+                message_id,
+                false,
+            ],
+        });
+        self.shared_state.outgoing_sender.send(message_body)
+            .expect("failed to enqueue remove-reaction message");
+    }
 }
 
 

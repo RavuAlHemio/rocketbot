@@ -110,6 +110,14 @@ pub trait RocketBotInterface : Send + Sync {
 
     /// Obtains all the emoji known to the server.
     async fn obtain_emoji(&self) -> Vec<Emoji>;
+
+    /// Places a reaction on the given message. `emoji_short_name` is the short name of the reaction
+    /// emoji without the surrounding colons.
+    async fn add_reaction(&self, message_id: &str, emoji_short_name: &str);
+
+    /// Removes a reaction from the given message. `emoji_short_name` is the short name of the
+    /// reaction emoji without the surrounding colons.
+    async fn remove_reaction(&self, message_id: &str, emoji_short_name: &str);
 }
 
 
