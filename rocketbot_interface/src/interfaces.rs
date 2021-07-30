@@ -7,8 +7,8 @@ use serde_json;
 
 use crate::commands::{CommandConfiguration, CommandDefinition, CommandInstance};
 use crate::model::{
-    Channel, ChannelMessage, ChannelTextType, OutgoingMessage, PrivateConversation, PrivateMessage,
-    User,
+    Channel, ChannelMessage, ChannelTextType, Emoji, OutgoingMessage, PrivateConversation,
+    PrivateMessage, User,
 };
 
 
@@ -107,6 +107,9 @@ pub trait RocketBotInterface : Send + Sync {
 
     /// Sets the given textual property of the given channel to the given value.
     async fn set_channel_text(&self, channel_name: &str, text_type: ChannelTextType, text: &str);
+
+    /// Obtains all the emoji known to the server.
+    async fn obtain_emoji(&self) -> Vec<Emoji>;
 }
 
 

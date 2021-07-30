@@ -236,3 +236,28 @@ impl OutgoingMessage {
         }
     }
 }
+
+
+#[derive(Clone, Debug, Eq, Hash, Ord, PartialEq, PartialOrd)]
+pub struct Emoji {
+    pub category: String,
+    pub order: usize,
+    pub short_name: String,
+}
+impl Emoji {
+    pub fn new(
+        category: String,
+        order: usize,
+        short_name: String,
+    ) -> Self {
+        Self {
+            category,
+            order,
+            short_name,
+        }
+    }
+
+    pub fn is_custom(&self) -> bool {
+        self.category == "custom"
+    }
+}

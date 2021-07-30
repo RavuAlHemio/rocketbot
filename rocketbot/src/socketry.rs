@@ -21,8 +21,8 @@ use rocketbot_interface::{JsonValueExtensions, rocketchat_timestamp_to_datetime}
 use rocketbot_interface::commands::{CommandConfiguration, CommandDefinition};
 use rocketbot_interface::interfaces::{RocketBotInterface, RocketBotPlugin};
 use rocketbot_interface::model::{
-    Channel, ChannelMessage, ChannelTextType, ChannelType, EditInfo, Message, OutgoingMessage,
-    PrivateConversation, PrivateMessage, User,
+    Channel, ChannelMessage, ChannelTextType, ChannelType, EditInfo, Emoji, Message,
+    OutgoingMessage, PrivateConversation, PrivateMessage, User,
 };
 use rocketbot_interface::sync::{Mutex, RwLock};
 use serde_json;
@@ -45,6 +45,7 @@ use crate::string_utils::{SplitChunk, split_whitespace};
 static LOGIN_MESSAGE_ID: &'static str = "login4242";
 static GET_SETTINGS_MESSAGE_ID: &'static str = "settings4242";
 static GET_ROOMS_MESSAGE_ID: &'static str = "rooms4242";
+static GET_CUSTOM_EMOJI_MESSAGE_ID: &'static str = "customemoji4242";
 static SUBSCRIBE_ROOMS_MESSAGE_ID: &'static str = "roomchanges4242";
 static SEND_MESSAGE_MESSAGE_ID: &'static str = "sendmessage4242";
 static ID_ALPHABET: &'static str = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789";
@@ -188,6 +189,7 @@ struct SharedConnectionState {
     username_to_initial_private_message: Mutex<HashMap<String, OutgoingMessage>>,
     new_timer_sender: mpsc::UnboundedSender<(DateTime<Utc>, serde_json::Value)>,
     channel_id_to_texts: RwLock<HashMap<(String, ChannelTextType), String>>,
+    emoji: RwLock<Vec<Emoji>>,
 }
 impl SharedConnectionState {
     fn new(
@@ -205,6 +207,7 @@ impl SharedConnectionState {
         username_to_initial_private_message: Mutex<HashMap<String, OutgoingMessage>>,
         new_timer_sender: mpsc::UnboundedSender<(DateTime<Utc>, serde_json::Value)>,
         channel_id_to_texts: RwLock<HashMap<(String, ChannelTextType), String>>,
+        emoji: RwLock<Vec<Emoji>>,
     ) -> Self {
         Self {
             outgoing_sender,
@@ -221,6 +224,7 @@ impl SharedConnectionState {
             username_to_initial_private_message,
             new_timer_sender,
             channel_id_to_texts,
+            emoji,
         }
     }
 }
@@ -583,6 +587,12 @@ impl RocketBotInterface for ServerConnection {
         self.shared_state.outgoing_sender.send(message_body)
             .expect("failed to enqueue change-channel-text message");
     }
+
+    async fn obtain_emoji(&self) -> Vec<Emoji> {
+        let emoji_guard = self.shared_state.emoji
+            .read().await;
+        emoji_guard.deref().clone()
+    }
 }
 
 
@@ -645,6 +655,10 @@ pub(crate) async fn connect() -> Arc<ServerConnection> {
         "SharedConnectionState::channel_id_to_texts",
         HashMap::new(),
     );
+    let emoji = RwLock::new(
+        "SharedConnectionState::emoji",
+        Vec::new(),
+    );
 
     let shared_state = Arc::new(SharedConnectionState::new(
         outgoing_sender,
@@ -661,12 +675,13 @@ pub(crate) async fn connect() -> Arc<ServerConnection> {
         username_to_initial_private_message,
         new_timer_sender,
         channel_id_to_texts,
+        emoji,
     ));
 
     let conn = Arc::new(ServerConnection::new(
         Arc::clone(&shared_state),
     ));
-    let state = ConnectionState::new(
+    let mut state = ConnectionState::new(
         shared_state,
         outgoing_receiver,
         None,
@@ -688,6 +703,15 @@ pub(crate) async fn connect() -> Arc<ServerConnection> {
         plugins_guard.append(&mut loaded_plugins);
     }
 
+    // obtain builtin emoji
+    let mut builtin_emoji = obtain_builtin_emoji(&mut state).await;
+    {
+        let mut emoji_guard = state.shared_state.emoji
+            .write().await;
+        emoji_guard.append(&mut builtin_emoji);
+    }
+
+    // launch it all
     tokio::spawn(async move {
         run_connections(state).await
     });
@@ -1096,6 +1120,16 @@ async fn handle_received(body: &serde_json::Value, mut state: &mut ConnectionSta
         });
         state.shared_state.outgoing_sender.send(room_list_body)
             .expect("failed to enqueue room list message");
+
+        // get the list of custom emoji
+        let custom_emoji_list_body = serde_json::json!({
+            "msg": "method",
+            "method": "listEmojiCustom",
+            "id": GET_CUSTOM_EMOJI_MESSAGE_ID,
+            "params": [],
+        });
+        state.shared_state.outgoing_sender.send(custom_emoji_list_body)
+            .expect("failed to enqueue custom emoji list message");
     } else if body["msg"] == "result" && body["id"] == GET_SETTINGS_MESSAGE_ID {
         let settings = &body["result"];
         for entry in settings.members_or_empty() {
@@ -1198,6 +1232,33 @@ async fn handle_received(body: &serde_json::Value, mut state: &mut ConnectionSta
             };
 
             channel_left(&mut state, room_id).await;
+        }
+    } else if body["msg"] == "result" && body["id"] == GET_CUSTOM_EMOJI_MESSAGE_ID {
+        let mut custom_emoji = Vec::new();
+        for (i, custom_emoji_json) in body["result"].members_or_empty().enumerate() {
+            let name = match custom_emoji_json["name"].as_str() {
+                Some(n) => n.to_owned(),
+                None => {
+                    error!("custom emoji with index {}: name is not a string", i);
+                    continue;
+                },
+            };
+            let emoji = Emoji::new(
+                "custom".to_owned(),
+                i,
+                name,
+            );
+            custom_emoji.push(emoji);
+        }
+
+        {
+            let mut emoji_guard = state.shared_state.emoji
+                .write().await;
+            emoji_guard.append(&mut custom_emoji);
+
+            for emoji in emoji_guard.iter() {
+                debug!("emoji: {:?}", emoji);
+            }
         }
     } else if body["msg"] == "changed" && body["collection"] == "stream-room-messages" {
         // we got a message! (probably)
@@ -1637,18 +1698,72 @@ async fn distribute_private_message_commands(private_message: &PrivateMessage, s
     }
 }
 
-async fn obtain_users_in_room(state: &mut ConnectionState, channel: &Channel) {
+async fn get_http_json(state: &mut ConnectionState, request: hyper::Request<hyper::Body>) -> Option<serde_json::Value> {
+    let full_uri = request.uri().clone();
+
+    let response_res = state.shared_state.http_client
+        .request(request).await;
+    let response = match response_res {
+        Ok(r) => r,
+        Err(e) => {
+            error!("error obtaining response for {}: {}", full_uri, e);
+            return None;
+        },
+    };
+    let (parts, mut body) = response.into_parts();
+    let response_bytes = match hyper::body::to_bytes(&mut body).await {
+        Ok(b) => b.to_vec(),
+        Err(e) => {
+            error!("error getting bytes from response for {}: {}", full_uri, e);
+            return None;
+        },
+    };
+    let response_string = match String::from_utf8(response_bytes) {
+        Ok(s) => s,
+        Err(e) => {
+            error!("error decoding response for {}: {}", full_uri, e);
+            return None;
+        },
+    };
+
+    if parts.status != StatusCode::OK {
+        error!(
+            "error response {} for {}: {}",
+            parts.status, full_uri, response_string,
+        );
+        return None;
+    }
+
+    let json_value: serde_json::Value = match serde_json::from_str(&response_string) {
+        Ok(v) => v,
+        Err(e) => {
+            error!("error parsing JSON for {}: {}", full_uri, e);
+            return None;
+        },
+    };
+
+    Some(json_value)
+}
+
+async fn get_api_json<Q, K, V>(state: &mut ConnectionState, uri_path: &str, query_options: Q) -> Option<serde_json::Value>
+    where
+        Q: IntoIterator<Item = (K, Option<V>)>,
+        K: AsRef<str>,
+        V: AsRef<str>,
+{
     let user_id = {
         let uid_guard = state.shared_state.my_user_id
             .read().await;
         match uid_guard.deref() {
             Some(uid) => uid.clone(),
-            None => return,
+            None => return None,
         }
     };
-    let auth_token = if let Some(u) = &state.my_auth_token { u } else { return };
-    let mut users: HashSet<User> = HashSet::new();
-
+    let auth_token = if let Some(u) = &state.my_auth_token {
+        u
+    } else {
+        return None;
+    };
     let web_uri = {
         let config_lock = CONFIG
             .get().expect("no initial configuration set")
@@ -1656,70 +1771,54 @@ async fn obtain_users_in_room(state: &mut ConnectionState, channel: &Channel) {
         Url::parse(&config_lock.server.web_uri)
             .expect("failed to parse web URI")
     };
+
+    let mut full_uri = web_uri.join(uri_path)
+        .expect("failed to join API endpoint to URI");
+
+    {
+        let mut query_params = full_uri.query_pairs_mut();
+        for (k, v) in query_options {
+            if let Some(sv) = v {
+                query_params.append_pair(k.as_ref(), sv.as_ref());
+            } else {
+                query_params.append_key_only(k.as_ref());
+            }
+        }
+    }
+
+    let request = hyper::Request::builder()
+        .method("GET")
+        .uri(full_uri.as_str())
+        .header("X-User-Id", &user_id)
+        .header("X-Auth-Token", auth_token)
+        .body(hyper::Body::empty())
+        .expect("failed to construct request");
+
+    get_http_json(state, request).await
+}
+
+async fn obtain_users_in_room(mut state: &mut ConnectionState, channel: &Channel) {
+    let mut users: HashSet<User> = HashSet::new();
+
     let uri_path = match channel.channel_type {
         ChannelType::Channel => "api/v1/channels.members",
         ChannelType::Group => "api/v1/groups.members",
         _ => return,
     };
-    let mut channel_members_uri = web_uri.join(uri_path)
-        .expect("failed to join API endpoint to URI");
-    channel_members_uri.query_pairs_mut()
-        .append_pair("roomId", &channel.id)
-        .append_pair("count", "50");
+    let keys_values: Vec<(&str, Option<&str>)> = vec![
+        ("roomId", Some(&channel.id)),
+        ("count", Some("50")),
+    ];
 
     let mut offset = 0usize;
     loop {
-        let mut offset_uri = channel_members_uri.clone();
-        offset_uri.query_pairs_mut()
-            .append_pair("offset", &offset.to_string());
+        let offset_string = offset.to_string();
+        let mut offset_keys_values = keys_values.clone();
+        offset_keys_values.push(("offset", Some(&offset_string)));
 
-        let request = hyper::Request::builder()
-            .method("GET")
-            .uri(offset_uri.as_str())
-            .header("X-User-Id", &user_id)
-            .header("X-Auth-Token", auth_token)
-            .body(hyper::Body::empty())
-            .expect("failed to construct request");
-
-        let response_res = state.shared_state.http_client
-            .request(request).await;
-        let response = match response_res {
-            Ok(r) => r,
-            Err(e) => {
-                error!("error fetching channel {:?} users: {}", &channel.id, e);
-                return;
-            },
-        };
-        let (parts, mut body) = response.into_parts();
-        let response_bytes = match hyper::body::to_bytes(&mut body).await {
-            Ok(b) => b.to_vec(),
-            Err(e) => {
-                error!("error getting bytes from response requesting channel {:?} users: {}", &channel.id, e);
-                return;
-            },
-        };
-        let response_string = match String::from_utf8(response_bytes) {
-            Ok(s) => s,
-            Err(e) => {
-                error!("error decoding response requesting channel {:?} users: {}", &channel.id, e);
-                return;
-            },
-        };
-
-        if parts.status != StatusCode::OK {
-            error!(
-                "error response {} while fetching channel {:?} users: {}",
-                parts.status, &channel.id, response_string,
-            );
-            return;
-        }
-
-        let json_value: serde_json::Value = match serde_json::from_str(&response_string) {
-            Ok(v) => v,
-            Err(e) => {
-                error!("error parsing JSON while fetching channel {:?} users: {}", &channel.id, e);
-                return;
-            },
+        let json_value = match get_api_json(&mut state, uri_path, offset_keys_values).await {
+            Some(jv) => jv,
+            None => return,
         };
 
         let user_count = json_value["members"].members_or_empty().len();
@@ -1766,4 +1865,82 @@ async fn obtain_users_in_room(state: &mut ConnectionState, channel: &Channel) {
             .write().await;
         chan_guard.replace_users_in_channel(&channel.id, users);
     }
+}
+
+async fn obtain_builtin_emoji(mut state: &mut ConnectionState) -> Vec<Emoji> {
+    let emoji_json_url = {
+        let config_guard = CONFIG
+            .get().expect("config initially set")
+            .read().await;
+        config_guard.server.emojione_emoji_json_uri.clone()
+    };
+
+    let request = hyper::Request::builder()
+        .method("GET")
+        .uri(emoji_json_url)
+        .body(hyper::Body::empty())
+        .expect("failed to construct request");
+
+    let json_value = match get_http_json(&mut state, request).await {
+        Some(jv) => jv,
+        None => {
+            return Vec::new();
+        },
+    };
+
+    let json_entries = match json_value.as_object() {
+        Some(je) => je,
+        None => {
+            error!("emoji JSON is not an object");
+            return Vec::new();
+        },
+    };
+    let mut emoji = Vec::with_capacity(json_entries.len());
+    for (codepoint, properties) in json_entries {
+        let category = match properties["category"].as_str() {
+            Some(v) => v,
+            None => {
+                error!("emoji {:?} category is not a string", codepoint);
+                continue;
+            },
+        };
+        let order = match properties["order"].as_usize() {
+            Some(v) => v,
+            None => {
+                error!("emoji {:?} category is not a string", codepoint);
+                continue;
+            },
+        };
+        let short_name = match properties["shortname"].as_str() {
+            Some(v) => v,
+            None => {
+                error!("emoji {:?} shortname is not a string", codepoint);
+                continue;
+            },
+        };
+        if short_name.len() < 3 {
+            error!("emoji {:?} shortname {:?} is too short (need at least 3 bytes)", codepoint, short_name);
+            continue;
+        }
+        if !short_name.starts_with(":") {
+            error!("emoji {:?} shortname {:?} does not start with a colon", codepoint, short_name);
+            continue;
+        }
+        if !short_name.ends_with(":") {
+            error!("emoji {:?} shortname {:?} does not end with a colon", codepoint, short_name);
+            continue;
+        }
+
+        // strip off the colons
+        let short_name_no_colon = &short_name[1..short_name.len()-1];
+
+        let e = Emoji::new(
+            category.to_owned(),
+            order,
+            short_name_no_colon.to_owned(),
+        );
+        emoji.push(e);
+    }
+
+    emoji
 }
