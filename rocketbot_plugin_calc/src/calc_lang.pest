@@ -44,8 +44,12 @@ atom_expression =
     }
 call_expression = { identifier ~ "(" ~ arglist? ~ ")" }
 parens_expression = { "(" ~ expression ~ ")" }
-integer_expression = { integer }
-decimal_expression = { decimal }
+integer_expression = { integer ~ unit_suffix* }
+decimal_expression = { decimal ~ unit_suffix* }
+
+unit_suffix = { "#" ~ unit_abbrev ~ unit_pow? }
+unit_abbrev = @{ ('A'..'Z'|'a'..'z')+ }
+unit_pow = @{ "-"? ~ ('0'..'9')+ }
 
 
 arglist = { expression ~ ("," ~ expression)* }

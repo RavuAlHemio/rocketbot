@@ -2,8 +2,11 @@ use std::collections::HashMap;
 use std::fmt;
 use std::time::{Duration, Instant};
 
-use num_bigint::{BigInt, ToBigInt};
+use num_bigint::BigInt;
 use num_traits::cast::ToPrimitive;
+
+use crate::numbers::{Number, NumberOperationError, NumberValue};
+use crate::units::{NumberUnits, UnitDatabase};
 
 
 #[derive(Clone, Copy, Debug, Eq, Hash, PartialEq)]
@@ -28,12 +31,21 @@ pub(crate) enum UnaryOperation {
 
 #[derive(Clone, Debug, PartialEq)]
 pub(crate) enum AstNode {
-    Int(BigInt),
-    Float(f64),
+    Number(Number),
     Constant(String),
     FunctionCall(String, Vec<AstNodeAtLocation>),
     BinaryOperation(BinaryOperation, Box<AstNodeAtLocation>, Box<AstNodeAtLocation>),
     UnaryOperation(UnaryOperation, Box<AstNodeAtLocation>),
+}
+impl From<f64> for AstNode {
+    fn from(f: f64) -> Self {
+        AstNode::Number(Number::from(NumberValue::from(f)))
+    }
+}
+impl From<BigInt> for AstNode {
+    fn from(i: BigInt) -> Self {
+        AstNode::Number(Number::from(NumberValue::from(i)))
+    }
 }
 
 #[derive(Clone, Debug, PartialEq)]
@@ -50,6 +62,25 @@ pub(crate) enum SimplificationError {
     UnexpectedOperandType(String),
     NonIntegralValue(f64),
     Timeout,
+    OperationFailed,
+    RightOperandHasUnits,
+    LeftOperandUnitsRightOperandFloat,
+    OperandHasUnits,
+    UnitReconciliation,
+}
+impl SimplificationError {
+    pub fn at_location(self, start_end: Option<(usize, usize)>) -> SimplificationErrorAtLocation {
+        SimplificationErrorAtLocation {
+            error: self,
+            start_end,
+        }
+    }
+    pub fn at_location_of(self, node: &AstNodeAtLocation) -> SimplificationErrorAtLocation {
+        SimplificationErrorAtLocation {
+            error: self,
+            start_end: node.start_end,
+        }
+    }
 }
 impl fmt::Display for SimplificationError {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
@@ -64,12 +95,30 @@ impl fmt::Display for SimplificationError {
                 => write!(f, "operand type {} unexpected", t),
             SimplificationError::NonIntegralValue(fv)
                 => write!(f, "value {} cannot be represented as an integer", fv),
-            &SimplificationError::Timeout
+            SimplificationError::Timeout
                 => write!(f, "timed out"),
+            SimplificationError::OperationFailed
+                => write!(f, "operation failed"),
+            SimplificationError::RightOperandHasUnits
+                => write!(f, "right operand has units; it mustn't"),
+            SimplificationError::LeftOperandUnitsRightOperandFloat
+                => write!(f, "left operand has units but the right operand is floating-point"),
+            SimplificationError::OperandHasUnits
+                => write!(f, "operand has units; it mustn't"),
+            SimplificationError::UnitReconciliation
+                => write!(f, "failed to reconcile operand units"),
         }
     }
 }
 impl std::error::Error for SimplificationError {
+}
+impl From<NumberOperationError> for SimplificationError {
+    fn from(noe: NumberOperationError) -> Self {
+        match noe {
+            NumberOperationError::OperationFailed => Self::OperationFailed,
+            NumberOperationError::UnitReconciliation => Self::UnitReconciliation,
+        }
+    }
 }
 
 #[derive(Clone, Debug, PartialEq)]
@@ -96,40 +145,26 @@ pub(crate) type BuiltInFunction = Box<dyn FnMut(&[AstNodeAtLocation]) -> BuiltIn
 pub(crate) struct SimplificationState {
     pub constants: HashMap<String, AstNode>,
     pub functions: HashMap<String, BuiltInFunction>,
+    pub units: UnitDatabase,
     pub start_time: Instant,
     pub timeout: Duration,
 }
 
 
-fn perform_binop_coerce<B, F>(start_end: Option<(usize, usize)>, left: &AstNodeAtLocation, right: &AstNodeAtLocation, mut bigint_op: B, mut float_op: F) -> SimplificationResult
+fn perform_binop<O>(start_end: Option<(usize, usize)>, left: &AstNodeAtLocation, right: &AstNodeAtLocation, mut op: O) -> SimplificationResult
     where
-        B: FnMut(&BigInt, &BigInt) -> Result<BigInt, SimplificationErrorAtLocation>,
-        F: FnMut(f64, f64) -> Result<f64, SimplificationErrorAtLocation>,
+        O: FnMut(&Number, &Number) -> Result<Number, NumberOperationError>,
 {
-    let calculated: AstNode = match &left.node {
-        AstNode::Int(l) => {
-            match &right.node {
-                AstNode::Int(r) => {
-                    AstNode::Int(bigint_op(&l, &r)?)
-                },
-                AstNode::Float(r) => {
-                    AstNode::Float(float_op(l.to_f64().expect("conversion failed"), *r)?)
-                },
-                other => return Err(right.make_error(SimplificationError::UnexpectedOperandType(format!("{:?}", other)))),
-            }
-        },
-        AstNode::Float(l) => {
-            match &right.node {
-                AstNode::Int(r) => {
-                    AstNode::Float(float_op(*l, r.to_f64().expect("conversion failed"))?)
-                },
-                AstNode::Float(r) => {
-                    AstNode::Float(float_op(*l, *r)?)
-                },
-                other => return Err(right.make_error(SimplificationError::UnexpectedOperandType(format!("{:?}", other)))),
-            }
-        },
-        other => return Err(left.make_error(SimplificationError::UnexpectedOperandType(format!("{:?}", other)))),
+    let calculated: AstNode = if let AstNode::Number(l) = &left.node {
+        if let AstNode::Number(r) = &right.node {
+            op(l, r)
+                .map(|res| AstNode::Number(res))
+                .map_err(|noe| SimplificationError::from(noe).at_location(start_end))?
+        } else {
+            return Err(SimplificationError::UnexpectedOperandType(format!("{:?}", right.node)).at_location_of(right));
+        }
+    } else {
+        return Err(SimplificationError::UnexpectedOperandType(format!("{:?}", left.node)).at_location_of(left));
     };
     Ok(AstNodeAtLocation {
         node: calculated,
@@ -140,18 +175,104 @@ fn perform_binop_coerce<B, F>(start_end: Option<(usize, usize)>, left: &AstNodeA
 
 fn perform_integral_only<B>(start_end: Option<(usize, usize)>, left: &AstNodeAtLocation, right: &AstNodeAtLocation, mut bigint_op: B) -> SimplificationResult
     where
-        B: FnMut(&BigInt, &BigInt) -> Result<BigInt, SimplificationErrorAtLocation>,
+        B: FnMut(&Number, &Number) -> Result<Number, NumberOperationError>,
 {
     let calculated: AstNode = match &left.node {
-        AstNode::Int(l) => {
-            match &right.node {
-                AstNode::Int(r) => {
-                    AstNode::Int(bigint_op(&l, &r)?)
-                },
-                other => return Err(right.make_error(SimplificationError::UnexpectedOperandType(format!("{:?}", other)))),
+        AstNode::Number(lnum) => {
+            if let NumberValue::Int(_l) = &lnum.value {
+                match &right.node {
+                    AstNode::Number(rnum) => {
+                        if let NumberValue::Int(_r) = &rnum.value {
+                            let result = bigint_op(&lnum, &rnum)
+                                .map_err(|e| SimplificationError::from(e).at_location(start_end))?;
+                            AstNode::Number(result)
+                        } else {
+                            return Err(SimplificationError::UnexpectedOperandType(format!("{:?}", right.node)).at_location_of(right));
+                        }
+                    },
+                    _other => return Err(SimplificationError::UnexpectedOperandType(format!("{:?}", right.node)).at_location_of(right)),
+                }
+            } else {
+                return Err(SimplificationError::UnexpectedOperandType(format!("{:?}", left.node)).at_location_of(left));
             }
         },
-        other => return Err(left.make_error(SimplificationError::UnexpectedOperandType(format!("{:?}", other)))),
+        _other => return Err(SimplificationError::UnexpectedOperandType(format!("{:?}", left.node)).at_location_of(left)),
+    };
+    Ok(AstNodeAtLocation {
+        node: calculated,
+        start_end,
+    })
+}
+
+
+fn pow(start_end: Option<(usize, usize)>, left: &AstNodeAtLocation, right: &AstNodeAtLocation, state: &mut SimplificationState) -> SimplificationResult {
+    let calculated: AstNode = match &left.node {
+        AstNode::Number(lnum) => {
+            match &right.node {
+                AstNode::Number(rnum) => {
+                    if rnum.units.len() > 0 {
+                        return Err(SimplificationError::RightOperandHasUnits.at_location(start_end));
+                    }
+
+                    match (&lnum.value, &rnum.value) {
+                        (NumberValue::Int(l), NumberValue::Int(r)) => {
+                            let one = BigInt::from(1);
+                            let mut val = one.clone();
+                            let mut counter = BigInt::from(0);
+                            while counter < *r {
+                                val *= l;
+                                counter += &one;
+                                check_timeout(state)?;
+                            }
+                            AstNode::Number(Number::new(
+                                NumberValue::Int(val),
+                                lnum.units.clone(),
+                            ))
+                        },
+                        (NumberValue::Int(l), NumberValue::Float(r)) => {
+                            if lnum.units.len() > 0 {
+                                return Err(SimplificationError::LeftOperandUnitsRightOperandFloat.at_location(start_end));
+                            }
+
+                            let l_f64 = l.to_f64().expect("conversion failed");
+                            AstNode::Number(Number::new(
+                                NumberValue::Float(l_f64.powf(*r)),
+                                NumberUnits::new(),
+                            ))
+                        },
+                        (NumberValue::Float(l), NumberValue::Int(r)) => {
+                            let r_f64 = r.to_f64().expect("conversion failed");
+
+                            // multiply unit powers
+                            let mut new_units = NumberUnits::new();
+                            for (unit, power) in &lnum.units {
+                                let new_unit_power = power * r;
+                                new_units.insert(
+                                    unit.clone(),
+                                    new_unit_power,
+                                );
+                            }
+
+                            AstNode::Number(Number::new(
+                                NumberValue::Float(l.powf(r_f64)),
+                                new_units,
+                            ))
+                        },
+                        (NumberValue::Float(l), NumberValue::Float(r)) => {
+                            if lnum.units.len() > 0 {
+                                return Err(SimplificationError::LeftOperandUnitsRightOperandFloat.at_location(start_end));
+                            }
+                            AstNode::Number(Number::new(
+                                NumberValue::Float(l.powf(*r)),
+                                NumberUnits::new(),
+                            ))
+                        },
+                    }
+                },
+                _other => return Err(SimplificationError::UnexpectedOperandType(format!("{:?}", right.node)).at_location_of(right)),
+            }
+        },
+        _other => return Err(SimplificationError::UnexpectedOperandType(format!("{:?}", left.node)).at_location_of(left)),
     };
     Ok(AstNodeAtLocation {
         node: calculated,
@@ -174,22 +295,14 @@ fn check_timeout(state: &SimplificationState) -> Result<(), SimplificationErrorA
 
 
 impl AstNodeAtLocation {
-    fn make_error(&self, error_kind: SimplificationError) -> SimplificationErrorAtLocation {
-        SimplificationErrorAtLocation {
-            error: error_kind,
-            start_end: self.start_end,
-        }
-    }
-
-    pub fn simplify(&self, state: &mut SimplificationState) -> SimplificationResult {
+    pub fn simplify(&self, mut state: &mut SimplificationState) -> SimplificationResult {
         check_timeout(state)?;
 
         match &self.node {
-            AstNode::Int(_) => Ok(self.clone()),
-            AstNode::Float(_) => Ok(self.clone()),
+            AstNode::Number(_) => Ok(self.clone()),
             AstNode::Constant(name) => {
                 match state.constants.get(name) {
-                    None => Err(self.make_error(SimplificationError::ConstantNotFound(name.clone()))),
+                    None => Err(SimplificationError::ConstantNotFound(name.clone()).at_location_of(self)),
                     Some(c) => Ok(AstNodeAtLocation {
                         node: c.clone(),
                         start_end: self.start_end,
@@ -198,7 +311,7 @@ impl AstNodeAtLocation {
             },
             AstNode::FunctionCall(name, args) => {
                 if !state.functions.contains_key(name) {
-                    return Err(self.make_error(SimplificationError::FunctionNotFound(name.clone())));
+                    return Err(SimplificationError::FunctionNotFound(name.clone()).at_location_of(self));
                 }
 
                 let mut simplified_args: Vec<AstNodeAtLocation> = Vec::with_capacity(args.len());
@@ -223,76 +336,34 @@ impl AstNodeAtLocation {
                 let right_simp = right.simplify(state)?;
                 match binop {
                     BinaryOperation::Add => {
-                        perform_binop_coerce(self.start_end, &left_simp, &right_simp, |l, r| Ok(l + r), |l, r| Ok(l + r))
+                        perform_binop(self.start_end, &left_simp, &right_simp, |l, r| l.checked_add(r.clone(), &state.units))
                     },
                     BinaryOperation::BinaryAnd => {
-                        perform_integral_only(self.start_end, &left_simp, &right_simp, |l, r| Ok(l & r))
+                        perform_integral_only(self.start_end, &left_simp, &right_simp, |l, r| l.checked_bit_and(r.clone(), &state.units))
                     },
                     BinaryOperation::BinaryOr => {
-                        perform_integral_only(self.start_end, &left_simp, &right_simp, |l, r| Ok(l | r))
+                        perform_integral_only(self.start_end, &left_simp, &right_simp, |l, r| l.checked_bit_or(r.clone(), &state.units))
                     },
                     BinaryOperation::BinaryXor => {
-                        perform_integral_only(self.start_end, &left_simp, &right_simp, |l, r| Ok(l ^ r))
+                        perform_integral_only(self.start_end, &left_simp, &right_simp, |l, r| l.checked_bit_xor(r.clone(), &state.units))
                     },
                     BinaryOperation::Multiply => {
-                        perform_binop_coerce(self.start_end, &left_simp, &right_simp, |l, r| Ok(l * r), |l, r| Ok(l * r))
+                        perform_binop(self.start_end, &left_simp, &right_simp, |l, r| l.checked_mul(r.clone()))
                     },
                     BinaryOperation::Power => {
-                        perform_binop_coerce(
-                            self.start_end, &left_simp, &right_simp,
-                            |l, r| {
-                                let one = BigInt::from(1);
-                                let mut val = one.clone();
-                                let mut counter = BigInt::from(0);
-                                while counter < *r {
-                                    val *= l;
-                                    counter += &one;
-                                    check_timeout(state)?;
-                                }
-                                Ok(val)
-                            },
-                            |l, r| Ok(l.powf(r)),
-                        )
+                        pow(self.start_end, &left_simp, &right_simp, &mut state)
                     },
                     BinaryOperation::Remainder => {
-                        perform_binop_coerce(self.start_end, &left_simp, &right_simp, |l, r| Ok(l % r), |l, r| Ok(l % r))
+                        perform_binop(self.start_end, &left_simp, &right_simp, |l, r| l.checked_rem(r.clone()))
                     },
                     BinaryOperation::Subtract => {
-                        perform_binop_coerce(self.start_end, &left_simp, &right_simp, |l, r| Ok(l - r), |l, r| Ok(l - r))
+                        perform_binop(self.start_end, &left_simp, &right_simp, |l, r| l.checked_sub(r.clone(), &state.units))
                     },
                     BinaryOperation::Divide => {
-                        let left_f64 = match &left_simp.node {
-                            AstNode::Int(l) => l.to_f64().expect("conversion failed"),
-                            AstNode::Float(l) => *l,
-                            other => return Err(left_simp.make_error(SimplificationError::UnexpectedOperandType(format!("{:?}", other)))),
-                        };
-                        let right_f64 = match &right_simp.node {
-                            AstNode::Int(r) => r.to_f64().expect("conversion failed"),
-                            AstNode::Float(r) => *r,
-                            other => return Err(right_simp.make_error(SimplificationError::UnexpectedOperandType(format!("{:?}", other)))),
-                        };
-                        Ok(AstNodeAtLocation {
-                            node: AstNode::Float(left_f64 / right_f64),
-                            start_end: self.start_end,
-                        })
+                        perform_binop(self.start_end, &left_simp, &right_simp, |l, r| l.checked_div(r.clone()))
                     },
                     BinaryOperation::DivideIntegral => {
-                        let left_bigint = match &left_simp.node {
-                            AstNode::Int(l) => l.clone(),
-                            AstNode::Float(l) => l.to_bigint()
-                                .ok_or(left_simp.make_error(SimplificationError::NonIntegralValue(*l)))?,
-                            other => return Err(left_simp.make_error(SimplificationError::UnexpectedOperandType(format!("{:?}", other)))),
-                        };
-                        let right_bigint = match &right_simp.node {
-                            AstNode::Int(r) => r.clone(),
-                            AstNode::Float(r) => r.to_bigint()
-                                .ok_or(right_simp.make_error(SimplificationError::NonIntegralValue(*r)))?,
-                            other => return Err(right_simp.make_error(SimplificationError::UnexpectedOperandType(format!("{:?}", other)))),
-                        };
-                        Ok(AstNodeAtLocation {
-                            node: AstNode::Int(left_bigint / right_bigint),
-                            start_end: self.start_end,
-                        })
+                        perform_binop(self.start_end, &left_simp, &right_simp, |l, r| l.checked_whole_div(r.clone()))
                     },
                 }
             },
@@ -301,9 +372,8 @@ impl AstNodeAtLocation {
                 match unop {
                     UnaryOperation::Negate => {
                         let node = match &inner_op.node {
-                            AstNode::Int(o) => AstNode::Int(-o),
-                            AstNode::Float(o) => AstNode::Float(-o),
-                            other => return Err(operand.make_error(SimplificationError::UnexpectedOperandType(format!("{:?}", other)))),
+                            AstNode::Number(o) => AstNode::Number(o.negated()),
+                            other => return Err(SimplificationError::UnexpectedOperandType(format!("{:?}", other)).at_location_of(operand)),
                         };
                         Ok(AstNodeAtLocation {
                             node,
@@ -311,21 +381,31 @@ impl AstNodeAtLocation {
                         })
                     },
                     UnaryOperation::Factorial => {
-                        if let AstNode::Int(o) = inner_op.node {
-                            let mut i = BigInt::from(2);
-                            let one = BigInt::from(1);
-                            let mut val = one.clone();
-                            while i < o {
-                                val *= &i;
-                                i += &one;
-                                check_timeout(state)?;
+                        if let AstNode::Number(onum) = &inner_op.node {
+                            if onum.units.len() > 0 {
+                                return Err(SimplificationError::OperandHasUnits.at_location_of(operand));
                             }
-                            Ok(AstNodeAtLocation {
-                                node: AstNode::Int(val),
-                                start_end: self.start_end,
-                            })
+                            if let NumberValue::Int(o) = &onum.value {
+                                let mut i = BigInt::from(2);
+                                let one = BigInt::from(1);
+                                let mut val = one.clone();
+                                while i < *o {
+                                    val *= &i;
+                                    i += &one;
+                                    check_timeout(state)?;
+                                }
+                                Ok(AstNodeAtLocation {
+                                    node: AstNode::Number(Number::new(
+                                        NumberValue::Int(val),
+                                        NumberUnits::new(),
+                                    )),
+                                    start_end: self.start_end,
+                                })
+                            } else {
+                                Err(SimplificationError::UnexpectedOperandType(format!("{:?}", inner_op)).at_location_of(operand))
+                            }
                         } else {
-                            Err(operand.make_error(SimplificationError::UnexpectedOperandType(format!("{:?}", inner_op))))
+                            Err(SimplificationError::UnexpectedOperandType(format!("{:?}", inner_op)).at_location_of(operand))
                         }
                     },
                 }
@@ -346,13 +426,13 @@ mod tests {
         let mut state = SimplificationState {
             constants: get_canonical_constants(),
             functions: get_canonical_functions(),
+            units: UnitDatabase::new_empty(),
             start_time: Instant::now(),
             timeout: Duration::from_secs(10),
         };
         let result = parsed.simplify(&mut state).unwrap();
         let obtained = match result.node {
-            AstNode::Int(i) => i.to_string(),
-            AstNode::Float(f) => f.to_string(),
+            AstNode::Number(i) => i.to_string(),
             other => panic!("unexpected AST node {:?}", other),
         };
         assert_eq!(expected, obtained);

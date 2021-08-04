@@ -1,0 +1,336 @@
+use std::collections::{BTreeMap, HashMap};
+use std::collections::hash_map::Entry;
+use std::fmt;
+
+use num_bigint::BigInt;
+
+use crate::numbers::{Number, NumberValue};
+
+
+pub type NumberUnits = BTreeMap<String, BigInt>;
+
+
+#[derive(Clone, Debug, Eq, Hash, PartialEq)]
+pub(crate) struct BaseUnit {
+    pub letters: String,
+}
+impl BaseUnit {
+    pub fn new(
+        letters: String,
+    ) -> Self {
+        Self {
+            letters,
+        }
+    }
+}
+
+#[derive(Clone, Debug, PartialEq)]
+pub(crate) struct DerivedUnit {
+    pub letters: String,
+    pub parents: NumberUnits,
+    pub factor_of_parents: f64,
+}
+impl DerivedUnit {
+    pub fn new(
+        letters: String,
+        parents: NumberUnits,
+        factor_of_parents: f64,
+    ) -> Self {
+        Self {
+            letters,
+            parents,
+            factor_of_parents,
+        }
+    }
+}
+
+#[derive(Clone, Debug, Hash, Eq, PartialEq)]
+pub enum UnitDatabaseError {
+    ExistsAsBaseUnit,
+    ExistsAsDerivedUnit,
+    UnknownBaseUnit(String),
+}
+impl fmt::Display for UnitDatabaseError {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match self {
+            Self::ExistsAsBaseUnit => write!(f, "new unit already exists as a base unit"),
+            Self::ExistsAsDerivedUnit => write!(f, "new unit already exists as a derived unit"),
+            Self::UnknownBaseUnit(s) => write!(f, "referenced unit {:?} not found", s),
+        }
+    }
+}
+impl std::error::Error for UnitDatabaseError {
+}
+
+pub(crate) struct UnitDatabase {
+    letters_to_base_unit: HashMap<String, BaseUnit>,
+    letters_to_derived_unit: HashMap<String, DerivedUnit>,
+    letters_to_max_depth: HashMap<String, usize>,
+}
+impl UnitDatabase {
+    pub fn new_empty() -> Self {
+        Self {
+            letters_to_base_unit: HashMap::new(),
+            letters_to_derived_unit: HashMap::new(),
+            letters_to_max_depth: HashMap::new(),
+        }
+    }
+
+    pub fn get_base_unit(&self, letters: &str) -> Option<&BaseUnit> {
+        self.letters_to_base_unit.get(letters)
+    }
+
+    pub fn get_derived_unit(&self, letters: &str) -> Option<&DerivedUnit> {
+        self.letters_to_derived_unit.get(letters)
+    }
+
+    pub fn get_max_depth(&self, letters: &str) -> Option<usize> {
+        self.letters_to_max_depth.get(letters).map(|s| *s)
+    }
+
+    pub fn register_base_unit(&mut self, base_unit: BaseUnit) -> Result<(), UnitDatabaseError> {
+        if self.letters_to_derived_unit.get(&base_unit.letters).is_some() {
+            return Err(UnitDatabaseError::ExistsAsDerivedUnit);
+        }
+
+        match self.letters_to_base_unit.entry(base_unit.letters.clone()) {
+            Entry::Occupied(oe) => {
+                Err(UnitDatabaseError::ExistsAsBaseUnit)
+            },
+            Entry::Vacant(ve) => {
+                self.letters_to_max_depth.insert(base_unit.letters.clone(), 0);
+                ve.insert(base_unit);
+                Ok(())
+            },
+        }
+    }
+
+    pub fn register_derived_unit(&mut self, derived_unit: DerivedUnit) -> Result<(), UnitDatabaseError> {
+        if self.letters_to_base_unit.get(&derived_unit.letters).is_some() {
+            return Err(UnitDatabaseError::ExistsAsBaseUnit);
+        }
+
+        match self.letters_to_derived_unit.entry(derived_unit.letters.clone()) {
+            Entry::Occupied(oe) => {
+                Err(UnitDatabaseError::ExistsAsDerivedUnit)
+            },
+            Entry::Vacant(ve) => {
+                let mut parent_max_depth = 0;
+                for (parent_letters, parent_power) in &derived_unit.parents {
+                    match self.letters_to_max_depth.get(parent_letters) {
+                        None => {
+                            return Err(UnitDatabaseError::UnknownBaseUnit(parent_letters.clone()));
+                        },
+                        Some(d) => {
+                            parent_max_depth = parent_max_depth.max(*d);
+                        },
+                    }
+                }
+
+                self.letters_to_max_depth.insert(derived_unit.letters.clone(), parent_max_depth + 1);
+                ve.insert(derived_unit);
+                Ok(())
+            },
+        }
+    }
+}
+
+fn get_max_depth_of_units<'a, I: 'a + Iterator<Item = (&'a String, &'a BigInt)>>(units: I, database: &UnitDatabase) -> Option<usize> {
+    let mut max_depth = 0;
+    for (u_letters, _u_power) in units {
+        match database.get_max_depth(&u_letters) {
+            None => return None,
+            Some(d) => {
+                if max_depth < d {
+                    max_depth = d;
+                }
+            },
+        }
+    }
+    Some(max_depth)
+}
+
+pub(crate) fn expand_number_unit(num: &Number, unit_letters: &str, database: &UnitDatabase) -> Number {
+    let unit = match database.get_derived_unit(unit_letters) {
+        Some(u) => u,
+        None => return num.clone(),
+    };
+
+    let new_value = num.value.checked_mul(NumberValue::Float(unit.factor_of_parents))
+        .expect("multiplication failed");
+
+    // update the units
+    let mut new_units = NumberUnits::new();
+    for (num_unit, num_pow) in &num.units {
+        if let Some(parent_pow) = unit.parents.get(num_unit) {
+            // number and parent are shared => add powers
+            let new_pow = num_pow + parent_pow;
+            if new_pow != BigInt::from(0) {
+                new_units.insert(num_unit.clone(), new_pow);
+            }
+        } else {
+            // only number contains this unit, not the parent => power from number
+            new_units.insert(num_unit.clone(), num_pow.clone());
+        }
+    }
+    for (parent_unit, parent_pow) in &unit.parents {
+        if num.units.contains_key(parent_unit) {
+            continue;
+        }
+
+        // only parent contains this unit, not the number => power from parent
+        new_units.insert(parent_unit.clone(), parent_pow.clone());
+    }
+
+    // reduce original unit by 1
+    let reduce_me = new_units.entry(unit_letters.to_owned())
+        .or_insert(BigInt::from(0));
+    *reduce_me -= 1;
+
+    // remove zero units
+    new_units.retain(|_name, power| power != &BigInt::from(0));
+
+    Number::new(
+        new_value,
+        new_units,
+    )
+}
+
+fn do_coerce_to_common_unit(
+    left: Number,
+    right: Number,
+    database: &UnitDatabase,
+) -> Option<(Number, Number)> {
+    // fast-path
+    if left.units == right.units {
+        return Some((left.clone(), right.clone()));
+    }
+
+    // collect relevant units by depth
+    let mut unit_by_depth = HashMap::new();
+    for (unit, _power) in left.units.iter().chain(right.units.iter()) {
+        match database.get_max_depth(&unit) {
+            None => return None, // unknown unit
+            Some(d) => {
+                unit_by_depth.insert(unit.clone(), d);
+            },
+        }
+    }
+    let mut depths_and_units: Vec<(usize, String)> = unit_by_depth.drain()
+        .map(|(u, d)| (d, u))
+        .collect();
+    depths_and_units.sort_unstable_by_key(|(u, d)| (usize::MAX - u, d.clone()));
+
+    for (_depth, unit) in depths_and_units {
+        let left_has_unit = left.units.contains_key(&unit);
+        let right_has_unit = right.units.contains_key(&unit);
+
+        if left_has_unit && !right_has_unit {
+            // expand the left unit
+            let new_left = expand_number_unit(&left, &unit, &database);
+            return do_coerce_to_common_unit(new_left, right, database);
+        } else if !left_has_unit && right_has_unit {
+            // expand the right unit
+            let new_right = expand_number_unit(&right, &unit, &database);
+            return do_coerce_to_common_unit(left, new_right, database);
+        }
+    }
+
+    // nothing...
+    None
+}
+
+pub(crate) fn coerce_to_common_unit(
+    left: &Number,
+    right: &Number,
+    database: &UnitDatabase,
+) -> Option<(Number, Number)> {
+    do_coerce_to_common_unit(left.clone(), right.clone(), database)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn make_database() -> UnitDatabase {
+        let mut db = UnitDatabase::new_empty();
+
+        db.register_base_unit(BaseUnit::new("kg".to_owned())).unwrap();
+        db.register_base_unit(BaseUnit::new("m".to_owned())).unwrap();
+        db.register_base_unit(BaseUnit::new("s".to_owned())).unwrap();
+
+        {
+            let mut sx1 = NumberUnits::new();
+            sx1.insert("s".to_owned(), BigInt::from(-1));
+            db.register_derived_unit(DerivedUnit::new("Hz".to_owned(), sx1, 1.0)).unwrap();
+        }
+
+        {
+            let mut kg_m_sx2 = NumberUnits::new();
+            kg_m_sx2.insert("kg".to_owned(), BigInt::from(1));
+            kg_m_sx2.insert("m".to_owned(), BigInt::from(1));
+            kg_m_sx2.insert("s".to_owned(), BigInt::from(-2));
+            db.register_derived_unit(DerivedUnit::new("N".to_owned(), kg_m_sx2, 1.0)).unwrap();
+        }
+
+        {
+            let mut n_mx2 = NumberUnits::new();
+            n_mx2.insert("N".to_owned(), BigInt::from(1));
+            n_mx2.insert("m".to_owned(), BigInt::from(-2));
+            db.register_derived_unit(DerivedUnit::new("Pa".to_owned(), n_mx2, 1.0)).unwrap();
+        }
+
+        {
+            let mut m = NumberUnits::new();
+            m.insert("m".to_owned(), BigInt::from(1));
+            db.register_derived_unit(DerivedUnit::new("in".to_owned(), m, 0.0254)).unwrap();
+        }
+
+        db
+    }
+
+    #[test]
+    fn test_synonymous_unit_coercion() {
+        // N = kg1 m1 s-2
+        // Pa = kg1 m-1 s-2
+
+        // Pa = N m-2
+
+        let database = make_database();
+
+        let mut n_mx2_units = NumberUnits::new();
+        n_mx2_units.insert("N".to_owned(), BigInt::from(1));
+        n_mx2_units.insert("m".to_owned(), BigInt::from(-2));
+        let n_mx2 = Number::new(NumberValue::Float(42.0), n_mx2_units);
+
+        let mut pa_units = NumberUnits::new();
+        pa_units.insert("Pa".to_owned(), BigInt::from(1));
+        let pa = Number::new(NumberValue::Float(42.0), pa_units);
+
+        let (new_n_mx2, new_pa) = coerce_to_common_unit(&n_mx2, &pa, &database).unwrap();
+        assert_eq!(NumberValue::Float(42.0), new_n_mx2.value);
+        assert_eq!(NumberValue::Float(42.0), new_pa.value);
+    }
+
+    #[test]
+    fn test_converted_unit_coercion() {
+        // N = kg1 m1 s-2
+        // Pa = kg1 m-1 s-2
+
+        // Pa = N m-2
+
+        let database = make_database();
+
+        let mut m_units = NumberUnits::new();
+        m_units.insert("m".to_owned(), BigInt::from(1));
+        let m = Number::new(NumberValue::Float(42.0), m_units);
+
+        let mut inch_units = NumberUnits::new();
+        inch_units.insert("in".to_owned(), BigInt::from(1));
+        let inch = Number::new(NumberValue::Float(42.0), inch_units);
+
+        let (new_m, new_inch) = coerce_to_common_unit(&m, &inch, &database).unwrap();
+        assert_eq!(NumberValue::Float(42.0), new_m.value);
+        assert_eq!(NumberValue::Float(1.0668), new_inch.value);
+    }
+}

@@ -4,10 +4,12 @@ use log::trace;
 use num_bigint::BigInt;
 use pest::Parser;
 use pest::error::Error;
-use pest::iterators::Pair;
+use pest::iterators::{Pair, Pairs};
 use pest_derive::Parser;
 
 use crate::ast::{AstNode, AstNodeAtLocation, BinaryOperation, UnaryOperation};
+use crate::numbers::{Number, NumberValue};
+use crate::units::NumberUnits;
 
 
 #[derive(Parser)]
@@ -168,23 +170,56 @@ fn parse_atom_expression(pair: &Pair<'_, Rule>) -> AstNodeAtLocation {
         },
         Rule::parens_expression => parse_expression(&child),
         Rule::integer_expression => {
-            let integer: BigInt = child.as_str().parse()
-                .expect("failed to parse integer");
+            let mut innerer = child.into_inner();
+            let integer: BigInt = innerer
+                .next().expect("missing integer")
+                .as_str().parse().expect("failed to parse integer");
+            let units = parse_unit_suffixes(innerer);
             AstNodeAtLocation {
-                node: AstNode::Int(integer),
+                node: AstNode::Number(Number::new(
+                    NumberValue::Int(integer),
+                    units,
+                )),
                 start_end: Some((pair.as_span().start(), pair.as_span().end())),
             }
         },
         Rule::decimal_expression => {
-            let float: f64 = child.as_str().parse()
-                .expect("failed to parse decimal expression");
+            let mut innerer = child.into_inner();
+            let float: f64 = innerer
+                .next().expect("missing float")
+                .as_str().parse().expect("failed to parse decimal expression");
+            let units = parse_unit_suffixes(innerer);
             AstNodeAtLocation {
-                node: AstNode::Float(float),
+                node: AstNode::Number(Number::new(
+                    NumberValue::Float(float),
+                    units,
+                )),
                 start_end: Some((pair.as_span().start(), pair.as_span().end())),
             }
         },
         other => panic!("unexpected rule {:?}", other),
     }
+}
+
+fn parse_unit_suffixes(mut pairs: Pairs<'_, Rule>) -> NumberUnits {
+    trace!("parse_unit_suffixes: {:?}", pairs);
+    let mut number_units = NumberUnits::new();
+    while let Some(pair) = pairs.next() {
+        let mut inner = pair.into_inner();
+
+        let unit_abbrev = inner.next().expect("unit abbreviation missing")
+            .as_str();
+        let unit_pow: BigInt = match inner.next() {
+            Some(up) => up.as_str()
+                .parse().expect("failed to parse unit power"),
+            None => BigInt::from(1),
+        };
+        number_units.insert(
+            unit_abbrev.to_owned(),
+            unit_pow,
+        );
+    }
+    number_units
 }
 
 fn parse_call_expression(pair: &Pair<'_, Rule>) -> AstNodeAtLocation {

@@ -1,6 +1,8 @@
 mod ast;
 mod grimoire;
+mod numbers;
 mod parsing;
+mod units;
 
 
 use std::collections::{HashMap, HashSet};
@@ -18,6 +20,7 @@ use serde_json;
 use crate::ast::{AstNode, SimplificationState};
 use crate::grimoire::{get_canonical_constants, get_canonical_functions};
 use crate::parsing::parse_full_expression;
+use crate::units::UnitDatabase;
 
 
 pub struct CalcPlugin {
@@ -50,6 +53,7 @@ impl CalcPlugin {
             let mut state = SimplificationState {
                 constants: get_canonical_constants(),
                 functions: get_canonical_functions(),
+                units: UnitDatabase::new_empty(),
                 start_time: Instant::now(),
                 timeout: Duration::from_secs_f64(self.timeout_seconds),
             };
@@ -58,11 +62,8 @@ impl CalcPlugin {
         match simplified_res {
             Ok(ntn) => {
                 let result_string = match &ntn.node {
-                    AstNode::Int(i) => {
+                    AstNode::Number(i) => {
                         i.to_string()
-                    },
-                    AstNode::Float(f) => {
-                        f.to_string()
                     },
                     other => {
                         error!("simplification produced invalid value: {:?}", other);

@@ -4,6 +4,8 @@ use num_bigint::{BigInt, ToBigInt};
 use num_traits::ToPrimitive;
 
 use crate::ast::{AstNode, BuiltInFunction, SimplificationError};
+use crate::numbers::{Number, NumberValue};
+use crate::units::NumberUnits;
 
 
 pub const GOLDEN_RATIO: f64 = 1.6180339887498948482045868344;
@@ -12,11 +14,11 @@ pub const GOLDEN_RATIO: f64 = 1.6180339887498948482045868344;
 pub(crate) fn get_canonical_constants() -> HashMap<String, AstNode> {
     let mut prepared: HashMap<&str, AstNode> = HashMap::new();
 
-    prepared.insert("pi", AstNode::Float(std::f64::consts::PI));
-    prepared.insert("e", AstNode::Float(std::f64::consts::E));
-    prepared.insert("goldenRatio", AstNode::Float(GOLDEN_RATIO));
-    prepared.insert("theAnswerToLifeTheUniverseAndEverything", AstNode::Int(BigInt::from(42)));
-    prepared.insert("numberOfHornsOnAUnicorn", AstNode::Int(BigInt::from(1)));
+    prepared.insert("pi", AstNode::from(std::f64::consts::PI));
+    prepared.insert("e", AstNode::from(std::f64::consts::E));
+    prepared.insert("goldenRatio", AstNode::from(GOLDEN_RATIO));
+    prepared.insert("theAnswerToLifeTheUniverseAndEverything", AstNode::from(BigInt::from(42)));
+    prepared.insert("numberOfHornsOnAUnicorn", AstNode::from(BigInt::from(1)));
 
     prepared.drain()
         .map(|(k, v)| (k.to_owned(), v))
@@ -32,12 +34,6 @@ pub(crate) fn get_canonical_functions() -> HashMap<String, BuiltInFunction> {
     prepared.insert("cos", f64_f64("cos", |f| f.cos()));
     prepared.insert("tan", f64_f64("tan", |f| f.tan()));
     prepared.insert("exp", f64_f64("exp", |f| f.tan()));
-    prepared.insert("deg2rad", f64_f64("deg2rad", |f| f * std::f64::consts::PI / 180.0));
-    prepared.insert("deg2gon", f64_f64("deg2gon", |f| f * 100.0 / 90.0));
-    prepared.insert("rad2deg", f64_f64("rad2deg", |f| f * 180.0 / std::f64::consts::PI));
-    prepared.insert("rad2gon", f64_f64("rad2gon", |f| f * 200.0 / std::f64::consts::PI));
-    prepared.insert("gon2deg", f64_f64("gon2deg", |f| f * 90.0 / 100.0));
-    prepared.insert("gon2rad", f64_f64("gon2rad", |f| f * std::f64::consts::PI / 200.0));
     prepared.insert("asin", f64_f64("asin", |f| f.asin()));
     prepared.insert("acos", f64_f64("acos", |f| f.acos()));
     prepared.insert("atan", f64_f64("atan", |f| f.atan()));
@@ -68,13 +64,20 @@ fn f64_f64<F>(name: &'static str, mut inner: F) -> BuiltInFunction
             return Err(SimplificationError::IncorrectArgCount(name.to_owned(), 1, operands.len()));
         }
 
-        let operand: f64 = match &operands[0].node {
-            AstNode::Int(i) => i.to_f64().expect("conversion failed"),
-            AstNode::Float(f) => *f,
+        let (operand, units): (f64, NumberUnits) = match &operands[0].node {
+            AstNode::Number(n) => {
+                match &n.value {
+                    NumberValue::Int(i) => (i.to_f64().expect("conversion failed"), n.units.clone()),
+                    NumberValue::Float(f) => (*f, n.units.clone()),
+                }
+            },
             other => return Err(SimplificationError::UnexpectedOperandType(format!("{:?}", other))),
         };
 
-        Ok(AstNode::Float(inner(operand)))
+        Ok(AstNode::Number(Number::new(
+            NumberValue::Float(inner(operand)),
+            units,
+        )))
     })
 }
 
@@ -87,9 +90,13 @@ fn f64_f64asint<F>(name: &'static str, mut inner: F) -> BuiltInFunction
             return Err(SimplificationError::IncorrectArgCount(name.to_owned(), 1, operands.len()));
         }
 
-        let operand: f64 = match &operands[0].node {
-            AstNode::Int(i) => i.to_f64().expect("conversion failed"),
-            AstNode::Float(f) => *f,
+        let (operand, units): (f64, NumberUnits) = match &operands[0].node {
+            AstNode::Number(n) => {
+                match &n.value {
+                    NumberValue::Int(i) => (i.to_f64().expect("conversion failed"), n.units.clone()),
+                    NumberValue::Float(f) => (*f, n.units.clone()),
+                }
+            },
             other => return Err(SimplificationError::UnexpectedOperandType(format!("{:?}", other))),
         };
         let result = inner(operand);
@@ -98,7 +105,10 @@ fn f64_f64asint<F>(name: &'static str, mut inner: F) -> BuiltInFunction
             None => return Err(SimplificationError::NonIntegralValue(result)),
         };
 
-        Ok(AstNode::Int(result_bint))
+        Ok(AstNode::Number(Number::new(
+            NumberValue::Int(result_bint),
+            units,
+        )))
     })
 }
 
@@ -111,17 +121,32 @@ fn f64_f64_f64<F>(name: &'static str, mut inner: F) -> BuiltInFunction
             return Err(SimplificationError::IncorrectArgCount(name.to_owned(), 2, operands.len()));
         }
 
-        let left: f64 = match &operands[0].node {
-            AstNode::Int(i) => i.to_f64().expect("conversion failed"),
-            AstNode::Float(f) => *f,
+        let (left, left_units): (f64, NumberUnits) = match &operands[0].node {
+            AstNode::Number(n) => {
+                match &n.value {
+                    NumberValue::Int(i) => (i.to_f64().expect("conversion failed"), n.units.clone()),
+                    NumberValue::Float(f) => (*f, n.units.clone()),
+                }
+            },
             other => return Err(SimplificationError::UnexpectedOperandType(format!("{:?}", other))),
         };
-        let right: f64 = match &operands[1].node {
-            AstNode::Int(i) => i.to_f64().expect("conversion failed"),
-            AstNode::Float(f) => *f,
+        let (right, right_units): (f64, NumberUnits) = match &operands[1].node {
+            AstNode::Number(n) => {
+                match &n.value {
+                    NumberValue::Int(i) => (i.to_f64().expect("conversion failed"), n.units.clone()),
+                    NumberValue::Float(f) => (*f, n.units.clone()),
+                }
+            },
             other => return Err(SimplificationError::UnexpectedOperandType(format!("{:?}", other))),
         };
 
-        Ok(AstNode::Float(inner(left, right)))
+        if right_units.len() > 0 {
+            return Err(SimplificationError::RightOperandHasUnits);
+        }
+
+        Ok(AstNode::Number(Number::new(
+            NumberValue::Float(inner(left, right)),
+            left_units,
+        )))
     })
 }
