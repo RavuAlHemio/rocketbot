@@ -301,11 +301,15 @@ fn do_coerce_to_common_unit(
         if left_has_unit && !right_has_unit {
             // expand the left unit
             let new_left = expand_number_unit(&left, &unit, &database);
-            return do_coerce_to_common_unit(new_left, right, database);
+            if left != new_left {
+                return do_coerce_to_common_unit(new_left, right, database);
+            }
         } else if !left_has_unit && right_has_unit {
             // expand the right unit
             let new_right = expand_number_unit(&right, &unit, &database);
-            return do_coerce_to_common_unit(left, new_right, database);
+            if right != new_right {
+                return do_coerce_to_common_unit(left, new_right, database);
+            }
         }
     }
 
