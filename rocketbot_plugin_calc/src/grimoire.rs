@@ -3,9 +3,12 @@ use std::collections::HashMap;
 use num_bigint::{BigInt, ToBigInt};
 use num_traits::ToPrimitive;
 
-use crate::ast::{AstNode, BuiltInFunction, SimplificationError};
+use crate::ast::{
+    AstNode, AstNodeAtLocation, BuiltInFunction, BuiltInFuncResult, SimplificationError,
+    SimplificationState,
+};
 use crate::numbers::{Number, NumberValue};
-use crate::units::NumberUnits;
+use crate::units::{coerce_to_unit, NumberUnits};
 
 
 pub const GOLDEN_RATIO: f64 = 1.6180339887498948482045868344;
@@ -49,6 +52,8 @@ pub(crate) fn get_canonical_functions() -> HashMap<String, BuiltInFunction> {
     prepared.insert("floor", f64_f64asint("floor", |f| f.floor()));
     prepared.insert("round", f64_f64asint("round", |f| f.round()));
     prepared.insert("trunc", f64_f64asint("trunc", |f| f.trunc()));
+
+    prepared.insert("coerce", Box::new(coerce));
 
     prepared.drain()
         .map(|(k, v)| (k.to_owned(), v))
@@ -149,4 +154,24 @@ fn f64_f64_f64<F>(name: &'static str, inner: F) -> BuiltInFunction
             left_units,
         )))
     })
+}
+
+fn coerce(state: &SimplificationState, operands: &[AstNodeAtLocation]) -> BuiltInFuncResult {
+    if operands.len() != 2 {
+        return Err(SimplificationError::IncorrectArgCount("coerce".to_owned(), 2, operands.len()));
+    }
+
+    let left_number = match &operands[0].node {
+        AstNode::Number(n) => n,
+        other => return Err(SimplificationError::UnexpectedOperandType(format!("{:?}", other))),
+    };
+    let right_number = match &operands[1].node {
+        AstNode::Number(n) => n,
+        other => return Err(SimplificationError::UnexpectedOperandType(format!("{:?}", other))),
+    };
+
+    match coerce_to_unit(left_number, &right_number.units, &state.units) {
+        Some(n) => Ok(AstNode::Number(n)),
+        None => Err(SimplificationError::UnitReconciliation),
+    }
 }
