@@ -63,6 +63,7 @@ impl std::error::Error for UnitDatabaseError {
 }
 
 pub(crate) struct UnitDatabase {
+    si_prefix_to_factor: HashMap<String, f64>,
     letters_to_base_unit: HashMap<String, BaseUnit>,
     letters_to_derived_unit: HashMap<String, DerivedUnit>,
     letters_to_max_depth: HashMap<String, usize>,
@@ -70,22 +71,94 @@ pub(crate) struct UnitDatabase {
 impl UnitDatabase {
     pub fn new_empty() -> Self {
         Self {
+            si_prefix_to_factor: HashMap::new(),
             letters_to_base_unit: HashMap::new(),
             letters_to_derived_unit: HashMap::new(),
             letters_to_max_depth: HashMap::new(),
         }
     }
 
-    pub fn get_base_unit(&self, letters: &str) -> Option<&BaseUnit> {
-        self.letters_to_base_unit.get(letters)
+    pub fn insert_canonical_si_prefixes(&mut self) {
+        self.si_prefix_to_factor.insert("Y".to_owned(), 1e24);
+        self.si_prefix_to_factor.insert("Z".to_owned(), 1e21);
+        self.si_prefix_to_factor.insert("E".to_owned(), 1e18);
+        self.si_prefix_to_factor.insert("P".to_owned(), 1e15);
+        self.si_prefix_to_factor.insert("T".to_owned(), 1e12);
+        self.si_prefix_to_factor.insert("G".to_owned(), 1e9);
+        self.si_prefix_to_factor.insert("M".to_owned(), 1e6);
+        self.si_prefix_to_factor.insert("k".to_owned(), 1e3);
+        self.si_prefix_to_factor.insert("h".to_owned(), 1e2);
+        self.si_prefix_to_factor.insert("da".to_owned(), 1e1);
+
+        self.si_prefix_to_factor.insert("d".to_owned(), 1e-1);
+        self.si_prefix_to_factor.insert("c".to_owned(), 1e-2);
+        self.si_prefix_to_factor.insert("m".to_owned(), 1e-3);
+        self.si_prefix_to_factor.insert("\u{03BC}".to_owned(), 1e-6);
+        self.si_prefix_to_factor.insert("n".to_owned(), 1e-9);
+        self.si_prefix_to_factor.insert("p".to_owned(), 1e-12);
+        self.si_prefix_to_factor.insert("f".to_owned(), 1e-15);
+        self.si_prefix_to_factor.insert("a".to_owned(), 1e-18);
+        self.si_prefix_to_factor.insert("z".to_owned(), 1e-21);
+        self.si_prefix_to_factor.insert("y".to_owned(), 1e-24);
     }
 
-    pub fn get_derived_unit(&self, letters: &str) -> Option<&DerivedUnit> {
-        self.letters_to_derived_unit.get(letters)
+    pub fn get_base_unit(&self, letters: &str) -> Option<BaseUnit> {
+        self.letters_to_base_unit.get(letters)
+            .map(|bu| bu.clone())
+    }
+
+    pub fn get_derived_unit(&self, letters: &str) -> Option<DerivedUnit> {
+        // does it exist?
+        if let Some(du) = self.letters_to_derived_unit.get(letters) {
+            // yes
+            return Some(du.clone());
+        }
+
+        // try applying SI prefixes
+        for (si_pfx, ten_pow) in &self.si_prefix_to_factor {
+            if !letters.starts_with(si_pfx) {
+                continue;
+            }
+
+            let non_prefix_unit = &letters[si_pfx.len()..];
+            // don't allow multiprefix units (otherwise replace with recursive call)
+            if self.letters_to_derived_unit.contains_key(non_prefix_unit) || self.letters_to_base_unit.contains_key(non_prefix_unit) {
+                // perfect
+
+                // synthesize a derived unit
+                let mut synth_parents = BTreeMap::new();
+                synth_parents.insert(non_prefix_unit.to_owned(), BigInt::from(1));
+                let synth_derived_unit = DerivedUnit::new(
+                    letters.to_owned(),
+                    synth_parents,
+                    *ten_pow,
+                );
+                return Some(synth_derived_unit);
+            }
+        }
+
+        None
     }
 
     pub fn get_max_depth(&self, letters: &str) -> Option<usize> {
-        self.letters_to_max_depth.get(letters).map(|s| *s)
+        // does it exist?
+        if let Some(d) = self.letters_to_max_depth.get(letters).map(|s| *s) {
+            // yes
+            return Some(d);
+        }
+
+        // try applying SI prefixes
+        for (si_pfx, _ten_pow) in &self.si_prefix_to_factor {
+            if !letters.starts_with(si_pfx) {
+                let non_prefix_unit = &letters[si_pfx.len()..];
+                // don't allow multiprefix units (otherwise replace with recursive call)
+                if let Some(md) = self.letters_to_max_depth.get(non_prefix_unit) {
+                    return Some(*md + 1);
+                }
+            }
+        }
+
+        None
     }
 
     pub fn register_base_unit(&mut self, base_unit: BaseUnit) -> Result<(), UnitDatabaseError> {
@@ -94,7 +167,7 @@ impl UnitDatabase {
         }
 
         match self.letters_to_base_unit.entry(base_unit.letters.clone()) {
-            Entry::Occupied(oe) => {
+            Entry::Occupied(_oe) => {
                 Err(UnitDatabaseError::ExistsAsBaseUnit)
             },
             Entry::Vacant(ve) => {
@@ -254,6 +327,7 @@ mod tests {
 
     fn make_database() -> UnitDatabase {
         let mut db = UnitDatabase::new_empty();
+        db.insert_canonical_si_prefixes();
 
         db.register_base_unit(BaseUnit::new("kg".to_owned())).unwrap();
         db.register_base_unit(BaseUnit::new("m".to_owned())).unwrap();
@@ -314,11 +388,6 @@ mod tests {
 
     #[test]
     fn test_converted_unit_coercion() {
-        // N = kg1 m1 s-2
-        // Pa = kg1 m-1 s-2
-
-        // Pa = N m-2
-
         let database = make_database();
 
         let mut m_units = NumberUnits::new();
@@ -330,7 +399,59 @@ mod tests {
         let inch = Number::new(NumberValue::Float(42.0), inch_units);
 
         let (new_m, new_inch) = coerce_to_common_unit(&m, &inch, &database).unwrap();
+
         assert_eq!(NumberValue::Float(42.0), new_m.value);
+        assert_eq!(1, new_m.units.len());
+        assert_eq!(Some(&BigInt::from(1)), new_m.units.get("m"));
+
         assert_eq!(NumberValue::Float(1.0668), new_inch.value);
+        assert_eq!(1, new_inch.units.len());
+        assert_eq!(Some(&BigInt::from(1)), new_inch.units.get("m"));
+    }
+
+    #[test]
+    fn test_power() {
+        let database = make_database();
+
+        let mut km3_units = NumberUnits::new();
+        km3_units.insert("km".to_owned(), BigInt::from(3));
+        let km3 = Number::new(NumberValue::Float(42.0), km3_units);
+
+        let mut m3_units = NumberUnits::new();
+        m3_units.insert("m".to_owned(), BigInt::from(3));
+        let m3 = Number::new(NumberValue::Float(42.0), m3_units);
+
+        let (new_km3, new_m3) = coerce_to_common_unit(&km3, &m3, &database).unwrap();
+
+        assert_eq!(NumberValue::Float(42.0e9), new_km3.value);
+        assert_eq!(1, new_km3.units.len());
+        assert_eq!(Some(&BigInt::from(3)), new_km3.units.get("m"));
+
+        assert_eq!(NumberValue::Float(42.0), new_m3.value);
+        assert_eq!(1, new_m3.units.len());
+        assert_eq!(Some(&BigInt::from(3)), new_m3.units.get("m"));
+    }
+
+    #[test]
+    fn test_converted_unit_power_coercion() {
+        let database = make_database();
+
+        let mut m_units = NumberUnits::new();
+        m_units.insert("m".to_owned(), BigInt::from(3));
+        let m = Number::new(NumberValue::Float(42.0), m_units);
+
+        let mut inch_units = NumberUnits::new();
+        inch_units.insert("in".to_owned(), BigInt::from(3));
+        let inch = Number::new(NumberValue::Float(42.0), inch_units);
+
+        let (new_m, new_inch) = coerce_to_common_unit(&m, &inch, &database).unwrap();
+
+        assert_eq!(NumberValue::Float(42.0), new_m.value);
+        assert_eq!(1, new_m.units.len());
+        assert_eq!(Some(&BigInt::from(3)), new_m.units.get("m"));
+
+        assert_eq!(NumberValue::Float(0.0006882566879999999), new_inch.value);
+        assert_eq!(1, new_inch.units.len());
+        assert_eq!(Some(&BigInt::from(3)), new_inch.units.get("m"));
     }
 }
