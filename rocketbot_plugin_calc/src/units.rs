@@ -325,6 +325,32 @@ pub(crate) fn coerce_to_common_unit(
     do_coerce_to_common_unit(left.clone(), right.clone(), database)
 }
 
+pub(crate) fn coerce_to_unit(
+    number: &Number,
+    units: &NumberUnits,
+    database: &UnitDatabase,
+) -> Option<Number> {
+    let template_number = Number::new(
+        NumberValue::Float(1.0),
+        units.clone(),
+    );
+
+    // attempt to coerce them to a common unit
+    let (c_number, c_template) = do_coerce_to_common_unit(
+        number.clone(),
+        template_number,
+        database,
+    )?;
+
+    // that succeeded
+    // c_template now contains the factor to convert from the target units to the common unit
+    // divide by it to get from the value in the common unit to the value in the target unit
+    Some(Number::new(
+        c_number.value / c_template.value,
+        units.clone(),
+    ))
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -362,6 +388,26 @@ mod tests {
             let mut m = NumberUnits::new();
             m.insert("m".to_owned(), BigInt::from(1));
             db.register_derived_unit(DerivedUnit::new("in".to_owned(), m, 0.0254)).unwrap();
+        }
+
+        {
+            let mut inch = NumberUnits::new();
+            inch.insert("in".to_owned(), BigInt::from(1));
+            db.register_derived_unit(DerivedUnit::new("ft".to_owned(), inch, 12.0)).unwrap();
+        }
+
+        {
+            let mut kg = NumberUnits::new();
+            kg.insert("kg".to_owned(), BigInt::from(1));
+            db.register_derived_unit(DerivedUnit::new("lb".to_owned(), kg, 0.45359237)).unwrap();
+        }
+
+        {
+            let mut ft_lb_sx2 = NumberUnits::new();
+            ft_lb_sx2.insert("ft".to_owned(), BigInt::from(1));
+            ft_lb_sx2.insert("lb".to_owned(), BigInt::from(1));
+            ft_lb_sx2.insert("s".to_owned(), BigInt::from(-2));
+            db.register_derived_unit(DerivedUnit::new("lbf".to_owned(), ft_lb_sx2, 32.1740485564304)).unwrap();
         }
 
         db
@@ -457,5 +503,68 @@ mod tests {
         assert_eq!(NumberValue::Float(0.0006882566879999999), new_inch.value);
         assert_eq!(1, new_inch.units.len());
         assert_eq!(Some(&BigInt::from(3)), new_inch.units.get("m"));
+    }
+
+    #[test]
+    fn test_unrelated_coercion() {
+        let database = make_database();
+
+        let mut m_units = NumberUnits::new();
+        m_units.insert("m".to_owned(), BigInt::from(1));
+        let m = Number::new(NumberValue::Float(42.0), m_units);
+
+        let mut s_units = NumberUnits::new();
+        s_units.insert("s".to_owned(), BigInt::from(1));
+        let s = Number::new(NumberValue::Float(42.0), s_units);
+
+        assert_eq!(None, coerce_to_common_unit(&m, &s, &database));
+    }
+
+    #[test]
+    fn test_targeted_coercion() {
+        let database = make_database();
+
+        let mut m_units = NumberUnits::new();
+        m_units.insert("m".to_owned(), BigInt::from(1));
+        let m = Number::new(NumberValue::Float(42.0), m_units);
+
+        let mut inch_units = NumberUnits::new();
+        inch_units.insert("in".to_owned(), BigInt::from(1));
+
+        let inch = coerce_to_unit(&m, &inch_units, &database).unwrap();
+        assert_eq!(NumberValue::Float(1653.5433070866143), inch.value);
+        assert_eq!(1, inch.units.len());
+        assert_eq!(Some(&BigInt::from(1)), inch.units.get("in"));
+    }
+
+    #[test]
+    fn test_indirect_targeted_coercion() {
+        let database = make_database();
+
+        let mut lbf_units = NumberUnits::new();
+        lbf_units.insert("lbf".to_owned(), BigInt::from(1));
+        let lbf = Number::new(NumberValue::Float(42.0), lbf_units);
+
+        let mut n_units = NumberUnits::new();
+        n_units.insert("N".to_owned(), BigInt::from(1));
+
+        let n = coerce_to_unit(&lbf, &n_units, &database).unwrap();
+        assert_eq!(NumberValue::Float(186.82530784094072), n.value);
+        assert_eq!(1, n.units.len());
+        assert_eq!(Some(&BigInt::from(1)), n.units.get("N"));
+    }
+
+    #[test]
+    fn test_incompatible_targeted_coercion() {
+        let database = make_database();
+
+        let mut m_units = NumberUnits::new();
+        m_units.insert("m".to_owned(), BigInt::from(1));
+        let m = Number::new(NumberValue::Float(42.0), m_units);
+
+        let mut s_units = NumberUnits::new();
+        s_units.insert("s".to_owned(), BigInt::from(1));
+
+        assert_eq!(None, coerce_to_unit(&m, &s_units, &database));
     }
 }
