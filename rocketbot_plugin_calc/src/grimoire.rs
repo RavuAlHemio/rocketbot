@@ -56,10 +56,10 @@ pub(crate) fn get_canonical_functions() -> HashMap<String, BuiltInFunction> {
 }
 
 
-fn f64_f64<F>(name: &'static str, mut inner: F) -> BuiltInFunction
-    where F: FnMut(f64) -> f64 + 'static
+fn f64_f64<F>(name: &'static str, inner: F) -> BuiltInFunction
+    where F: Fn(f64) -> f64 + 'static
 {
-    Box::new(move |operands| {
+    Box::new(move |_state, operands| {
         if operands.len() != 1 {
             return Err(SimplificationError::IncorrectArgCount(name.to_owned(), 1, operands.len()));
         }
@@ -82,10 +82,10 @@ fn f64_f64<F>(name: &'static str, mut inner: F) -> BuiltInFunction
 }
 
 
-fn f64_f64asint<F>(name: &'static str, mut inner: F) -> BuiltInFunction
-    where F: FnMut(f64) -> f64 + 'static
+fn f64_f64asint<F>(name: &'static str, inner: F) -> BuiltInFunction
+    where F: Fn(f64) -> f64 + 'static
 {
-    Box::new(move |operands| {
+    Box::new(move |_state, operands| {
         if operands.len() != 1 {
             return Err(SimplificationError::IncorrectArgCount(name.to_owned(), 1, operands.len()));
         }
@@ -113,10 +113,10 @@ fn f64_f64asint<F>(name: &'static str, mut inner: F) -> BuiltInFunction
 }
 
 
-fn f64_f64_f64<F>(name: &'static str, mut inner: F) -> BuiltInFunction
-    where F: FnMut(f64, f64) -> f64 + 'static
+fn f64_f64_f64<F>(name: &'static str, inner: F) -> BuiltInFunction
+    where F: Fn(f64, f64) -> f64 + 'static
 {
-    Box::new(move |operands| {
+    Box::new(move |_state, operands| {
         if operands.len() != 2 {
             return Err(SimplificationError::IncorrectArgCount(name.to_owned(), 2, operands.len()));
         }

@@ -140,7 +140,7 @@ impl std::error::Error for SimplificationErrorAtLocation {
 
 pub(crate) type SimplificationResult = Result<AstNodeAtLocation, SimplificationErrorAtLocation>;
 pub(crate) type BuiltInFuncResult = Result<AstNode, SimplificationError>;
-pub(crate) type BuiltInFunction = Box<dyn FnMut(&[AstNodeAtLocation]) -> BuiltInFuncResult>;
+pub(crate) type BuiltInFunction = Box<dyn Fn(&SimplificationState, &[AstNodeAtLocation]) -> BuiltInFuncResult>;
 
 pub(crate) struct SimplificationState {
     pub constants: HashMap<String, AstNode>,
@@ -319,8 +319,8 @@ impl AstNodeAtLocation {
                     simplified_args.push(arg.simplify(state)?);
                 }
 
-                let func = state.functions.get_mut(name).unwrap();
-                match func(&simplified_args) {
+                let func = state.functions.get(name).unwrap();
+                match func(&state, &simplified_args) {
                     Ok(node) => Ok(AstNodeAtLocation {
                         node,
                         start_end: self.start_end,
