@@ -358,6 +358,14 @@ letters = "H"
 parents = { kg = 1, m = 2, s = -2, A = -2 }
 factor_of_parents = 1
 
+### DERIVED UNITS OF TEMPERATURE
+
+[[derived_units]]
+# R, rankine, Fahrenheit steps from absolute zero (like kelvins are Celsius steps from absolute zero), 1.8 kelvins
+letters = "R"
+parents = { K = 1 }
+factor_of_parents = 1.8
+
 ### DERIVED UNITS RELATED TO LIGHT
 
 [[derived_units]]
