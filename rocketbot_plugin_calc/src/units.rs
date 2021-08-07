@@ -164,7 +164,7 @@ impl UnitDatabase {
     }
 
     pub fn register_base_unit(&mut self, base_unit: BaseUnit) -> Result<(), UnitDatabaseError> {
-        if self.letters_to_derived_unit.get(&base_unit.letters).is_some() {
+        if self.get_derived_unit(&base_unit.letters).is_some() {
             return Err(UnitDatabaseError::ExistsAsDerivedUnit);
         }
 
@@ -181,29 +181,29 @@ impl UnitDatabase {
     }
 
     pub fn register_derived_unit(&mut self, derived_unit: DerivedUnit) -> Result<(), UnitDatabaseError> {
-        if self.letters_to_base_unit.get(&derived_unit.letters).is_some() {
+        if self.get_base_unit(&derived_unit.letters).is_some() {
             return Err(UnitDatabaseError::ExistsAsBaseUnit);
         }
 
-        match self.letters_to_derived_unit.entry(derived_unit.letters.clone()) {
-            Entry::Occupied(oe) => {
+        match self.get_derived_unit(&derived_unit.letters) {
+            Some(_derived_unit) => {
                 Err(UnitDatabaseError::ExistsAsDerivedUnit)
             },
-            Entry::Vacant(ve) => {
+            None => {
                 let mut parent_max_depth = 0;
-                for (parent_letters, parent_power) in &derived_unit.parents {
-                    match self.letters_to_max_depth.get(parent_letters) {
+                for parent_letters in derived_unit.parents.keys() {
+                    match self.get_max_depth(parent_letters) {
                         None => {
                             return Err(UnitDatabaseError::UnknownBaseUnit(parent_letters.clone()));
                         },
                         Some(d) => {
-                            parent_max_depth = parent_max_depth.max(*d);
+                            parent_max_depth = parent_max_depth.max(d);
                         },
                     }
                 }
 
                 self.letters_to_max_depth.insert(derived_unit.letters.clone(), parent_max_depth + 1);
-                ve.insert(derived_unit);
+                self.letters_to_derived_unit.insert(derived_unit.letters.clone(),derived_unit);
                 Ok(())
             },
         }
@@ -230,21 +230,6 @@ impl StoredUnitDatabase {
 
         Ok(unit_db)
     }
-}
-
-fn get_max_depth_of_units<'a, I: 'a + Iterator<Item = (&'a String, &'a BigInt)>>(units: I, database: &UnitDatabase) -> Option<usize> {
-    let mut max_depth = 0;
-    for (u_letters, _u_power) in units {
-        match database.get_max_depth(&u_letters) {
-            None => return None,
-            Some(d) => {
-                if max_depth < d {
-                    max_depth = d;
-                }
-            },
-        }
-    }
-    Some(max_depth)
 }
 
 pub(crate) fn expand_number_unit(num: &Number, unit_letters: &str, database: &UnitDatabase) -> Number {
