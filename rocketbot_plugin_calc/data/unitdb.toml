@@ -98,7 +98,7 @@ factor_of_parents = 0.017453292519943295
 # gon, decimal degree, pi/200 radians
 letters = "gon"
 parents = {}
-factor_of_parents = 5.654866776461628
+factor_of_parents = 0.015707963267948967
 
 ### DERIVED UNITS OF SQUARED LENGTH (AREA)
 
