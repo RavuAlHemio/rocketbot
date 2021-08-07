@@ -34,19 +34,19 @@ letters = "cd"
 [[derived_units]]
 # min, minute, 60 seconds
 letters = "min"
-parents = { s = 1 }
+parents = { s = "1" }
 factor_of_parents = 0.01666666666666666666
 
 [[derived_units]]
 # h, hour, 60*60 seconds
 letters = "h"
-parents = { s = 1 }
+parents = { s = "1" }
 factor_of_parents = 0.00027777777777777777
 
 [[derived_units]]
 # d, day, 24*60*60 seconds
 letters = "d"
-parents = { s = 1 }
+parents = { s = "1" }
 factor_of_parents = 0.00001157407407407407
 
 ### DERIVED UNITS OF LENGTH
@@ -54,38 +54,38 @@ factor_of_parents = 0.00001157407407407407
 [[derived_units]]
 # au, astronomical unit, 149_597_870_700 m
 letters = "au"
-parents = { m = 1 }
+parents = { m = "1" }
 factor_of_parents = 149597870700
 
 [[derived_units]]
 # in, inch, 25.4 millimeters (0.0254 meters)
 letters = "in"
-parents = { m = 1 }
+parents = { m = "1" }
 factor_of_parents = 0.0254
 
 [[derived_units]]
 # ft, foot, 12 inches
 letters = "ft"
-parents = { in = 1 }
+parents = { in = "1" }
 factor_of_parents = 12
 
 [[derived_units]]
 # yd, yard, 3 feet (36 inches)
 letters = "yd"
-parents = { in = 1 }
+parents = { in = "1" }
 factor_of_parents = 36
 
 [[derived_units]]
 # mi, mile, 1760 yards (63360 inches)
 letters = "mi"
-parents = { in = 1 }
+parents = { in = "1" }
 factor_of_parents = 63360
 
 [[derived_units]]
 # nmi, nautical mile, 1852 meters
 # (hides nanomile but nobody uses that)
 letters = "nmi"
-parents = { m = 1 }
+parents = { m = "1" }
 factor_of_parents = 1852
 
 [[derived_units]]
@@ -105,7 +105,7 @@ factor_of_parents = 5.654866776461628
 [[derived_units]]
 # a, are, 100 square meters
 letters = "a"
-parents = { m = 2 }
+parents = { m = "2" }
 factor_of_parents = 100
 
 # hectare (100 a) is derived thanks to SI prefix support
@@ -114,21 +114,21 @@ factor_of_parents = 100
 # sqin, square inch, an inch times an inch
 # effectively an alias for in^2
 letters = "sqin"
-parents = { in = 2 }
+parents = { in = "2" }
 factor_of_parents = 1
 
 [[derived_units]]
 # sqft, square foot, a foot times a foot
 # effectively an alias for ft^2
 letters = "sqft"
-parents = { ft = 2 }
+parents = { ft = "2" }
 factor_of_parents = 1
 
 [[derived_units]]
 # ac, acre, 43560 square survey feet (1 survey foot = 1200/3937 meters)
 # we do not support survey feet, so define in terms of square meter
 letters = "ac"
-parents = { m = 2 }
+parents = { m = "2" }
 factor_of_parents = 4046.87260987425201
 
 ### DERIVED UNITS OF CUBED LENGTH (VOLUME)
@@ -136,44 +136,44 @@ factor_of_parents = 4046.87260987425201
 [[derived_units]]
 # l, liter/litre, 1 cubic decimeter = 0.001 cubic meters
 letters = "l"
-parents = { m = 3 }
+parents = { m = "3" }
 factor_of_parents = 0.001
 
 [[derived_units]]
 # floz, fluid ounce, 29.573_529_562_5 milliliters = 0.029_573_529_562_5 liters = 0.000_029_573_529_562_5 cubic meters
 letters = "floz"
-parents = { m = 3 }
+parents = { m = "3" }
 factor_of_parents = 0.0000295735295625
 
 [[derived_units]]
 # pint, 16 fluid ounces
 # (not pt; conflicts with typographic points)
 letters = "pint"
-parents = { floz = 1 }
+parents = { floz = "1" }
 factor_of_parents = 16
 
 [[derived_units]]
 # qt, quart, 2 pints = 32 fluid ounces
 letters = "qt"
-parents = { floz = 1 }
+parents = { floz = "1" }
 factor_of_parents = 32
 
 [[derived_units]]
 # gal, gallon, 4 quarts = 8 pints = 128 fluid ounces
 letters = "gal"
-parents = { floz = 1 }
+parents = { floz = "1" }
 factor_of_parents = 128
 
 [[derived_units]]
 # bbl, barrel, 31.5 gallons
 letters = "bbl"
-parents = { gal = 1 }
+parents = { gal = "1" }
 factor_of_parents = 31.5
 
 [[derived_units]]
 # obbl, oil barrel, 42 gallons
 letters = "obbl"
-parents = { gal = 1 }
+parents = { gal = "1" }
 factor_of_parents = 42
 
 ### DERIVED UNITS OF MASS
@@ -181,25 +181,25 @@ factor_of_parents = 42
 [[derived_units]]
 # t, tonne/metric ton, 1_000 kilograms = 1_000_000 grams
 letters = "t"
-parents = { g = 1 }
+parents = { g = "1" }
 factor_of_parents = 1000000
 
 [[derived_units]]
 # oz, (avoirdupois) ounce, 28.349_523_125 grams
 letters = "oz"
-parents = { g = 1 }
+parents = { g = "1" }
 factor_of_parents = 28.349523125
 
 [[derived_units]]
 # lb, (avoirdupois) pound, 16 ounces
 letters = "lb"
-parents = { oz = 1 }
+parents = { oz = "1" }
 factor_of_parents = 16
 
 [[derived_units]]
 # ton, (avoirdupois) ton, 2000 lb = 32000 ounces
 letters = "ton"
-parents = { oz = 1 }
+parents = { oz = "1" }
 factor_of_parents = 32000
 
 ### DERIVED UNITS OF FREQUENCY (PER TIME)
@@ -207,7 +207,7 @@ factor_of_parents = 32000
 [[derived_units]]
 # Hz, Hertz, 1 s^-1
 letters = "Hz"
-parents = { s = -1 }
+parents = { s = "-1" }
 factor_of_parents = 1
 
 ### DERIVED UNITS OF VELOCITY (LENGTH PER TIME)
@@ -215,7 +215,7 @@ factor_of_parents = 1
 [[derived_units]]
 # mph, miles per hour, alias for mi/h
 letters = "mph"
-parents = { mi = 1, h = -1 }
+parents = { mi = "1", h = "-1" }
 factor_of_parents = 1
 
 ### DERIVED UNITS OF ACCELERATION (LENGTH PER TIME PER TIME)
@@ -227,13 +227,13 @@ factor_of_parents = 1
 [[derived_units]]
 # N, newton, 1 kg m s^-2
 letters = "N"
-parents = { kg = 1, m = 1, s = -2 }
+parents = { kg = "1", m = "1", s = "-2" }
 factor_of_parents = 1
 
 [[derived_units]]
 # lbf, pound-force, 1 lb * standard gravity = 4.4482216152605 newtons
 letters = "lbf"
-parents = { N = 1 }
+parents = { N = "1" }
 factor_of_parents = 4.4482216152605
 
 ### DERIVED UNITS OF PRESSURE (FORCE PER AREA = MASS PER LENGTH PER TIME PER TIME)
@@ -241,19 +241,19 @@ factor_of_parents = 4.4482216152605
 [[derived_units]]
 # Pa, pascal, 1 kg m^-1 s^-2
 letters = "Pa"
-parents = { kg = 1, m = -1, s = -2 }
+parents = { kg = "1", m = "-1", s = "-2" }
 factor_of_parents = 1
 
 [[derived_units]]
 # psi, pounds (force) per square inch, 1 lbf in^-2
 letters = "psi"
-parents = { lbf = 1, in = -2 }
+parents = { lbf = "1", in = "-2" }
 factor_of_parents = 1
 
 [[derived_units]]
 # mHg, meters of mercury (mostly seen as millimeters of mercury), 1 mmHg = 133.322_387_415 Pa => 1 mHg = 133_322.387_415 Pa
 letters = "mHg"
-parents = { Pa = 1 }
+parents = { Pa = "1" }
 factor_of_parents = 133322.387415
 
 ### DERIVED UNITS OF ENERGY (MASS TIMES FORCE = MASS TIMES LENGTH TIMES LENGTH PER TIME PER TIME)
@@ -261,25 +261,25 @@ factor_of_parents = 133322.387415
 [[derived_units]]
 # J, joule, 1 kg m^2 s^-2
 letters = "J"
-parents = { kg = 1, m = 2, s = -2 }
+parents = { kg = "1", m = "2", s = "-2" }
 factor_of_parents = 1
 
 [[derived_units]]
 # Btu, British Thermal Unit, 1_055.06 J (according to ISO 31-4)
 letters = "Btu"
-parents = { J = 1 }
+parents = { J = "1" }
 factor_of_parents = 1055.06
 
 [[derived_units]]
 # cal, (small) calorie, 4.184 joules
 letters = "cal"
-parents = { J = 1 }
+parents = { J = "1" }
 factor_of_parents = 4.184
 
 [[derived_units]]
 # Cal, food calorie/large calorie, 4184 joules, equivalent to a kilocalorie
 letters = "Cal"
-parents = { J = 1 }
+parents = { J = "1" }
 factor_of_parents = 4184
 
 ### DERIVED UNITS OF POWER (ENERGY PER TIME = MASS TIMES LENGTH TIMES LENGTH PER TIME PER TIME PER TIME
@@ -287,7 +287,7 @@ factor_of_parents = 4184
 [[derived_units]]
 # W, watt, 1 kg m^2 s^-3
 letters = "W"
-parents = { kg = 1, m = 2, s = -3 }
+parents = { kg = "1", m = "2", s = "-3" }
 factor_of_parents = 1
 
 ### DERIVED UNITS OF CHARGE (CURRENT PER TIME)
@@ -295,7 +295,7 @@ factor_of_parents = 1
 [[derived_units]]
 # C, coulomb, 1 s A
 letters = "C"
-parents = { s = 1, A = 1 }
+parents = { s = "1", A = "1" }
 factor_of_parents = 1
 
 ### DERIVED UNITS OF VOLTAGE (POWER PER CURRENT = MASS TIMES LENGTH TIMES LENGTH PER TIME PER TIME PER TIME PER CURRENT)
@@ -303,7 +303,7 @@ factor_of_parents = 1
 [[derived_units]]
 # V, volt, 1 kg m^2 s^-3 A^-1
 letters = "V"
-parents = { kg = 1, m = 2, s = -3, A = -1 }
+parents = { kg = "1", m = "2", s = "-3", A = "-1" }
 factor_of_parents = 1
 
 ### DERIVED UNITS OF CAPACITANCE (CHARGE PER VOLTAGE = TIME ^ 4 TIMES CURRENT ^ 2 PER MASS PER LENGTH PER LENGTH)
@@ -311,7 +311,7 @@ factor_of_parents = 1
 [[derived_units]]
 # F, farad, 1 kg^-1 m^-2 s^4 A^2
 letters = "F"
-parents = { kg = -1, m = -2, s = 4, A = 2 }
+parents = { kg = "-1", m = "-2", s = "4", A = "2" }
 factor_of_parents = 1
 
 ### DERIVED UNITS OF RESISTANCE (VOLTAGE PER CURRENT = MASS TIMES LENGTH TIMES LENGTH PER TIME PER TIME PER TIME PER CURRENT PER CURRENT)
@@ -319,19 +319,19 @@ factor_of_parents = 1
 [[derived_units]]
 # ohm, 1 kg m^2 s^-3 A^-2
 letters = "ohm"
-parents = { kg = 1, m = 2, s = -3, A = -2 }
+parents = { kg = "1", m = "2", s = "-3", A = "-2" }
 factor_of_parents = 1
 
 [[derived_units]]
 # Ω, correct alias for ohm
 letters = "Ω"
-parents = { ohm = 1 }
+parents = { ohm = "1" }
 factor_of_parents = 1
 
 [[derived_units]]
 # S, siemens, inverse ohm
 letters = "S"
-parents = { ohm = -1 }
+parents = { ohm = "-1" }
 factor_of_parents = 1
 
 ### DERIVED UNITS OF MAGNETIC FLUX (ENERGY PER CURRENT = MASS TIMES LENGTH TIMES LENGTH PER TIME PER TIME PER CURRENT)
@@ -339,7 +339,7 @@ factor_of_parents = 1
 [[derived_units]]
 # Wb, weber, kg m^2 s^-2 A^-1
 letters = "Wb"
-parents = { kg = 1, m = 2, s = -2, A = -1 }
+parents = { kg = "1", m = "2", s = "-2", A = "-1" }
 factor_of_parents = 1
 
 ### DERIVED UNITS OF MAGNETIC INDUCTION (MAGNETIC FLUX PER AREA = MASS PER TIME PER TIME PER CURRENT)
@@ -347,7 +347,7 @@ factor_of_parents = 1
 [[derived_units]]
 # T, tesla, kg s^-2 A^-1
 letters = "T"
-parents = { kg = 1, s = -2, A = -1 }
+parents = { kg = "1", s = "-2", A = "-1" }
 factor_of_parents = 1
 
 ### DERIVED UNITS OF ELECTRICAL INDUCTANCE (MAGNETIC FLUX PER CURRENT)
@@ -355,7 +355,7 @@ factor_of_parents = 1
 [[derived_units]]
 # H, henry, kg m^2 s^-2 A^-2
 letters = "H"
-parents = { kg = 1, m = 2, s = -2, A = -2 }
+parents = { kg = "1", m = "2", s = "-2", A = "-2" }
 factor_of_parents = 1
 
 ### DERIVED UNITS OF TEMPERATURE
@@ -363,7 +363,7 @@ factor_of_parents = 1
 [[derived_units]]
 # R, rankine, Fahrenheit steps from absolute zero (like kelvins are Celsius steps from absolute zero), 1.8 kelvins
 letters = "R"
-parents = { K = 1 }
+parents = { K = "1" }
 factor_of_parents = 1.8
 
 ### DERIVED UNITS RELATED TO LIGHT
@@ -371,11 +371,11 @@ factor_of_parents = 1.8
 [[derived_units]]
 # lm, lumen, unit of luminous flux, 1 cd sr (where 1 sr = 1)
 letters = "lm"
-parents = { cd = 1 }
+parents = { cd = "1" }
 factor_of_parents = 1
 
 [[derived_units]]
 # lx, lux, unit of illuminance, lumens per square meter, cd m^-2
 letters = "lx"
-parents = { cd = 1, m = -2 }
+parents = { cd = "1", m = "-2" }
 factor_of_parents = 1

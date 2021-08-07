@@ -28,6 +28,7 @@ impl BaseUnit {
 #[derive(Clone, Debug, Deserialize, PartialEq, Serialize)]
 pub(crate) struct DerivedUnit {
     pub letters: String,
+    #[serde(with = "number_units_serde")]
     pub parents: NumberUnits,
     pub factor_of_parents: f64,
 }
@@ -358,6 +359,35 @@ pub(crate) fn coerce_to_unit(
         c_number.value / c_template.value,
         units.clone(),
     ))
+}
+
+mod number_units_serde {
+    use super::NumberUnits;
+    use std::collections::BTreeMap;
+    use num_bigint::BigInt;
+    use serde::{Deserialize, Deserializer, Serialize, Serializer};
+    use serde::de::Error;
+
+    pub fn serialize<S: Serializer>(units: &NumberUnits, s: S) -> Result<S::Ok, S::Error> {
+        // transform into string-to-string dict
+        let mut units_stringy = BTreeMap::new();
+        for (letters, power) in units {
+            units_stringy.insert(letters.clone(), power.to_string());
+        }
+        units_stringy.serialize(s)
+    }
+
+    pub fn deserialize<'de, D: Deserializer<'de>>(d: D) -> Result<NumberUnits, D::Error> {
+        // deserialize as string-to-string dict
+        let units_stringy: BTreeMap<String, String> = BTreeMap::deserialize(d)?;
+        let mut units = BTreeMap::new();
+        for (letters, power_str) in &units_stringy {
+            let power: BigInt = power_str.parse()
+                .map_err(|e| D::Error::custom(format!("failed to make BigInt from {:?}: {}", power_str, e)))?;
+            units.insert(letters.clone(), power);
+        }
+        Ok(units)
+    }
 }
 
 #[cfg(test)]
