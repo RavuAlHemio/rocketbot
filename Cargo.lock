@@ -1242,11 +1242,14 @@ name = "rocketbot_plugin_calc"
 version = "0.1.0"
 dependencies = [
  "async-trait",
+ "chrono",
  "log",
+ "minidom",
  "num-bigint",
  "num-traits",
  "pest",
  "pest_derive",
+ "reqwest",
  "rocketbot_interface",
  "serde",
  "serde_json",

@@ -3,13 +3,20 @@ name = "rocketbot_plugin_calc"
 version = "0.1.0"
 edition = "2018"
 
+[features]
+default = ["currency"]
+currency = ["minidom", "reqwest"]
+
 [dependencies]
 async-trait = { version = "0.1" }
+chrono = { version = "0.4" }
 log = { version = "0.4" }
+minidom = { version = "0.13", optional = true }
 num-bigint = { version = "0.4", features = ["rand", "serde"] }
 num-traits = { version = "0.2" }
 pest = { version = "2.1" }
 pest_derive = { version = "2.1" }
+reqwest = { version = "0.11", features = ["rustls-tls"], optional = true }
 rocketbot_interface = { path = "../rocketbot_interface" }
 serde = { version = "1.0", features = ["derive"] }
 serde_json = { version = "1.0" }

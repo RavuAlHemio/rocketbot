@@ -50,14 +50,16 @@ impl DerivedUnit {
 pub enum UnitDatabaseError {
     ExistsAsBaseUnit(String),
     ExistsAsDerivedUnit(String),
-    UnknownBaseUnit(String),
+    UnknownParentUnit(String),
+    UnknownDerivedUnit(String),
 }
 impl fmt::Display for UnitDatabaseError {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
             Self::ExistsAsBaseUnit(s) => write!(f, "new unit {:?} already exists as a base unit", s),
             Self::ExistsAsDerivedUnit(s) => write!(f, "new unit {:?} already exists as a derived unit", s),
-            Self::UnknownBaseUnit(s) => write!(f, "referenced unit {:?} not found", s),
+            Self::UnknownParentUnit(s) => write!(f, "referenced base unit {:?} not found", s),
+            Self::UnknownDerivedUnit(s) => write!(f, "derived unit {:?} not found", s),
         }
     }
 }
@@ -197,7 +199,7 @@ impl UnitDatabase {
                 for parent_letters in derived_unit.parents.keys() {
                     match self.get_max_depth(parent_letters) {
                         None => {
-                            return Err(UnitDatabaseError::UnknownBaseUnit(parent_letters.clone()));
+                            return Err(UnitDatabaseError::UnknownParentUnit(parent_letters.clone()));
                         },
                         Some(d) => {
                             parent_max_depth = parent_max_depth.max(d);
@@ -209,6 +211,22 @@ impl UnitDatabase {
                 self.letters_to_derived_unit.insert(derived_unit.letters.clone(),derived_unit);
                 Ok(())
             },
+        }
+    }
+
+    pub fn change_derived_unit_factor(&mut self, letters: &str, factor: f64) -> Result<(), UnitDatabaseError> {
+        if self.letters_to_base_unit.contains_key(letters) {
+            return Err(UnitDatabaseError::ExistsAsBaseUnit(letters.to_owned()));
+        }
+
+        match self.letters_to_derived_unit.get_mut(letters) {
+            Some(derived_unit) => {
+                derived_unit.factor_of_parents = factor;
+                Ok(())
+            },
+            None => {
+                Err(UnitDatabaseError::UnknownDerivedUnit(letters.to_owned()))
+            }
         }
     }
 }

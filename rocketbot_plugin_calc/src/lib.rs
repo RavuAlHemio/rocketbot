@@ -1,4 +1,6 @@
 mod ast;
+#[cfg(feature = "currency")]
+mod currency;
 mod grimoire;
 mod numbers;
 mod parsing;
@@ -12,11 +14,13 @@ use std::sync::Weak;
 use std::time::{Duration, Instant};
 
 use async_trait::async_trait;
+use chrono::{DateTime, TimeZone, Utc};
 use log::error;
 use rocketbot_interface::JsonValueExtensions;
 use rocketbot_interface::commands::{CommandDefinition, CommandInstance};
 use rocketbot_interface::interfaces::{RocketBotInterface, RocketBotPlugin};
 use rocketbot_interface::model::ChannelMessage;
+use rocketbot_interface::sync::{Mutex, RwLock};
 use serde_json;
 use toml;
 
@@ -30,7 +34,9 @@ pub struct CalcPlugin {
     interface: Weak<dyn RocketBotInterface>,
     timeout_seconds: f64,
     max_result_string_length: usize,
-    unit_database: UnitDatabase,
+    unit_database: RwLock<UnitDatabase>,
+    currency_units: bool,
+    last_currency_update: Mutex<DateTime<Utc>>,
 }
 impl CalcPlugin {
     async fn handle_calc(&self, channel_message: &ChannelMessage, command: &CommandInstance) {
@@ -53,11 +59,32 @@ impl CalcPlugin {
             },
         };
 
+        {
+            let mut lcu_guard = self.last_currency_update
+                .lock().await;
+            let delta = Utc::now() - (*lcu_guard);
+            if delta > chrono::Duration::hours(24) {
+                // update!
+                let mut write_guard = self.unit_database
+                    .write().await;
+                if cfg!(feature = "currency") && self.currency_units {
+                    crate::currency::update_currencies(&mut write_guard).await;
+                }
+                *lcu_guard = Utc::now();
+            }
+        }
+
+        let unit_database = {
+            let read_guard = self.unit_database
+                .read().await;
+            (*read_guard).clone()
+        };
+
         let simplified_res = {
             let mut state = SimplificationState {
                 constants: get_canonical_constants(),
                 functions: get_canonical_functions(),
-                units: self.unit_database.clone(),
+                units: unit_database,
                 start_time: Instant::now(),
                 timeout: Duration::from_secs_f64(self.timeout_seconds),
             };
@@ -112,9 +139,11 @@ impl RocketBotPlugin for CalcPlugin {
             .expect("timeout_seconds missing or not representable as f64");
         let max_result_string_length = config["max_result_string_length"].as_usize()
             .expect("max_result_string_length missing or not representable as usize");
+        let currency_units = config["currency_units"].as_bool()
+            .expect("currency_units missing or not representable as boolean");
 
         let unit_db_file_value = &config["unit_database_file"];
-        let unit_database = if unit_db_file_value.is_null() {
+        let unit_database_inner = if unit_db_file_value.is_null() {
             UnitDatabase::new_empty()
         } else {
             let unit_db_file = unit_db_file_value.as_str()
@@ -129,6 +158,16 @@ impl RocketBotPlugin for CalcPlugin {
             unit_db.to_unit_database()
                 .expect("failed to process unit database file")
         };
+        let unit_database = RwLock::new(
+            "CalcPlugin::unit_database",
+            unit_database_inner,
+        );
+
+        let last_currency_update = Mutex::new(
+            "CalcPlugin::last_currency_update",
+            Utc.ymd(2000, 1, 1)
+                .and_hms(0, 0, 0)
+        );
 
         my_interface.register_channel_command(&CommandDefinition::new(
             "calc".to_owned(),
@@ -145,6 +184,8 @@ impl RocketBotPlugin for CalcPlugin {
             timeout_seconds,
             max_result_string_length,
             unit_database,
+            currency_units,
+            last_currency_update,
         }
     }
 
