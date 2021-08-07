@@ -19,8 +19,12 @@ jobs:
         run: cargo build
       - name: run debug tests
         run: cargo test
+      - name: generate CountryCodes.json
+        run: cargo run --example countrycodes
       - name: upload debug binary
         uses: actions/upload-artifact@v2
         with:
           name: rocketbot-debug
-          path: target/debug/rocketbot
+          path: |
+            target/debug/rocketbot
+            CountryCodes.json

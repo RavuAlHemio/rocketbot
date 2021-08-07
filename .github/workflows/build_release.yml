@@ -19,8 +19,12 @@ jobs:
         run: cargo build --release
       - name: run release tests
         run: cargo test --release
+      - name: generate CountryCodes.json
+        run: cargo run --example countrycodes --release
       - name: upload release binary
         uses: actions/upload-artifact@v2
         with:
           name: rocketbot-release
-          path: target/release/rocketbot
+          path: |
+            target/release/rocketbot
+            CountryCodes.json
