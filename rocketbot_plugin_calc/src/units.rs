@@ -241,36 +241,41 @@ pub(crate) fn expand_number_unit(num: &Number, unit_letters: &str, database: &Un
         None => return num.clone(),
     };
 
-    let new_value = num.value.checked_mul(NumberValue::Float(unit.factor_of_parents))
-        .expect("multiplication failed");
+    let current_power = match num.units.get(unit_letters) {
+        None => return num.clone(),
+        Some(p) => p.clone(),
+    };
+    assert_ne!(current_power, BigInt::from(0));
+    let reduce = current_power < BigInt::from(0);
 
-    // update the units
-    let mut new_units = NumberUnits::new();
-    for (num_unit, num_pow) in &num.units {
-        if let Some(parent_pow) = unit.parents.get(num_unit) {
-            // number and parent are shared => add powers
-            let new_pow = num_pow + parent_pow;
-            if new_pow != BigInt::from(0) {
-                new_units.insert(num_unit.clone(), new_pow);
-            }
+    let new_value = if reduce {
+        num.value.checked_div(NumberValue::Float(unit.factor_of_parents))
+            .expect("division failed")
+    } else {
+        num.value.checked_mul(NumberValue::Float(unit.factor_of_parents))
+            .expect("multiplication failed")
+    };
+
+    // update the units from the parent
+    let mut new_units = num.units.clone();
+    for (parent_letters, parent_pow) in &unit.parents {
+        let new_pow = new_units.entry(parent_letters.clone())
+            .or_insert_with(|| BigInt::from(0));
+        if reduce {
+            *new_pow -= parent_pow;
         } else {
-            // only number contains this unit, not the parent => power from number
-            new_units.insert(num_unit.clone(), num_pow.clone());
+            *new_pow += parent_pow;
         }
     }
-    for (parent_unit, parent_pow) in &unit.parents {
-        if num.units.contains_key(parent_unit) {
-            continue;
-        }
 
-        // only parent contains this unit, not the number => power from parent
-        new_units.insert(parent_unit.clone(), parent_pow.clone());
-    }
-
-    // reduce original unit by 1
+    // remove one power of the original unit
     let reduce_me = new_units.entry(unit_letters.to_owned())
         .or_insert(BigInt::from(0));
-    *reduce_me -= 1;
+    if reduce {
+        *reduce_me += 1;
+    } else {
+        *reduce_me -= 1;
+    }
 
     // remove zero units
     new_units.retain(|_name, power| power != &BigInt::from(0));
@@ -403,6 +408,7 @@ mod tests {
         db.register_base_unit(BaseUnit::new("kg".to_owned())).unwrap();
         db.register_base_unit(BaseUnit::new("m".to_owned())).unwrap();
         db.register_base_unit(BaseUnit::new("s".to_owned())).unwrap();
+        db.register_base_unit(BaseUnit::new("A".to_owned())).unwrap();
 
         {
             let mut sx1 = NumberUnits::new();
@@ -449,6 +455,23 @@ mod tests {
             ft_lb_sx2.insert("lb".to_owned(), BigInt::from(1));
             ft_lb_sx2.insert("s".to_owned(), BigInt::from(-2));
             db.register_derived_unit(DerivedUnit::new("lbf".to_owned(), ft_lb_sx2, 32.1740485564304)).unwrap();
+        }
+
+        {
+            let mut kg_m2_sx3_ax1 = NumberUnits::new();
+            kg_m2_sx3_ax1.insert("kg".to_owned(), BigInt::from(1));
+            kg_m2_sx3_ax1.insert("m".to_owned(), BigInt::from(2));
+            kg_m2_sx3_ax1.insert("s".to_owned(), BigInt::from(-3));
+            kg_m2_sx3_ax1.insert("A".to_owned(), BigInt::from(-1));
+            db.register_derived_unit(DerivedUnit::new("V".to_owned(), kg_m2_sx3_ax1, 1.0)).unwrap();
+        }
+
+        {
+            let mut kg_m2_sx3 = NumberUnits::new();
+            kg_m2_sx3.insert("kg".to_owned(), BigInt::from(1));
+            kg_m2_sx3.insert("m".to_owned(), BigInt::from(2));
+            kg_m2_sx3.insert("s".to_owned(), BigInt::from(-3));
+            db.register_derived_unit(DerivedUnit::new("W".to_owned(), kg_m2_sx3, 1.0)).unwrap();
         }
 
         db
@@ -607,5 +630,38 @@ mod tests {
         s_units.insert("s".to_owned(), BigInt::from(1));
 
         assert_eq!(None, coerce_to_unit(&m, &s_units, &database));
+    }
+
+    #[test]
+    fn test_coercion_negative_powers() {
+        // W = kg1 m2 s-3
+        // V = kg1 m2 s-3 A-1
+
+        // V = W A-1
+
+        let database = make_database();
+
+        let mut v_units = NumberUnits::new();
+        v_units.insert("V".to_owned(), BigInt::from(1));
+        let v = Number::new(NumberValue::Float(42.0), v_units);
+
+        let mut w_ax1_units = NumberUnits::new();
+        w_ax1_units.insert("W".to_owned(), BigInt::from(1));
+        w_ax1_units.insert("A".to_owned(), BigInt::from(-1));
+        let w_ax1 = Number::new(NumberValue::Float(42.0), w_ax1_units);
+
+        let (new_v, new_w_ax1) = coerce_to_common_unit(&v, &w_ax1, &database).unwrap();
+        assert_eq!(NumberValue::Float(42.0), new_v.value);
+        assert_eq!(4, new_v.units.len());
+        assert_eq!(Some(&BigInt::from(1)), new_v.units.get("kg"));
+        assert_eq!(Some(&BigInt::from(2)), new_v.units.get("m"));
+        assert_eq!(Some(&BigInt::from(-3)), new_v.units.get("s"));
+        assert_eq!(Some(&BigInt::from(-1)), new_v.units.get("A"));
+        assert_eq!(NumberValue::Float(42.0), new_w_ax1.value);
+        assert_eq!(4, new_w_ax1.units.len());
+        assert_eq!(Some(&BigInt::from(1)), new_w_ax1.units.get("kg"));
+        assert_eq!(Some(&BigInt::from(2)), new_w_ax1.units.get("m"));
+        assert_eq!(Some(&BigInt::from(-3)), new_w_ax1.units.get("s"));
+        assert_eq!(Some(&BigInt::from(-1)), new_w_ax1.units.get("A"));
     }
 }
