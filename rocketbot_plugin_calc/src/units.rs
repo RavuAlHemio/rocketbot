@@ -48,15 +48,15 @@ impl DerivedUnit {
 
 #[derive(Clone, Debug, Hash, Eq, PartialEq)]
 pub enum UnitDatabaseError {
-    ExistsAsBaseUnit,
-    ExistsAsDerivedUnit,
+    ExistsAsBaseUnit(String),
+    ExistsAsDerivedUnit(String),
     UnknownBaseUnit(String),
 }
 impl fmt::Display for UnitDatabaseError {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
-            Self::ExistsAsBaseUnit => write!(f, "new unit already exists as a base unit"),
-            Self::ExistsAsDerivedUnit => write!(f, "new unit already exists as a derived unit"),
+            Self::ExistsAsBaseUnit(s) => write!(f, "new unit {:?} already exists as a base unit", s),
+            Self::ExistsAsDerivedUnit(s) => write!(f, "new unit {:?} already exists as a derived unit", s),
             Self::UnknownBaseUnit(s) => write!(f, "referenced unit {:?} not found", s),
         }
     }
@@ -166,12 +166,12 @@ impl UnitDatabase {
 
     pub fn register_base_unit(&mut self, base_unit: BaseUnit) -> Result<(), UnitDatabaseError> {
         if self.get_derived_unit(&base_unit.letters).is_some() {
-            return Err(UnitDatabaseError::ExistsAsDerivedUnit);
+            return Err(UnitDatabaseError::ExistsAsDerivedUnit(base_unit.letters.clone()));
         }
 
         match self.letters_to_base_unit.entry(base_unit.letters.clone()) {
             Entry::Occupied(_oe) => {
-                Err(UnitDatabaseError::ExistsAsBaseUnit)
+                Err(UnitDatabaseError::ExistsAsBaseUnit(base_unit.letters.clone()))
             },
             Entry::Vacant(ve) => {
                 self.letters_to_max_depth.insert(base_unit.letters.clone(), 0);
@@ -183,12 +183,12 @@ impl UnitDatabase {
 
     pub fn register_derived_unit(&mut self, derived_unit: DerivedUnit) -> Result<(), UnitDatabaseError> {
         if self.get_base_unit(&derived_unit.letters).is_some() {
-            return Err(UnitDatabaseError::ExistsAsBaseUnit);
+            return Err(UnitDatabaseError::ExistsAsBaseUnit(derived_unit.letters.clone()));
         }
 
         match self.get_derived_unit(&derived_unit.letters) {
             Some(_derived_unit) => {
-                Err(UnitDatabaseError::ExistsAsDerivedUnit)
+                Err(UnitDatabaseError::ExistsAsDerivedUnit(derived_unit.letters.clone()))
             },
             None => {
                 let mut parent_max_depth = 0;
