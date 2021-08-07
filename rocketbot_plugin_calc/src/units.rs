@@ -3,6 +3,7 @@ use std::collections::hash_map::Entry;
 use std::fmt;
 
 use num_bigint::BigInt;
+use serde::{Deserialize, Serialize};
 
 use crate::numbers::{Number, NumberValue};
 
@@ -10,7 +11,7 @@ use crate::numbers::{Number, NumberValue};
 pub type NumberUnits = BTreeMap<String, BigInt>;
 
 
-#[derive(Clone, Debug, Eq, Hash, PartialEq)]
+#[derive(Clone, Debug, Deserialize, Eq, Hash, PartialEq, Serialize)]
 pub(crate) struct BaseUnit {
     pub letters: String,
 }
@@ -24,7 +25,7 @@ impl BaseUnit {
     }
 }
 
-#[derive(Clone, Debug, PartialEq)]
+#[derive(Clone, Debug, Deserialize, PartialEq, Serialize)]
 pub(crate) struct DerivedUnit {
     pub letters: String,
     pub parents: NumberUnits,
@@ -62,6 +63,7 @@ impl fmt::Display for UnitDatabaseError {
 impl std::error::Error for UnitDatabaseError {
 }
 
+#[derive(Clone, Debug, PartialEq)]
 pub(crate) struct UnitDatabase {
     si_prefix_to_factor: HashMap<String, f64>,
     letters_to_base_unit: HashMap<String, BaseUnit>,
@@ -205,6 +207,28 @@ impl UnitDatabase {
                 Ok(())
             },
         }
+    }
+}
+
+#[derive(Clone, Debug, Deserialize, PartialEq, Serialize)]
+pub(crate) struct StoredUnitDatabase {
+    base_units: Vec<BaseUnit>,
+    derived_units: Vec<DerivedUnit>,
+}
+impl StoredUnitDatabase {
+    pub fn to_unit_database(&self) -> Result<UnitDatabase, UnitDatabaseError> {
+        let mut unit_db = UnitDatabase::new_empty();
+        unit_db.insert_canonical_si_prefixes();
+
+        for base_unit in &self.base_units {
+            unit_db.register_base_unit(base_unit.clone())?;
+        }
+
+        for derived_unit in &self.derived_units {
+            unit_db.register_derived_unit(derived_unit.clone())?;
+        }
+
+        Ok(unit_db)
     }
 }
 
