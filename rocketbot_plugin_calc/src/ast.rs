@@ -224,9 +224,20 @@ fn pow(start_end: Option<(usize, usize)>, left: &AstNodeAtLocation, right: &AstN
                                 counter += &one;
                                 check_timeout(state)?;
                             }
+
+                            // multiply unit powers
+                            let mut new_units = NumberUnits::new();
+                            for (unit, power) in &lnum.units {
+                                let new_unit_power = power * r;
+                                new_units.insert(
+                                    unit.clone(),
+                                    new_unit_power,
+                                );
+                            }
+
                             AstNode::Number(Number::new(
                                 NumberValue::Int(val),
-                                lnum.units.clone(),
+                                new_units,
                             ))
                         },
                         (NumberValue::Int(l), NumberValue::Float(r)) => {
