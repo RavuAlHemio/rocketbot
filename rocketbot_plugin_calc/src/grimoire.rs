@@ -54,6 +54,7 @@ pub(crate) fn get_canonical_functions() -> HashMap<String, BuiltInFunction> {
     prepared.insert("trunc", f64_f64asint("trunc", |f| f.trunc()));
 
     prepared.insert("coerce", Box::new(coerce));
+    prepared.insert("setunit", Box::new(set_unit));
 
     prepared.drain()
         .map(|(k, v)| (k.to_owned(), v))
@@ -156,6 +157,8 @@ fn f64_f64_f64<F>(name: &'static str, inner: F) -> BuiltInFunction
     })
 }
 
+/// Takes two operands and attempts to convert the first operand to the unit of the second. The
+/// numeric value of the second operand is ignored; only the unit is taken into account.
 fn coerce(state: &SimplificationState, operands: &[AstNodeAtLocation]) -> BuiltInFuncResult {
     if operands.len() != 2 {
         return Err(SimplificationError::IncorrectArgCount("coerce".to_owned(), 2, operands.len()));
@@ -174,4 +177,29 @@ fn coerce(state: &SimplificationState, operands: &[AstNodeAtLocation]) -> BuiltI
         Some(n) => Ok(AstNode::Number(n)),
         None => Err(SimplificationError::UnitReconciliation),
     }
+}
+
+/// Takes two operands and returns the value of the first operand with the units of the second
+/// operand. No conversion is performed; the units of the second operand are simply attached to the
+/// number in the first operand.
+///
+/// Units can be stripped from a number by passing a unitless value as the second operand.
+fn set_unit(_state: &SimplificationState, operands: &[AstNodeAtLocation]) -> BuiltInFuncResult {
+    if operands.len() != 2 {
+        return Err(SimplificationError::IncorrectArgCount("setunit".to_owned(), 2, operands.len()));
+    }
+
+    let left_number = match &operands[0].node {
+        AstNode::Number(n) => n,
+        other => return Err(SimplificationError::UnexpectedOperandType(format!("{:?}", other))),
+    };
+    let right_number = match &operands[1].node {
+        AstNode::Number(n) => n,
+        other => return Err(SimplificationError::UnexpectedOperandType(format!("{:?}", other))),
+    };
+
+    Ok(AstNode::Number(Number::new(
+        left_number.value.clone(),
+        right_number.units.clone(),
+    )))
 }
