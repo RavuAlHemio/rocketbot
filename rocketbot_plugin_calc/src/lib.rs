@@ -119,10 +119,23 @@ impl CalcPlugin {
                 ).await;
             },
             Err(e) => {
-                interface.send_channel_message(
-                    channel_name,
-                    &format!("@{} Simplification failed: {}", sender_username, e),
-                ).await;
+                if let Some((start, end)) = e.start_end {
+                    let wavey: String = (0..end)
+                        .map(|i| if i < start { ' ' } else { '^' })
+                        .collect();
+                    interface.send_channel_message(
+                        channel_name,
+                        &format!(
+                            "@{} Simplification failed: {}\n```\n{}\n{}\n```",
+                            sender_username, e.error, command.rest, wavey,
+                        ),
+                    ).await;
+                } else {
+                    interface.send_channel_message(
+                        channel_name,
+                        &format!("@{} Simplification failed: {}", sender_username, e.error),
+                    ).await;
+                }
             },
         };
     }
