@@ -148,7 +148,7 @@ impl RocketBotPlugin for VaccinePlugin {
             };
         }
 
-        let (freshest_entries, delta, part_percent, full_percent, state_name) = {
+        let (freshest_entries, freshest_date, delta, part_percent, full_percent, state_name) = {
             let db_guard = self.vaccine_database
                 .read().await;
             let state_id = match db_guard.lower_name_to_state_id.get(&name_lower) {
@@ -180,6 +180,8 @@ impl RocketBotPlugin for VaccinePlugin {
             }
             let pop = db_guard.state_id_to_pop[state_id].clone();
 
+            let freshest_date = freshest_entries[0].0.clone();
+
             let mut actual_entries: Vec<VaccinationStats> = freshest_entries.iter()
                 .map(|(_date, stats)| (*stats).clone())
                 .collect();
@@ -197,11 +199,11 @@ impl RocketBotPlugin for VaccinePlugin {
 
             let delta = actual_entries[0].clone() - actual_entries[1].clone();
 
-            (actual_entries, delta, part_percent, full_percent, state_name)
+            (actual_entries, freshest_date, delta, part_percent, full_percent, state_name)
         };
 
         let mut response = String::new();
-        response.push_str(&format!("@{} {}: ", channel_message.message.sender.username, state_name));
+        response.push_str(&format!("@{} {} ({}): ", channel_message.message.sender.username, state_name, freshest_date.format("%Y-%m-%d")));
         response.push_str(&format_stat(
             &freshest_entries[0].vaccinations,
             delta.as_ref().map(|d| &d.vaccinations),
