@@ -1194,12 +1194,14 @@ dependencies = [
  "chrono",
  "minidom",
  "once_cell",
+ "rand",
  "regex",
  "reqwest",
  "rocketbot_interface",
  "serde",
  "serde_json",
  "tokio",
+ "unicode-normalization",
  "url",
 ]
 

@@ -1,3 +1,7 @@
+#[cfg(feature = "confusion")]
+mod confusion;
+
+
 use std::collections::{HashMap, HashSet};
 use std::fmt;
 use std::fs::File;
@@ -284,6 +288,9 @@ pub struct GeoNamesClient {
     username: String,
     http_client: Mutex<reqwest::Client>,
     country_codes: CountryCodeMapping,
+
+    #[cfg(feature = "confusion")]
+    confuser: crate::confusion::Confuser,
 }
 impl GeoNamesClient {
     pub fn new(config: &serde_json::Value) -> GeoNamesClient {
@@ -297,11 +304,47 @@ impl GeoNamesClient {
         let country_codes = CountryCodeMapping::load_from_file(Path::new("CountryCodes.json"))
             .expect("failed to load country code mappings");
 
-        GeoNamesClient {
+        Self::finish_config(username, http_client, country_codes, config)
+    }
+
+    #[cfg(feature = "confusion")]
+    fn finish_config(
+        username: String,
+        http_client: Mutex<reqwest::Client>,
+        country_codes: CountryCodeMapping,
+        config: &serde_json::Value,
+    ) -> Self {
+        let confuser = crate::confusion::Confuser::new(config);
+        Self {
+            username,
+            http_client,
+            country_codes,
+            confuser,
+        }
+    }
+
+    #[cfg(not(feature = "confusion"))]
+    fn finish_config(
+        username: String,
+        http_client: Mutex<reqwest::Client>,
+        country_codes: CountryCodeMapping,
+        _config: &serde_json::Value,
+    ) -> Self {
+        Self {
             username,
             http_client,
             country_codes,
         }
+    }
+
+    #[cfg(feature = "confusion")]
+    fn confuse_location(&self, location: &str) -> String {
+        self.confuser.confuse(location)
+    }
+
+    #[cfg(not(feature = "confusion"))]
+    fn confuse_location(&self, location: &str) -> String {
+        location.to_owned()
     }
 
     async fn get_and_populate_json<T: DeserializeOwned, U: Clone + fmt::Display + IntoUrl>(&self, uri: U) -> Result<T, GeoNamesError> {
@@ -324,10 +367,12 @@ impl GeoNamesClient {
     }
 
     pub async fn search_for_location(&self, location: &str) -> Result<GeoSearchResponse, GeoNamesError> {
+        let actual_location = self.confuse_location(location);
+
         let mut url = Url::parse("http://api.geonames.org/searchJSON?maxRows=1")
             .expect("parsing URL failed");
         url.query_pairs_mut()
-            .append_pair("q", location)
+            .append_pair("q", &actual_location)
             .append_pair("username", &self.username);
 
         self.get_and_populate_json(url).await
