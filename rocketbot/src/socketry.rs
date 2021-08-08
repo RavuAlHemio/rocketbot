@@ -1380,8 +1380,8 @@ async fn handle_received(body: &serde_json::Value, mut state: &mut ConnectionSta
                     }
                 }
 
-                if channel_message.message.edit_info.is_none() {
-                    // parse commands if there are any (not on edited messages!)
+                if channel_message.message.edit_info.is_none() && sender_id != my_user_id {
+                    // parse commands if there are any (not on edited messages or the bot's own messages!)
                     distribute_channel_message_commands(&channel_message, &mut state).await;
                 }
             } else if let Some(convo) = convo_opt {
