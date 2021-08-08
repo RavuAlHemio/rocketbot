@@ -44,12 +44,12 @@ impl Confuser {
                     .as_str().expect("detect_regex is not a string");
                 let detect_regex = Regex::new(detect_regex_str)
                     .expect("failed to parse detect_regex");
-                let strip_diacritics_first = config["strip_diacritics_first"]
+                let strip_diacritics_first = confusion_config["strip_diacritics_first"]
                     .as_bool().expect("strip_diacritics_first missing or not a bool");
-                let replacement = config["replacement"]
+                let replacement = confusion_config["replacement"]
                     .as_str().expect("replacement missing or not a string")
                     .to_owned();
-                let probability = config["probability"]
+                let probability = confusion_config["probability"]
                     .as_f64().expect("probability missing or not an f64");
                 confusions.push(ConfusionConfig::new(
                     detect_regex,
