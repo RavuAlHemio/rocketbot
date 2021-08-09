@@ -217,6 +217,7 @@ fn handle_option(
 #[cfg(test)]
 mod tests {
     use super::*;
+    use rocketbot_interface::commands::CommandBehaviors;
     use crate::string_utils::split_whitespace;
 
     fn perform_test(command: &CommandDefinition, message: &str) -> Option<CommandInstance> {
@@ -237,6 +238,7 @@ mod tests {
             Some(HashSet::new()),
             HashMap::new(),
             0,
+            CommandBehaviors::empty(),
             "{cpfx}bloop [STUFF]".to_owned(),
             "Bloops.".to_owned(),
         );
@@ -260,6 +262,7 @@ mod tests {
             Some(HashSet::new()),
             HashMap::new(),
             0,
+            CommandBehaviors::empty(),
             "{cpfx}bloop [STUFF]".to_owned(),
             "Bloops.".to_owned(),
         );
@@ -283,6 +286,7 @@ mod tests {
             Some(HashSet::new()),
             HashMap::new(),
             1,
+            CommandBehaviors::empty(),
             "{cpfx}bloop [STUFF]".to_owned(),
             "Bloops.".to_owned(),
         );

@@ -17,7 +17,7 @@ use async_trait::async_trait;
 use chrono::{DateTime, TimeZone, Utc};
 use log::error;
 use rocketbot_interface::JsonValueExtensions;
-use rocketbot_interface::commands::{CommandDefinition, CommandInstance};
+use rocketbot_interface::commands::{CommandBehaviors, CommandDefinition, CommandInstance};
 use rocketbot_interface::interfaces::{RocketBotInterface, RocketBotPlugin};
 use rocketbot_interface::model::ChannelMessage;
 use rocketbot_interface::sync::{Mutex, RwLock};
@@ -188,6 +188,7 @@ impl RocketBotPlugin for CalcPlugin {
             Some(HashSet::new()),
             HashMap::new(),
             0,
+            CommandBehaviors::empty(),
             "{cpfx}calc EXPRESSION".to_owned(),
             "Calculates the given mathematical expression and outputs the result.".to_owned(),
         )).await;

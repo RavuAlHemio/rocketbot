@@ -3,7 +3,9 @@ use std::sync::Weak;
 
 use async_trait::async_trait;
 use rocketbot_interface::JsonValueExtensions;
-use rocketbot_interface::commands::{CommandDefinition, CommandInstance, CommandValueType};
+use rocketbot_interface::commands::{
+    CommandBehaviors, CommandDefinition, CommandInstance, CommandValueType,
+};
 use rocketbot_interface::interfaces::{RocketBotInterface, RocketBotPlugin};
 use rocketbot_interface::model::{ImpersonationInfo, OutgoingMessage, PrivateMessage};
 use serde_json;
@@ -36,6 +38,7 @@ impl RocketBotPlugin for SockpuppetPlugin {
             Some(HashSet::new()),
             chansend_options,
             1,
+            CommandBehaviors::empty(),
             "{cpfx}chansend [{lopfx}impersonate USERNAME] CHANNEL MESSAGE".to_owned(),
             "Sends a message, pretending to be the bot or someone else.".to_owned(),
         );

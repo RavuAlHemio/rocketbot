@@ -9,7 +9,7 @@ use chrono::{NaiveDate, Utc};
 use log::error;
 use num_bigint::BigUint;
 use num_traits::ToPrimitive;
-use rocketbot_interface::commands::{CommandDefinition, CommandInstance};
+use rocketbot_interface::commands::{CommandBehaviors, CommandDefinition, CommandInstance};
 use rocketbot_interface::interfaces::{RocketBotInterface, RocketBotPlugin};
 use rocketbot_interface::model::ChannelMessage;
 use rocketbot_interface::sync::RwLock;
@@ -94,6 +94,7 @@ impl RocketBotPlugin for VaccinePlugin {
             Some(HashSet::new()),
             HashMap::new(),
             0,
+            CommandBehaviors::empty(),
             "{cpfx}vaccine [STATE]".to_owned(),
             "Displays the number of vaccinated people in the given Austrian state or for all of Austria.".to_owned(),
         );

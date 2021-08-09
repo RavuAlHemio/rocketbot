@@ -18,7 +18,7 @@ use rand::{Rng, SeedableRng};
 use rand::distributions::{Distribution, Uniform};
 use rand::rngs::StdRng;
 use rocketbot_interface::{JsonValueExtensions, rocketchat_timestamp_to_datetime};
-use rocketbot_interface::commands::{CommandConfiguration, CommandDefinition};
+use rocketbot_interface::commands::{CommandBehaviors, CommandConfiguration, CommandDefinition};
 use rocketbot_interface::interfaces::{RocketBotInterface, RocketBotPlugin};
 use rocketbot_interface::model::{
     Channel, ChannelMessage, ChannelTextType, ChannelType, EditInfo, Emoji, Message,
@@ -1666,6 +1666,11 @@ async fn distribute_channel_message_commands(channel_message: &ChannelMessage, s
         }
     };
 
+    if channel_message.message.is_by_bot && !command.behaviors.contains(CommandBehaviors::ACCEPT_FROM_BOTS) {
+        // command does not want to be triggered by bots
+        return;
+    }
+
     let instance = if let Some(ci) = parse_command(&command, &command_config, &pieces, &message.raw) {
         ci
     } else {
@@ -1709,6 +1714,11 @@ async fn distribute_private_message_commands(private_message: &PrivateMessage, s
             None => return,
         }
     };
+
+    if private_message.message.is_by_bot && !command.behaviors.contains(CommandBehaviors::ACCEPT_FROM_BOTS) {
+        // command does not want to be triggered by bots
+        return;
+    }
 
     let instance = if let Some(ci) = parse_command(&command, &command_config, &pieces, &message.raw) {
         ci

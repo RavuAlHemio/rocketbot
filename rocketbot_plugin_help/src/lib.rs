@@ -2,7 +2,9 @@ use std::collections::{BTreeMap, HashMap, HashSet};
 use std::sync::{Arc, Weak};
 
 use async_trait::async_trait;
-use rocketbot_interface::commands::{CommandConfiguration, CommandDefinition, CommandInstance};
+use rocketbot_interface::commands::{
+    CommandBehaviors, CommandConfiguration, CommandDefinition, CommandInstance,
+};
 use rocketbot_interface::interfaces::{RocketBotInterface, RocketBotPlugin};
 use rocketbot_interface::model::{ChannelMessage, PrivateMessage};
 use serde_json;
@@ -205,6 +207,7 @@ impl RocketBotPlugin for HelpPlugin {
             Some(HashSet::new()),
             HashMap::new(),
             0,
+            CommandBehaviors::empty(),
             "{cpfx}help [COMMAND]".to_owned(),
             "Shows help about the given command, or lists all available commands.".to_owned(),
         );
@@ -217,6 +220,7 @@ impl RocketBotPlugin for HelpPlugin {
             Some(HashSet::new()),
             HashMap::new(),
             0,
+            CommandBehaviors::empty(),
             "{cpfx}helpplug PLUGIN".to_owned(),
             "Lists all available commands, including usage information, provided by the given plugin.".to_owned(),
         );
@@ -229,6 +233,7 @@ impl RocketBotPlugin for HelpPlugin {
             Some(HashSet::new()),
             HashMap::new(),
             0,
+            CommandBehaviors::empty(),
             "{cpfx}usage COMMAND".to_owned(),
             "Shows usage information for the given command.".to_owned(),
         );

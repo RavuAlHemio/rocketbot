@@ -8,7 +8,7 @@ use async_trait::async_trait;
 use rand::{Rng, SeedableRng};
 use rand::rngs::StdRng;
 use rocketbot_interface::JsonValueExtensions;
-use rocketbot_interface::commands::{CommandDefinition, CommandInstance};
+use rocketbot_interface::commands::{CommandBehaviors, CommandDefinition, CommandInstance};
 use rocketbot_interface::interfaces::{RocketBotInterface, RocketBotPlugin};
 use rocketbot_interface::model::ChannelMessage;
 use rocketbot_interface::sync::Mutex;
@@ -34,6 +34,7 @@ impl RocketBotPlugin for FortunePlugin {
             Some(HashSet::new()),
             HashMap::new(),
             0,
+            CommandBehaviors::empty(),
             "{cpfx}fortune [GROUP]".to_owned(),
             "Selects and displays a random fortune, optionally from a specific group.".to_owned(),
         );

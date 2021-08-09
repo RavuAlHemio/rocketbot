@@ -1,5 +1,14 @@
 use std::collections::{HashMap, HashSet};
 
+use bitflags::bitflags;
+
+
+bitflags! {
+    pub struct CommandBehaviors: u64 {
+        const ACCEPT_FROM_BOTS = 0b00000001;
+    }
+}
+
 
 #[derive(Clone, Copy, Debug, Hash, Eq, PartialEq)]
 pub enum CommandValueType {
@@ -16,6 +25,7 @@ pub struct CommandDefinition {
     pub flags: Option<HashSet<String>>,
     pub options: HashMap<String, CommandValueType>,
     pub arg_count: usize,
+    pub behaviors: CommandBehaviors,
 
     /// The following placeholders may be used in the usage string:
     /// `{cpfx}`: command prefix
@@ -33,6 +43,7 @@ impl CommandDefinition {
         flags: Option<HashSet<String>>,
         options: HashMap<String, CommandValueType>,
         arg_count: usize,
+        behaviors: CommandBehaviors,
         usage: String,
         description: String,
     ) -> CommandDefinition {
@@ -42,6 +53,7 @@ impl CommandDefinition {
             flags,
             options,
             arg_count,
+            behaviors,
             usage,
             description,
         }

@@ -6,7 +6,7 @@ use std::collections::{HashMap, HashSet};
 use std::sync::Weak;
 
 use async_trait::async_trait;
-use rocketbot_interface::commands::{CommandDefinition, CommandInstance};
+use rocketbot_interface::commands::{CommandBehaviors, CommandDefinition, CommandInstance};
 use rocketbot_interface::interfaces::{RocketBotInterface, RocketBotPlugin};
 use rocketbot_interface::model::ChannelMessage;
 use serde_json::Value;
@@ -58,6 +58,7 @@ impl RocketBotPlugin for VitalsPlugin {
             Some(HashSet::new()),
             HashMap::new(),
             0,
+            CommandBehaviors::empty(),
             "{cpfx}vitals [TARGET]".to_owned(),
             "Obtains health-related information about the given target.".to_owned(),
         )).await;

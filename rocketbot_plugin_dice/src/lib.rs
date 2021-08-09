@@ -11,7 +11,9 @@ use rand::seq::SliceRandom;
 use rand::rngs::StdRng;
 use regex::{Captures, Regex};
 use rocketbot_interface::JsonValueExtensions;
-use rocketbot_interface::commands::{CommandDefinition, CommandInstance, CommandValueType};
+use rocketbot_interface::commands::{
+    CommandBehaviors, CommandDefinition, CommandInstance, CommandValueType,
+};
 use rocketbot_interface::interfaces::{RocketBotInterface, RocketBotPlugin};
 use rocketbot_interface::model::ChannelMessage;
 use rocketbot_interface::sync::Mutex;
@@ -526,6 +528,7 @@ impl RocketBotPlugin for DicePlugin {
             Some(HashSet::new()),
             HashMap::new(),
             0,
+            CommandBehaviors::empty(),
             "{cpfx}roll DICE [DICE ...]".to_owned(),
             "Rolls one or more dice.".to_owned(),
         );
@@ -537,6 +540,7 @@ impl RocketBotPlugin for DicePlugin {
             Some(HashSet::new()),
             HashMap::new(),
             0,
+            CommandBehaviors::empty(),
             "{cpfx}yn [QUESTION]".to_owned(),
             "Helps you make a decision (or not) by answering a yes/no question.".to_owned(),
         );
@@ -548,6 +552,7 @@ impl RocketBotPlugin for DicePlugin {
             Some(HashSet::new()),
             HashMap::new(),
             0,
+            CommandBehaviors::empty(),
             "{cpfx}decide OPTION or OPTION [or OPTION...]".to_owned(),
             "Helps you make a decision (or not) by choosing one of multiple options.".to_owned(),
         );
@@ -559,6 +564,7 @@ impl RocketBotPlugin for DicePlugin {
             Some(HashSet::new()),
             HashMap::new(),
             0,
+            CommandBehaviors::empty(),
             "{cpfx}shuffle OPTION or OPTION [or OPTION...]".to_owned(),
             "Helps you prioritize by shuffling the options.".to_owned(),
         );
@@ -573,6 +579,7 @@ impl RocketBotPlugin for DicePlugin {
             Some(HashSet::new()),
             wikipedia_options,
             0,
+            CommandBehaviors::empty(),
             "{cpfx}someyear [{lopfx}wikipedia WP]".to_owned(),
             "Selects a random year and links to its Wikipedia article.".to_owned(),
         );

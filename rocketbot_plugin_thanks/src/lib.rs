@@ -6,7 +6,7 @@ use async_trait::async_trait;
 use chrono::Utc;
 use log::{error, info};
 use rocketbot_interface::JsonValueExtensions;
-use rocketbot_interface::commands::{CommandDefinition, CommandInstance};
+use rocketbot_interface::commands::{CommandBehaviors, CommandDefinition, CommandInstance};
 use rocketbot_interface::interfaces::{RocketBotInterface, RocketBotPlugin};
 use rocketbot_interface::model::ChannelMessage;
 use serde_json;
@@ -421,6 +421,7 @@ impl RocketBotPlugin for ThanksPlugin {
             Some(HashSet::new()),
             HashMap::new(),
             1,
+            CommandBehaviors::empty(),
             "{cpfx}thanks|{cpfx}thank|{cpfx}thx USERNAME [REASON]".to_owned(),
             "Thanks a user.".to_owned(),
         );
@@ -436,6 +437,7 @@ impl RocketBotPlugin for ThanksPlugin {
             Some(HashSet::new()),
             HashMap::new(),
             1,
+            CommandBehaviors::empty(),
             "{cpfx}thanked USERNAME".to_owned(),
             "Displays how often the given user has been thanked.".to_owned(),
         );
@@ -445,6 +447,7 @@ impl RocketBotPlugin for ThanksPlugin {
             Some(HashSet::new()),
             HashMap::new(),
             1,
+            CommandBehaviors::empty(),
             "{cpfx}grateful USERNAME".to_owned(),
             "Displays how often the given user has thanked others.".to_owned(),
         );
@@ -457,6 +460,7 @@ impl RocketBotPlugin for ThanksPlugin {
             Some(HashSet::new()),
             HashMap::new(),
             0,
+            CommandBehaviors::empty(),
             "{cpfx}topthanked".to_owned(),
             "Displays the top thanked users to the knowledge of this bot.".to_owned(),
         );
@@ -466,6 +470,7 @@ impl RocketBotPlugin for ThanksPlugin {
             Some(HashSet::new()),
             HashMap::new(),
             0,
+            CommandBehaviors::empty(),
             "{cpfx}topgrateful".to_owned(),
             "Displays the top grateful users to the knowledge of this bot.".to_owned(),
         );

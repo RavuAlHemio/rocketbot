@@ -3,7 +3,7 @@ use std::sync::Weak;
 
 use async_trait::async_trait;
 use log::warn;
-use rocketbot_interface::commands::{CommandDefinition, CommandInstance};
+use rocketbot_interface::commands::{CommandBehaviors, CommandDefinition, CommandInstance};
 use rocketbot_interface::interfaces::{RocketBotInterface, RocketBotPlugin};
 use rocketbot_interface::model::{ChannelMessage, PrivateMessage};
 use serde_json;
@@ -30,6 +30,7 @@ impl RocketBotPlugin for VersionPlugin {
             Some(HashSet::new()),
             HashMap::new(),
             0,
+            CommandBehaviors::empty(),
             "{cpfx}version".to_owned(),
             "Outputs the currently running version of the bot.".to_owned(),
         );

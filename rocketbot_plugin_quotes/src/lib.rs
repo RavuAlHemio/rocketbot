@@ -12,7 +12,7 @@ use rand::{Rng, SeedableRng};
 use rand::rngs::StdRng;
 use rand::seq::SliceRandom;
 use rocketbot_interface::JsonValueExtensions;
-use rocketbot_interface::commands::{CommandDefinition, CommandInstance};
+use rocketbot_interface::commands::{CommandBehaviors, CommandDefinition, CommandInstance};
 use rocketbot_interface::interfaces::{RocketBotInterface, RocketBotPlugin};
 use rocketbot_interface::model::ChannelMessage;
 use rocketbot_interface::sync::Mutex;
@@ -683,6 +683,7 @@ impl RocketBotPlugin for QuotesPlugin {
             Some(HashSet::new()),
             HashMap::new(),
             0,
+            CommandBehaviors::empty(),
             "{cpfx}addquote QUOTE".to_owned(),
             "Adds the given quote to the quote database.".to_owned(),
         );
@@ -694,6 +695,7 @@ impl RocketBotPlugin for QuotesPlugin {
             Some(HashSet::new()),
             HashMap::new(),
             1,
+            CommandBehaviors::empty(),
             "{cpfx}remember USERNAME SUBSTRING".to_owned(),
             "Adds a recent utterance of the given user to the quote database.".to_owned(),
         );
@@ -710,6 +712,7 @@ impl RocketBotPlugin for QuotesPlugin {
             Some(quote_flags.clone()),
             HashMap::new(),
             0,
+            CommandBehaviors::empty(),
             "{cpfx}quote [{lopfx}any|{lopfx}bad] [{sopfx}r] [SUBSTRING]".to_owned(),
             "Outputs a random quote containing the given substring.".to_owned(),
         );
@@ -721,6 +724,7 @@ impl RocketBotPlugin for QuotesPlugin {
             Some(quote_flags.clone()),
             HashMap::new(),
             1,
+            CommandBehaviors::empty(),
             "{cpfx}quoteuser [{lopfx}any|{lopfx}bad] [{sopfx}r] USERNAME [SUBSTRING]".to_owned(),
             "Outputs a random quote from the given user containing the given substring.".to_owned(),
         );
@@ -732,6 +736,7 @@ impl RocketBotPlugin for QuotesPlugin {
             Some(quote_flags.clone()),
             HashMap::new(),
             0,
+            CommandBehaviors::empty(),
             "{cpfx}nextquote [{lopfx}any|{lopfx}bad]".to_owned(),
             "Displays the next quote from a pre-shuffled list of quotes.".to_owned(),
         );
@@ -743,6 +748,7 @@ impl RocketBotPlugin for QuotesPlugin {
             Some(quote_flags.clone()),
             HashMap::new(),
             0,
+            CommandBehaviors::empty(),
             "{cpfx}uq|{cpfx}upquote|{cpfx}dq|{cpfx}downquote".to_owned(),
             "Updates the most recently added or displayed quote with a positive or a negative vote from you.".to_owned(),
         );

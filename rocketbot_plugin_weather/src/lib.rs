@@ -11,7 +11,7 @@ use once_cell::sync::Lazy;
 use regex::Regex;
 use rocketbot_geonames::GeoNamesClient;
 use rocketbot_interface::JsonValueExtensions;
-use rocketbot_interface::commands::{CommandDefinition, CommandInstance};
+use rocketbot_interface::commands::{CommandBehaviors, CommandDefinition, CommandInstance};
 use rocketbot_interface::interfaces::{RocketBotInterface, RocketBotPlugin};
 use rocketbot_interface::model::ChannelMessage;
 use serde_json;
@@ -162,6 +162,7 @@ impl RocketBotPlugin for WeatherPlugin {
             Some(HashSet::new()),
             HashMap::new(),
             0,
+            CommandBehaviors::empty(),
             "{cpfx}weather|{cpfx}lweather [LOCATION]".to_owned(),
             "Displays the current weather as well as a forecast for the given location.".to_owned(),
         );

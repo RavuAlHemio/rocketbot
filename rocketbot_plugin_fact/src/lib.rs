@@ -9,7 +9,7 @@ use async_trait::async_trait;
 use rand::{Rng, RngCore, SeedableRng};
 use rand::rngs::StdRng;
 use rocketbot_interface::JsonValueExtensions;
-use rocketbot_interface::commands::{CommandDefinition, CommandInstance};
+use rocketbot_interface::commands::{CommandBehaviors, CommandDefinition, CommandInstance};
 use rocketbot_interface::interfaces::{RocketBotInterface, RocketBotPlugin};
 use rocketbot_interface::model::ChannelMessage;
 use rocketbot_interface::sync::Mutex;
@@ -86,6 +86,7 @@ impl RocketBotPlugin for FactPlugin {
             Some(HashSet::new()),
             HashMap::new(),
             0,
+            CommandBehaviors::empty(),
             "{cpfx}fact".to_owned(),
             "Obtains and displays a random fact.".to_owned(),
         );

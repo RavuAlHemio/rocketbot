@@ -5,7 +5,7 @@ use async_trait::async_trait;
 use rand::{Rng, SeedableRng};
 use rand::rngs::StdRng;
 use rocketbot_interface::JsonValueExtensions;
-use rocketbot_interface::commands::{CommandDefinition, CommandInstance};
+use rocketbot_interface::commands::{CommandBehaviors, CommandDefinition, CommandInstance};
 use rocketbot_interface::interfaces::{RocketBotInterface, RocketBotPlugin};
 use rocketbot_interface::model::ChannelMessage;
 use rocketbot_interface::sync::Mutex;
@@ -48,6 +48,7 @@ impl TextCommandsPlugin {
                 Some(random_flags),
                 HashMap::new(),
                 0,
+                CommandBehaviors::empty(),
                 if nicknamable { format!("{{cpfx}}{} [{{lopfx}}random|NICKNAME]", command_name) } else { format!("{{cpfx}}{}", command_name) },
                 if nicknamable {
                     "Responds to the given text command, inserting a nickname at a predefined location.".to_owned()

@@ -13,7 +13,7 @@ use log::error;
 use rand::SeedableRng;
 use rand::rngs::StdRng;
 use rocketbot_interface::JsonValueExtensions;
-use rocketbot_interface::commands::{CommandDefinition, CommandInstance};
+use rocketbot_interface::commands::{CommandBehaviors, CommandDefinition, CommandInstance};
 use rocketbot_interface::interfaces::{RocketBotInterface, RocketBotPlugin};
 use rocketbot_interface::model::ChannelMessage;
 use serde_json;
@@ -74,6 +74,7 @@ impl RocketBotPlugin for GrammarGenPlugin {
                 None,
                 HashMap::new(),
                 0,
+                CommandBehaviors::empty(),
                 format!("{{cpfx}}{} [NICKNAME]", grammar_name),
                 "Produces a phrase from the given grammar.".to_owned(),
             );

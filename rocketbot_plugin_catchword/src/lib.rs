@@ -7,7 +7,7 @@ use rand::{Rng, SeedableRng};
 use rand::rngs::StdRng;
 use regex::{Match, Regex};
 use rocketbot_interface::JsonValueExtensions;
-use rocketbot_interface::commands::{CommandDefinition, CommandInstance};
+use rocketbot_interface::commands::{CommandBehaviors, CommandDefinition, CommandInstance};
 use rocketbot_interface::interfaces::{RocketBotInterface, RocketBotPlugin};
 use rocketbot_interface::model::ChannelMessage;
 use rocketbot_interface::sync::Mutex;
@@ -84,6 +84,7 @@ impl RocketBotPlugin for CatchwordPlugin {
                 Some(HashSet::new()),
                 HashMap::new(),
                 0,
+                CommandBehaviors::empty(),
                 format!("{{cpfx}}{} PHRASE", catch_name),
                 "Performs replacements in the PHRASE according to preconfigured rules.".to_owned(),
             )).await;
