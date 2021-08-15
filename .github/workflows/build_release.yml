@@ -15,6 +15,8 @@ jobs:
         run: 'python3 cicd/plugincheck.py'
       - name: update version
         run: 'sed -i -e "s/{{VERSION}}/`git rev-parse HEAD`/" rocketbot_plugin_version/src/lib.rs'
+      - name: fetch dependencies
+        run: sh ./cicd/cargo_fetch.sh
       - name: run release build
         run: cargo build --release
       - name: run release tests
