@@ -15,4 +15,3 @@ rocketbot_geonames = { path = "../rocketbot_geonames" }
 rocketbot_interface = { path = "../rocketbot_interface" }
 serde = { version = "1.0" }
 serde_json = { version = "1.0" }
-tokio = { version = "1.7" }

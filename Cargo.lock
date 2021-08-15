@@ -1201,7 +1201,6 @@ dependencies = [
  "rocketbot_interface",
  "serde",
  "serde_json",
- "tokio",
  "unicode-normalization",
  "url",
 ]
@@ -1257,7 +1256,6 @@ dependencies = [
  "rocketbot_interface",
  "serde",
  "serde_json",
- "tokio",
  "toml",
 ]
 
@@ -1296,7 +1294,6 @@ dependencies = [
  "regex",
  "rocketbot_interface",
  "serde_json",
- "tokio",
 ]
 
 [[package]]
@@ -1313,7 +1310,6 @@ dependencies = [
  "rocketbot_interface",
  "serde",
  "serde_json",
- "tokio",
  "url",
 ]
 
@@ -1326,7 +1322,6 @@ dependencies = [
  "rand",
  "rocketbot_interface",
  "serde_json",
- "tokio",
 ]
 
 [[package]]
@@ -1384,7 +1379,6 @@ dependencies = [
  "log",
  "rocketbot_interface",
  "serde_json",
- "tokio",
 ]
 
 [[package]]
@@ -1421,7 +1415,6 @@ dependencies = [
  "rand",
  "rocketbot_interface",
  "serde_json",
- "tokio",
 ]
 
 [[package]]
@@ -1434,7 +1427,6 @@ dependencies = [
  "regex",
  "rocketbot_interface",
  "serde_json",
- "tokio",
 ]
 
 [[package]]
@@ -1455,7 +1447,6 @@ dependencies = [
  "rand",
  "rocketbot_interface",
  "serde_json",
- "tokio",
 ]
 
 [[package]]
@@ -1496,7 +1487,6 @@ dependencies = [
  "reqwest",
  "rocketbot_interface",
  "serde_json",
- "tokio",
 ]
 
 [[package]]
@@ -1507,7 +1497,6 @@ dependencies = [
  "log",
  "rocketbot_interface",
  "serde_json",
- "tokio",
 ]
 
 [[package]]
@@ -1524,7 +1513,6 @@ dependencies = [
  "rocketbot_interface",
  "serde",
  "serde_json",
- "tokio",
 ]
 
 [[package]]
@@ -1542,7 +1530,6 @@ dependencies = [
  "rocketbot_interface",
  "serde",
  "serde_json",
- "tokio",
 ]
 
 [[package]]

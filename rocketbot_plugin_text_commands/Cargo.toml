@@ -8,4 +8,3 @@ async-trait = { version = "0.1" }
 rand = { version = "0.8" }
 rocketbot_interface = { path = "../rocketbot_interface" }
 serde_json = { version = "1.0" }
-tokio = { version = "1.7", features = ["sync"] }

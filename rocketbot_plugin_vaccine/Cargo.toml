@@ -13,4 +13,3 @@ num-traits = { version = "0.2" }
 reqwest = { version = "0.11", features = ["rustls-tls"] }
 rocketbot_interface = { path = "../rocketbot_interface" }
 serde_json = { version = "1.0" }
-tokio = { version = "1.7", features = ["sync"] }
