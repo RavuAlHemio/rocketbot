@@ -1,8 +1,12 @@
 use std::collections::{HashMap, HashSet};
-use std::convert::TryInto;
+use std::convert::{TryFrom, TryInto};
+use std::ops::Deref;
 use std::sync::Weak;
 
 use async_trait::async_trait;
+use bigdecimal::BigDecimal;
+use num_bigint::BigInt;
+use num_traits::{FromPrimitive, One, Zero};
 use once_cell::sync::Lazy;
 use regex::Regex;
 use rocketbot_interface::commands::{CommandBehaviors, CommandDefinition, CommandInstance};
@@ -19,11 +23,28 @@ static SI_THOUSANDS: &[&str] = &[
     "y", "z", "a", "f", "p", "n", "\u{3BC}", "m", "", "k", "M", "G", "T", "P", "E", "Z", "Y",
 ];
 const SI_THOUSANDS_OFFSET: isize = 8;
-const SI_PREFIX_MAX: f64 = 5000.0;
-const SI_PREFIX_MIN: f64 = 5.0;
+const SI_PREFIX_MAX: Lazy<BigDecimal> = Lazy::new(|| BigDecimal::from_i32(5000).unwrap());
+const SI_PREFIX_MIN: Lazy<BigDecimal> = Lazy::new(|| BigDecimal::from_i32(5).unwrap());
 
 
-fn paper_size(series: &str, order: f64) -> (f64, f64) {
+fn twopow(mut power: BigInt) -> BigDecimal {
+    let mut dec = BigDecimal::one();
+    let zero = BigInt::zero();
+
+    while power > zero {
+        dec = dec.double();
+        power -= 1;
+    }
+    while power < zero {
+        dec = dec.half();
+        power += 1;
+    }
+
+    dec
+}
+
+
+fn paper_size(series: &str, order: &BigInt) -> Option<(BigDecimal, BigDecimal)> {
     /* derivation of lengths for an area:
      * long/short = sqrt(2), long*short = area
      * long/short = sqrt(2), short = area/long
@@ -34,13 +55,13 @@ fn paper_size(series: &str, order: f64) -> (f64, f64) {
      * long = sqrt(sqrt(2) * area)
      */
 
-     let series_upper = series.to_uppercase();
-     let area_m2 = if series_upper == "A" {
+    let series_upper = series.to_uppercase();
+    let area_m2 = if series_upper == "A" {
         // A0: area is 1 m^2
         // Aorder = 2^(-order) m^2
 
-        2.0_f64.powf(-order)
-     } else if series_upper == "B" {
+        twopow(-order)
+    } else if series_upper == "B" {
         // Border's area is the geometric mean between Aorder's area and A(order-1)'s area
         // A0 = 1 m^2, 2A0 = 2 m^2
         // => B0 = sqrt(1 m^2 * 2 m^2) = sqrt(2 m^4) = sqrt(2) m^2
@@ -48,50 +69,50 @@ fn paper_size(series: &str, order: f64) -> (f64, f64) {
         // more generally:
         // Border = sqrt(2^(-order) m^2 * 2 * 2^(-order) m^2) = sqrt(2^(2*(-order)+1))
 
-        f64::sqrt(2.0_f64.powf(2.0 * (-order) + 1.0))
-     } else if series_upper == "C" {
-         // Corder's area is the geometric mean between Aorder's area and Border's area
-         // A0 = 1 m^2, B0 = sqrt(2) m^2
-         // => C0 = sqrt(1 m^2 * sqrt(2) m^2) = sqrt(sqrt(2) m^4) = sqrt(sqrt(2)) m^2
+        let b_pow: BigInt = (-order) * 2 + 1;
+        twopow(b_pow).sqrt()?
+    } else if series_upper == "C" {
+        // Corder's area is the geometric mean between Aorder's area and Border's area
+        // A0 = 1 m^2, B0 = sqrt(2) m^2
+        // => C0 = sqrt(1 m^2 * sqrt(2) m^2) = sqrt(sqrt(2) m^4) = sqrt(sqrt(2)) m^2
 
-         // more generally:
-         // Corder = sqrt(sqrt(2^(-order)) * sqrt(2^(2*norder+1)))
+        // more generally:
+        // Corder = sqrt(sqrt(2^(-order)) * sqrt(2^(2*norder+1)))
 
-         f64::sqrt(f64::sqrt(2.0_f64.powf(-order)) * f64::sqrt(2.0_f64.powf(2.0 * (-order) + 1.0)))
-     } else {
-         panic!("unknown ISO 216 series {:?}", series_upper);
-     };
+        let b_pow: BigInt = (-order) * 2 + 1;
 
-     let long_m = f64::sqrt(f64::sqrt(2.0) * area_m2);
-     let short_m = long_m / f64::sqrt(2.0);
+        let a_area = twopow(-order);
+        let b_area = twopow(b_pow).sqrt()?;
 
-     (long_m, short_m)
+        (a_area * b_area).sqrt()?
+    } else {
+        panic!("unknown ISO 216 series {:?}", series_upper);
+    };
+
+    let sqrt_2 = BigDecimal::from(2).sqrt().unwrap();
+
+    let long_m = (&sqrt_2 * area_m2).sqrt()?;
+    let short_m = &long_m / &sqrt_2;
+
+    Some((long_m, short_m))
 }
 
-fn si_prefix(mut value: f64) -> (&'static str, f64) {
-    let mut index: isize = 0;
+fn si_prefix(mut value: BigDecimal) -> (&'static str, BigDecimal) {
+    let mut index_with_offset = SI_THOUSANDS_OFFSET;
+    let max_index: isize = isize::try_from(SI_THOUSANDS.len()).unwrap() - 1;
 
-    if value == 0.0 {
-        return ("", value);
+    let thousand = BigDecimal::from(1000);
+
+    if value == BigDecimal::zero() {
+        return (SI_THOUSANDS[0], value);
     }
 
-    while value > SI_PREFIX_MAX {
-        value /= 1000.0;
-        index += 1;
-    }
-    while value < SI_PREFIX_MIN {
-        value *= 1000.0;
-        index -= 1;
-    }
-
-    let mut index_with_offset = index + SI_THOUSANDS_OFFSET;
-    while index_with_offset < 0 {
-        value /= 1000.0;
+    while &value > SI_PREFIX_MAX.deref() && index_with_offset < max_index {
+        value = value / &thousand;
         index_with_offset += 1;
     }
-    let prefix_count_isize: isize = SI_THOUSANDS.len().try_into().unwrap();
-    while index_with_offset >= prefix_count_isize {
-        value *= 1000.0;
+    while &value < SI_PREFIX_MIN.deref() && index_with_offset > 0 {
+        value *= &thousand;
         index_with_offset -= 1;
     }
 
@@ -159,7 +180,7 @@ impl RocketBotPlugin for PaperPlugin {
             }
         }
 
-        let index: f64 = match index_trimmed.parse() {
+        let index: BigInt = match index_trimmed.parse() {
             Ok(i) => i,
             Err(_e) => {
                 interface.send_channel_message(
@@ -170,7 +191,16 @@ impl RocketBotPlugin for PaperPlugin {
             },
         };
 
-        let (long_m, short_m) = paper_size(series, index);
+        let (long_m, short_m) = match paper_size(series, &index) {
+            Some(lmsm) => lmsm,
+            None => {
+                interface.send_channel_message(
+                    &channel_message.channel.name,
+                    &format!("@{} Value out of bounds. :(", channel_message.message.sender.username),
+                ).await;
+                return;
+            }
+        };
         let (long_pfx, long_val) = si_prefix(long_m);
         let (short_pfx, short_val) = si_prefix(short_m);
 
@@ -199,10 +229,58 @@ impl RocketBotPlugin for PaperPlugin {
 mod tests {
     use super::*;
 
+    fn test_paper_sizes(order_i32: i32) {
+        let order = BigInt::from(order_i32);
+
+        let a = paper_size("A", &order);
+        if a.is_none() {
+            panic!("A{} not computable", order_i32);
+        }
+
+        let b = paper_size("B", &order);
+        if b.is_none() {
+            panic!("B{} not computable", order_i32);
+        }
+
+        let c = paper_size("C", &order);
+        if c.is_none() {
+            panic!("B{} not computable", order_i32);
+        }
+    }
+
     #[test]
     fn test_zero_si_prefix() {
-        let (zero_pfx, zero_val) = si_prefix(0.0);
-        assert_eq!("", zero_pfx);
-        assert_eq!(0.0, zero_val);
+        let (zero_pfx, zero_val) = si_prefix(BigDecimal::zero());
+        assert_eq!("y", zero_pfx);
+        assert_eq!(BigDecimal::zero(), zero_val);
+    }
+
+    #[test]
+    fn test_si_prefixes() {
+        let (pfx, val) = si_prefix(BigDecimal::from(9000));
+        assert_eq!("k", pfx);
+        assert_eq!(BigDecimal::from(9), val);
+
+        let (pfx, val) = si_prefix("0.009".parse().unwrap());
+        assert_eq!("m", pfx);
+        assert_eq!(BigDecimal::from(9), val);
+
+        let (pfx, val) = si_prefix(BigDecimal::from(9_000_000_000_i64));
+        assert_eq!("G", pfx);
+        assert_eq!(BigDecimal::from(9), val);
+    }
+
+    #[test]
+    fn test_ten_each_way_concrete() {
+        for order_i32 in -10..=10 {
+            test_paper_sizes(order_i32);
+        }
+    }
+
+    #[test]
+    fn test_extremes() {
+        test_paper_sizes(1755);
+        test_paper_sizes(1769);
+        test_paper_sizes(1794);
     }
 }

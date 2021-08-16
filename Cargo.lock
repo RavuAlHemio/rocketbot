@@ -46,6 +46,17 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "904dfeac50f3cdaba28fc6f57fdcddb75f49ed61346676a78c4ffe55877802fd"
 
 [[package]]
+name = "bigdecimal"
+version = "0.2.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "cc403c26e6b03005522e6e8053384c4e881dfe5b2bf041c0c2c49be33d64a539"
+dependencies = [
+ "num-bigint 0.3.2",
+ "num-integer",
+ "num-traits",
+]
+
+[[package]]
 name = "bitflags"
 version = "1.2.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -704,6 +715,17 @@ dependencies = [
 
 [[package]]
 name = "num-bigint"
+version = "0.3.2"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "7d0a3d5e207573f948a9e5376662aa743a2ea13f7c50a554d7af443a73fbfeba"
+dependencies = [
+ "autocfg",
+ "num-integer",
+ "num-traits",
+]
+
+[[package]]
+name = "num-bigint"
 version = "0.4.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "4e0d047c1062aa51e256408c560894e5251f08925980e53cf1aa5bd00eec6512"
@@ -732,7 +754,7 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "d41702bd167c2df5520b384281bc111a4b5efcf7fbc4c9c222c815b07e0a6a6a"
 dependencies = [
  "autocfg",
- "num-bigint",
+ "num-bigint 0.4.0",
  "num-integer",
  "num-traits",
 ]
@@ -1249,7 +1271,7 @@ dependencies = [
  "chrono",
  "log",
  "minidom",
- "num-bigint",
+ "num-bigint 0.4.0",
  "num-traits",
  "pest",
  "pest_derive",
@@ -1289,7 +1311,7 @@ version = "0.1.0"
 dependencies = [
  "async-trait",
  "chrono",
- "num-bigint",
+ "num-bigint 0.4.0",
  "once_cell",
  "rand",
  "regex",
@@ -1331,7 +1353,7 @@ version = "0.1.0"
 dependencies = [
  "async-trait",
  "log",
- "num-bigint",
+ "num-bigint 0.4.0",
  "num-traits",
  "pest",
  "pest_derive",
@@ -1387,6 +1409,9 @@ name = "rocketbot_plugin_paper"
 version = "0.1.0"
 dependencies = [
  "async-trait",
+ "bigdecimal",
+ "num-bigint 0.4.0",
+ "num-traits",
  "once_cell",
  "regex",
  "rocketbot_interface",
@@ -1483,7 +1508,7 @@ dependencies = [
  "chrono",
  "encoding_rs",
  "log",
- "num-bigint",
+ "num-bigint 0.4.0",
  "num-traits",
  "reqwest",
  "rocketbot_interface",
