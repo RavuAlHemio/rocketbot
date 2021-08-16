@@ -71,6 +71,10 @@ fn paper_size(series: &str, order: f64) -> (f64, f64) {
 fn si_prefix(mut value: f64) -> (&'static str, f64) {
     let mut index: isize = 0;
 
+    if value == 0.0 {
+        return ("", value);
+    }
+
     while value > SI_PREFIX_MAX {
         value /= 1000.0;
         index += 1;
@@ -187,5 +191,18 @@ impl RocketBotPlugin for PaperPlugin {
         } else {
             None
         }
+    }
+}
+
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_zero_si_prefix() {
+        let (zero_pfx, zero_val) = si_prefix(0.0);
+        assert_eq!("", zero_pfx);
+        assert_eq!(0.0, zero_val);
     }
 }
