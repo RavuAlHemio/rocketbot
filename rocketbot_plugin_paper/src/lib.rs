@@ -36,7 +36,7 @@ fn twopow(mut power: BigInt) -> BigDecimal {
     let bim10 = -&bi10;
 
     while power > bi10 {
-        dec = dec / &bd1024;
+        dec *= &bd1024;
         power -= &bi10;
     }
     while power > zero {
@@ -45,7 +45,7 @@ fn twopow(mut power: BigInt) -> BigDecimal {
     }
 
     while power < bim10 {
-        dec *= &bd1024;
+        dec = dec / &bd1024;
         power += &bi10;
     }
     while power < zero {
@@ -232,13 +232,16 @@ impl RocketBotPlugin for PaperPlugin {
         let (long_pfx, long_val) = si_prefix(long_m);
         let (short_pfx, short_val) = si_prefix(short_m);
 
+        let long_prec = long_val.with_prec(8);
+        let short_prec = short_val.with_prec(8);
+
         interface.send_channel_message(
             &channel_message.channel.name,
             &format!(
                 "@{} {}{}: {} {}m \u{D7} {} {}m",
                 channel_message.message.sender.username,
                 series, index,
-                long_val, long_pfx, short_val, short_pfx,
+                long_prec, long_pfx, short_prec, short_pfx,
             ),
         ).await;
     }
@@ -313,5 +316,42 @@ mod tests {
         test_paper_sizes(1791);
         test_paper_sizes(1794);
         test_paper_sizes(99999);
+    }
+
+    fn test_single_precision(
+        series: &str,
+        order: i64,
+        prec: u64,
+        expect_long_pfx: &str,
+        expect_long_str: &str,
+        expect_short_pfx: &str,
+        expect_short_str: &str,
+    ) {
+        let (long_side, short_side) = paper_size(series, &BigInt::from(order)).unwrap();
+        let (long_pfx, long_val) = si_prefix(long_side);
+        let (short_pfx, short_val) = si_prefix(short_side);
+
+        assert_eq!(expect_long_pfx, long_pfx);
+        assert_eq!(expect_short_pfx, short_pfx);
+
+        let long_prec = long_val.with_prec(prec);
+        let short_prec = short_val.with_prec(prec);
+
+        assert_eq!(expect_long_str, long_prec.to_string());
+        assert_eq!(expect_short_str, short_prec.to_string());
+    }
+
+    #[test]
+    fn test_precision() {
+        test_single_precision(
+            "A", 4, 6,
+            "m", "297.302",
+            "m", "210.224",
+        );
+        test_single_precision(
+            "A", 42, 6,
+            "m", "297.302",
+            "m", "210.224",
+        );
     }
 }
