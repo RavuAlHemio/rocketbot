@@ -137,6 +137,7 @@ fn si_prefix(mut value: BigDecimal) -> (&'static str, BigDecimal) {
 pub struct PaperPlugin {
     interface: Weak<dyn RocketBotInterface>,
     max_index: BigInt,
+    output_precision: u64,
 }
 #[async_trait]
 impl RocketBotPlugin for PaperPlugin {
@@ -150,6 +151,8 @@ impl RocketBotPlugin for PaperPlugin {
             .expect("max_index missing or not a string");
         let max_index: BigInt = max_index_str.parse()
             .expect("failed to parse max_index");
+        let output_precision = config["output_precision"].as_u64()
+            .expect("output_precision missing or not a u64");
 
         my_interface.register_channel_command(&CommandDefinition::new(
             "paper".to_owned(),
@@ -165,6 +168,7 @@ impl RocketBotPlugin for PaperPlugin {
         PaperPlugin {
             interface,
             max_index,
+            output_precision,
         }
     }
 
@@ -232,8 +236,8 @@ impl RocketBotPlugin for PaperPlugin {
         let (long_pfx, long_val) = si_prefix(long_m);
         let (short_pfx, short_val) = si_prefix(short_m);
 
-        let long_prec = long_val.with_prec(8);
-        let short_prec = short_val.with_prec(8);
+        let long_prec = long_val.with_prec(self.output_precision);
+        let short_prec = short_val.with_prec(self.output_precision);
 
         interface.send_channel_message(
             &channel_message.channel.name,
@@ -349,9 +353,9 @@ mod tests {
             "m", "210.224",
         );
         test_single_precision(
-            "A", 42, 6,
-            "m", "297.302",
-            "m", "210.224",
+            "A", 4242, 6,
+            "y", "0.00000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000389616",
+            "y", "0.00000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000275500",
         );
     }
 }
