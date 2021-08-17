@@ -257,23 +257,24 @@ impl RocketBotPlugin for PaperPlugin {
 mod tests {
     use super::*;
 
-    fn test_paper_sizes(order_i32: i32) {
-        let order = BigInt::from(order_i32);
-
-        let a = paper_size("A", &order);
-        if a.is_none() {
-            panic!("A{} not computable", order_i32);
+    fn test_paper_size(series: &str, order_i: i64) {
+        let order = BigInt::from(order_i);
+        match paper_size(series, &order) {
+            None => {
+                panic!("{}{} is not computable", series, order);
+            },
+            Some((long_side, short_side)) => {
+                // ensure the SI prefixes can be calculated
+                si_prefix(long_side);
+                si_prefix(short_side);
+            },
         }
+    }
 
-        let b = paper_size("B", &order);
-        if b.is_none() {
-            panic!("B{} not computable", order_i32);
-        }
-
-        let c = paper_size("C", &order);
-        if c.is_none() {
-            panic!("B{} not computable", order_i32);
-        }
+    fn test_paper_sizes(order_i: i64) {
+        test_paper_size("A", order_i);
+        test_paper_size("B", order_i);
+        test_paper_size("C", order_i);
     }
 
     #[test]
@@ -309,6 +310,8 @@ mod tests {
     fn test_extremes() {
         test_paper_sizes(1755);
         test_paper_sizes(1769);
+        test_paper_sizes(1791);
         test_paper_sizes(1794);
+        test_paper_sizes(99999);
     }
 }
