@@ -136,14 +136,20 @@ fn si_prefix(mut value: BigDecimal) -> (&'static str, BigDecimal) {
 
 pub struct PaperPlugin {
     interface: Weak<dyn RocketBotInterface>,
+    max_index: BigInt,
 }
 #[async_trait]
 impl RocketBotPlugin for PaperPlugin {
-    async fn new(interface: Weak<dyn RocketBotInterface>, _config: serde_json::Value) -> Self {
+    async fn new(interface: Weak<dyn RocketBotInterface>, config: serde_json::Value) -> Self {
         let my_interface = match interface.upgrade() {
             None => panic!("interface is gone"),
             Some(i) => i,
         };
+
+        let max_index_str = config["max_index"].as_str()
+            .expect("max_index missing or not a string");
+        let max_index: BigInt = max_index_str.parse()
+            .expect("failed to parse max_index");
 
         my_interface.register_channel_command(&CommandDefinition::new(
             "paper".to_owned(),
@@ -158,6 +164,7 @@ impl RocketBotPlugin for PaperPlugin {
 
         PaperPlugin {
             interface,
+            max_index,
         }
     }
 
@@ -203,6 +210,14 @@ impl RocketBotPlugin for PaperPlugin {
                 return;
             },
         };
+
+        if index > self.max_index || index < -&self.max_index {
+            interface.send_channel_message(
+                &channel_message.channel.name,
+                &format!("@{} Index too large.", channel_message.message.sender.username),
+            ).await;
+            return;
+        }
 
         let (long_m, short_m) = match paper_size(series, &index) {
             Some(lmsm) => lmsm,
