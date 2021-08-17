@@ -31,9 +31,22 @@ fn twopow(mut power: BigInt) -> BigDecimal {
     let mut dec = BigDecimal::one();
     let zero = BigInt::zero();
 
+    let bd1024 = BigDecimal::from(1024);
+    let bi10 = BigInt::from(10);
+    let bim10 = -&bi10;
+
+    while power > bi10 {
+        dec = dec / &bd1024;
+        power -= &bi10;
+    }
     while power > zero {
         dec = dec.double();
         power -= 1;
+    }
+
+    while power < bim10 {
+        dec *= &bd1024;
+        power += &bi10;
     }
     while power < zero {
         dec = dec.half();
