@@ -14,6 +14,7 @@ members = [
     "rocketbot_plugin_grammargen",
     "rocketbot_plugin_group_pressure",
     "rocketbot_plugin_help",
+    "rocketbot_plugin_link_react",
     "rocketbot_plugin_logger",
     "rocketbot_plugin_new_year",
     "rocketbot_plugin_paper",
