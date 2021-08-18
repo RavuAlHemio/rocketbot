@@ -147,3 +147,78 @@ impl fmt::Display for MessageFragment {
         }
     }
 }
+
+pub fn collect_inline_urls<'a, I: Iterator<Item = &'a InlineFragment>>(fragments: I) -> Vec<String> {
+    let mut urls = Vec::new();
+    for fragment in fragments {
+        match fragment {
+            InlineFragment::Bold(ilfs) => {
+                let mut inline_urls = collect_inline_urls(ilfs.iter());
+                urls.append(&mut inline_urls);
+            },
+            InlineFragment::Emoji(_emoji) => {},
+            InlineFragment::InlineCode(_code) => {},
+            InlineFragment::Italic(ilfs) => {
+                let mut inline_urls = collect_inline_urls(ilfs.iter());
+                urls.append(&mut inline_urls);
+            },
+            InlineFragment::Link(url, label_ilf) => {
+                // this is where the magic happens
+                urls.push(url.clone());
+
+                // you never know
+                let mut inline_urls = collect_inline_urls(std::iter::once(label_ilf.as_ref()));
+                urls.append(&mut inline_urls);
+            },
+            InlineFragment::MentionChannel(_channel) => {},
+            InlineFragment::MentionUser(_user) => {},
+            InlineFragment::PlainText(_pt) => {},
+            InlineFragment::Strike(ilfs) => {
+                let mut inline_urls = collect_inline_urls(ilfs.iter());
+                urls.append(&mut inline_urls);
+            },
+        }
+    }
+    urls
+}
+
+pub fn collect_urls<'a, I: Iterator<Item = &'a MessageFragment>>(fragments: I) -> Vec<String> {
+    let mut urls = Vec::new();
+    for fragment in fragments {
+        match fragment {
+            MessageFragment::BigEmoji(_emoji) => {},
+            MessageFragment::Code(_lang, _ilfs) => {},
+            MessageFragment::Heading(_level, ilfs) => {
+                let mut inline_urls = collect_inline_urls(ilfs.iter());
+                urls.append(&mut inline_urls);
+            },
+            MessageFragment::OrderedList(items) => {
+                for item in items {
+                    let mut inline_urls = collect_inline_urls(item.label.iter());
+                    urls.append(&mut inline_urls);
+                }
+            },
+            MessageFragment::Paragraph(ilfs) => {
+                let mut inline_urls = collect_inline_urls(ilfs.iter());
+                urls.append(&mut inline_urls);
+            },
+            MessageFragment::Quote(frags) => {
+                let mut frag_urls = collect_urls(frags.iter());
+                urls.append(&mut frag_urls);
+            },
+            MessageFragment::Tasks(cbs) => {
+                for cb in cbs {
+                    let mut inline_urls = collect_inline_urls(cb.label.iter());
+                    urls.append(&mut inline_urls);
+                }
+            },
+            MessageFragment::UnorderedList(items) => {
+                for item in items {
+                    let mut inline_urls = collect_inline_urls(item.label.iter());
+                    urls.append(&mut inline_urls);
+                }
+            },
+        }
+    }
+    urls
+}
