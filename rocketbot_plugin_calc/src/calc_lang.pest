@@ -39,13 +39,13 @@ atom_expression =
     { call_expression
     | identifier
     | parens_expression
-    | integer_expression
     | decimal_expression
+    | integer_expression
     }
 call_expression = { identifier ~ "(" ~ arglist? ~ ")" }
 parens_expression = { "(" ~ expression ~ ")" }
-integer_expression = { integer ~ unit_suffix* }
 decimal_expression = { decimal ~ unit_suffix* }
+integer_expression = { integer ~ unit_suffix* }
 
 unit_suffix = { "#" ~ unit_abbrev ~ unit_pow? }
 unit_abbrev = @{ ('A'..'Z'|'a'..'z')+ }

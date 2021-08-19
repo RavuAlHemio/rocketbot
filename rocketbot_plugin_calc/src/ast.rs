@@ -470,4 +470,14 @@ mod tests {
         // right-associative (2**(3**3))
         run_test("134217728", "2**3**3");
     }
+
+    #[test]
+    fn test_parse_integer_with_unit() {
+        run_test("123#W", "123#W");
+    }
+
+    #[test]
+    fn test_parse_decimal_with_unit() {
+        run_test("123.4#W", "123.4#W");
+    }
 }
