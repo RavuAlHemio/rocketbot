@@ -1,5 +1,6 @@
 use std::collections::{HashMap, HashSet};
 use std::convert::{TryFrom, TryInto};
+use std::fmt::Write;
 use std::ops::Deref;
 use std::sync::Weak;
 
@@ -216,6 +217,35 @@ fn si_prefix(mut value: BigDecimal) -> (&'static str, BigDecimal) {
     (SI_THOUSANDS[index_with_offset_usize], value)
 }
 
+fn to_scientific(dec: &BigDecimal) -> String {
+    let (bi, exp) = dec.as_bigint_and_exponent();
+    let mut bi_string = bi.to_string();
+
+    let out_exp = if bi_string.len() > 1 {
+        // insert the decimal point
+        bi_string.insert(1, '.');
+
+        // the exponent is the number of digits minus one (and don't forget the decimal point)
+        (bi_string.len() - 2) as i64 - exp
+    } else {
+        (bi_string.len() - 1) as i64 - exp
+    };
+
+    // append the exponent
+    write!(&mut bi_string, "e{}", out_exp).unwrap();
+
+    bi_string
+}
+
+fn maybe_to_scientific(dec: &BigDecimal) -> String {
+    let standard = dec.to_string();
+    if standard.starts_with("0.00000") || standard.ends_with("000000") {
+        to_scientific(&dec)
+    } else {
+        standard
+    }
+}
+
 
 pub struct PaperPlugin {
     interface: Weak<dyn RocketBotInterface>,
@@ -321,6 +351,8 @@ impl RocketBotPlugin for PaperPlugin {
 
         let long_prec = long_val.with_prec(self.output_precision);
         let short_prec = short_val.with_prec(self.output_precision);
+        let long_sci = maybe_to_scientific(&long_prec);
+        let short_sci = maybe_to_scientific(&short_prec);
 
         interface.send_channel_message(
             &channel_message.channel.name,
@@ -328,7 +360,7 @@ impl RocketBotPlugin for PaperPlugin {
                 "@{} {}{}: {} {}m \u{D7} {} {}m",
                 channel_message.message.sender.username,
                 series, index,
-                long_prec, long_pfx, short_prec, short_pfx,
+                long_sci, long_pfx, short_sci, short_pfx,
             ),
         ).await;
     }
@@ -443,5 +475,18 @@ mod tests {
             "y", "0.00000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000389616",
             "y", "0.00000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000275500",
         );
+    }
+
+    fn test_single_to_scientific(expected: &str, to_sci_decimal: &str) {
+        let dec: BigDecimal = to_sci_decimal.parse().unwrap();
+        assert_eq!(expected, to_scientific(&dec))
+    }
+
+    #[test]
+    fn test_to_scientific() {
+        test_single_to_scientific("1.2345e4", "12345");
+        test_single_to_scientific("1.2345e1", "12.345");
+        test_single_to_scientific("1.2345e-3", "0.0012345");
+        test_single_to_scientific("1.2345e-69", "0.0000000000000000000000000000000000000000000000000000000000000000000012345");
     }
 }
