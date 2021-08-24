@@ -16,7 +16,7 @@ use serde_json;
 
 
 static PAPER_RE: Lazy<Regex> = Lazy::new(|| Regex::new(
-    "^\\s*(?P<series>[ABCabc])\\s*(?P<index>-?\\s*[0-9]+(?:\\s*[0-9]+)*)\\s*$",
+    "^\\s*(?P<series>[A-Za-z])\\s*(?P<index>-?\\s*[0-9]+(?:\\s*[0-9]+)*)\\s*$",
 ).expect("failed to compile regex"));
 
 static SI_THOUSANDS: &[&str] = &[
@@ -57,6 +57,66 @@ fn twopow(mut power: BigInt) -> BigDecimal {
 }
 
 
+macro_rules! paper_area_func_geom_order_order {
+    ($func_name:ident, $order_parent_1:path, $order_parent_2:path) => {
+        #[inline]
+        fn $func_name(order: &BigInt) -> Option<BigDecimal> {
+            ($order_parent_1(order)? * $order_parent_2(order)?).sqrt()
+        }
+    };
+}
+
+macro_rules! paper_area_func_geom_order_orderm1 {
+    ($func_name:ident, $order_parent:path, $orderm1_parent:path) => {
+        #[inline]
+        fn $func_name(order: &BigInt) -> Option<BigDecimal> {
+            let orderm1: BigInt = order - 1;
+            ($order_parent(order)? * $orderm1_parent(&orderm1)?).sqrt()
+        }
+    };
+}
+
+// layer 0 (A is ISO 216)
+fn paper_area_a(order: &BigInt) -> Option<BigDecimal> {
+    Some(twopow(-order))
+}
+
+// layer 1 (B is ISO 216)
+paper_area_func_geom_order_orderm1!(paper_area_b, paper_area_a, paper_area_a);
+
+// layer 2 (C is ISO 216, D is the Swedish extension SIS 014711)
+paper_area_func_geom_order_order!(paper_area_c, paper_area_a, paper_area_b);
+paper_area_func_geom_order_orderm1!(paper_area_d, paper_area_b, paper_area_a);
+
+// layer 3 (E, F and G are SIS 014711, H is a logical extension thereof)
+paper_area_func_geom_order_order!(paper_area_e, paper_area_a, paper_area_c);
+paper_area_func_geom_order_order!(paper_area_f, paper_area_c, paper_area_b);
+paper_area_func_geom_order_order!(paper_area_g, paper_area_b, paper_area_d);
+paper_area_func_geom_order_orderm1!(paper_area_h, paper_area_d, paper_area_a);
+
+// layer 4 (I, J, K, L, M, N, O and P are further subdivisions below SIS 014711)
+paper_area_func_geom_order_order!(paper_area_i, paper_area_a, paper_area_e);
+paper_area_func_geom_order_order!(paper_area_j, paper_area_e, paper_area_c);
+paper_area_func_geom_order_order!(paper_area_k, paper_area_c, paper_area_f);
+paper_area_func_geom_order_order!(paper_area_l, paper_area_f, paper_area_b);
+paper_area_func_geom_order_order!(paper_area_m, paper_area_b, paper_area_g);
+paper_area_func_geom_order_order!(paper_area_n, paper_area_g, paper_area_d);
+paper_area_func_geom_order_order!(paper_area_o, paper_area_d, paper_area_h);
+paper_area_func_geom_order_orderm1!(paper_area_p, paper_area_h, paper_area_a);
+
+// layer 5 (Q, R, S, T, U, V, W, X, Y and Z are further subdivisions)
+// further sizes exist on this layer -- AA through AF -- but they are not generated as functions here
+paper_area_func_geom_order_order!(paper_area_q, paper_area_a, paper_area_i);
+paper_area_func_geom_order_order!(paper_area_r, paper_area_i, paper_area_e);
+paper_area_func_geom_order_order!(paper_area_s, paper_area_e, paper_area_j);
+paper_area_func_geom_order_order!(paper_area_t, paper_area_j, paper_area_c);
+paper_area_func_geom_order_order!(paper_area_u, paper_area_c, paper_area_k);
+paper_area_func_geom_order_order!(paper_area_v, paper_area_k, paper_area_f);
+paper_area_func_geom_order_order!(paper_area_w, paper_area_f, paper_area_l);
+paper_area_func_geom_order_order!(paper_area_x, paper_area_l, paper_area_b);
+paper_area_func_geom_order_order!(paper_area_y, paper_area_b, paper_area_m);
+paper_area_func_geom_order_order!(paper_area_z, paper_area_m, paper_area_g);
+
 fn paper_size(series: &str, order: &BigInt) -> Option<(BigDecimal, BigDecimal)> {
     /* derivation of lengths for an area:
      * long/short = sqrt(2), long*short = area
@@ -70,36 +130,59 @@ fn paper_size(series: &str, order: &BigInt) -> Option<(BigDecimal, BigDecimal)> 
 
     let series_upper = series.to_uppercase();
     let area_m2 = if series_upper == "A" {
-        // A0: area is 1 m^2
-        // Aorder = 2^(-order) m^2
-
-        twopow(-order)
+        paper_area_a(order)?
     } else if series_upper == "B" {
-        // Border's area is the geometric mean between Aorder's area and A(order-1)'s area
-        // A0 = 1 m^2, 2A0 = 2 m^2
-        // => B0 = sqrt(1 m^2 * 2 m^2) = sqrt(2 m^4) = sqrt(2) m^2
-
-        // more generally:
-        // Border = sqrt(2^(-order) m^2 * 2 * 2^(-order) m^2) = sqrt(2^(2*(-order)+1))
-
-        let b_pow: BigInt = (-order) * 2 + 1;
-        twopow(b_pow).sqrt()?
+        paper_area_b(order)?
     } else if series_upper == "C" {
-        // Corder's area is the geometric mean between Aorder's area and Border's area
-        // A0 = 1 m^2, B0 = sqrt(2) m^2
-        // => C0 = sqrt(1 m^2 * sqrt(2) m^2) = sqrt(sqrt(2) m^4) = sqrt(sqrt(2)) m^2
-
-        // more generally:
-        // Corder = sqrt(sqrt(2^(-order)) * sqrt(2^(2*norder+1)))
-
-        let b_pow: BigInt = (-order) * 2 + 1;
-
-        let a_area = twopow(-order);
-        let b_area = twopow(b_pow).sqrt()?;
-
-        (a_area * b_area).sqrt()?
+        paper_area_c(order)?
+    } else if series_upper == "D" {
+        paper_area_d(order)?
+    } else if series_upper == "E" {
+        paper_area_e(order)?
+    } else if series_upper == "F" {
+        paper_area_f(order)?
+    } else if series_upper == "G" {
+        paper_area_g(order)?
+    } else if series_upper == "H" {
+        paper_area_h(order)?
+    } else if series_upper == "I" {
+        paper_area_i(order)?
+    } else if series_upper == "J" {
+        paper_area_j(order)?
+    } else if series_upper == "K" {
+        paper_area_k(order)?
+    } else if series_upper == "L" {
+        paper_area_l(order)?
+    } else if series_upper == "M" {
+        paper_area_m(order)?
+    } else if series_upper == "N" {
+        paper_area_n(order)?
+    } else if series_upper == "O" {
+        paper_area_o(order)?
+    } else if series_upper == "P" {
+        paper_area_p(order)?
+    } else if series_upper == "Q" {
+        paper_area_q(order)?
+    } else if series_upper == "R" {
+        paper_area_r(order)?
+    } else if series_upper == "S" {
+        paper_area_s(order)?
+    } else if series_upper == "T" {
+        paper_area_t(order)?
+    } else if series_upper == "U" {
+        paper_area_u(order)?
+    } else if series_upper == "V" {
+        paper_area_v(order)?
+    } else if series_upper == "W" {
+        paper_area_w(order)?
+    } else if series_upper == "X" {
+        paper_area_x(order)?
+    } else if series_upper == "Y" {
+        paper_area_y(order)?
+    } else if series_upper == "Z" {
+        paper_area_z(order)?
     } else {
-        panic!("unknown ISO 216 series {:?}", series_upper);
+        panic!("unknown ISO 216 or extension series {:?}", series_upper);
     };
 
     let sqrt_2 = BigDecimal::from(2).sqrt().unwrap();
