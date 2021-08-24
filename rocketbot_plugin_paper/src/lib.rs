@@ -362,9 +362,12 @@ mod tests {
     }
 
     fn test_paper_sizes(order_i: i64) {
-        test_paper_size("A", order_i);
-        test_paper_size("B", order_i);
-        test_paper_size("C", order_i);
+        let mut series = String::with_capacity(1);
+        for c in 'A'..='Z' {
+            series.clear();
+            series.push(c);
+            test_paper_size(&series, order_i);
+        }
     }
 
     #[test]
