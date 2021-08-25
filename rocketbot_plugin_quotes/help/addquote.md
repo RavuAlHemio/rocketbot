@@ -2,4 +2,4 @@
 
 Adds the given quote to the quote database.
 
-Note that adding a quote does not change the current quote for the purpose of `{cpfx}upquote`/`{cpfx}uq` and `{cpfx}downquote`/`{cpfx}dq`. You must therefore first search for the given quote before voting on it. This behavior may change in the future.
+Adding a quote also changes the current quote for the purpose of `{cpfx}upquote`/`{cpfx}uq` and `{cpfx}downquote`/`{cpfx}dq`.

@@ -309,20 +309,25 @@ GROUP BY q.quote_id, q.timestamp, q.channel, q.author, q.message_type, q.body
         }
     }
 
-    async fn insert_quote(&self, new_quote: &Quote) -> Result<(), tokio_postgres::Error> {
+    async fn insert_quote(&self, new_quote: &Quote, last_quote_id_per_channel_name: &mut HashMap<String, i64>) -> Result<(), tokio_postgres::Error> {
         let db_client = self.connect_db().await?;
 
         let message_type_char: char = new_quote.message_type.into();
         let mut message_type_string = String::with_capacity(1);
         message_type_string.push(message_type_char);
 
-        db_client.execute(
+        let inserted_row = db_client.query_one(
             r#"
 INSERT INTO quotes.quotes ("timestamp", channel, author, message_type, body)
 VALUES ($1, $2, $3, $4, $5)
+RETURNING quote_id
             "#,
             &[&new_quote.timestamp, &new_quote.channel, &new_quote.author, &message_type_string, &new_quote.body],
         ).await?;
+        let inserted_id: i64 = inserted_row.get(0);
+
+        last_quote_id_per_channel_name.insert(new_quote.channel.clone(), inserted_id);
+
         Ok(())
     }
 
@@ -339,7 +344,12 @@ VALUES ($1, $2, $3, $4, $5)
             MessageType::FreeForm,
             command.rest.clone(),
         );
-        if let Err(e) = self.insert_quote(&new_quote).await {
+        let insert_res = {
+            let mut state_guard = self.quotes_state
+                .lock().await;
+            self.insert_quote(&new_quote, &mut state_guard.last_quote_id_per_channel_name).await
+        };
+        if let Err(e) = insert_res {
             error!("failed to insert quote: {}", e);
             interface.send_channel_message(
                 &channel_message.channel.name,
@@ -388,7 +398,7 @@ VALUES ($1, $2, $3, $4, $5)
                 return;
             }
 
-            if let Err(e) = self.insert_quote(&pot_quote).await {
+            if let Err(e) = self.insert_quote(&pot_quote, &mut quotes_state.last_quote_id_per_channel_name).await {
                 error!("failed to insert new quote: {}", e);
                 interface.send_channel_message(
                     channel_name,
