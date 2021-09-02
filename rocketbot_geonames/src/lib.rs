@@ -139,9 +139,6 @@ impl GeoName {
 
 #[derive(Clone, Debug, Deserialize, PartialEq, Serialize)]
 pub struct GeoSearchResponse {
-    #[serde(rename = "totalResultsCount")]
-    pub total_results_count: usize,
-
     #[serde(rename = "geonames")]
     pub geo_names: Vec<GeoName>,
 }
