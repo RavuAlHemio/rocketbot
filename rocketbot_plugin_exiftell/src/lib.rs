@@ -12,7 +12,7 @@ use once_cell::unsync::Lazy;
 use rocketbot_geonames::GeoNamesClient;
 use rocketbot_interface::JsonValueExtensions;
 use rocketbot_interface::interfaces::{RocketBotInterface, RocketBotPlugin};
-use rocketbot_interface::model::ChannelMessage;
+use rocketbot_interface::model::{ChannelMessage, OutgoingMessage};
 use serde_json;
 
 
@@ -305,9 +305,14 @@ impl RocketBotPlugin for ExifTellPlugin {
             };
 
             let response_body = format!("EXIF says: {}", geonames_location);
-            interface.send_channel_message(
+            let response_message = OutgoingMessage::new(
+                response_body,
+                None,
+                Some(channel_message.message.id.clone()),
+            );
+            interface.send_channel_message_advanced(
                 &channel_message.channel.name,
-                &response_body,
+                response_message,
             ).await;
 
             sent_messages += 1;
