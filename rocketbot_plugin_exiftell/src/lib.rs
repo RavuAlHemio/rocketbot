@@ -172,6 +172,20 @@ fn decode_exif_gps_reference<T, F>(value: &exif::Value, mut transform: F) -> Opt
     }
 }
 
+fn get_location_from_values(gps_lat: &exif::Field, gps_lat_ref: &exif::Field, gps_lon: &exif::Field, gps_lon_ref: &exif::Field) -> Option<(Rational64, Rational64)> {
+    // convertible to our values?
+    let lat = decode_exif_gps_position(&gps_lat.value)?;
+    let lat_ref: LatitudeDirection = decode_exif_gps_reference(&gps_lat_ref.value, |r| r.try_into().ok())?;
+    let lon = decode_exif_gps_position(&gps_lon.value)?;
+    let lon_ref: LongitudeDirection = decode_exif_gps_reference(&gps_lon_ref.value, |r| r.try_into().ok())?;
+
+    // possibly minus
+    let final_lat: Rational64 = lat * Rational64::from(lat_ref);
+    let final_lon: Rational64 = lon * Rational64::from(lon_ref);
+
+    Some((final_lat, final_lon))
+}
+
 
 pub struct ExifTellPlugin {
     interface: Weak<dyn RocketBotInterface>,
@@ -269,27 +283,10 @@ impl RocketBotPlugin for ExifTellPlugin {
                 None => continue,
             };
 
-            // convertible to our values?
-            let lat = match decode_exif_gps_position(&gps_lat.value) {
-                Some(l) => l,
+            let (final_lat, final_lon) = match get_location_from_values(gps_lat, gps_lat_ref, gps_lon, gps_lon_ref) {
+                Some(flfl) => flfl,
                 None => continue,
             };
-            let lat_ref: LatitudeDirection = match decode_exif_gps_reference(&gps_lat_ref.value, |r| r.try_into().ok()) {
-                Some(lr) => lr,
-                None => continue,
-            };
-            let lon = match decode_exif_gps_position(&gps_lon.value) {
-                Some(l) => l,
-                None => continue,
-            };
-            let lon_ref: LongitudeDirection = match decode_exif_gps_reference(&gps_lon_ref.value, |r| r.try_into().ok()) {
-                Some(lr) => lr,
-                None => continue,
-            };
-
-            // minus!
-            let final_lat: Rational64 = lat * Rational64::from(lat_ref);
-            let final_lon: Rational64 = lon * Rational64::from(lon_ref);
 
             let response_body = format!(
                 "EXIF says: {} {}",
@@ -330,17 +327,12 @@ mod tests {
         let gps_lon = exif.get_field(exif::Tag::GPSLongitude, exif::In::PRIMARY).unwrap();
         let gps_lon_ref = exif.get_field(exif::Tag::GPSLongitudeRef, exif::In::PRIMARY).unwrap();
 
-        let lat = decode_exif_gps_position(&gps_lat.value).unwrap();
-        let lat_ref: LatitudeDirection = decode_exif_gps_reference(&gps_lat_ref.value, |r| r.try_into().ok()).unwrap();
-        let lon = decode_exif_gps_position(&gps_lon.value).unwrap();
-        let lon_ref: LongitudeDirection = decode_exif_gps_reference(&gps_lon_ref.value, |r| r.try_into().ok()).unwrap();
+        let (final_lat, final_lon) = get_location_from_values(gps_lat, gps_lat_ref, gps_lon, gps_lon_ref).unwrap();
 
         let epsilon = Rational64::new(1, 1_000_000_000);
 
         // the photo encodes 36.9780234, 48.6996499
-        assert!((Rational64::new(369780234, 10_000_000) - lat).abs() < epsilon);
-        assert_eq!(LatitudeDirection::North, lat_ref);
-        assert!((Rational64::new(486996499, 10_000_000) - lon).abs() < epsilon);
-        assert_eq!(LongitudeDirection::East, lon_ref);
+        assert!((Rational64::new(369780234, 10_000_000) - final_lat).abs() < epsilon);
+        assert!((Rational64::new(486996499, 10_000_000) - final_lon).abs() < epsilon);
     }
 }
