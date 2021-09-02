@@ -192,6 +192,7 @@ pub struct ExifTellPlugin {
     interface: Weak<dyn RocketBotInterface>,
     max_image_bytes: usize,
     max_messages_per_image: Option<usize>,
+    geo_links_format: String,
     geonames_client: GeoNamesClient,
 }
 #[async_trait]
@@ -203,9 +204,16 @@ impl RocketBotPlugin for ExifTellPlugin {
             None
         } else {
             Some(
-                config["max_image_bytes"].as_usize()
+                config["max_messages_per_image"].as_usize()
                     .expect("max_image_bytes not representable as a usize")
             )
+        };
+        let geo_links_format = if config["geo_links_format"].is_null() {
+            String::new()
+        } else {
+            config["geo_links_format"].as_str()
+                .expect("geo_links_format not representable as a string")
+                .to_owned()
         };
         let geonames_client = GeoNamesClient::new(&config["geonames"]);
 
@@ -213,6 +221,7 @@ impl RocketBotPlugin for ExifTellPlugin {
             interface,
             max_image_bytes,
             max_messages_per_image,
+            geo_links_format,
             geonames_client,
         }
     }
@@ -295,12 +304,18 @@ impl RocketBotPlugin for ExifTellPlugin {
             let final_lat_f64 = (*final_lat.numer() as f64) / (*final_lat.denom() as f64);
             let final_lon_f64 = (*final_lon.numer() as f64) / (*final_lon.denom() as f64);
 
+            let final_lat_str = format!("{:.5}", final_lat_f64);
+            let final_lon_str = format!("{:.5}", final_lon_f64);
+            let geo_link = self.geo_links_format
+                .replace("{LAT}", &final_lat_str)
+                .replace("{LON}", &final_lon_str);
+
             // try to reverse-geocode
             let geonames_location = match self.geonames_client.get_first_reverse_geo(final_lat_f64, final_lon_f64).await {
-                Ok(loc) => format!("{} ({} {})", loc, final_lat_f64, final_lon_f64),
+                Ok(loc) => format!("{} ({} {}){}", loc, final_lat_str, final_lon_str, geo_link),
                 Err(e) => {
                     error!("GeoNames failed to reverse-geocode {} {}: {}", final_lat_f64, final_lon_f64, e);
-                    format!("{} {}", final_lat_f64, final_lon_f64)
+                    format!("{} {}{}", final_lat_str, final_lon_str, geo_link)
                 },
             };
 
