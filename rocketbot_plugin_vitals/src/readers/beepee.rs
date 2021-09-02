@@ -15,13 +15,13 @@ struct BloodPressureEntry {
     #[serde(rename = "zoned_timestamp", with = "serde_date_string")]
     pub timestamp: DateTime<Local>,
 
-    pub systolic: i32,
+    pub systolic_mmhg: i32,
 
-    pub diastolic: i32,
+    pub diastolic_mmhg: i32,
 
-    pub pulse: i32,
+    pub pulse_bpm: i32,
 
-    pub spo2: Option<i32>,
+    pub spo2_percent: Option<i32>,
 }
 
 
@@ -33,7 +33,10 @@ struct BodyMassEntry {
     pub timestamp: DateTime<Local>,
 
     #[serde(with = "serde_rational")]
-    pub mass: Rational64,
+    pub mass_kg: Rational64,
+
+    #[serde(with = "serde_opt_rational")]
+    pub bmi: Option<Rational64>,
 }
 
 
@@ -78,14 +81,14 @@ impl BeepeeReader {
         match newest {
             None => Some("no blood pressure measurement found".to_owned()),
             Some(n) => {
-                let spo2_piece = if let Some(spo2) = n.spo2 {
+                let spo2_piece = if let Some(spo2) = n.spo2_percent {
                     format!(" with {}% SpO\u{2082}", spo2)
                 } else {
                     String::new()
                 };
                 Some(format!(
                     "{}/{} mmHg at {} bpm{} at {}",
-                    n.systolic, n.diastolic, n.pulse, spo2_piece, n.timestamp.format("%Y-%m-%d %H:%M:%S"),
+                    n.systolic_mmhg, n.diastolic_mmhg, n.pulse_bpm, spo2_piece, n.timestamp.format("%Y-%m-%d %H:%M:%S"),
                 ))
             },
         }
@@ -127,10 +130,15 @@ impl BeepeeReader {
         match newest {
             None => Some("no mass measurement found".to_owned()),
             Some(n) => {
-                let kg: f64 = (*n.mass.numer() as f64) / (*n.mass.denom() as f64);
+                let bmi_piece = if let Some(bmi) = n.bmi {
+                    format!(" (BMI {})", bmi)
+                } else {
+                    String::new()
+                };
+                let kg: f64 = (*n.mass_kg.numer() as f64) / (*n.mass_kg.denom() as f64);
                 Some(format!(
-                    "{:.01} kg at {}",
-                    kg, n.timestamp.format("%Y-%m-%d %H:%M:%S"),
+                    "{:.01} kg{} at {}",
+                    kg, bmi_piece, n.timestamp.format("%Y-%m-%d %H:%M:%S"),
                 ))
             },
         }
@@ -205,5 +213,31 @@ mod serde_rational {
         let string = String::deserialize(deserializer)?;
         string.parse()
             .map_err(|e| serde::de::Error::custom(e))
+    }
+}
+
+
+mod serde_opt_rational {
+    use num_rational::Rational64;
+    use serde::{Deserialize, Deserializer, Serializer};
+
+    pub fn serialize<S: Serializer>(ratio: &Option<Rational64>, serializer: S) -> Result<S::Ok, S::Error> {
+        if let Some(r) = ratio {
+            serializer.serialize_some(r.to_string().as_str())
+        } else {
+            serializer.serialize_none()
+        }
+    }
+
+    pub fn deserialize<'de, D: Deserializer<'de>>(deserializer: D) -> Result<Option<Rational64>, D::Error> {
+        let string_opt: Option<String> = Option::deserialize(deserializer)?;
+        match string_opt {
+            Some(string) => {
+                let rat = string.parse()
+                    .map_err(|e| serde::de::Error::custom(e))?;
+                Ok(Some(rat))
+            },
+            None => Ok(None),
+        }
     }
 }
