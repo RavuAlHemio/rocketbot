@@ -19,6 +19,7 @@ use rand::distributions::{Distribution, Uniform};
 use rand::rngs::StdRng;
 use rocketbot_interface::{JsonValueExtensions, rocketchat_timestamp_to_datetime};
 use rocketbot_interface::commands::{CommandBehaviors, CommandConfiguration, CommandDefinition};
+use rocketbot_interface::errors::HttpError;
 use rocketbot_interface::interfaces::{RocketBotInterface, RocketBotPlugin};
 use rocketbot_interface::message::MessageFragment;
 use rocketbot_interface::model::{
@@ -186,6 +187,7 @@ struct SharedConnectionState {
     private_message_commands: RwLock<HashMap<String, CommandDefinition>>,
     http_client: hyper::Client<HttpsConnector<HttpConnector>>,
     my_user_id: RwLock<Option<String>>,
+    my_auth_token: RwLock<Option<String>>,
     max_message_length: RwLock<Option<usize>>,
     username_to_initial_private_message: Mutex<HashMap<String, OutgoingMessage>>,
     new_timer_sender: mpsc::UnboundedSender<(DateTime<Utc>, serde_json::Value)>,
@@ -204,6 +206,7 @@ impl SharedConnectionState {
         private_message_commands: RwLock<HashMap<String, CommandDefinition>>,
         http_client: hyper::Client<HttpsConnector<HttpConnector>>,
         my_user_id: RwLock<Option<String>>,
+        my_auth_token: RwLock<Option<String>>,
         max_message_length: RwLock<Option<usize>>,
         username_to_initial_private_message: Mutex<HashMap<String, OutgoingMessage>>,
         new_timer_sender: mpsc::UnboundedSender<(DateTime<Utc>, serde_json::Value)>,
@@ -221,6 +224,7 @@ impl SharedConnectionState {
             private_message_commands,
             http_client,
             my_user_id,
+            my_auth_token,
             max_message_length,
             username_to_initial_private_message,
             new_timer_sender,
@@ -234,7 +238,6 @@ impl SharedConnectionState {
 struct ConnectionState {
     shared_state: Arc<SharedConnectionState>,
     outgoing_receiver: mpsc::UnboundedReceiver<serde_json::Value>,
-    my_auth_token: Option<String>,
     timers: Vec<(DateTime<Utc>, serde_json::Value)>,
     new_timer_receiver: mpsc::UnboundedReceiver<(DateTime<Utc>, serde_json::Value)>,
     last_seen_message_timestamp: DateTime<Utc>,
@@ -243,7 +246,6 @@ impl ConnectionState {
     fn new(
         shared_state: Arc<SharedConnectionState>,
         outgoing_receiver: mpsc::UnboundedReceiver<serde_json::Value>,
-        my_auth_token: Option<String>,
         timers: Vec<(DateTime<Utc>, serde_json::Value)>,
         new_timer_receiver: mpsc::UnboundedReceiver<(DateTime<Utc>, serde_json::Value)>,
         last_seen_message_timestamp: DateTime<Utc>,
@@ -251,7 +253,6 @@ impl ConnectionState {
         ConnectionState {
             shared_state,
             outgoing_receiver,
-            my_auth_token,
             timers,
             new_timer_receiver,
             last_seen_message_timestamp,
@@ -624,6 +625,11 @@ impl RocketBotInterface for ServerConnection {
         self.shared_state.outgoing_sender.send(message_body)
             .expect("failed to enqueue remove-reaction message");
     }
+
+    async fn obtain_http_resource(&self, path: &str) -> Result<hyper::Response<hyper::Body>, HttpError> {
+        let query_options: Vec<(String, Option<String>)> = Vec::with_capacity(0);
+        get_http_from_server(&self.shared_state, path, query_options).await
+    }
 }
 
 
@@ -673,6 +679,10 @@ pub(crate) async fn connect() -> Arc<ServerConnection> {
         "SharedConnectionState::my_user_id",
         None,
     );
+    let my_auth_token: RwLock<Option<String>> = RwLock::new(
+        "SharedConnectionState::my_auth_token",
+        None,
+    );
     let max_message_length: RwLock<Option<usize>> = RwLock::new(
         "SharedConnectionState::max_message_length",
         None,
@@ -702,6 +712,7 @@ pub(crate) async fn connect() -> Arc<ServerConnection> {
         private_message_commands,
         http_client,
         my_user_id,
+        my_auth_token,
         max_message_length,
         username_to_initial_private_message,
         new_timer_sender,
@@ -715,7 +726,6 @@ pub(crate) async fn connect() -> Arc<ServerConnection> {
     let mut state = ConnectionState::new(
         shared_state,
         outgoing_receiver,
-        None,
         Vec::new(),
         new_timer_receiver,
         Utc
@@ -1114,7 +1124,10 @@ async fn handle_received(body: &serde_json::Value, mut state: &mut ConnectionSta
             let mut uid_guard = state.shared_state.my_user_id.write().await;
             *uid_guard = Some(user_id.clone());
         }
-        state.my_auth_token = Some(auth_token.clone());
+        {
+            let mut token_guard = state.shared_state.my_auth_token.write().await;
+            *token_guard = Some(auth_token.clone());
+        }
 
         // subscribe to changes to our room state
         let subscribe_room_change_body = serde_json::json!({
@@ -1783,16 +1796,16 @@ async fn distribute_private_message_commands(private_message: &PrivateMessage, s
     }
 }
 
-async fn get_http_json(state: &mut ConnectionState, request: hyper::Request<hyper::Body>) -> Option<serde_json::Value> {
+async fn get_http_json(state: &SharedConnectionState, request: hyper::Request<hyper::Body>) -> Result<serde_json::Value, HttpError> {
     let full_uri = request.uri().clone();
 
-    let response_res = state.shared_state.http_client
+    let response_res = state.http_client
         .request(request).await;
     let response = match response_res {
         Ok(r) => r,
         Err(e) => {
             error!("error obtaining response for {}: {}", full_uri, e);
-            return None;
+            return Err(HttpError::ObtainingResponse(e));
         },
     };
     let (parts, mut body) = response.into_parts();
@@ -1800,14 +1813,14 @@ async fn get_http_json(state: &mut ConnectionState, request: hyper::Request<hype
         Ok(b) => b.to_vec(),
         Err(e) => {
             error!("error getting bytes from response for {}: {}", full_uri, e);
-            return None;
+            return Err(HttpError::ObtainingResponseBody(e));
         },
     };
     let response_string = match String::from_utf8(response_bytes) {
         Ok(s) => s,
         Err(e) => {
             error!("error decoding response for {}: {}", full_uri, e);
-            return None;
+            return Err(HttpError::DecodingAsUtf8(e));
         },
     };
 
@@ -1816,38 +1829,41 @@ async fn get_http_json(state: &mut ConnectionState, request: hyper::Request<hype
             "error response {} for {}: {}",
             parts.status, full_uri, response_string,
         );
-        return None;
+        return Err(HttpError::StatusNotOk(parts.status));
     }
 
     let json_value: serde_json::Value = match serde_json::from_str(&response_string) {
         Ok(v) => v,
         Err(e) => {
             error!("error parsing JSON for {}: {}", full_uri, e);
-            return None;
+            return Err(HttpError::ParsingJson(e));
         },
     };
 
-    Some(json_value)
+    Ok(json_value)
 }
 
-async fn get_api_json<Q, K, V>(state: &mut ConnectionState, uri_path: &str, query_options: Q) -> Option<serde_json::Value>
+async fn get_request_for_http_from_server<Q, K, V>(state: &SharedConnectionState, uri_path: &str, query_options: Q) -> Result<hyper::Request<hyper::Body>, HttpError>
     where
         Q: IntoIterator<Item = (K, Option<V>)>,
         K: AsRef<str>,
         V: AsRef<str>,
 {
     let user_id = {
-        let uid_guard = state.shared_state.my_user_id
+        let uid_guard = state.my_user_id
             .read().await;
         match uid_guard.deref() {
             Some(uid) => uid.clone(),
-            None => return None,
+            None => return Err(HttpError::MissingUserId),
         }
     };
-    let auth_token = if let Some(u) = &state.my_auth_token {
-        u
-    } else {
-        return None;
+    let auth_token = {
+        let token_guard = state.my_auth_token
+            .read().await;
+        match token_guard.deref() {
+            Some(tok) => tok.clone(),
+            None => return Err(HttpError::MissingAuthToken),
+        }
     };
     let web_uri = {
         let config_lock = CONFIG
@@ -1879,10 +1895,40 @@ async fn get_api_json<Q, K, V>(state: &mut ConnectionState, uri_path: &str, quer
         .body(hyper::Body::empty())
         .expect("failed to construct request");
 
+    Ok(request)
+}
+
+async fn get_http_from_server<Q, K, V>(state: &SharedConnectionState, uri_path: &str, query_options: Q) -> Result<hyper::Response<hyper::Body>, HttpError>
+    where
+        Q: IntoIterator<Item = (K, Option<V>)>,
+        K: AsRef<str>,
+        V: AsRef<str>,
+{
+    let request: hyper::Request<hyper::Body> = get_request_for_http_from_server(&state, uri_path, query_options).await?;
+    let full_uri = request.uri().clone();
+    let response_res = state.http_client
+        .request(request).await;
+    let response = match response_res {
+        Ok(r) => r,
+        Err(e) => {
+            error!("error obtaining response for {}: {}", full_uri, e);
+            return Err(HttpError::ObtainingResponse(e));
+        },
+    };
+    Ok(response)
+}
+
+async fn get_api_json<Q, K, V>(state: &SharedConnectionState, uri_path: &str, query_options: Q) -> Result<serde_json::Value, HttpError>
+    where
+        Q: IntoIterator<Item = (K, Option<V>)>,
+        K: AsRef<str>,
+        V: AsRef<str>,
+{
+    let request = get_request_for_http_from_server(&state, uri_path, query_options).await?;
     get_http_json(state, request).await
 }
 
-async fn obtain_users_in_room(mut state: &mut ConnectionState, channel: &Channel) {
+async fn obtain_users_in_room(state: &ConnectionState, channel: &Channel) {
     let mut users: HashSet<User> = HashSet::new();
 
     let uri_path = match channel.channel_type {
@@ -1901,9 +1947,9 @@ async fn obtain_users_in_room(mut state: &mut ConnectionState, channel: &Channel
         let mut offset_keys_values = keys_values.clone();
         offset_keys_values.push(("offset", Some(&offset_string)));
 
-        let json_value = match get_api_json(&mut state, uri_path, offset_keys_values).await {
-            Some(jv) => jv,
-            None => return,
+        let json_value = match get_api_json(&state.shared_state, uri_path, offset_keys_values).await {
+            Ok(jv) => jv,
+            Err(_) => return,
         };
 
         let user_count = json_value["members"].members_or_empty().len();
@@ -1952,7 +1998,7 @@ async fn obtain_users_in_room(mut state: &mut ConnectionState, channel: &Channel
     }
 }
 
-async fn obtain_builtin_emoji(mut state: &mut ConnectionState) -> Vec<Emoji> {
+async fn obtain_builtin_emoji(state: &ConnectionState) -> Vec<Emoji> {
     let emoji_json_url = {
         let config_guard = CONFIG
             .get().expect("config initially set")
@@ -1966,9 +2012,9 @@ async fn obtain_builtin_emoji(mut state: &mut ConnectionState) -> Vec<Emoji> {
         .body(hyper::Body::empty())
         .expect("failed to construct request");
 
-    let json_value = match get_http_json(&mut state, request).await {
-        Some(jv) => jv,
-        None => {
+    let json_value = match get_http_json(&state.shared_state, request).await {
+        Ok(jv) => jv,
+        Err(_) => {
             return Vec::new();
         },
     };

@@ -1,5 +1,9 @@
 use std::error::Error;
 use std::fmt;
+use std::string::FromUtf8Error;
+
+use hyper::StatusCode;
+use serde_json;
 
 
 #[derive(Clone, Debug, Eq, Hash, PartialEq)]
@@ -27,4 +31,38 @@ impl fmt::Display for ChannelTypeParseError {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         write!(f, "unknown channel type {:?}", self.0)
     }
+}
+
+
+#[derive(Debug)]
+pub enum HttpError {
+    MissingUserId,
+    MissingAuthToken,
+    ObtainingResponse(hyper::Error),
+    ObtainingResponseBody(hyper::Error),
+    DecodingAsUtf8(FromUtf8Error),
+    StatusNotOk(StatusCode),
+    ParsingJson(serde_json::Error),
+}
+impl fmt::Display for HttpError {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match self {
+            Self::MissingUserId =>
+                write!(f, "user ID is not yet known"),
+            Self::MissingAuthToken =>
+                write!(f, "authentication token is not yet known"),
+            Self::ObtainingResponse(e) =>
+                write!(f, "error obtaining response: {}", e),
+            Self::ObtainingResponseBody(e) =>
+                write!(f, "error obtaining response body: {}", e),
+            Self::DecodingAsUtf8(e) =>
+                write!(f, "error decoding response body as UTF-8: {}", e),
+            Self::StatusNotOk(sc) =>
+                write!(f, "non-OK status ({}) when receiving response", sc),
+            Self::ParsingJson(e) =>
+                write!(f, "error parsing JSON: {}", e),
+        }
+    }
+}
+impl Error for HttpError {
 }

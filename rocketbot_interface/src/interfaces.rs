@@ -3,9 +3,11 @@ use std::sync::Weak;
 
 use async_trait::async_trait;
 use chrono::{DateTime, Utc};
+use hyper;
 use serde_json;
 
 use crate::commands::{CommandConfiguration, CommandDefinition, CommandInstance};
+use crate::errors::HttpError;
 use crate::model::{
     Channel, ChannelMessage, ChannelTextType, Emoji, OutgoingMessage, PrivateConversation,
     PrivateMessage, User,
@@ -118,6 +120,9 @@ pub trait RocketBotInterface : Send + Sync {
     /// Removes a reaction from the given message. `emoji_short_name` is the short name of the
     /// reaction emoji without the surrounding colons.
     async fn remove_reaction(&self, message_id: &str, emoji_short_name: &str);
+
+    /// Obtains a resource from the Rocket.Chat server via HTTP or HTTPS.
+    async fn obtain_http_resource(&self, path: &str) -> Result<hyper::Response<hyper::Body>, HttpError>;
 }
 
 

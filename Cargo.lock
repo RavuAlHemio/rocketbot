@@ -1236,6 +1236,7 @@ dependencies = [
  "async-trait",
  "bitflags",
  "chrono",
+ "hyper",
  "log",
  "once_cell",
  "serde_json",
