@@ -45,6 +45,11 @@ impl RocketBotPlugin for GroupPressurePlugin {
             Some(i) => i,
         };
 
+        let raw_message = match &channel_message.message.raw {
+            Some(rm) => rm,
+            None => return, // no group pressure for non-textual messages
+        };
+
         let mut recent_messages_guard = self.channel_name_to_recent_messages
             .lock().await;
 
@@ -71,7 +76,7 @@ impl RocketBotPlugin for GroupPressurePlugin {
             // add to the fray!
             interface.send_channel_message(
                 &channel_message.channel.name,
-                &channel_message.message.raw,
+                raw_message,
             ).await;
         } else {
             // no (not yet?)

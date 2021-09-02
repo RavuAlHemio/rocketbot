@@ -20,6 +20,7 @@ use rand::rngs::StdRng;
 use rocketbot_interface::{JsonValueExtensions, rocketchat_timestamp_to_datetime};
 use rocketbot_interface::commands::{CommandBehaviors, CommandConfiguration, CommandDefinition};
 use rocketbot_interface::interfaces::{RocketBotInterface, RocketBotPlugin};
+use rocketbot_interface::message::MessageFragment;
 use rocketbot_interface::model::{
     Channel, ChannelMessage, ChannelTextType, ChannelType, EditInfo, Emoji, Message,
     OutgoingMessage, PrivateConversation, PrivateMessage, User,
@@ -1540,22 +1541,32 @@ fn message_from_json(message_json: &serde_json::Value) -> Option<Message> {
             return None;
         },
     };
-    let raw_message = match message_json["msg"].as_str() {
-        Some(v) => v,
-        None => {
-            error!("message is missing raw content; skipping");
-            return None;
-        },
+    let raw_message: Option<&str> = if message_json["msg"].is_null() {
+        None
+    } else {
+        match message_json["msg"].as_str() {
+            Some(v) => Some(v),
+            None => {
+                error!("message is missing raw content; skipping");
+                return None;
+            },
+        }
     };
-    let parsed_message = match parse_message(&message_json["md"]) {
-        Ok(pm) => pm,
-        Err(e) => {
-            error!(
-                "failed to parse message {:?} from structure {:?}: {}",
-                raw_message, message_json["md"].to_string(), e,
-            );
-            return None;
-        },
+
+    let parsed_message: Option<Vec<MessageFragment>> = if message_json["md"].is_null() {
+        None
+    } else {
+        let parsed = match parse_message(&message_json["md"]) {
+            Ok(pm) => pm,
+            Err(e) => {
+                error!(
+                    "failed to parse message {:?} from structure {:?}: {}",
+                    raw_message, message_json["md"].to_string(), e,
+                );
+                return None;
+            }
+        };
+        Some(parsed)
     };
 
     let timestamp_rocket = match message_json["ts"]["$date"].as_i64() {
@@ -1633,7 +1644,7 @@ fn message_from_json(message_json: &serde_json::Value) -> Option<Message> {
             username.to_owned(),
             nickname,
         ),
-        raw_message.to_owned(),
+        raw_message.map(|s| s.to_owned()),
         parsed_message,
         message_json["bot"].is_object(),
         edit_info,
@@ -1645,11 +1656,15 @@ async fn distribute_channel_message_commands(channel_message: &ChannelMessage, s
 
     let command_prefix = &command_config.command_prefix;
     let message = &channel_message.message;
-    if !message.raw.starts_with(command_prefix) {
+    let raw_message = match &message.raw {
+        Some(rm) => rm,
+        None => return, // no commands in non-textual messages
+    };
+    if !raw_message.starts_with(command_prefix) {
         return;
     }
 
-    let pieces: Vec<SplitChunk> = split_whitespace(&message.raw).collect();
+    let pieces: Vec<SplitChunk> = split_whitespace(&raw_message).collect();
     let command_text = pieces[0];
     if !command_text.chunk.starts_with(command_prefix) {
         return;
@@ -1671,7 +1686,7 @@ async fn distribute_channel_message_commands(channel_message: &ChannelMessage, s
         return;
     }
 
-    let instance = if let Some(ci) = parse_command(&command, &command_config, &pieces, &message.raw) {
+    let instance = if let Some(ci) = parse_command(&command, &command_config, &pieces, &raw_message) {
         ci
     } else {
         // error already logged
@@ -1694,11 +1709,15 @@ async fn distribute_private_message_commands(private_message: &PrivateMessage, s
 
     let command_prefix = &command_config.command_prefix;
     let message = &private_message.message;
-    if !message.raw.starts_with(command_prefix) {
+    let raw_message = match &message.raw {
+        Some(rm) => rm,
+        None => return, // no commands in non-textual messages
+    };
+    if !raw_message.starts_with(command_prefix) {
         return;
     }
 
-    let pieces: Vec<SplitChunk> = split_whitespace(&message.raw).collect();
+    let pieces: Vec<SplitChunk> = split_whitespace(&raw_message).collect();
     let command_text = pieces[0];
     if !command_text.chunk.starts_with(command_prefix) {
         return;
@@ -1720,7 +1739,7 @@ async fn distribute_private_message_commands(private_message: &PrivateMessage, s
         return;
     }
 
-    let instance = if let Some(ci) = parse_command(&command, &command_config, &pieces, &message.raw) {
+    let instance = if let Some(ci) = parse_command(&command, &command_config, &pieces, &raw_message) {
         ci
     } else {
         // error already logged

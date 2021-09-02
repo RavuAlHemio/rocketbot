@@ -22,7 +22,11 @@ impl RocketBotPlugin for BelchPlugin {
     }
 
     async fn channel_message(&self, channel_message: &ChannelMessage) {
-        if channel_message.message.raw == "!burp" {
+        let raw_message = match &channel_message.message.raw {
+            Some(m) => m,
+            None => return,
+        };
+        if raw_message == "!burp" {
             let interface = match self.interface.upgrade() {
                 None => return,
                 Some(i) => i,

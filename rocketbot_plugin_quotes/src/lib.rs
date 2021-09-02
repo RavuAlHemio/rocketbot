@@ -784,13 +784,18 @@ impl RocketBotPlugin for QuotesPlugin {
     }
 
     async fn channel_message(&self, channel_message: &ChannelMessage) {
+        let raw_message = match &channel_message.message.raw {
+            Some(rm) => rm,
+            None => return, // no remembering pictorial messages
+        };
+
         let potential_quote = Quote::new(
             -1,
             Utc::now(),
             channel_message.channel.name.clone(),
             channel_message.message.sender.username.clone(),
             MessageType::Message,
-            channel_message.message.raw.clone(),
+            raw_message.clone(),
         );
 
         {

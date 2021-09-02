@@ -124,8 +124,8 @@ pub struct Message {
     pub id: String,
     pub timestamp: DateTime<Utc>,
     pub sender: User,
-    pub raw: String,
-    pub parsed: Vec<MessageFragment>,
+    pub raw: Option<String>,
+    pub parsed: Option<Vec<MessageFragment>>,
     pub is_by_bot: bool,
     pub edit_info: Option<EditInfo>,
 }
@@ -134,8 +134,8 @@ impl Message {
         id: String,
         timestamp: DateTime<Utc>,
         sender: User,
-        raw: String,
-        parsed: Vec<MessageFragment>,
+        raw: Option<String>,
+        parsed: Option<Vec<MessageFragment>>,
         is_by_bot: bool,
         edit_info: Option<EditInfo>,
     ) -> Self {

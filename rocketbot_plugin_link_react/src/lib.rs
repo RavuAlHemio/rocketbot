@@ -79,8 +79,13 @@ impl RocketBotPlugin for LinkReactPlugin {
             Some(i) => i,
         };
 
+        let parsed_message = match &channel_message.message.parsed {
+            Some(pm) => pm,
+            None => return, // just some attachments
+        };
+
         // collect URLs from channel message
-        let urls = collect_urls(channel_message.message.parsed.iter());
+        let urls = collect_urls(parsed_message.iter());
 
         // look for a match
         for url in &urls {

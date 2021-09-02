@@ -135,7 +135,10 @@ impl RocketBotPlugin for AllographPlugin {
             Some(i) => i,
         };
 
-        let original_body = &channel_message.message.raw;
+        let original_body = match &channel_message.message.raw {
+            Some(s) => s,
+            None => return, // no message, probably just attachments
+        };
         let channel_name = &channel_message.channel.name;
         let sender_nickname = channel_message.message.sender.nickname_or_username();
 

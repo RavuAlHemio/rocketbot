@@ -28,7 +28,12 @@ pub struct SedPlugin {
 }
 impl SedPlugin {
     async fn handle_replacement_command(&self, interface: Arc<dyn RocketBotInterface>, channel_message: ChannelMessage) -> bool {
-        let transformations = match parse_replacement_commands(&channel_message.message.raw) {
+        let raw_message = match &channel_message.message.raw {
+            Some(rm) => rm,
+            None => return false, // non-textual messages do not contain commands
+        };
+
+        let transformations = match parse_replacement_commands(&raw_message) {
             Some(sc) => sc,
             None => {
                 // something that didn't even look like sed commands
@@ -58,16 +63,18 @@ impl SedPlugin {
                 }
             }
         };
+        assert!(last_messages.iter().all(|m| m.message.raw.is_some()));
 
         let mut found_any = false;
         for last_message in last_messages {
-            let mut replaced = last_message.message.raw.clone();
+            let last_raw_message = last_message.message.raw.unwrap();
+            let mut replaced = last_raw_message.clone();
 
             for transformation in &transformations {
                 replaced = transformation.transform(&replaced);
             }
 
-            if replaced != last_message.message.raw {
+            if replaced != last_raw_message {
                 // success!
                 if self.max_result_length > 0 && replaced.len() > self.max_result_length {
                     replaced = self.result_too_long_message.clone();
@@ -86,7 +93,7 @@ impl SedPlugin {
         if !found_any {
             info!(
                 "no recent messages found to match transformations {}",
-                channel_message.message.raw,
+                raw_message,
             );
         }
 
@@ -144,8 +151,10 @@ impl RocketBotPlugin for SedPlugin {
             return;
         }
 
-        if !interface.is_my_user_id(&channel_message.message.sender.id).await {
-            self.remember_message(&channel_message).await;
+        if channel_message.message.raw.is_some() {
+            if !interface.is_my_user_id(&channel_message.message.sender.id).await {
+                self.remember_message(&channel_message).await;
+            }
         }
     }
 
