@@ -925,6 +925,9 @@ async fn do_send_any_message(shared_state: &SharedConnectionState, target_id: &s
         message_body["params"][0].insert("alias".to_owned(), serde_json::Value::String(impersonation.nickname));
         message_body["params"][0].insert("avatar".to_owned(), serde_json::Value::String(impersonation.avatar_url));
     }
+    if let Some(rtmid) = message.reply_to_message_id {
+        message_body["params"][0].insert("tmid".to_owned(), serde_json::Value::String(rtmid));
+    }
     shared_state.outgoing_sender.send(message_body)
         .expect("failed to enqueue channel message");
 }
@@ -1674,6 +1677,9 @@ fn message_from_json(message_json: &serde_json::Value) -> Option<Message> {
         ));
     }
 
+    let reply_to_message_id = message_json["tmid"].as_str()
+        .map(|t| t.to_owned());
+
     Some(Message::new(
         message_id.to_owned(),
         timestamp,
@@ -1687,6 +1693,7 @@ fn message_from_json(message_json: &serde_json::Value) -> Option<Message> {
         message_json["bot"].is_object(),
         edit_info,
         attachments,
+        reply_to_message_id,
     ))
 }
 

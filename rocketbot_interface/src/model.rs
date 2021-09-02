@@ -129,6 +129,7 @@ pub struct Message {
     pub is_by_bot: bool,
     pub edit_info: Option<EditInfo>,
     pub attachments: Vec<MessageAttachment>,
+    pub reply_to_message_id: Option<String>,
 }
 impl Message {
     pub fn new(
@@ -140,6 +141,7 @@ impl Message {
         is_by_bot: bool,
         edit_info: Option<EditInfo>,
         attachments: Vec<MessageAttachment>,
+        reply_to_message_id: Option<String>,
     ) -> Self {
         Self {
             id,
@@ -150,6 +152,7 @@ impl Message {
             is_by_bot,
             edit_info,
             attachments,
+            reply_to_message_id,
         }
     }
 }
@@ -253,15 +256,18 @@ impl ImpersonationInfo {
 pub struct OutgoingMessage {
     pub body: String,
     pub impersonation: Option<ImpersonationInfo>,
+    pub reply_to_message_id: Option<String>,
 }
 impl OutgoingMessage {
     pub fn new(
         body: String,
         impersonation: Option<ImpersonationInfo>,
+        reply_to_message_id: Option<String>,
     ) -> Self {
         Self {
             body,
             impersonation,
+            reply_to_message_id,
         }
     }
 }

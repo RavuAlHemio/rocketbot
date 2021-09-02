@@ -19,19 +19,19 @@ use crate::model::{
 pub trait RocketBotInterface : Send + Sync {
     /// Sends a textual message to a channel.
     async fn send_channel_message(&self, channel_name: &str, message: &str) {
-        let message_object = OutgoingMessage::new(message.to_owned(), None);
+        let message_object = OutgoingMessage::new(message.to_owned(), None, None);
         self.send_channel_message_advanced(channel_name, message_object).await
     }
 
     /// Sends a textual message to a private conversation.
     async fn send_private_message(&self, conversation_id: &str, message: &str) {
-        let message_object = OutgoingMessage::new(message.to_owned(), None);
+        let message_object = OutgoingMessage::new(message.to_owned(), None, None);
         self.send_private_message_advanced(conversation_id, message_object).await
     }
 
     /// Sends a textual message to a person.
     async fn send_private_message_to_user(&self, username: &str, message: &str) {
-        let message_object = OutgoingMessage::new(message.to_owned(), None);
+        let message_object = OutgoingMessage::new(message.to_owned(), None, None);
         self.send_private_message_to_user_advanced(username, message_object).await
     }
 

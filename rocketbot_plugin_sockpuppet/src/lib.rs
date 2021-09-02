@@ -97,6 +97,7 @@ impl RocketBotPlugin for SockpuppetPlugin {
         let outgoing_message = OutgoingMessage::new(
             message_body,
             impersonation,
+            None,
         );
         interface.send_channel_message_advanced(&channel_name, outgoing_message).await;
     }
