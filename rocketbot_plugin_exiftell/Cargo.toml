@@ -1,0 +1,17 @@
+[package]
+name = "rocketbot_plugin_exiftell"
+version = "0.1.0"
+edition = "2018"
+
+[dependencies]
+async-trait = { version = "0.1" }
+hyper = { version = "0.14" }
+kamadak-exif = { version = "0.5" }
+log = { version = "0.4" }
+num-rational = { version = "0.4" }
+once_cell = { version = "1.8" }
+rocketbot_interface = { path = "../rocketbot_interface" }
+serde_json = { version = "1.0" }
+
+[dev-dependencies]
+num-traits = { version = "0.2" }
