@@ -1348,6 +1348,7 @@ dependencies = [
  "num-rational",
  "num-traits",
  "once_cell",
+ "rocketbot_geonames",
  "rocketbot_interface",
  "serde_json",
 ]

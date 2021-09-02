@@ -9,6 +9,7 @@ use hyper::StatusCode;
 use log::error;
 use num_rational::Rational64;
 use once_cell::unsync::Lazy;
+use rocketbot_geonames::GeoNamesClient;
 use rocketbot_interface::JsonValueExtensions;
 use rocketbot_interface::interfaces::{RocketBotInterface, RocketBotPlugin};
 use rocketbot_interface::model::ChannelMessage;
@@ -191,6 +192,7 @@ pub struct ExifTellPlugin {
     interface: Weak<dyn RocketBotInterface>,
     max_image_bytes: usize,
     max_messages_per_image: Option<usize>,
+    geonames_client: GeoNamesClient,
 }
 #[async_trait]
 impl RocketBotPlugin for ExifTellPlugin {
@@ -205,11 +207,13 @@ impl RocketBotPlugin for ExifTellPlugin {
                     .expect("max_image_bytes not representable as a usize")
             )
         };
+        let geonames_client = GeoNamesClient::new(&config["geonames"]);
 
         Self {
             interface,
             max_image_bytes,
             max_messages_per_image,
+            geonames_client,
         }
     }
 
@@ -288,11 +292,19 @@ impl RocketBotPlugin for ExifTellPlugin {
                 None => continue,
             };
 
-            let response_body = format!(
-                "EXIF says: {} {}",
-                (*final_lat.numer() as f64) / (*final_lat.denom() as f64),
-                (*final_lon.numer() as f64) / (*final_lon.denom() as f64),
-            );
+            let final_lat_f64 = (*final_lat.numer() as f64) / (*final_lat.denom() as f64);
+            let final_lon_f64 = (*final_lon.numer() as f64) / (*final_lon.denom() as f64);
+
+            // try to reverse-geocode
+            let geonames_location = match self.geonames_client.get_first_reverse_geo(final_lat_f64, final_lon_f64).await {
+                Ok(loc) => loc,
+                Err(e) => {
+                    error!("GeoNames failed to reverse-geocode {} {}: {}", final_lat_f64, final_lon_f64, e);
+                    format!("{} {}", final_lat_f64, final_lon_f64)
+                },
+            };
+
+            let response_body = format!("EXIF says: {}", geonames_location);
             interface.send_channel_message(
                 &channel_message.channel.name,
                 &response_body,
