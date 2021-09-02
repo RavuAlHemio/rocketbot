@@ -297,7 +297,7 @@ impl RocketBotPlugin for ExifTellPlugin {
 
             // try to reverse-geocode
             let geonames_location = match self.geonames_client.get_first_reverse_geo(final_lat_f64, final_lon_f64).await {
-                Ok(loc) => loc,
+                Ok(loc) => format!("{} ({} {})", loc, final_lat_f64, final_lon_f64),
                 Err(e) => {
                     error!("GeoNames failed to reverse-geocode {} {}: {}", final_lat_f64, final_lon_f64, e);
                     format!("{} {}", final_lat_f64, final_lon_f64)
