@@ -131,7 +131,7 @@ impl BeepeeReader {
             None => Some("no mass measurement found".to_owned()),
             Some(n) => {
                 let bmi_piece = if let Some(bmi) = n.bmi {
-                    format!(" (BMI {})", bmi)
+                    format!(" (BMI {:.01})", (*bmi.numer() as f64) / (*bmi.denom() as f64))
                 } else {
                     String::new()
                 };
