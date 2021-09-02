@@ -34,8 +34,8 @@ enum LatitudeDirection {
 impl From<LatitudeDirection> for Rational64 {
     fn from(d: LatitudeDirection) -> Self {
         match d {
-            LatitudeDirection::North => Rational64::new(1, 0),
-            LatitudeDirection::South => Rational64::new(-1, 0),
+            LatitudeDirection::North => Rational64::new(1, 1),
+            LatitudeDirection::South => Rational64::new(-1, 1),
         }
     }
 }
@@ -59,8 +59,8 @@ enum LongitudeDirection {
 impl From<LongitudeDirection> for Rational64 {
     fn from(d: LongitudeDirection) -> Self {
         match d {
-            LongitudeDirection::East => Rational64::new(1, 0),
-            LongitudeDirection::West => Rational64::new(-1, 0),
+            LongitudeDirection::East => Rational64::new(1, 1),
+            LongitudeDirection::West => Rational64::new(-1, 1),
         }
     }
 }
