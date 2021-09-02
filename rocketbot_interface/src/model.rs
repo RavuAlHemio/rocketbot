@@ -128,6 +128,7 @@ pub struct Message {
     pub parsed: Option<Vec<MessageFragment>>,
     pub is_by_bot: bool,
     pub edit_info: Option<EditInfo>,
+    pub attachments: Vec<MessageAttachment>,
 }
 impl Message {
     pub fn new(
@@ -138,6 +139,7 @@ impl Message {
         parsed: Option<Vec<MessageFragment>>,
         is_by_bot: bool,
         edit_info: Option<EditInfo>,
+        attachments: Vec<MessageAttachment>,
     ) -> Self {
         Self {
             id,
@@ -147,6 +149,33 @@ impl Message {
             parsed,
             is_by_bot,
             edit_info,
+            attachments,
+        }
+    }
+}
+
+#[derive(Clone, Debug, Eq, Hash, PartialEq)]
+pub struct MessageAttachment {
+    pub title: String,
+    pub title_link: String,
+    pub description: Option<String>,
+    pub image_mime_type: Option<String>,
+    pub image_size_bytes: Option<usize>,
+}
+impl MessageAttachment {
+    pub fn new(
+        title: String,
+        title_link: String,
+        description: Option<String>,
+        image_mime_type: Option<String>,
+        image_size_bytes: Option<usize>,
+    ) -> Self {
+        Self {
+            title,
+            title_link,
+            description,
+            image_mime_type,
+            image_size_bytes,
         }
     }
 }

@@ -23,7 +23,7 @@ use rocketbot_interface::interfaces::{RocketBotInterface, RocketBotPlugin};
 use rocketbot_interface::message::MessageFragment;
 use rocketbot_interface::model::{
     Channel, ChannelMessage, ChannelTextType, ChannelType, EditInfo, Emoji, Message,
-    OutgoingMessage, PrivateConversation, PrivateMessage, User,
+    MessageAttachment, OutgoingMessage, PrivateConversation, PrivateMessage, User,
 };
 use rocketbot_interface::sync::{Mutex, RwLock};
 use serde_json;
@@ -1636,6 +1636,31 @@ fn message_from_json(message_json: &serde_json::Value) -> Option<Message> {
         None
     };
 
+    let mut attachments = Vec::new();
+    for attachment in message_json["attachments"].members_or_empty() {
+        let title = match attachment["title"].as_str() {
+            Some(t) => t.to_owned(),
+            None => continue,
+        };
+        let title_link = match attachment["title_link"].as_str() {
+            Some(l) => l.to_owned(),
+            None => continue,
+        };
+        let description = attachment["description"].as_str()
+            .map(|d| d.to_owned());
+        let image_mime_type = attachment["image_type"].as_str()
+            .map(|mt| mt.to_owned());
+        let image_size_bytes = attachment["image_size"].as_usize();
+
+        attachments.push(MessageAttachment::new(
+            title,
+            title_link,
+            description,
+            image_mime_type,
+            image_size_bytes,
+        ));
+    }
+
     Some(Message::new(
         message_id.to_owned(),
         timestamp,
@@ -1648,6 +1673,7 @@ fn message_from_json(message_json: &serde_json::Value) -> Option<Message> {
         parsed_message,
         message_json["bot"].is_object(),
         edit_info,
+        attachments,
     ))
 }
 
