@@ -30,4 +30,5 @@ jobs:
           path: |
             target/debug/rocketbot
             rocketbot_plugin_calc/data/unitdb.toml
+            rocketbot_plugin_grammargen/grammars/*.grammar
             CountryCodes.json
