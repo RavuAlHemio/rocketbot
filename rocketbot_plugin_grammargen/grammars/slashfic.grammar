@@ -15,7 +15,7 @@ grab_sentence
     ;
 
 communication_sentence
-    : "\u201C" sweet_nothings ",\u201D he " whispered_verb " into " guy2 "\u2019s " ear_or_similar "."
+    : "\u201C" sweet_nothings "\u201D he " whispered_verb " into " guy2 "\u2019s " ear_or_similar "."
     | "He " kissed_verb " " guy2 [ " " passionately_adverb ] " on the " neck_or_similar "."
     ;
 
@@ -37,7 +37,7 @@ grabbed_verb
 
 penis_adjective
     : "large" | "massive" | "huge" | "gigantic" | "throbbing" | "erect" | "hard" | "stiff" | "tiny"
-    | "small" | "petite"
+    | "small" | "petite" | "humongous" | "giant" | "oversized" | "girthy" | "voluminous" | "long"
     ;
 
 penis_synonym
@@ -56,19 +56,22 @@ opening_adverbial
 
 sweet_nothings
     // serious variants: weight 10
-    : <10>  "You are mine forever"
-    | <10>  "I\u2019m going in"
+    : <10>  "You are mine forever,"
+    | <10>  "I\u2019m going in,"
+    | <10>  "Get ready,"
+    | <10>  "Are you ready?"
     // less serious variants: weight 1
-    | <1>   "Ready or not, here I come"
-    | <1>   "This won\u2019t hurt a bit"
-    | <1>   "This will hurt a little"
-    | <1>   "I\u2019m out of lube"
-    | <1>   "You cannot withstand the power of my Kernseife" // 2021-09-04 18:59
+    | <1>   "Ready or not, here I come,"
+    | <1>   "This won\u2019t hurt a bit,"
+    | <1>   "This will hurt a little,"
+    | <1>   "By the way, I\u2019m out of lube,"
+    | <1>   "You cannot withstand the power of my Kernseife!" // 2021-09-04 18:59
     ;
 
 whispered_verb
-    : "whispered"
-    | "whispered softly"
+    : "whispered" [ " softly" ]
+    | "breathed" [ " softly" | " heavily" ]
+    | "grunted" [ " softly" | " heavily" ]
     ;
 
 ear_or_similar
@@ -85,7 +88,7 @@ kissed_verb
     ;
 
 passionately_adverb
-    : "passionately" | "softly" | "ecstatically"
+    : "passionately" | "softly" | "ecstatically" | "violently" | "aggressively"
     ;
 
 neck_or_similar
@@ -93,6 +96,7 @@ neck_or_similar
     : <5>   "neck"
     | <5>   "nape"
     | <5>   "shoulder"
+    | <5>   "earlobe"
     // less serious variants: weight 1
     | <1>   "nose"
     ;
