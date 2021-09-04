@@ -32,7 +32,7 @@ reaction_sentence
     | guy2 " " yelped_verb " in " pain_or_similar " and came, then and there, " climax_place "."
     | guy2 " immediately " released_his_liquid " " climax_place "."
     | guy2 " " yelped_verb " in " pain_or_similar " and immediately " released_his_liquid " " climax_place "."
-    | guy2 " moved in closer, enjoying " ("the" | "this new") "."
+    | guy2 " moved in closer, enjoying " ("the" | "this new") " experience."
     | guy2 " knew" [ " right away that" ] " " ( "he " ("was the one" | "had made the right decision") | "they would stay together forever" ) "."
     | guy2 " could not be happier with the way things were developing."
     | guy2 " knew it was going to work out just fine."
