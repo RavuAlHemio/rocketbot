@@ -1,3 +1,5 @@
+#randomize_condition small ;
+
 choose_guy1 @ : __IRC_nick;
 choose_guy2 @ : __IRC_nick;
 
@@ -43,8 +45,21 @@ grabbed_verb
     ;
 
 penis_adjective
-    : "large" | "massive" | "huge" | "gigantic" | "throbbing" | "erect" | "hard" | "stiff" | "tiny"
-    | "small" | "petite" | "humongous" | "giant" | "oversized" | "girthy" | "voluminous" | "long"
+    : !small    ( small_penis_adjective | unsized_penis_adjective )
+    | !!small   ( large_penis_adjective | unsized_penis_adjective )
+    ;
+
+large_penis_adjective
+    : "large" | "massive" | "huge" | "gigantic" | "humongous" | "giant" | "oversized" | "girthy"
+    | "voluminous" | "long"
+    ;
+
+small_penis_adjective
+    : "tiny" | "small" | "petite"
+    ;
+
+unsized_penis_adjective
+    : "erect" | "throbbing" | "hard" | "stiff"
     ;
 
 penis_synonym
