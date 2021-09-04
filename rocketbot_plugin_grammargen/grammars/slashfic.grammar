@@ -17,7 +17,7 @@ grab_sentence
 communication_sentence
     : "\u201C" sweet_nothings "\u201D he " whispered_verb " into " guy2 "\u2019s " ear_or_similar "."
     | "He " kissed_verb " " guy2 [ " " passionately_adverb ] " on the " neck_or_similar "."
-    | "It was " ( guy1 | guy2 ) "\u2019s first time and he was going to " ( "make it count" | "enjoy it" | "be gentle" ) "."
+    | "It was " ( guy1 "\u2019s" | guy2 "\u2019s" | "their" ) " first time and he was going to " ( "make it count" | "enjoy it" | "be gentle" ) "."
     ;
 
 penetration_sentence
@@ -32,6 +32,10 @@ reaction_sentence
     | guy2 " " yelped_verb " in " pain_or_similar " and came, then and there, " climax_place "."
     | guy2 " immediately " released_his_liquid " " climax_place "."
     | guy2 " " yelped_verb " in " pain_or_similar " and immediately " released_his_liquid " " climax_place "."
+    | guy2 " moved in closer, enjoying " ("the" | "this new") "."
+    | guy2 " knew" [ " right away that" ] " " ( "he " ("was the one" | "had made the right decision") | "they would stay together forever" ) "."
+    | guy2 " could not be happier with the way things were developing."
+    | guy2 " knew it was going to work out just fine."
     ;
 
 grabbed_verb
@@ -75,6 +79,7 @@ whispered_verb
     : "whispered" [ " softly" ]
     | "breathed" [ " softly" | " heavily" ]
     | "grunted" [ " softly" | " heavily" ]
+    | "moaned" [ " softly" | " heavily" ]
     ;
 
 ear_or_similar
@@ -138,6 +143,9 @@ yelped_verb
     : "yelped out"
     | "grunted"
     | "exhaled"
+    | "breathed out"
+    | "moaned"
+    | "panted"
     ;
 
 pain_or_similar
