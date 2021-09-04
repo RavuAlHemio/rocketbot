@@ -429,6 +429,12 @@ mod tests {
         db.register_base_unit(BaseUnit::new("A".to_owned())).unwrap();
 
         {
+            let mut s = NumberUnits::new();
+            s.insert("s".to_owned(), BigInt::from(1));
+            db.register_derived_unit(DerivedUnit::new("h".to_owned(), s, 60.0*60.0)).unwrap();
+        }
+
+        {
             let mut sx1 = NumberUnits::new();
             sx1.insert("s".to_owned(), BigInt::from(-1));
             db.register_derived_unit(DerivedUnit::new("Hz".to_owned(), sx1, 1.0)).unwrap();
@@ -681,5 +687,31 @@ mod tests {
         assert_eq!(Some(&BigInt::from(2)), new_w_ax1.units.get("m"));
         assert_eq!(Some(&BigInt::from(-3)), new_w_ax1.units.get("s"));
         assert_eq!(Some(&BigInt::from(-1)), new_w_ax1.units.get("A"));
+    }
+
+    #[test]
+    fn test_m_sx1_to_km_hx1() {
+        let database = make_database();
+
+        let mut m_sx1_units = NumberUnits::new();
+        m_sx1_units.insert("m".to_owned(), BigInt::from(1));
+        m_sx1_units.insert("s".to_owned(), BigInt::from(-1));
+        let m_sx1 = Number::new(NumberValue::Float(1.0), m_sx1_units);
+
+        let mut km_hx1_units = NumberUnits::new();
+        km_hx1_units.insert("km".to_owned(), BigInt::from(1));
+        km_hx1_units.insert("h".to_owned(), BigInt::from(-1));
+
+        let epsilon = 1e-10;
+
+        let km_hx1 = coerce_to_unit(&m_sx1, &km_hx1_units, &database).unwrap();
+        if let NumberValue::Float(f) = km_hx1.value {
+            assert!((f - 3.6).abs() < epsilon);
+        } else {
+            panic!("number value not float");
+        }
+        assert_eq!(2, km_hx1.units.len());
+        assert_eq!(Some(&BigInt::from(1)), km_hx1.units.get("km"));
+        assert_eq!(Some(&BigInt::from(-1)), km_hx1.units.get("h"));
     }
 }
