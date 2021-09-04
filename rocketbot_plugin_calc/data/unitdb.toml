@@ -35,19 +35,19 @@ letters = "cd"
 # min, minute, 60 seconds
 letters = "min"
 parents = { s = "1" }
-factor_of_parents = 0.01666666666666666666
+factor_of_parents = 60
 
 [[derived_units]]
 # h, hour, 60*60 seconds
 letters = "h"
 parents = { s = "1" }
-factor_of_parents = 0.00027777777777777777
+factor_of_parents = 3600
 
 [[derived_units]]
 # d, day, 24*60*60 seconds
 letters = "d"
 parents = { s = "1" }
-factor_of_parents = 0.00001157407407407407
+factor_of_parents = 86400
 
 ### DERIVED UNITS OF LENGTH
 
