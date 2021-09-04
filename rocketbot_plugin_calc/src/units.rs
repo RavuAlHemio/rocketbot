@@ -154,7 +154,7 @@ impl UnitDatabase {
 
         // try applying SI prefixes
         for (si_pfx, _ten_pow) in &self.si_prefix_to_factor {
-            if !letters.starts_with(si_pfx) {
+            if letters.starts_with(si_pfx) {
                 let non_prefix_unit = &letters[si_pfx.len()..];
                 // don't allow multiprefix units (otherwise replace with recursive call)
                 if let Some(md) = self.letters_to_max_depth.get(non_prefix_unit) {
