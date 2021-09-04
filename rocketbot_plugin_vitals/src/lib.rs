@@ -6,6 +6,7 @@ use std::collections::{HashMap, HashSet};
 use std::sync::Weak;
 
 use async_trait::async_trait;
+use rocketbot_interface::JsonValueExtensions;
 use rocketbot_interface::commands::{CommandBehaviors, CommandDefinition, CommandInstance};
 use rocketbot_interface::interfaces::{RocketBotInterface, RocketBotPlugin};
 use rocketbot_interface::model::ChannelMessage;
@@ -106,7 +107,7 @@ impl RocketBotPlugin for VitalsPlugin {
         }
 
         let mut lower_alias_to_lower_key = HashMap::new();
-        for (alias, key_object) in config["aliases"].as_object().expect("aliases is not an object").iter() {
+        for (alias, key_object) in config["aliases"].entries_or_empty() {
             let key_lower = match key_object.as_str() {
                 Some(s) => s.to_lowercase(),
                 None => panic!("aliases[{:?}] not a string", alias),
