@@ -17,10 +17,13 @@ grab_sentence
 communication_sentence
     : "\u201C" sweet_nothings "\u201D he " whispered_verb " into " guy2 "\u2019s " ear_or_similar "."
     | "He " kissed_verb " " guy2 [ " " passionately_adverb ] " on the " neck_or_similar "."
+    | "It was " ( guy1 | guy2 ) "\u2019s first time and he was going to " ( "make it count" | "enjoy it" | "be gentle" ) "."
     ;
 
 penetration_sentence
-    : penetration_intro ", " guy1 " " shoved_verb " his " penis_adjective " " penis_synonym " into " guy2 "\u2019s " opening "."
+    : penetration_intro ", " guy1 [ " " shoved_adverb ] " " shoved_verb " his " penis_adjective " " penis_synonym " into " guy2 "\u2019s " opening "."
+    | penetration_intro ", " guy1 [ " " shoved_adverb ] " entered into " guy2 "\u2019s " opening "."
+    | penetration_intro ", " guy1 [ " " shoved_adverb ] " filled " guy2 "\u2019s " opening " with his " penis_adjective " " penis_synonym "."
     ;
 
 reaction_sentence
@@ -81,10 +84,11 @@ ear_or_similar
     | <1>   "eye"
     | <1>   "nose"
     | <1>   "chin"
+    | <1>   "butt"
     ;
 
 kissed_verb
-    : "kissed" | "licked" | "bit"
+    : "kissed" | "licked" | "bit" | "nuzzled"
     ;
 
 passionately_adverb
@@ -105,10 +109,17 @@ penetration_intro
     : "Then"
     | "Suddenly"
     | "With a " shove_adjective " " shove_noun
+    | "Bracing himself"
+    | "Preparing for the experience of a lifetime"
+    | "Not entirely sure of himself"
     ;
 
 shoved_verb
     : "shoved" | "inserted" | "stuck"
+    ;
+
+shoved_adverb
+    : "quickly" | "impatiently" | "slowly" | "awkwardly" | "sheepishly"
     ;
 
 opening
@@ -132,7 +143,8 @@ yelped_verb
 pain_or_similar
     : "pain"
     | "pleasure"
-    | "a mix of pain and pleasure"
+    | "ecstasy"
+    | "a mix of pain and " ( "pleasure" | "ecstasy" )
     ;
 
 shove_adjective
