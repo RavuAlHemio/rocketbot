@@ -204,6 +204,12 @@ dependencies = [
 ]
 
 [[package]]
+name = "either"
+version = "1.6.1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "e78d4f1cc4ae33bbfc157ed5d5a5ef3bc29227303d595861deb238fcec4e9457"
+
+[[package]]
 name = "encoding_rs"
 version = "0.8.28"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -1386,6 +1392,7 @@ name = "rocketbot_plugin_grammargen"
 version = "0.1.0"
 dependencies = [
  "async-trait",
+ "either",
  "log",
  "num-bigint 0.4.0",
  "num-traits",

@@ -6,9 +6,9 @@ use std::io::Read;
 use std::path::PathBuf;
 use std::sync::{Arc, Mutex};
 
-use rand::SeedableRng;
+use rand::{Rng, SeedableRng};
 use rand::rngs::StdRng;
-use rocketbot_plugin_grammargen::grammar::{GeneratorState, Production, RuleDefinition};
+use rocketbot_plugin_grammargen::grammar::{GeneratorState, Metacommand, Production, RuleDefinition};
 use rocketbot_plugin_grammargen::parsing::parse_grammar;
 
 
@@ -59,11 +59,26 @@ async fn main() {
         ),
     );
 
+    let mut rng = StdRng::from_entropy();
+    let mut conditions = HashSet::new();
+
+    // process metacommands
+    for mcmd in &rulebook.metacommands {
+        match mcmd {
+            Metacommand::RandomizeCondition(flag) => {
+                let activate_flag: bool = rng.gen();
+                if activate_flag {
+                    conditions.insert(flag.clone());
+                }
+            },
+        }
+    }
+
     let mut state = GeneratorState::new(
         rulebook,
-        HashSet::new(),
+        conditions,
         Arc::new(Mutex::new(
-            StdRng::from_entropy(),
+            rng,
         )),
         Arc::new(Mutex::new(
             HashMap::new(),

@@ -10,7 +10,7 @@ use std::sync::{Arc, Mutex, Weak};
 
 use async_trait::async_trait;
 use log::error;
-use rand::SeedableRng;
+use rand::{Rng, SeedableRng};
 use rand::rngs::StdRng;
 use rocketbot_interface::JsonValueExtensions;
 use rocketbot_interface::commands::{CommandBehaviors, CommandDefinition, CommandInstance};
@@ -18,7 +18,7 @@ use rocketbot_interface::interfaces::{RocketBotInterface, RocketBotPlugin};
 use rocketbot_interface::model::ChannelMessage;
 use serde_json;
 
-use crate::grammar::{GeneratorState, Rulebook};
+use crate::grammar::{GeneratorState, Metacommand, Rulebook};
 use crate::parsing::parse_grammar;
 
 
@@ -128,10 +128,27 @@ impl RocketBotPlugin for GrammarGenPlugin {
         let mut my_grammar = grammar.clone();
         my_grammar.add_builtins(&channel_nicks, chosen_nick_opt);
 
-        let conditions: HashSet<String> = command.flags
-            .iter()
-            .map(|opt_name| format!("opt_{}", opt_name))
-            .collect();
+        let rng = Arc::clone(&self.rng);
+        let mut conditions = HashSet::new();
+
+        // process metacommands
+        {
+            let mut rng_guard = rng.lock().unwrap();
+            for metacommand in &my_grammar.metacommands {
+                match metacommand {
+                    Metacommand::RandomizeCondition(cond) => {
+                        let activate_condition: bool = rng_guard.gen();
+                        if activate_condition {
+                            conditions.insert(cond.clone());
+                        }
+                    },
+                }
+            }
+        }
+
+        for flag in &command.flags {
+            conditions.insert(format!("opt_{}", flag));
+        }
 
         let mut state = GeneratorState::new(
             my_grammar,

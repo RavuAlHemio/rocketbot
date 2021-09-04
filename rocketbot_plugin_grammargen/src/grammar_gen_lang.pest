@@ -37,12 +37,13 @@ number = { ASCII_DIGIT+ }
 hexd = { ASCII_HEX_DIGIT }
 
 ggrulebook = { SOI ~ ruledef+ ~ EOI }
-ruledef = { paramrule | ggrule }
+ruledef = { paramrule | ggrule | metacommand }
 
 paramrule = { identifier ~ memoization? ~ "{" ~ identifier ~ ("," ~ identifier)* ~ "}" ~ ":" ~ ggproduction ~ ";" }
 ggrule = { identifier ~ memoization? ~ ":" ~ ggproduction ~ ";" }
 ggproduction = { alternative ~ ("|" ~ alternative)* }
 memoization = { "@" }
+metacommand = { "#" ~ metacommand_definition ~ ";" }
 
 alternative = { condition* ~ weight? ~ sequence_elem+ }
 
@@ -64,3 +65,8 @@ single_sequence_elem =
 parenthesized = { "(" ~ ggproduction ~ ")" }
 optional = { "[" ~ weight? ~ ggproduction ~ "]" }
 call_params = { identifier ~ "{" ~ ggproduction ~ ("," ~ ggproduction)* ~ "}" }
+
+metacommand_definition =
+    { randomize_condition_metacommand
+    }
+randomize_condition_metacommand = { "randomize_condition" ~ identifier }

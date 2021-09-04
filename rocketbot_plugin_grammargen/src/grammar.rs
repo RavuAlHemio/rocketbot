@@ -94,15 +94,18 @@ pub trait TextGenerator : Debug + Sync + Send {
 pub struct Rulebook {
     pub name: String,
     pub rule_definitions: HashMap<String, RuleDefinition>,
+    pub metacommands: Vec<Metacommand>,
 }
 impl Rulebook {
     pub fn new(
         name: String,
         rule_definitions: HashMap<String, RuleDefinition>,
+        metacommands: Vec<Metacommand>,
     ) -> Rulebook {
         Rulebook {
             name,
             rule_definitions,
+            metacommands,
         }
     }
 
@@ -164,6 +167,11 @@ impl RuleDefinition {
             memoize,
         }
     }
+}
+
+#[derive(Clone, Debug, Eq, Hash, PartialEq)]
+pub enum Metacommand {
+    RandomizeCondition(String),
 }
 
 #[derive(Clone, Debug, Eq, Hash, PartialEq)]

@@ -1,6 +1,7 @@
 use std::sync::atomic::{AtomicUsize, Ordering};
 use std::collections::HashMap;
 
+use either::Either;
 use num_bigint::BigUint;
 use num_traits::Num;
 use pest::Parser;
@@ -8,7 +9,7 @@ use pest::error::Error;
 use pest::iterators::Pair;
 use pest_derive::Parser;
 
-use crate::grammar::{Alternative, Condition, Production, Rulebook, RuleDefinition};
+use crate::grammar::{Alternative, Condition, Metacommand, Production, Rulebook, RuleDefinition};
 
 
 #[derive(Parser)]
@@ -96,10 +97,19 @@ fn parse_number(number_pair: &Pair<'_, Rule>) -> BigUint {
 fn parse_rulebook(name: &str, rulebook_pair: &Pair<'_, Rule>, state: &mut ParserState) -> Rulebook {
     let inner = rulebook_pair.clone().into_inner();
 
-    let mut rules: Vec<RuleDefinition> = inner
-        .filter(|pair| pair.as_rule() == Rule::ruledef)
-        .map(|pair| parse_ruledef(&pair, state))
-        .collect();
+    let mut metacommands: Vec<Metacommand> = Vec::new();
+    let mut rules: Vec<RuleDefinition> = Vec::new();
+
+    for pair in inner {
+        if pair.as_rule() != Rule::ruledef {
+            continue;
+        }
+
+        match parse_ruledef(&pair, state) {
+            Either::Left(rd) => rules.push(rd),
+            Either::Right(mc) => metacommands.push(mc),
+        };
+    }
 
     let mut rule_definitions = HashMap::new();
     for rule in rules.drain(..) {
@@ -108,16 +118,17 @@ fn parse_rulebook(name: &str, rulebook_pair: &Pair<'_, Rule>, state: &mut Parser
             panic!("duplicate rule definition named {}", rd.name);
         }
     }
-    Rulebook::new(name.to_owned(), rule_definitions)
+    Rulebook::new(name.to_owned(), rule_definitions, metacommands)
 }
 
-fn parse_ruledef(ruledef_pair: &Pair<'_, Rule>, state: &mut ParserState) -> RuleDefinition {
+fn parse_ruledef(ruledef_pair: &Pair<'_, Rule>, state: &mut ParserState) -> Either<RuleDefinition, Metacommand> {
     let mut inner = ruledef_pair.clone().into_inner();
 
     let def_pair = inner.next().expect("empty rule definition");
     match def_pair.as_rule() {
-        Rule::ggrule => parse_rule(&def_pair, state),
-        Rule::paramrule => parse_paramrule(&def_pair, state),
+        Rule::ggrule => Either::Left(parse_rule(&def_pair, state)),
+        Rule::paramrule => Either::Left(parse_paramrule(&def_pair, state)),
+        Rule::metacommand => Either::Right(parse_metacommand(&def_pair)),
         other => panic!("unexpected rule definition type: {:?}", other),
     }
 }
@@ -177,6 +188,27 @@ fn parse_rule(def_pair: &Pair<'_, Rule>, state: &mut ParserState) -> RuleDefinit
         production,
         memoize,
     )
+}
+
+fn parse_metacommand(def_pair: &Pair<'_, Rule>) -> Metacommand {
+    let mut inner = def_pair.clone().into_inner();
+
+    let metacommand = inner.next().expect("missing metacommand");
+    let mut innerer = metacommand.clone().into_inner();
+    let metacommand_definition = innerer.next().expect("missing metacommand definition");
+    match metacommand_definition.as_rule() {
+        Rule::randomize_condition_metacommand => parse_randomize_condition_metacommand(&metacommand_definition),
+        other => {
+            panic!("unexpected metacommand rule {:?}", other);
+        },
+    }
+}
+
+fn parse_randomize_condition_metacommand(def_pair: &Pair<'_, Rule>) -> Metacommand {
+    let mut inner = def_pair.clone().into_inner();
+    let identifier_pair = inner.next().expect("no identifier");
+    let identifier = parse_identifier(&identifier_pair);
+    Metacommand::RandomizeCondition(identifier)
 }
 
 fn parse_production(prod_pair: &Pair<'_, Rule>, state: &mut ParserState) -> Production {
