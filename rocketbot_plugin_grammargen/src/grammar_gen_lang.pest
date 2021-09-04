@@ -39,9 +39,10 @@ hexd = { ASCII_HEX_DIGIT }
 ggrulebook = { SOI ~ ruledef+ ~ EOI }
 ruledef = { paramrule | ggrule }
 
-paramrule = { identifier ~ "{" ~ identifier ~ ("," ~ identifier)* ~ "}" ~ ":" ~ ggproduction ~ ";" }
-ggrule = { identifier ~ ":" ~ ggproduction ~ ";" }
+paramrule = { identifier ~ memoization? ~ "{" ~ identifier ~ ("," ~ identifier)* ~ "}" ~ ":" ~ ggproduction ~ ";" }
+ggrule = { identifier ~ memoization? ~ ":" ~ ggproduction ~ ";" }
 ggproduction = { alternative ~ ("|" ~ alternative)* }
+memoization = { "@" }
 
 alternative = { condition* ~ weight? ~ sequence_elem+ }
 

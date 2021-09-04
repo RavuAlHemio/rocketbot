@@ -1,4 +1,4 @@
-use std::collections::HashSet;
+use std::collections::{HashMap, HashSet};
 use std::env;
 use std::ffi::OsString;
 use std::fs::File;
@@ -46,6 +46,7 @@ async fn main() {
             "__IRC_nick".to_owned(),
             Vec::new(),
             nick_production.clone(),
+            false,
         ),
     );
     rulebook.rule_definitions.insert(
@@ -54,6 +55,7 @@ async fn main() {
             "__IRC_chosen_nick".to_owned(),
             Vec::new(),
             nick_production.clone(),
+            false,
         ),
     );
 
@@ -62,6 +64,9 @@ async fn main() {
         HashSet::new(),
         Arc::new(Mutex::new(
             StdRng::from_entropy(),
+        )),
+        Arc::new(Mutex::new(
+            HashMap::new(),
         )),
     );
 

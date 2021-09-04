@@ -13,17 +13,20 @@ pub struct GeneratorState {
     pub rulebook: Rulebook,
     pub conditions: HashSet<String>,
     pub rng: Arc<Mutex<StdRng>>,
+    pub memories: Arc<Mutex<HashMap<usize, Option<String>>>>,
 }
 impl GeneratorState {
     pub fn new(
         rulebook: Rulebook,
         conditions: HashSet<String>,
         rng: Arc<Mutex<StdRng>>,
+        memories: Arc<Mutex<HashMap<usize, Option<String>>>>,
     ) -> GeneratorState {
         GeneratorState {
             rulebook,
             conditions,
             rng,
+            memories,
         }
     }
 
@@ -48,10 +51,12 @@ impl Clone for GeneratorState {
         let rulebook = self.rulebook.clone();
         let conditions = self.conditions.clone();
         let rng = Arc::clone(&self.rng);
+        let memories = Arc::clone(&self.memories);
         GeneratorState::new(
             rulebook,
             conditions,
             rng,
+            memories,
         )
     }
 }
@@ -118,6 +123,7 @@ impl Rulebook {
                 "__IRC_nick".to_owned(),
                 Vec::new(),
                 any_nick_production.clone(),
+                false,
             ),
         );
 
@@ -131,6 +137,7 @@ impl Rulebook {
                 } else {
                     any_nick_production
                 },
+                false,
             ),
         );
     }
@@ -141,17 +148,20 @@ pub struct RuleDefinition {
     pub name: String,
     pub param_names: Vec<String>,
     pub top_production: Production,
+    pub memoize: bool,
 }
 impl RuleDefinition {
     pub fn new(
         name: String,
         param_names: Vec<String>,
         top_production: Production,
+        memoize: bool,
     ) -> RuleDefinition {
         RuleDefinition {
             name,
             param_names,
             top_production,
+            memoize,
         }
     }
 }
@@ -163,7 +173,7 @@ pub enum Production {
     Choice { options: Vec<Alternative> },
     Optional { weight: BigUint, inner: Box<Production> },
     Kleene { at_least_one: bool, inner: Box<Production> },
-    Call { name: String, args: Vec<Production> },
+    Call { name: String, args: Vec<Production>, call_site_id: usize },
 }
 impl TextGenerator for Production {
     fn generate(&self, state: &mut GeneratorState) -> Option<String> {
@@ -260,9 +270,18 @@ impl TextGenerator for Production {
 
                 Some(ret)
             },
-            Production::Call { name, args } => {
+            Production::Call { name, args, call_site_id } => {
                 if let Some(rule) = state.rulebook.rule_definitions.get(name) {
                     assert_eq!(rule.param_names.len(), args.len());
+
+                    if rule.memoize {
+                        // have we generated this yet?
+                        let memo_guard = state.memories.lock().unwrap();
+                        if let Some(memoized) = memo_guard.get(call_site_id) {
+                            // yup
+                            return memoized.clone();
+                        }
+                    }
 
                     // link up arguments with their values
                     let mut sub_state = state.clone();
@@ -273,12 +292,21 @@ impl TextGenerator for Production {
                                 param_name.clone(),
                                 Vec::new(),
                                 arg.clone(),
+                                false,
                             ),
                         );
                     }
 
                     // generate
-                    rule.top_production.generate(&mut sub_state)
+                    let generated = rule.top_production.generate(&mut sub_state);
+
+                    if rule.memoize {
+                        // remember me
+                        let mut memo_guard = state.memories.lock().unwrap();
+                        memo_guard.insert(*call_site_id, generated.clone());
+                    }
+
+                    generated
                 } else {
                     // call to undefined function
                     None
@@ -322,7 +350,7 @@ impl TextGenerator for Production {
             Production::Kleene { at_least_one: _, inner } => {
                 inner.verify_soundness(state)
             },
-            Production::Call { name, args } => {
+            Production::Call { name, args, call_site_id: _ } => {
                 if let Some(rule) = state.rulebook.rule_definitions.get(name) {
                     if rule.param_names.len() != args.len() {
                         return Err(SoundnessError::ArgumentCountMismatch(
@@ -340,6 +368,7 @@ impl TextGenerator for Production {
                                 param_name.clone(),
                                 Vec::new(),
                                 arg.clone(),
+                                false,
                             ),
                         );
                     }

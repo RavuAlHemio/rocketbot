@@ -1,3 +1,4 @@
+use std::sync::atomic::{AtomicUsize, Ordering};
 use std::collections::HashMap;
 
 use num_bigint::BigUint;
@@ -15,6 +16,18 @@ use crate::grammar::{Alternative, Condition, Production, Rulebook, RuleDefinitio
 struct GrammarGenParser;
 
 
+struct ParserState {
+    call_site_id_counter: AtomicUsize,
+}
+impl ParserState {
+    pub fn new() -> Self {
+        Self {
+            call_site_id_counter: AtomicUsize::new(0),
+        }
+    }
+}
+
+
 pub fn parse_grammar(name: &str, text: &str) -> Result<Rulebook, Error<Rule>> {
     let pairs: Vec<Pair<'_, Rule>> = match GrammarGenParser::parse(Rule::ggrulebook, text) {
         Ok(p) => p,
@@ -23,7 +36,9 @@ pub fn parse_grammar(name: &str, text: &str) -> Result<Rulebook, Error<Rule>> {
 
     assert_eq!(pairs.len(), 1);
 
-    Ok(parse_rulebook(name, &pairs[0]))
+    let mut state = ParserState::new();
+
+    Ok(parse_rulebook(name, &pairs[0], &mut state))
 }
 
 fn parse_escaped_string(string_pair: &Pair<'_, Rule>) -> String {
@@ -78,12 +93,12 @@ fn parse_number(number_pair: &Pair<'_, Rule>) -> BigUint {
         .expect("failed to parse number")
 }
 
-fn parse_rulebook(name: &str, rulebook_pair: &Pair<'_, Rule>) -> Rulebook {
+fn parse_rulebook(name: &str, rulebook_pair: &Pair<'_, Rule>, state: &mut ParserState) -> Rulebook {
     let inner = rulebook_pair.clone().into_inner();
 
     let mut rules: Vec<RuleDefinition> = inner
         .filter(|pair| pair.as_rule() == Rule::ruledef)
-        .map(|pair| parse_ruledef(&pair))
+        .map(|pair| parse_ruledef(&pair, state))
         .collect();
 
     let mut rule_definitions = HashMap::new();
@@ -96,27 +111,34 @@ fn parse_rulebook(name: &str, rulebook_pair: &Pair<'_, Rule>) -> Rulebook {
     Rulebook::new(name.to_owned(), rule_definitions)
 }
 
-fn parse_ruledef(ruledef_pair: &Pair<'_, Rule>) -> RuleDefinition {
+fn parse_ruledef(ruledef_pair: &Pair<'_, Rule>, state: &mut ParserState) -> RuleDefinition {
     let mut inner = ruledef_pair.clone().into_inner();
 
     let def_pair = inner.next().expect("empty rule definition");
     match def_pair.as_rule() {
-        Rule::ggrule => parse_rule(&def_pair),
-        Rule::paramrule => parse_paramrule(&def_pair),
+        Rule::ggrule => parse_rule(&def_pair, state),
+        Rule::paramrule => parse_paramrule(&def_pair, state),
         other => panic!("unexpected rule definition type: {:?}", other),
     }
 }
 
-fn parse_paramrule(def_pair: &Pair<'_, Rule>) -> RuleDefinition {
+fn parse_paramrule(def_pair: &Pair<'_, Rule>, state: &mut ParserState) -> RuleDefinition {
     let mut inner = def_pair.clone().into_inner();
+    let mut memoize = false;
 
     let mut param_names = Vec::new();
 
     let identifier_pair = inner.next().expect("no identifier");
     let identifier = parse_identifier(&identifier_pair);
 
-    let mut next_pair = inner.next().expect("no arg name identifier or production");
+    let mut next_pair = inner.next().expect("no memoization, arg name identifier or production");
     loop {
+        if let Rule::memoization = next_pair.as_rule() {
+            memoize = true;
+            next_pair = inner.next().expect("no arg name identifier or production");
+            continue;
+        }
+
         if next_pair.as_rule() != Rule::identifier {
             break;
         }
@@ -124,41 +146,49 @@ fn parse_paramrule(def_pair: &Pair<'_, Rule>) -> RuleDefinition {
         next_pair = inner.next().expect("no arg name identifier or production");
     }
 
-    let production = parse_production(&next_pair);
+    let production = parse_production(&next_pair, state);
 
     RuleDefinition::new(
         identifier,
         param_names,
         production,
+        memoize,
     )
 }
 
-fn parse_rule(def_pair: &Pair<'_, Rule>) -> RuleDefinition {
+fn parse_rule(def_pair: &Pair<'_, Rule>, state: &mut ParserState) -> RuleDefinition {
     let mut inner = def_pair.clone().into_inner();
+    let mut memoize = false;
 
     let identifier_pair = inner.next().expect("no identifier");
     let identifier = parse_identifier(&identifier_pair);
 
-    let production_pair = inner.next().expect("no production");
-    let production = parse_production(&production_pair);
+    let mut production_or_memoization_pair = inner.next().expect("no memoization or production");
+    if let Rule::memoization = production_or_memoization_pair.as_rule() {
+        memoize = true;
+        production_or_memoization_pair = inner.next().expect("no production");
+    }
+
+    let production = parse_production(&production_or_memoization_pair, state);
 
     RuleDefinition::new(
         identifier,
         Vec::new(),
         production,
+        memoize,
     )
 }
 
-fn parse_production(prod_pair: &Pair<'_, Rule>) -> Production {
+fn parse_production(prod_pair: &Pair<'_, Rule>, state: &mut ParserState) -> Production {
     let mut inner = prod_pair.clone().into_inner();
     let mut alternatives = Vec::new();
 
     let alternative_pair = inner.next().expect("no alternative");
-    let alternative = parse_alternative(&alternative_pair);
+    let alternative = parse_alternative(&alternative_pair, state);
     alternatives.push(alternative);
 
     while let Some(alternative_pair) = inner.next() {
-        let alternative = parse_alternative(&alternative_pair);
+        let alternative = parse_alternative(&alternative_pair, state);
         alternatives.push(alternative);
     }
 
@@ -170,7 +200,7 @@ fn parse_production(prod_pair: &Pair<'_, Rule>) -> Production {
     }
 }
 
-fn parse_alternative(alt_pair: &Pair<'_, Rule>) -> Alternative {
+fn parse_alternative(alt_pair: &Pair<'_, Rule>, state: &mut ParserState) -> Alternative {
     let mut inner = alt_pair.clone().into_inner();
     let mut conditions = Vec::new();
     let mut weight = BigUint::from(1u32);
@@ -185,7 +215,7 @@ fn parse_alternative(alt_pair: &Pair<'_, Rule>) -> Alternative {
                 weight = parse_weight(&pair);
             },
             Rule::sequence_elem => {
-                sequence.push(parse_sequence_elem(&pair));
+                sequence.push(parse_sequence_elem(&pair, state));
             },
             _ => {
                 panic!("unexpected command {:?} in alternative", pair.as_rule());
@@ -233,11 +263,11 @@ fn parse_weight(weight_pair: &Pair<'_, Rule>) -> BigUint {
     number
 }
 
-fn parse_sequence_elem(seq_elem_pair: &Pair<'_, Rule>) -> Production {
+fn parse_sequence_elem(seq_elem_pair: &Pair<'_, Rule>, state: &mut ParserState) -> Production {
     let mut inner = seq_elem_pair.clone().into_inner();
 
     let single_elem_pair = inner.next().expect("no single sequence element");
-    let single_elem = parse_single_sequence_elem(&single_elem_pair);
+    let single_elem = parse_single_sequence_elem(&single_elem_pair, state);
 
     if let Some(kleene) = inner.next() {
         return match kleene.as_str() {
@@ -260,7 +290,7 @@ fn parse_sequence_elem(seq_elem_pair: &Pair<'_, Rule>) -> Production {
     single_elem
 }
 
-fn parse_single_sequence_elem(sse_pair: &Pair<'_, Rule>) -> Production {
+fn parse_single_sequence_elem(sse_pair: &Pair<'_, Rule>, state: &mut ParserState) -> Production {
     let mut inner = sse_pair.clone().into_inner();
 
     let elem_pair = inner.next().expect("no element");
@@ -269,7 +299,7 @@ fn parse_single_sequence_elem(sse_pair: &Pair<'_, Rule>) -> Production {
             let mut innerer = elem_pair.clone().into_inner();
 
             let production_pair = innerer.next().expect("no production");
-            let production = parse_production(&production_pair);
+            let production = parse_production(&production_pair, state);
 
             production
         },
@@ -285,7 +315,7 @@ fn parse_single_sequence_elem(sse_pair: &Pair<'_, Rule>) -> Production {
                 next_pair = innerer.next().expect("no production");
             }
 
-            let production = parse_production(&next_pair);
+            let production = parse_production(&next_pair, state);
 
             Production::Optional {
                 weight,
@@ -295,31 +325,35 @@ fn parse_single_sequence_elem(sse_pair: &Pair<'_, Rule>) -> Production {
         Rule::call_params => {
             let mut innerer = elem_pair.clone().into_inner();
             let mut arguments = Vec::new();
+            let call_site_id = state.call_site_id_counter.fetch_add(1, Ordering::SeqCst);
 
             let identifier_pair = innerer.next().expect("no identifier");
             let identifier = parse_identifier(&identifier_pair);
 
             let arg_pair = innerer.next().expect("no argument production");
-            let arg = parse_production(&arg_pair);
+            let arg = parse_production(&arg_pair, state);
             arguments.push(arg);
 
             while let Some(arg_pair) = innerer.next() {
-                let arg = parse_production(&arg_pair);
+                let arg = parse_production(&arg_pair, state);
                 arguments.push(arg);
             }
 
             Production::Call {
                 name: identifier,
                 args: arguments,
+                call_site_id,
             }
         },
         Rule::identifier => {
             let identifier = parse_identifier(&elem_pair);
             let arguments = Vec::new();
+            let call_site_id = state.call_site_id_counter.fetch_add(1, Ordering::SeqCst);
 
             Production::Call {
                 name: identifier,
                 args: arguments,
+                call_site_id,
             }
         },
         Rule::escaped_string => {

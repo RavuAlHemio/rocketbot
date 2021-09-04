@@ -137,6 +137,7 @@ impl RocketBotPlugin for GrammarGenPlugin {
             my_grammar,
             conditions,
             Arc::clone(&self.rng),
+            Arc::new(Mutex::new(HashMap::new())),
         );
 
         let phrase = match state.generate() {
