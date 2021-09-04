@@ -1,0 +1,160 @@
+choose_guy1 @ : __IRC_nick;
+choose_guy2 @ : __IRC_nick;
+
+// level of indirection because memoization happens at the call site
+// (i.e. here)
+guy1 : choose_guy1 ;
+guy2 : choose_guy2 ;
+
+slashfic
+    : grab_sentence " " communication_sentence " " penetration_sentence " " reaction_sentence
+    ;
+
+grab_sentence
+    : guy1 " " grabbed_verb " his " penis_adjective " " penis_synonym " and " placed_verb " it " opening_adverbial "."
+    ;
+
+communication_sentence
+    : "\u201C" sweet_nothings ",\u201D he " whispered_verb " into " guy2 "\u2019s " ear_or_similar "."
+    | "He " kissed_verb " " guy2 [ " " passionately_adverb ] " on the " neck_or_similar "."
+    ;
+
+penetration_sentence
+    : penetration_intro ", " guy1 " " shoved_verb " his " penis_adjective " " penis_synonym " into " guy2 "\u2019s " opening "."
+    ;
+
+reaction_sentence
+    : guy2 " " yelped_verb " in " pain_or_similar "."
+    | guy2 " came, then and there, " climax_place "."
+    | guy2 " " yelped_verb " in " pain_or_similar " and came, then and there, " climax_place "."
+    | guy2 " immediately " released_his_liquid " " climax_place "."
+    | guy2 " " yelped_verb " in " pain_or_similar " and immediately " released_his_liquid " " climax_place "."
+    ;
+
+grabbed_verb
+    : "grabbed" | "took" | "grasped" | "gripped"
+    ;
+
+penis_adjective
+    : "large" | "massive" | "huge" | "gigantic" | "throbbing" | "erect" | "hard" | "stiff" | "tiny"
+    | "small" | "petite"
+    ;
+
+penis_synonym
+    : "penis" | "cock" | "dick" | "shaft" | "manhood" | "dong" | "stiffy" | "boner"
+    ;
+
+placed_verb
+    : "placed" | "positioned"
+    ;
+
+opening_adverbial
+    : "in front of " guy2 "\u2019s " opening
+    | "near " guy2 "\u2019s " opening
+    | "close to " guy2 "\u2019s " opening
+    ;
+
+sweet_nothings
+    // serious variants: weight 10
+    : <10>  "You are mine forever"
+    | <10>  "I\u2019m going in"
+    // less serious variants: weight 1
+    | <1>   "Ready or not, here I come"
+    | <1>   "This won\u2019t hurt a bit"
+    | <1>   "This will hurt a little"
+    | <1>   "I\u2019m out of lube"
+    | <1>   "You cannot withstand the power of my Kernseife" // 2021-09-04 18:59
+    ;
+
+whispered_verb
+    : "whispered"
+    | "whispered softly"
+    ;
+
+ear_or_similar
+    // serious variants: weight 10
+    : <10>  "ear"
+    // less serious variants: weight 1
+    | <1>   "eye"
+    | <1>   "nose"
+    | <1>   "chin"
+    ;
+
+kissed_verb
+    : "kissed" | "licked" | "bit"
+    ;
+
+passionately_adverb
+    : "passionately" | "softly" | "ecstatically"
+    ;
+
+neck_or_similar
+    // serious variants: weight 5
+    : <5>   "neck"
+    | <5>   "nape"
+    | <5>   "shoulder"
+    // less serious variants: weight 1
+    | <1>   "nose"
+    ;
+
+penetration_intro
+    : "Then"
+    | "Suddenly"
+    | "With a " shove_adjective " " shove_noun
+    ;
+
+shoved_verb
+    : "shoved" | "inserted" | "stuck"
+    ;
+
+opening
+    // serious variants: weight 10
+    : <10>  "butt"
+    | <10>  "ass"
+    | <10>  "rear"
+    | <10>  "mouth"
+    | <10>  "opening"
+    // less serious variants: weight 11
+    | <1>   "nose"
+    | <1>   "ear"
+    ;
+
+yelped_verb
+    : "yelped out"
+    | "grunted"
+    | "exhaled"
+    ;
+
+pain_or_similar
+    : "pain"
+    | "pleasure"
+    | "a mix of pain and pleasure"
+    ;
+
+shove_adjective
+    : "slight"
+    | "small"
+    | "hefty"
+    ;
+
+shove_noun
+    : "shove"
+    | "push"
+    | "movement of the hips"
+    ;
+
+climax_place
+    : "on the bed"
+    | "on the floor"
+    | "in the shower"
+    | "in the " ("bathtub" | "jacuzzi" | "pool")
+    | "on the " ("futon" | "yoga mat")
+    | "on the kitchen countertop"
+    | "on the " ("kitchen" | "coffee") " table"
+    | "on the desk"
+    ;
+
+released_his_liquid
+    : "released his " ("liquid" | "seed" | "cum")
+    | "came" | "ejaculated" | "spooged"
+    ;
