@@ -45,7 +45,7 @@ impl RocketBotPlugin for VitalsPlugin {
                 panic!("unknown reader type {:?}", reader);
             };
 
-            key_to_reader.insert(target.to_owned(), reader_obj);
+            key_to_reader.insert(target.to_lowercase(), reader_obj);
         }
 
         let default_target = config["default_target"].as_str()
@@ -84,12 +84,12 @@ impl RocketBotPlugin for VitalsPlugin {
             Some(i) => i,
         };
 
-        let mut target = command.rest.trim();
+        let mut target = command.rest.trim().to_lowercase();
         if target.len() == 0 {
-            target = self.default_target.as_str();
+            target = self.default_target.clone();
         }
 
-        let reader = match self.key_to_reader.get(target) {
+        let reader = match self.key_to_reader.get(&target) {
             Some(r) => r,
             None => {
                 interface.send_channel_message(
