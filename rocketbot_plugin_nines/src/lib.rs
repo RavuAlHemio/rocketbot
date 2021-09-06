@@ -14,9 +14,17 @@ use rocketbot_interface::interfaces::{RocketBotInterface, RocketBotPlugin};
 use rocketbot_interface::model::ChannelMessage;
 
 
-static NINES_RE: Lazy<Regex> = Lazy::new(|| Regex::new(
-    "^(?P<nine_count>[0-9]+)|(?P<digit_count>[0-9]+)\\s+(?P<digit>[0-9])s|(?P<percentage>[0-9]+(?:[.][0-9]+)?)%$"
-).unwrap());
+static NINES_RE: Lazy<Regex> = Lazy::new(|| Regex::new(concat!(
+    "^",
+    "(?:",
+        "(?P<nine_count>[0-9]+)",
+        "|",
+        "(?P<digit_count>[0-9]+)\\s+(?P<digit>[0-9])s",
+        "|",
+        "(?P<percentage>[0-9]+(?:[.][0-9]+)?)%",
+    ")",
+    "$",
+)).unwrap());
 static SECONDS_PER_DAY: Lazy<BigDecimal> = Lazy::new(|| BigDecimal::from(60*60*24));
 static SECONDS_PER_WEEK: Lazy<BigDecimal> = Lazy::new(|| SECONDS_PER_DAY.deref() * BigDecimal::from(7));
 static SECONDS_PER_MONTH: Lazy<BigDecimal> = Lazy::new(|| SECONDS_PER_DAY.deref() * BigDecimal::from(30));
@@ -205,5 +213,27 @@ impl RocketBotPlugin for NinesPlugin {
         } else {
             None
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    #[test]
+    fn test_regex_nine_count() {
+        let caps = super::NINES_RE.captures("12").unwrap();
+        assert_eq!("12", caps.name("nine_count").unwrap().as_str());
+    }
+
+    #[test]
+    fn test_regex_digit_count() {
+        let caps = super::NINES_RE.captures("12 5s").unwrap();
+        assert_eq!("12", caps.name("digit_count").unwrap().as_str());
+        assert_eq!("5", caps.name("digit").unwrap().as_str());
+    }
+
+    #[test]
+    fn test_regex_percentage_count() {
+        let caps = super::NINES_RE.captures("12%").unwrap();
+        assert_eq!("12", caps.name("percentage").unwrap().as_str());
     }
 }
