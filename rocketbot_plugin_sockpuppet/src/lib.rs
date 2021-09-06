@@ -2,7 +2,7 @@ use std::collections::{HashMap, HashSet};
 use std::sync::Weak;
 
 use async_trait::async_trait;
-use rocketbot_interface::JsonValueExtensions;
+use rocketbot_interface::{JsonValueExtensions, send_channel_message_advanced};
 use rocketbot_interface::commands::{
     CommandBehaviors, CommandDefinition, CommandInstance, CommandValueType,
 };
@@ -99,7 +99,7 @@ impl RocketBotPlugin for SockpuppetPlugin {
             impersonation,
             None,
         );
-        interface.send_channel_message_advanced(&channel_name, outgoing_message).await;
+        send_channel_message_advanced!(interface, &channel_name, outgoing_message).await;
     }
 
     async fn get_command_help(&self, command_name: &str) -> Option<String> {

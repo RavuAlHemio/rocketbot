@@ -3,6 +3,7 @@ use std::sync::Weak;
 
 use async_trait::async_trait;
 use log::warn;
+use rocketbot_interface::{send_channel_message, send_private_message};
 use rocketbot_interface::commands::{CommandBehaviors, CommandDefinition, CommandInstance};
 use rocketbot_interface::interfaces::{RocketBotInterface, RocketBotPlugin};
 use rocketbot_interface::model::{ChannelMessage, PrivateMessage};
@@ -66,7 +67,8 @@ impl RocketBotPlugin for VersionPlugin {
             VERSION_STRING
         };
 
-        interface.send_channel_message(
+        send_channel_message!(
+            interface,
             &channel_message.channel.name,
             &format!("rocketbot revision {}", this_version),
         ).await;
@@ -92,7 +94,8 @@ impl RocketBotPlugin for VersionPlugin {
             VERSION_STRING
         };
 
-        interface.send_private_message(
+        send_private_message!(
+            interface,
             &private_message.conversation.id,
             &format!("rocketbot revision {}", this_version),
         ).await;

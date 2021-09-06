@@ -2,7 +2,7 @@ use std::sync::Weak;
 
 use async_trait::async_trait;
 use chrono::{Datelike, Local, TimeZone, Utc};
-use rocketbot_interface::JsonValueExtensions;
+use rocketbot_interface::{JsonValueExtensions, send_channel_message};
 use rocketbot_interface::interfaces::{RocketBotInterface, RocketBotPlugin};
 use serde_json;
 
@@ -69,11 +69,13 @@ impl RocketBotPlugin for NewYearPlugin {
         };
 
         for channel in &self.channels {
-            interface.send_channel_message(
+            send_channel_message!(
+                interface,
                 channel,
                 &format!("</{}>", new_year-1),
             ).await;
-            interface.send_channel_message(
+            send_channel_message!(
+                interface,
                 channel,
                 &format!("<{}>", new_year),
             ).await;

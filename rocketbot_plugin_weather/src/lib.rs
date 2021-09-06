@@ -10,7 +10,7 @@ use log::warn;
 use once_cell::sync::Lazy;
 use regex::Regex;
 use rocketbot_geonames::GeoNamesClient;
-use rocketbot_interface::JsonValueExtensions;
+use rocketbot_interface::{JsonValueExtensions, send_channel_message};
 use rocketbot_interface::commands::{CommandBehaviors, CommandDefinition, CommandInstance};
 use rocketbot_interface::interfaces::{RocketBotInterface, RocketBotPlugin};
 use rocketbot_interface::model::ChannelMessage;
@@ -93,7 +93,8 @@ impl WeatherPlugin {
             let loc = match self.geonames_client.get_first_geo_name(&location).await {
                 Err(e) => {
                     warn!("GeoNames error: {}", e);
-                    interface.send_channel_message(
+                    send_channel_message!(
+                        interface,
                         &channel_message.channel.name,
                         &format!(
                             "@{} GeoNames cannot find that location!",
@@ -135,12 +136,14 @@ impl WeatherPlugin {
         };
 
         if let Some(loc) = location {
-            interface.send_channel_message(
+            send_channel_message!(
+                interface,
                 &channel_message.channel.name,
                 &format!("@{} {}: {}", channel_message.message.sender.username, loc, weather),
             ).await;
         } else {
-            interface.send_channel_message(
+            send_channel_message!(
+                interface,
                 &channel_message.channel.name,
                 &format!("@{} {}", channel_message.message.sender.username, weather),
             ).await;

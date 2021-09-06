@@ -6,7 +6,7 @@ use std::collections::{HashMap, HashSet};
 use std::sync::Weak;
 
 use async_trait::async_trait;
-use rocketbot_interface::JsonValueExtensions;
+use rocketbot_interface::{JsonValueExtensions, send_channel_message};
 use rocketbot_interface::commands::{CommandBehaviors, CommandDefinition, CommandInstance};
 use rocketbot_interface::interfaces::{RocketBotInterface, RocketBotPlugin};
 use rocketbot_interface::model::ChannelMessage;
@@ -42,7 +42,8 @@ impl VitalsPlugin {
         let reader = match self.lower_key_to_reader.get(&target_lower_aliased) {
             Some(r) => r,
             None => {
-                interface.send_channel_message(
+                send_channel_message!(
+                    interface,
                     &channel_message.channel.name,
                     &format!("@{} Unknown vital {:?}.", channel_message.message.sender.username, target_lower),
                 ).await;
@@ -52,7 +53,8 @@ impl VitalsPlugin {
 
         let vital = reader.read().await;
         if let Some(v) = vital {
-            interface.send_channel_message(
+            send_channel_message!(
+                interface,
                 &channel_message.channel.name,
                 &format!("@{} {}", channel_message.message.sender.username, v),
             ).await;
@@ -71,7 +73,8 @@ impl VitalsPlugin {
             .collect();
         let key_string = key_list.join(", ");
 
-        interface.send_channel_message(
+        send_channel_message!(
+            interface,
             &channel_message.channel.name,
             &format!("Available vitals: {}", key_string),
         ).await;

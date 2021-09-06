@@ -10,7 +10,7 @@ use rand::{Rng, SeedableRng};
 use rand::seq::SliceRandom;
 use rand::rngs::StdRng;
 use regex::{Captures, Regex};
-use rocketbot_interface::JsonValueExtensions;
+use rocketbot_interface::{JsonValueExtensions, send_channel_message};
 use rocketbot_interface::commands::{
     CommandBehaviors, CommandDefinition, CommandInstance, CommandValueType,
 };
@@ -195,28 +195,32 @@ impl DicePlugin {
             .and_then(|as_| as_.parse().ok());
 
         if die_count.is_none() {
-            interface.send_channel_message(
+            send_channel_message!(
+                interface,
                 channel_name,
                 &format!("@{} Too many dice.", sender_username),
             ).await;
             return None;
         }
         if side_count.is_none() {
-            interface.send_channel_message(
+            send_channel_message!(
+                interface,
                 channel_name,
                 &format!("@{} Too many sides.", sender_username),
             ).await;
             return None;
         }
         if multiply_value.is_none() {
-            interface.send_channel_message(
+            send_channel_message!(
+                interface,
                 channel_name,
                 &format!("@{} Value to multiply too large.", sender_username),
             ).await;
             return None;
         }
         if add_value.is_none() {
-            interface.send_channel_message(
+            send_channel_message!(
+                interface,
                 channel_name,
                 &format!("@{} Value to add too large.", sender_username),
             ).await;
@@ -244,7 +248,8 @@ impl DicePlugin {
             let roll_match_captures = match ROLL_REGEX.captures(roll) {
                 Some(rmc) => rmc,
                 None => {
-                    interface.send_channel_message(
+                    send_channel_message!(
+                        interface,
                         channel_name,
                         &format!("@{} Failed to parse roll {:?}", sender_username, roll),
                     ).await;
@@ -262,7 +267,8 @@ impl DicePlugin {
         }
 
         if dice_groups.len() > self.config.max_roll_count {
-            interface.send_channel_message(
+            send_channel_message!(
+                interface,
                 channel_name,
                 &format!("@{} Too many rolls.", sender_username),
             ).await;
@@ -277,7 +283,8 @@ impl DicePlugin {
             && dice_groups[0].multiply_value == 1
             && dice_groups[0].add_value == 0
         {
-            interface.send_channel_message(
+            send_channel_message!(
+                interface,
                 channel_name,
                 "_rolls its eyes_",
             ).await;
@@ -314,7 +321,8 @@ impl DicePlugin {
             sender_username,
             all_rolls.join("; "),
         );
-        interface.send_channel_message(
+        send_channel_message!(
+            interface,
             channel_name,
             &all_rolls_string,
         ).await;
@@ -347,7 +355,8 @@ impl DicePlugin {
         if cooling_down {
             cooldown_state.cooldown_triggered = true;
             if let Some(cooldown_answer) = self.config.cooldown_answers.choose(&mut *rng_guard) {
-                interface.send_channel_message(
+                send_channel_message!(
+                    interface,
                     channel_name,
                     &format!("@{} {}", sender_username, cooldown_answer),
                 ).await;
@@ -374,7 +383,8 @@ impl DicePlugin {
         let mut rng_guard = self.rng.lock().await;
         let yes_no_answer = self.config.yes_no_answers.choose(&mut *rng_guard);
         if let Some(yna) = yes_no_answer {
-            interface.send_channel_message(
+            send_channel_message!(
+                interface,
                 channel_name,
                 &format!("@{} {}", sender_username, yna),
             ).await;
@@ -396,7 +406,8 @@ impl DicePlugin {
             .nth(0);
         let splitter = match splitter_opt {
             None => {
-                interface.send_channel_message(
+                send_channel_message!(
+                    interface,
                     channel_name,
                     &format!("@{} Uhh... that looks like only one option to choose from.", sender_username),
                 ).await;
@@ -412,7 +423,8 @@ impl DicePlugin {
                 // special answer instead!
                 let special_answer = self.config.special_decision_answers.choose(&mut *rng_guard);
                 if let Some(sa) = special_answer {
-                    interface.send_channel_message(
+                    send_channel_message!(
+                        interface,
                         channel_name,
                         &format!("@{} {}", sender_username, sa),
                     ).await;
@@ -423,7 +435,8 @@ impl DicePlugin {
 
         let options: Vec<&str> = decision_string.split(splitter).collect();
         if let Some(option) = options.choose(&mut *rng_guard) {
-            interface.send_channel_message(
+            send_channel_message!(
+                interface,
                 channel_name,
                 &format!("@{} {}", sender_username, option),
             ).await;
@@ -445,7 +458,8 @@ impl DicePlugin {
             .nth(0);
         let splitter = match splitter_opt {
             None => {
-                interface.send_channel_message(
+                send_channel_message!(
+                    interface,
                     channel_name,
                     &format!("@{} Uhh... that looks like only one option to shuffle from.", sender_username),
                 ).await;
@@ -458,7 +472,8 @@ impl DicePlugin {
         let mut options: Vec<&str> = decision_string.split(splitter).collect();
         options.shuffle(&mut *rng_guard);
         let new_string = options.join(splitter);
-        interface.send_channel_message(
+        send_channel_message!(
+            interface,
             channel_name,
             &format!("@{} {}", sender_username, new_string),
         ).await;
@@ -488,7 +503,8 @@ impl DicePlugin {
                 && (c < 'A' || c > 'Z')
             );
         if wikipedia_invalid {
-            interface.send_channel_message(
+            send_channel_message!(
+                interface,
                 channel_name,
                 &format!("@{} That does not look like a valid Wikipedia to me.", sender_username),
             ).await;
@@ -498,7 +514,8 @@ impl DicePlugin {
         let mut rng_guard = self.rng.lock().await;
         let current_year = Local::now().year();
         let year = rng_guard.gen_range(1..=current_year);
-        interface.send_channel_message(
+        send_channel_message!(
+            interface,
             channel_name,
             &format!("@{} https://{}.wikipedia.org/wiki/{}", sender_username, wikipedia, year),
         ).await;

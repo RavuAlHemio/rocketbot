@@ -9,6 +9,7 @@ use chrono::{NaiveDate, Utc};
 use log::error;
 use num_bigint::BigUint;
 use num_traits::ToPrimitive;
+use rocketbot_interface::send_channel_message;
 use rocketbot_interface::commands::{CommandBehaviors, CommandDefinition, CommandInstance};
 use rocketbot_interface::interfaces::{RocketBotInterface, RocketBotPlugin};
 use rocketbot_interface::model::ChannelMessage;
@@ -155,7 +156,8 @@ impl RocketBotPlugin for VaccinePlugin {
             let state_id = match db_guard.lower_name_to_state_id.get(&name_lower) {
                 Some(s) => s,
                 None => {
-                    interface.send_channel_message(
+                    send_channel_message!(
+                        interface,
                         &channel_message.channel.name,
                         &format!(
                             "@{} was ist das f\u{FC}r 1 Bundesland?",
@@ -226,7 +228,8 @@ impl RocketBotPlugin for VaccinePlugin {
             "fully immune",
         ));
 
-        interface.send_channel_message(
+        send_channel_message!(
+            interface,
             &channel_message.channel.name,
             &response,
         ).await;

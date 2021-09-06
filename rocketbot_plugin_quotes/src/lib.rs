@@ -11,7 +11,7 @@ use log::error;
 use rand::{Rng, SeedableRng};
 use rand::rngs::StdRng;
 use rand::seq::SliceRandom;
-use rocketbot_interface::JsonValueExtensions;
+use rocketbot_interface::{JsonValueExtensions, send_channel_message};
 use rocketbot_interface::commands::{CommandBehaviors, CommandDefinition, CommandInstance};
 use rocketbot_interface::interfaces::{RocketBotInterface, RocketBotPlugin};
 use rocketbot_interface::model::ChannelMessage;
@@ -269,7 +269,8 @@ GROUP BY q.quote_id, q.timestamp, q.channel, q.author, q.message_type, q.body
         };
 
         let quote_text = quote_and_vote_sum.format_output(requestor_vote);
-        interface.send_channel_message(
+        send_channel_message!(
+            interface,
             channel_name,
             &quote_text,
         ).await;
@@ -302,7 +303,8 @@ GROUP BY q.quote_id, q.timestamp, q.channel, q.author, q.message_type, q.body
                 add_my_rating,
             ).await;
         } else {
-            interface.send_channel_message(
+            send_channel_message!(
+                interface,
                 channel_name,
                 &format!("@{} Sorry, I don't have any matching quotes.", requestor_username),
             ).await;
@@ -351,7 +353,8 @@ RETURNING quote_id
         };
         if let Err(e) = insert_res {
             error!("failed to insert quote: {}", e);
-            interface.send_channel_message(
+            send_channel_message!(
+                interface,
                 &channel_message.channel.name,
                 &format!(
                     "@{} Failed to store the quote, sorry!",
@@ -388,7 +391,8 @@ RETURNING quote_id
             }
 
             if quote_username == sender_username {
-                interface.send_channel_message(
+                send_channel_message!(
+                    interface,
                     channel_name,
                     &format!(
                         "@{} Sorry, someone else has to remember your quotes!",
@@ -400,7 +404,8 @@ RETURNING quote_id
 
             if let Err(e) = self.insert_quote(&pot_quote, &mut quotes_state.last_quote_id_per_channel_name).await {
                 error!("failed to insert new quote: {}", e);
-                interface.send_channel_message(
+                send_channel_message!(
+                    interface,
                     channel_name,
                     &format!(
                         "@{} Failed to store the quote, sorry!",
@@ -410,7 +415,8 @@ RETURNING quote_id
                 return;
             }
 
-            interface.send_channel_message(
+            send_channel_message!(
+                interface,
                 channel_name,
                 &format!("Remembering {}", pot_quote),
             ).await;
@@ -430,7 +436,8 @@ RETURNING quote_id
             return;
         }
 
-        interface.send_channel_message(
+        send_channel_message!(
+            interface,
             channel_name,
             &format!(
                 "@{} Sorry, I don't remember what {} said about {:?}.",
@@ -447,7 +454,8 @@ RETURNING quote_id
 
         let quote_rating = if command.flags.contains("any") {
             if command.flags.contains("bad") {
-                interface.send_channel_message(
+                send_channel_message!(
+                    interface,
                     channel_name,
                     &format!(
                         "@{} Options `--any` and `--bad` cannot be used simultaneously.",
@@ -537,7 +545,8 @@ RETURNING quote_id
             match shuffled_quotes {
                 Some(sq) => {
                     if sq.len() == 0 {
-                        interface.send_channel_message(
+                        send_channel_message!(
+                            interface,
                             channel_name,
                             &format!("@{} Sorry, I don't have any matching quotes.", sender_username),
                         ).await;
@@ -576,7 +585,8 @@ RETURNING quote_id
                         },
                     };
                     if fresh_quotes.len() == 0 {
-                        interface.send_channel_message(
+                        send_channel_message!(
+                            interface,
                             channel_name,
                             &format!("@{} Sorry, I don't have any matching quotes.", sender_username),
                         ).await;
@@ -633,7 +643,8 @@ ON CONFLICT (quote_id, voter_lowercase) DO UPDATE SET points = excluded.points
         let quote_id = match state_guard.last_quote_id_per_channel_name.get(channel_name) {
             Some(qid) => *qid,
             None => {
-                interface.send_channel_message(
+                send_channel_message!(
+                    interface,
                     channel_name,
                     &format!(
                         "@{} You'll have to get a quote first...",
@@ -646,7 +657,8 @@ ON CONFLICT (quote_id, voter_lowercase) DO UPDATE SET points = excluded.points
 
         if let Err(e) = self.upsert_vote(quote_id, voter_username, vote_points).await {
             error!("failed to upsert vote: {}", e);
-            interface.send_channel_message(
+            send_channel_message!(
+                interface,
                 &channel_message.channel.name,
                 &format!(
                     "@{} Failed to upsert your vote, sorry!",

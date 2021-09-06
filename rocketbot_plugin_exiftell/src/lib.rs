@@ -10,7 +10,7 @@ use log::error;
 use num_rational::Rational64;
 use once_cell::unsync::Lazy;
 use rocketbot_geonames::GeoNamesClient;
-use rocketbot_interface::JsonValueExtensions;
+use rocketbot_interface::{JsonValueExtensions, send_channel_message_advanced};
 use rocketbot_interface::interfaces::{RocketBotInterface, RocketBotPlugin};
 use rocketbot_interface::model::{ChannelMessage, OutgoingMessage};
 use serde_json;
@@ -325,7 +325,8 @@ impl RocketBotPlugin for ExifTellPlugin {
                 None,
                 Some(channel_message.message.id.clone()),
             );
-            interface.send_channel_message_advanced(
+            send_channel_message_advanced!(
+                interface,
                 &channel_message.channel.name,
                 response_message,
             ).await;

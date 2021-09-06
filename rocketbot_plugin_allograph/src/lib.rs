@@ -6,7 +6,7 @@ use log::debug;
 use rand::{Rng, SeedableRng};
 use rand::rngs::StdRng;
 use regex::Regex;
-use rocketbot_interface::JsonValueExtensions;
+use rocketbot_interface::{JsonValueExtensions, send_channel_message};
 use rocketbot_interface::interfaces::{RocketBotInterface, RocketBotPlugin};
 use rocketbot_interface::model::ChannelMessage;
 use rocketbot_interface::sync::Mutex;
@@ -204,7 +204,8 @@ impl RocketBotPlugin for AllographPlugin {
         let main_prob = inner_state.rng.gen_range(0..100);
         if main_prob < self.probability_percent {
             debug!("{} < {}; posting {:?}", main_prob, self.probability_percent, changing_body);
-            interface.send_channel_message(
+            send_channel_message!(
+                interface,
                 channel_name,
                 &changing_body,
             ).await;

@@ -2,6 +2,7 @@ use std::collections::{BTreeMap, HashMap, HashSet};
 use std::sync::{Arc, Weak};
 
 use async_trait::async_trait;
+use rocketbot_interface::{send_channel_message, send_private_message};
 use rocketbot_interface::commands::{
     CommandBehaviors, CommandConfiguration, CommandDefinition, CommandInstance,
 };
@@ -20,11 +21,11 @@ fn replace_config_placeholders(original: &str, command_name: &str, command_confi
 
 
 async fn respond_channel_message<'a>(interface: Arc<dyn RocketBotInterface + 'a>, orig_message: &ChannelMessage, response: &str) {
-    interface.send_channel_message(&orig_message.channel.name, &response).await
+    send_channel_message!(interface, &orig_message.channel.name, &response).await
 }
 
 async fn respond_private_message<'a>(interface: Arc<dyn RocketBotInterface + 'a>, orig_message: &PrivateMessage, response: &str) {
-    interface.send_private_message(&orig_message.conversation.id, &response).await
+    send_private_message!(interface, &orig_message.conversation.id, &response).await
 }
 
 fn collect_command_usages(

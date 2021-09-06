@@ -7,7 +7,7 @@ use std::sync::Weak;
 use async_trait::async_trait;
 use rand::{Rng, SeedableRng};
 use rand::rngs::StdRng;
-use rocketbot_interface::JsonValueExtensions;
+use rocketbot_interface::{JsonValueExtensions, send_channel_message};
 use rocketbot_interface::commands::{CommandBehaviors, CommandDefinition, CommandInstance};
 use rocketbot_interface::interfaces::{RocketBotInterface, RocketBotPlugin};
 use rocketbot_interface::model::ChannelMessage;
@@ -105,16 +105,16 @@ impl RocketBotPlugin for FortunePlugin {
                     fortune_groups.sort_unstable();
                     let fortune_group_string = fortune_groups.join(", ");
 
-                    interface
-                        .send_channel_message(
-                            &channel_message.channel.name,
-                            &format!(
-                                "@{} `{}` is an unknown fortune group; we have: {}",
-                                channel_message.message.sender.username,
-                                cat,
-                                fortune_group_string,
-                            ),
-                        ).await;
+                    send_channel_message!(
+                        interface,
+                        &channel_message.channel.name,
+                        &format!(
+                            "@{} `{}` is an unknown fortune group; we have: {}",
+                            channel_message.message.sender.username,
+                            cat,
+                            fortune_group_string,
+                        ),
+                    ).await;
                 },
                 Some(fortunes) => {
                     if fortunes.len() > 0 {
@@ -123,11 +123,11 @@ impl RocketBotPlugin for FortunePlugin {
                         let index = rng_guard.gen_range(0..fortunes.len());
                         let fortune = &fortunes[index];
                         let fortune_as_quote = format!(">{}", fortune.replace("\n", "\n>"));
-                        interface
-                            .send_channel_message(
-                                &channel_message.channel.name,
-                                &fortune_as_quote,
-                            ).await;
+                        send_channel_message!(
+                            interface,
+                            &channel_message.channel.name,
+                            &fortune_as_quote,
+                        ).await;
                     }
                 },
             }
@@ -148,11 +148,11 @@ impl RocketBotPlugin for FortunePlugin {
 
                     let fortune = &fortunes[index];
                     let fortune_as_quote = format!(">{}", fortune.replace("\n", "\n>"));
-                    interface
-                        .send_channel_message(
-                            &channel_message.channel.name,
-                            &fortune_as_quote,
-                        ).await;
+                    send_channel_message!(
+                        interface,
+                        &channel_message.channel.name,
+                        &fortune_as_quote,
+                    ).await;
                     break;
                 }
             }

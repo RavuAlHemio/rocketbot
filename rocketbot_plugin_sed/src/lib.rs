@@ -7,7 +7,7 @@ use std::sync::{Arc, Weak};
 
 use async_trait::async_trait;
 use log::info;
-use rocketbot_interface::JsonValueExtensions;
+use rocketbot_interface::{JsonValueExtensions, send_channel_message};
 use rocketbot_interface::interfaces::{RocketBotInterface, RocketBotPlugin};
 use rocketbot_interface::model::ChannelMessage;
 use rocketbot_interface::sync::Mutex;
@@ -80,7 +80,8 @@ impl SedPlugin {
                     replaced = self.result_too_long_message.clone();
                 }
 
-                interface.send_channel_message(
+                send_channel_message!(
+                    interface,
                     &channel_message.channel.name,
                     &replaced,
                 ).await;

@@ -8,7 +8,7 @@ use std::sync::{Arc, Weak};
 use async_trait::async_trait;
 use rand::{Rng, RngCore, SeedableRng};
 use rand::rngs::StdRng;
-use rocketbot_interface::JsonValueExtensions;
+use rocketbot_interface::{JsonValueExtensions, send_channel_message};
 use rocketbot_interface::commands::{CommandBehaviors, CommandDefinition, CommandInstance};
 use rocketbot_interface::interfaces::{RocketBotInterface, RocketBotPlugin};
 use rocketbot_interface::model::ChannelMessage;
@@ -44,7 +44,8 @@ impl FactPlugin {
             .get_random_fact(Arc::clone(&self.rng)).await
             .unwrap_or_else(|e| e.to_string());
 
-        interface.send_channel_message(
+        send_channel_message!(
+            interface,
             &channel_message.channel.name,
             &result,
         ).await;

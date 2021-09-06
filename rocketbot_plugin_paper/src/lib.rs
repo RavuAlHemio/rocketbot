@@ -10,6 +10,7 @@ use num_bigint::BigInt;
 use num_traits::{FromPrimitive, One, Zero};
 use once_cell::sync::Lazy;
 use regex::Regex;
+use rocketbot_interface::send_channel_message;
 use rocketbot_interface::commands::{CommandBehaviors, CommandDefinition, CommandInstance};
 use rocketbot_interface::interfaces::{RocketBotInterface, RocketBotPlugin};
 use rocketbot_interface::model::ChannelMessage;
@@ -302,7 +303,8 @@ impl RocketBotPlugin for PaperPlugin {
         let (series, index_str) = match PAPER_RE.captures(&command.rest) {
             Some(caps) => (caps.name("series").unwrap().as_str(), caps.name("index").unwrap().as_str()),
             None => {
-                interface.send_channel_message(
+                send_channel_message!(
+                    interface,
                     &channel_message.channel.name,
                     &format!("@{} Failed to parse paper type.", channel_message.message.sender.username),
                 ).await;
@@ -320,7 +322,8 @@ impl RocketBotPlugin for PaperPlugin {
         let index: BigInt = match index_trimmed.parse() {
             Ok(i) => i,
             Err(_e) => {
-                interface.send_channel_message(
+                send_channel_message!(
+                    interface,
                     &channel_message.channel.name,
                     &format!("@{} Failed to parse index.", channel_message.message.sender.username),
                 ).await;
@@ -329,7 +332,8 @@ impl RocketBotPlugin for PaperPlugin {
         };
 
         if index > self.max_index || index < -&self.max_index {
-            interface.send_channel_message(
+            send_channel_message!(
+                interface,
                 &channel_message.channel.name,
                 &format!("@{} Index too large.", channel_message.message.sender.username),
             ).await;
@@ -339,7 +343,8 @@ impl RocketBotPlugin for PaperPlugin {
         let (long_m, short_m) = match paper_size(series, &index) {
             Some(lmsm) => lmsm,
             None => {
-                interface.send_channel_message(
+                send_channel_message!(
+                    interface,
                     &channel_message.channel.name,
                     &format!("@{} Value out of bounds. :(", channel_message.message.sender.username),
                 ).await;
@@ -354,7 +359,8 @@ impl RocketBotPlugin for PaperPlugin {
         let long_sci = maybe_to_scientific(&long_prec);
         let short_sci = maybe_to_scientific(&short_prec);
 
-        interface.send_channel_message(
+        send_channel_message!(
+            interface,
             &channel_message.channel.name,
             &format!(
                 "@{} {}{}: {} {}m \u{D7} {} {}m",

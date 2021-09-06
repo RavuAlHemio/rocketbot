@@ -1,6 +1,7 @@
 use std::sync::Weak;
 
 use async_trait::async_trait;
+use rocketbot_interface::send_channel_message;
 use rocketbot_interface::interfaces::{RocketBotInterface, RocketBotPlugin};
 use rocketbot_interface::model::ChannelMessage;
 use serde_json;
@@ -31,7 +32,7 @@ impl RocketBotPlugin for BelchPlugin {
                 None => return,
                 Some(i) => i,
             };
-            interface.send_channel_message(&channel_message.channel.name, "_belches loudly_")
+            send_channel_message!(interface, &channel_message.channel.name, "_belches loudly_")
                 .await;
         }
     }

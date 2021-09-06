@@ -6,7 +6,7 @@ use log::debug;
 use rand::{Rng, SeedableRng};
 use rand::rngs::StdRng;
 use regex::{Match, Regex};
-use rocketbot_interface::JsonValueExtensions;
+use rocketbot_interface::{JsonValueExtensions, send_channel_message};
 use rocketbot_interface::commands::{CommandBehaviors, CommandDefinition, CommandInstance};
 use rocketbot_interface::interfaces::{RocketBotInterface, RocketBotPlugin};
 use rocketbot_interface::model::ChannelMessage;
@@ -167,7 +167,8 @@ impl RocketBotPlugin for CatchwordPlugin {
             message_index = first_match.unwrap().end();
         }
 
-        interface.send_channel_message(
+        send_channel_message!(
+            interface,
             &channel_message.channel.name,
             &ret,
         ).await;

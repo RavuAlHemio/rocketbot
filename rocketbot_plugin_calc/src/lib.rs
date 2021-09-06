@@ -16,7 +16,7 @@ use std::time::{Duration, Instant};
 use async_trait::async_trait;
 use chrono::{DateTime, TimeZone, Utc};
 use log::error;
-use rocketbot_interface::JsonValueExtensions;
+use rocketbot_interface::{JsonValueExtensions, send_channel_message};
 use rocketbot_interface::commands::{CommandBehaviors, CommandDefinition, CommandInstance};
 use rocketbot_interface::interfaces::{RocketBotInterface, RocketBotPlugin};
 use rocketbot_interface::model::ChannelMessage;
@@ -51,7 +51,8 @@ impl CalcPlugin {
         let top_node = match parse_full_expression(&command.rest) {
             Ok(node) => node,
             Err(e) => {
-                interface.send_channel_message(
+                send_channel_message!(
+                    interface,
                     channel_name,
                     &format!("@{} Failed to parse message:\n```\n{}\n```", sender_username, e),
                 ).await;
@@ -98,7 +99,8 @@ impl CalcPlugin {
                     },
                     other => {
                         error!("simplification produced invalid value: {:?}", other);
-                        interface.send_channel_message(
+                        send_channel_message!(
+                            interface,
                             channel_name,
                             &format!("@{} Simplification produced an invalid value!", sender_username),
                         ).await;
@@ -107,13 +109,15 @@ impl CalcPlugin {
                 };
 
                 if result_string.len() > self.max_result_string_length {
-                    interface.send_channel_message(
+                    send_channel_message!(
+                        interface,
                         channel_name,
                         &format!("@{} NUMBER TOO GROSS", sender_username),
                     ).await;
                 }
 
-                interface.send_channel_message(
+                send_channel_message!(
+                    interface,
                     channel_name,
                     &format!("@{} {}", sender_username, result_string),
                 ).await;
@@ -123,7 +127,8 @@ impl CalcPlugin {
                     let wavey: String = (0..end)
                         .map(|i| if i < start { ' ' } else { '^' })
                         .collect();
-                    interface.send_channel_message(
+                    send_channel_message!(
+                        interface,
                         channel_name,
                         &format!(
                             "@{} Simplification failed: {}\n```\n{}\n{}\n```",
@@ -131,7 +136,8 @@ impl CalcPlugin {
                         ),
                     ).await;
                 } else {
-                    interface.send_channel_message(
+                    send_channel_message!(
+                        interface,
                         channel_name,
                         &format!("@{} Simplification failed: {}", sender_username, e.error),
                     ).await;

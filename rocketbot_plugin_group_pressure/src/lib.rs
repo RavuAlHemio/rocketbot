@@ -2,7 +2,7 @@ use std::collections::{HashMap, HashSet, VecDeque};
 use std::sync::Weak;
 
 use async_trait::async_trait;
-use rocketbot_interface::JsonValueExtensions;
+use rocketbot_interface::{JsonValueExtensions, send_channel_message};
 use rocketbot_interface::interfaces::{RocketBotInterface, RocketBotPlugin};
 use rocketbot_interface::model::ChannelMessage;
 use rocketbot_interface::sync::Mutex;
@@ -74,7 +74,8 @@ impl RocketBotPlugin for GroupPressurePlugin {
                 .retain(|m| m.message.raw != channel_message.message.raw);
 
             // add to the fray!
-            interface.send_channel_message(
+            send_channel_message!(
+                interface,
                 &channel_message.channel.name,
                 raw_message,
             ).await;

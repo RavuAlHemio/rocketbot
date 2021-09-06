@@ -12,7 +12,7 @@ use async_trait::async_trait;
 use log::error;
 use rand::{Rng, SeedableRng};
 use rand::rngs::StdRng;
-use rocketbot_interface::JsonValueExtensions;
+use rocketbot_interface::{JsonValueExtensions, send_channel_message};
 use rocketbot_interface::commands::{CommandBehaviors, CommandDefinition, CommandInstance};
 use rocketbot_interface::interfaces::{RocketBotInterface, RocketBotPlugin};
 use rocketbot_interface::model::ChannelMessage;
@@ -161,7 +161,8 @@ impl RocketBotPlugin for GrammarGenPlugin {
             None => return,
             Some(s) => s,
         };
-        interface.send_channel_message(
+        send_channel_message!(
+            interface,
             &channel_message.channel.name,
             &phrase,
         ).await;

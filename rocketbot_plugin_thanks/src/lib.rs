@@ -5,7 +5,7 @@ use std::sync::Weak;
 use async_trait::async_trait;
 use chrono::Utc;
 use log::{error, info};
-use rocketbot_interface::JsonValueExtensions;
+use rocketbot_interface::{JsonValueExtensions, send_channel_message};
 use rocketbot_interface::commands::{CommandBehaviors, CommandDefinition, CommandInstance};
 use rocketbot_interface::interfaces::{RocketBotInterface, RocketBotPlugin};
 use rocketbot_interface::model::ChannelMessage;
@@ -59,7 +59,8 @@ impl ThanksPlugin {
         let reason = command.rest.clone();
 
         if thanker_lower == thankee_lower {
-            interface.send_channel_message(
+            send_channel_message!(
+                interface,
                 &channel_message.channel.name,
                 &format!(
                     "You are so full of yourself, @{}",
@@ -78,7 +79,8 @@ impl ThanksPlugin {
         ).await;
         if let Err(e) = exec_res {
             error!("error inserting thanks: {}", e);
-            interface.send_channel_message(
+            send_channel_message!(
+                interface,
                 &channel_message.channel.name,
                 &format!(
                     "@{}: something broke, sorry!",
@@ -100,7 +102,8 @@ impl ThanksPlugin {
             Ok(cr) => cr,
             Err(e) => {
                 error!("error querying thanks count: {}", e);
-                interface.send_channel_message(
+                send_channel_message!(
+                    interface,
                     &channel_message.channel.name,
                     &format!(
                         "@{} Alright! {} has been thanked.",
@@ -113,7 +116,8 @@ impl ThanksPlugin {
         };
         let count: i64 = count_row.get(0);
 
-        interface.send_channel_message(
+        send_channel_message!(
+            interface,
             &channel_message.channel.name,
             &format!(
                 "@{} Alright! By the way, {} has been thanked {} until now.",
@@ -206,7 +210,8 @@ impl ThanksPlugin {
             }
         };
 
-        interface.send_channel_message(
+        send_channel_message!(
+            interface,
             &channel_message.channel.name,
             &format!(
                 "@{} {} has {}{}.",
@@ -300,7 +305,8 @@ impl ThanksPlugin {
             }
         };
 
-        interface.send_channel_message(
+        send_channel_message!(
+            interface,
             &channel_message.channel.name,
             &format!(
                 "@{} {} has {}{}.",
@@ -347,7 +353,8 @@ impl ThanksPlugin {
                     entries.push(format!("{}: {}\u{D7}", thankee, count));
                 }
                 let entries_string = entries.join(", ");
-                interface.send_channel_message(
+                send_channel_message!(
+                    interface,
                     &channel_message.channel.name,
                     &format!(
                         "@{} {}",
@@ -394,7 +401,8 @@ impl ThanksPlugin {
                     entries.push(format!("{}: {}\u{D7}", thanker, count));
                 }
                 let entries_string = entries.join(", ");
-                interface.send_channel_message(
+                send_channel_message!(
+                    interface,
                     &channel_message.channel.name,
                     &format!(
                         "@{} {}",

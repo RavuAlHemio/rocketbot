@@ -1,6 +1,7 @@
 pub mod commands;
 pub mod errors;
 pub mod interfaces;
+pub mod macros;
 pub mod message;
 pub mod model;
 pub mod sync;

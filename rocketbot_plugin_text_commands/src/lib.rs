@@ -4,7 +4,7 @@ use std::sync::{Arc, Weak};
 use async_trait::async_trait;
 use rand::{Rng, SeedableRng};
 use rand::rngs::StdRng;
-use rocketbot_interface::JsonValueExtensions;
+use rocketbot_interface::{JsonValueExtensions, send_channel_message};
 use rocketbot_interface::commands::{CommandBehaviors, CommandDefinition, CommandInstance};
 use rocketbot_interface::interfaces::{RocketBotInterface, RocketBotPlugin};
 use rocketbot_interface::model::ChannelMessage;
@@ -115,7 +115,8 @@ impl RocketBotPlugin for TextCommandsPlugin {
                 responses[index].clone()
             };
 
-            interface.send_channel_message(
+            send_channel_message!(
+                interface,
                 &channel_message.channel.name,
                 &variant,
             ).await;
@@ -155,7 +156,8 @@ impl RocketBotPlugin for TextCommandsPlugin {
 
             let message_with_target = variant.replace("{{NICKNAME}}", &target);
 
-            interface.send_channel_message(
+            send_channel_message!(
+                interface,
                 &channel_message.channel.name,
                 &message_with_target,
             ).await;
