@@ -25,6 +25,7 @@ use crate::parsing::parse_grammar;
 pub struct GrammarGenPlugin {
     interface: Weak<dyn RocketBotInterface>,
     grammars: HashMap<String, Rulebook>,
+    grammar_to_allowed_channel_names: HashMap<String, Option<HashSet<String>>>,
     rng: Arc<Mutex<StdRng>>,
 }
 #[async_trait]
@@ -67,6 +68,22 @@ impl RocketBotPlugin for GrammarGenPlugin {
             grammars.insert(grammar_name, rulebook);
         }
 
+        let mut grammar_to_allowed_channel_names = HashMap::new();
+        for (grammar_name, channels) in config["grammar_to_allowed_channel_name"].entries().expect("grammar_to_allowed_channel_name not an object") {
+            if channels.is_null() {
+                grammar_to_allowed_channel_names.insert(grammar_name.clone(), None);
+            } else {
+                let mut channel_names = HashSet::new();
+                for entry in channels.members().expect("grammar_to_allowed_channel_name member value not a list") {
+                    let channel_name = entry
+                        .as_str().expect("grammar_to_allowed_channel_name member value entry not a string")
+                        .to_owned();
+                    channel_names.insert(channel_name);
+                }
+                grammar_to_allowed_channel_names.insert(grammar_name.clone(), Some(channel_names));
+            }
+        }
+
         for grammar_name in grammars.keys() {
             let this_grammar_command = CommandDefinition::new(
                 grammar_name.clone(),
@@ -88,6 +105,7 @@ impl RocketBotPlugin for GrammarGenPlugin {
         GrammarGenPlugin {
             interface,
             grammars,
+            grammar_to_allowed_channel_names,
             rng,
         }
     }
@@ -101,6 +119,24 @@ impl RocketBotPlugin for GrammarGenPlugin {
             None => return,
             Some(i) => i,
         };
+
+        let grammar = match self.grammars.get(&command.name) {
+            None => return,
+            Some(g) => g,
+        };
+
+        // allowed in this channel?
+        if let Some(allowed_channels) = self.grammar_to_allowed_channel_names.get(&command.name) {
+            // the grammar has been mentioned in the config file
+            if let Some(ac) = allowed_channels {
+                // the grammar has been restricted to specific channels
+                if !ac.contains(&channel_message.channel.name) {
+                    // the grammar is not allowed in this channel
+                    return;
+                }
+            }
+        }
+        // assume that grammars not mentioned in the config file are allowed everywhere
 
         let chosen_nick_opt = if command.rest.len() > 0 {
             Some(command.rest.as_str())
@@ -119,11 +155,6 @@ impl RocketBotPlugin for GrammarGenPlugin {
         let channel_nicks: HashSet<String> = channel_users.iter()
             .map(|u| u.nickname_or_username().to_owned())
             .collect();
-
-        let grammar = match self.grammars.get(&command.name) {
-            None => return,
-            Some(g) => g,
-        };
 
         let mut my_grammar = grammar.clone();
         my_grammar.add_builtins(&channel_nicks, chosen_nick_opt);
