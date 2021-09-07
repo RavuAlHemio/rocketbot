@@ -69,18 +69,20 @@ impl RocketBotPlugin for GrammarGenPlugin {
         }
 
         let mut grammar_to_allowed_channel_names = HashMap::new();
-        for (grammar_name, channels) in config["grammar_to_allowed_channel_name"].entries().expect("grammar_to_allowed_channel_name not an object") {
-            if channels.is_null() {
-                grammar_to_allowed_channel_names.insert(grammar_name.clone(), None);
-            } else {
-                let mut channel_names = HashSet::new();
-                for entry in channels.members().expect("grammar_to_allowed_channel_name member value not a list") {
-                    let channel_name = entry
-                        .as_str().expect("grammar_to_allowed_channel_name member value entry not a string")
-                        .to_owned();
-                    channel_names.insert(channel_name);
+        if !config["grammar_to_allowed_channel_names"].is_null() {
+            for (grammar_name, channels) in config["grammar_to_allowed_channel_names"].entries().expect("grammar_to_allowed_channel_names not an object") {
+                if channels.is_null() {
+                    grammar_to_allowed_channel_names.insert(grammar_name.clone(), None);
+                } else {
+                    let mut channel_names = HashSet::new();
+                    for entry in channels.members().expect("grammar_to_allowed_channel_names member value not a list") {
+                        let channel_name = entry
+                            .as_str().expect("grammar_to_allowed_channel_names member value entry not a string")
+                            .to_owned();
+                        channel_names.insert(channel_name);
+                    }
+                    grammar_to_allowed_channel_names.insert(grammar_name.clone(), Some(channel_names));
                 }
-                grammar_to_allowed_channel_names.insert(grammar_name.clone(), Some(channel_names));
             }
         }
 
