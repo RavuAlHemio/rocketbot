@@ -23,9 +23,9 @@ struct NominatimPlace {
 
     pub licence: String,
 
-    pub osm_type: String,
+    pub osm_type: Option<String>,
 
-    pub osm_id: u64,
+    pub osm_id: Option<u64>,
 
     #[serde(rename = "boundingbox")]
     pub bounding_box: Vec<String>,
@@ -45,7 +45,7 @@ struct NominatimPlace {
 
     pub importance: f64,
 
-    pub icon: String,
+    pub icon: Option<String>,
 
     pub address: Option<NominatimAddress>,
 
