@@ -101,12 +101,19 @@ struct NominatimAddress {
 }
 impl NominatimAddress {
     pub fn name_and_country_name(&self) -> Option<String> {
+        let hamlet = self.hamlet.as_ref()
+            .or(self.borough.as_ref());
         let town = self.municipality.as_ref()
             .or(self.city.as_ref())
             .or(self.town.as_ref())
             .or(self.village.as_ref())?;
         let country = self.country.as_ref()?;
-        Some(format!("{}, {}", town, country))
+
+        if let Some(h) = hamlet {
+            Some(format!("{}, {}, {}", h, town, country))
+        } else {
+            Some(format!("{}, {}", town, country))
+        }
     }
 }
 
