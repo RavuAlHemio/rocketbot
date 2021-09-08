@@ -1214,9 +1214,10 @@ dependencies = [
 ]
 
 [[package]]
-name = "rocketbot_geonames"
+name = "rocketbot_geocoding"
 version = "0.1.0"
 dependencies = [
+ "async-trait",
  "bytes",
  "chrono",
  "minidom",
@@ -1337,7 +1338,7 @@ dependencies = [
  "num-rational",
  "num-traits",
  "once_cell",
- "rocketbot_geonames",
+ "rocketbot_geocoding",
  "rocketbot_interface",
  "serde_json",
 ]
@@ -1605,7 +1606,7 @@ dependencies = [
  "once_cell",
  "regex",
  "reqwest",
- "rocketbot_geonames",
+ "rocketbot_geocoding",
  "rocketbot_interface",
  "serde",
  "serde_json",

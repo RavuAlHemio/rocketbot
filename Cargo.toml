@@ -1,7 +1,7 @@
 [workspace]
 members = [
     "rocketbot",
-    "rocketbot_geonames",
+    "rocketbot_geocoding",
     "rocketbot_interface",
     "rocketbot_plugin_allograph",
     "rocketbot_plugin_belch",

@@ -9,7 +9,7 @@ use hyper::StatusCode;
 use log::error;
 use num_rational::Rational64;
 use once_cell::unsync::Lazy;
-use rocketbot_geonames::GeoNamesClient;
+use rocketbot_geocoding::{Geocoder, GeoCoordinates};
 use rocketbot_interface::{JsonValueExtensions, send_channel_message_advanced};
 use rocketbot_interface::interfaces::{RocketBotInterface, RocketBotPlugin};
 use rocketbot_interface::model::{ChannelMessage, OutgoingMessage};
@@ -193,7 +193,7 @@ pub struct ExifTellPlugin {
     max_image_bytes: usize,
     max_messages_per_image: Option<usize>,
     geo_links_format: String,
-    geonames_client: GeoNamesClient,
+    geocoder: Geocoder,
 }
 #[async_trait]
 impl RocketBotPlugin for ExifTellPlugin {
@@ -215,14 +215,14 @@ impl RocketBotPlugin for ExifTellPlugin {
                 .expect("geo_links_format not representable as a string")
                 .to_owned()
         };
-        let geonames_client = GeoNamesClient::new(&config["geonames"]);
+        let geocoder = Geocoder::new(&config["geocoding"]).await;
 
         Self {
             interface,
             max_image_bytes,
             max_messages_per_image,
             geo_links_format,
-            geonames_client,
+            geocoder,
         }
     }
 
@@ -311,10 +311,12 @@ impl RocketBotPlugin for ExifTellPlugin {
                 .replace("{LON}", &final_lon_str);
 
             // try to reverse-geocode
-            let geonames_location = match self.geonames_client.get_first_reverse_geo(final_lat_f64, final_lon_f64).await {
+            let geonames_location = match self.geocoder.reverse_geocode(GeoCoordinates::new(final_lat_f64, final_lon_f64)).await {
                 Ok(loc) => format!("{} ({} {}){}", loc, final_lat_str, final_lon_str, geo_link),
-                Err(e) => {
-                    error!("GeoNames failed to reverse-geocode {} {}: {}", final_lat_f64, final_lon_f64, e);
+                Err(errors) => {
+                    for e in errors {
+                        error!("failed to reverse-geocode {} {}: {}", final_lat_f64, final_lon_f64, e);
+                    }
                     format!("{} {}{}", final_lat_str, final_lon_str, geo_link)
                 },
             };

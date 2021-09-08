@@ -9,7 +9,7 @@ use async_trait::async_trait;
 use log::warn;
 use once_cell::sync::Lazy;
 use regex::Regex;
-use rocketbot_geonames::GeoNamesClient;
+use rocketbot_geocoding::{Geocoder, GeoCoordinates};
 use rocketbot_interface::{JsonValueExtensions, send_channel_message};
 use rocketbot_interface::commands::{CommandBehaviors, CommandDefinition, CommandInstance};
 use rocketbot_interface::interfaces::{RocketBotInterface, RocketBotPlugin};
@@ -38,7 +38,7 @@ pub struct WeatherPlugin {
     location_aliases: HashMap<String, String>,
     interface: Weak<dyn RocketBotInterface>,
     providers: Vec<Box<dyn WeatherProvider>>,
-    geonames_client: GeoNamesClient,
+    geocoder: Geocoder,
 }
 impl WeatherPlugin {
     async fn handle_weather_command(&self, channel_message: &ChannelMessage, command: &CommandInstance) {
@@ -82,22 +82,24 @@ impl WeatherPlugin {
                 .as_str()
                 .parse().expect("parsing longitude failed");
             let loc_name = if show_loc_name {
-                self.geonames_client.get_first_reverse_geo(latitude, longitude).await
+                self.geocoder.reverse_geocode(GeoCoordinates::new(latitude, longitude)).await
                     .ok()
             } else {
                 None
             };
             (latitude, longitude, loc_name)
         } else {
-            // find the location using GeoNames (Wunderground's geocoding is really bad)
-            let loc = match self.geonames_client.get_first_geo_name(&location).await {
-                Err(e) => {
-                    warn!("GeoNames error: {}", e);
+            // find the location using a different geocoder (Wunderground's geocoding is really bad)
+            let loc = match self.geocoder.geocode(&location).await {
+                Err(errors) => {
+                    for e in errors {
+                        warn!("geocoding error: {}", e);
+                    }
                     send_channel_message!(
                         interface,
                         &channel_message.channel.name,
                         &format!(
-                            "@{} GeoNames cannot find that location!",
+                            "@{} Cannot find that location!",
                             channel_message.message.sender.username,
                         ),
                     ).await;
@@ -106,16 +108,7 @@ impl WeatherPlugin {
                 Ok(l) => l,
             };
 
-            let lat = match loc.latitude() {
-                Ok(l) => l,
-                Err(_) => return,
-            };
-            let lon = match loc.longitude() {
-                Ok(l) => l,
-                Err(_) => return,
-            };
-
-            (lat, lon, Some(loc.name_and_country_name()))
+            (loc.coordinates.latitude_deg, loc.coordinates.longitude_deg, Some(loc.place))
         };
 
         for provider in &self.providers {
@@ -205,14 +198,14 @@ impl RocketBotPlugin for WeatherPlugin {
             providers.push(provider);
         }
 
-        let geonames_client = GeoNamesClient::new(&config["geonames"]);
+        let geocoder = Geocoder::new(&config["geocoding"]).await;
 
         WeatherPlugin {
             default_location,
             location_aliases,
             interface,
             providers,
-            geonames_client,
+            geocoder,
         }
     }
 
