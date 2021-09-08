@@ -19,13 +19,13 @@ use crate::country_codes::CountryCodeMapping;
 
 #[derive(Clone, Debug, Deserialize, PartialEq, Serialize)]
 struct NominatimPlace {
-    pub place_id: String,
+    pub place_id: u64,
 
     pub licence: String,
 
     pub osm_type: String,
 
-    pub osm_id: String,
+    pub osm_id: u64,
 
     #[serde(rename = "boundingbox")]
     pub bounding_box: Vec<String>,
