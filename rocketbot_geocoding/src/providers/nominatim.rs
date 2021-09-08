@@ -55,16 +55,58 @@ struct NominatimPlace {
 
 #[derive(Clone, Debug, Deserialize, Eq, Hash, PartialEq, Serialize)]
 struct NominatimAddress {
-    pub city: String,
-    pub state_district: String,
-    pub state: String,
-    pub postcode: String,
-    pub country: String,
-    pub country_code: String,
+    pub postcode: Option<String>,
+
+    pub house_number: Option<String>,
+    pub house_name: Option<String>,
+
+    pub road: Option<String>,
+
+    pub city_block: Option<String>,
+    pub residential: Option<String>,
+    pub farm: Option<String>,
+    pub farmyard: Option<String>,
+    pub industrial: Option<String>,
+    pub commercial: Option<String>,
+    pub retail: Option<String>,
+
+    pub neighbourhood: Option<String>,
+    pub allotments: Option<String>,
+    pub quarter: Option<String>,
+
+    pub hamlet: Option<String>,
+    pub croft: Option<String>,
+    pub isolated_dwelling: Option<String>,
+
+    pub city_district: Option<String>,
+    pub district: Option<String>,
+    pub borough: Option<String>,
+    pub suburb: Option<String>,
+    pub subdivision: Option<String>,
+
+    pub municipality: Option<String>,
+    pub city: Option<String>,
+    pub town: Option<String>,
+    pub village: Option<String>,
+
+    pub region: Option<String>,
+    pub state: Option<String>,
+    pub state_district: Option<String>,
+    pub county: Option<String>,
+
+    pub country: Option<String>,
+    pub country_code: Option<String>,
+
+    pub continent: Option<String>,
 }
 impl NominatimAddress {
-    pub fn name_and_country_name(&self) -> String {
-        format!("{}, {}", self.city, self.country)
+    pub fn name_and_country_name(&self) -> Option<String> {
+        let town = self.municipality.as_ref()
+            .or(self.city.as_ref())
+            .or(self.town.as_ref())
+            .or(self.village.as_ref())?;
+        let country = self.country.as_ref()?;
+        Some(format!("{}, {}", town, country))
     }
 }
 
@@ -171,10 +213,10 @@ impl GeocodingProvider for NominatimGeocodingProvider {
         }
 
         let place: NominatimPlace = self.get_and_populate_json(url).await?;
-        if let Some(addr) = place.address {
+        if let Some(addr) = place.address.and_then(|a| a.name_and_country_name()) {
             Ok(GeoLocation::new(
                 GeoCoordinates::new(place.lat, place.lon),
-                addr.name_and_country_name(),
+                addr,
             ))
         } else {
             Err(GeocodingError::MissingAddressInfo)
@@ -206,10 +248,10 @@ impl GeocodingProvider for NominatimGeocodingProvider {
         }
 
         let place: NominatimPlace = self.get_and_populate_json(url).await?;
-        if let Some(addr) = place.address {
+        if let Some(addr) = place.address.and_then(|a| a.name_and_country_name()) {
             Ok(GeoLocation::new(
                 GeoCoordinates::new(place.lat, place.lon),
-                addr.name_and_country_name(),
+                addr,
             ))
         } else {
             Err(GeocodingError::MissingAddressInfo)
@@ -243,11 +285,8 @@ impl GeocodingProvider for NominatimGeocodingProvider {
         }
 
         let place: NominatimPlace = self.get_and_populate_json(url).await?;
-        if let Some(addr) = &place.address {
-            Ok(format!(
-                "{}, {}",
-                addr.city, addr.country,
-            ))
+        if let Some(addr) = place.address.and_then(|a| a.name_and_country_name()) {
+            Ok(addr)
         } else {
             Err(GeocodingError::NoResult)
         }
