@@ -1220,6 +1220,7 @@ dependencies = [
  "async-trait",
  "bytes",
  "chrono",
+ "log",
  "minidom",
  "once_cell",
  "rand",

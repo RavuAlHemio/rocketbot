@@ -4,6 +4,7 @@ use std::sync::Arc;
 use async_trait::async_trait;
 use bytes::Buf;
 use chrono::{DateTime, Utc};
+use log::debug;
 use reqwest::{self, IntoUrl};
 use rocketbot_interface::sync::Mutex;
 use serde::{Deserialize, Serialize};
@@ -132,16 +133,26 @@ impl GeonamesGeocodingProvider {
             .lock().await;
         let response = client_guard
             .get(uri.clone())
-            .send().await.map_err(|e| GeocodingError::Http(uri.to_string(), e))?;
+            .send().await.map_err(|e| {
+                debug!("Geonames request to {} failed: {}", uri, e);
+                GeocodingError::Http(uri.to_string(), e)
+            })?;
         if response.status() != reqwest::StatusCode::OK {
+            debug!("Geonames request to {} returned status code {}", uri, response.status());
             return Err(GeocodingError::ResponseCode(uri.to_string(), response));
         }
 
         let bytes = response
-            .bytes().await.map_err(|e| GeocodingError::Bytes(uri.to_string(), e))?;
+            .bytes().await.map_err(|e| {
+                debug!("failed to convert Geonames response from {} to bytes: {}", uri, e);
+                GeocodingError::Bytes(uri.to_string(), e)
+            })?;
         let bytes_reader = bytes.reader();
         let deserialized: T = serde_json::from_reader(bytes_reader)
-            .map_err(|e| GeocodingError::JsonParsing(uri.to_string(), e))?;
+            .map_err(|e| {
+                debug!("failed to deserialize Geonames response from {} to JSON: {}", uri, e);
+                GeocodingError::JsonParsing(uri.to_string(), e)
+            })?;
 
         Ok(deserialized)
     }

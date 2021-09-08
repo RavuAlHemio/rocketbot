@@ -11,6 +11,7 @@ confusion = ["rand", "unicode-normalization"]
 async-trait = { version = "0.1" }
 bytes = { version = "1.0" }
 chrono = { version = "0.4" }
+log = { version = "0.4" }
 once_cell = { version = "1.8" }
 rand = { version = "0.8", optional = true }
 regex = { version = "1.5" }
