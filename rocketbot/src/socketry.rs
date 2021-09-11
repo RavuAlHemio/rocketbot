@@ -1109,6 +1109,7 @@ async fn do_send_any_message_with_attachment(shared_state: &SharedConnectionStat
     let request = hyper::Request::builder()
         .method("POST")
         .uri(full_uri.as_str())
+        .header("Content-Type", format!("multipart/form-data; boundary={}", boundary_text))
         .header("X-User-Id", &user_id)
         .header("X-Auth-Token", auth_token)
         .body(hyper::Body::from(body))
