@@ -4,6 +4,7 @@ members = [
     "rocketbot_geocoding",
     "rocketbot_interface",
     "rocketbot_plugin_allograph",
+    "rocketbot_plugin_barcode",
     "rocketbot_plugin_belch",
     "rocketbot_plugin_calc",
     "rocketbot_plugin_catchword",

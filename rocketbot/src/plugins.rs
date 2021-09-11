@@ -24,6 +24,8 @@ pub(crate) async fn load_plugins(iface: Weak<dyn RocketBotInterface>) -> Vec<Box
 
             let plugin: Box<dyn RocketBotPlugin> = if plugin_config.name == "allograph" {
                 Box::new(rocketbot_plugin_allograph::AllographPlugin::new(iface_weak, inner_config).await)
+            } else if plugin_config.name == "barcode" {
+                Box::new(rocketbot_plugin_barcode::BarcodePlugin::new(iface_weak, inner_config).await)
             } else if plugin_config.name == "belch" {
                 Box::new(rocketbot_plugin_belch::BelchPlugin::new(iface_weak, inner_config).await)
             } else if plugin_config.name == "calc" {

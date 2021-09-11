@@ -15,6 +15,7 @@ once_cell = { version = "1.8" }
 rand = { version = "0.8" }
 rocketbot_interface = { path = "../rocketbot_interface" }
 rocketbot_plugin_allograph = { path = "../rocketbot_plugin_allograph" }
+rocketbot_plugin_barcode = { path = "../rocketbot_plugin_barcode" }
 rocketbot_plugin_belch = { path = "../rocketbot_plugin_belch" }
 rocketbot_plugin_calc = { path = "../rocketbot_plugin_calc" }
 rocketbot_plugin_catchword = { path = "../rocketbot_plugin_catchword" }
