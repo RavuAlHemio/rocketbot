@@ -1126,8 +1126,18 @@ async fn do_send_any_message_with_attachment(shared_state: &SharedConnectionStat
         },
     };
 
-    if response.status() != StatusCode::OK {
-        error!("cannot send message with attachment; response code is not OK but {}", response.status());
+    // obtain content
+    let (response_header, mut response_body) = response.into_parts();
+    let response_bytes: Vec<u8> = match hyper::body::to_bytes(&mut response_body).await {
+        Ok(rb) => rb.to_vec(),
+        Err(e) => {
+            error!("cannot send message with attachment; failed to obtain response bytes: {}", e);
+            return;
+        },
+    };
+
+    if response_header.status != StatusCode::OK {
+        error!("cannot send message with attachment; response code is not OK but {} (body is {:?})", response_header.status, response_bytes);
         return;
     }
 }
