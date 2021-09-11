@@ -273,6 +273,45 @@ impl OutgoingMessage {
 }
 
 
+#[derive(Clone, Debug, Eq, Hash, PartialEq)]
+pub struct OutgoingMessageBuilder {
+    message: OutgoingMessage,
+}
+impl OutgoingMessageBuilder {
+    pub fn new(
+        body: String,
+    ) -> Self {
+        let message = OutgoingMessage::new(
+            body,
+            None,
+            None,
+        );
+        Self {
+            message,
+        }
+    }
+
+    pub fn body(mut self, new_body: String) -> Self {
+        self.message.body = new_body;
+        self
+    }
+
+    pub fn impersonation(mut self, new_impersonation: ImpersonationInfo) -> Self {
+        self.message.impersonation = Some(new_impersonation);
+        self
+    }
+
+    pub fn reply_to_message_id(mut self, new_reply_to_message_id: String) -> Self {
+        self.message.reply_to_message_id = Some(new_reply_to_message_id);
+        self
+    }
+
+    pub fn build(&self) -> OutgoingMessage {
+        self.message.clone()
+    }
+}
+
+
 #[derive(Clone, Debug, Eq, Hash, Ord, PartialEq, PartialOrd)]
 pub struct Emoji {
     pub category: String,
