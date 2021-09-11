@@ -9,8 +9,8 @@ use serde_json;
 use crate::commands::{CommandConfiguration, CommandDefinition, CommandInstance};
 use crate::errors::HttpError;
 use crate::model::{
-    Channel, ChannelMessage, ChannelTextType, Emoji, OutgoingMessage, PrivateConversation,
-    PrivateMessage, User,
+    Channel, ChannelMessage, ChannelTextType, Emoji, OutgoingMessage, OutgoingMessageWithAttachment,
+    PrivateConversation, PrivateMessage, User,
 };
 
 
@@ -43,6 +43,15 @@ pub trait RocketBotInterface : Send + Sync {
 
     /// Sends a textual message to a person, allowing for advanced options.
     async fn send_private_message_to_user_advanced(&self, username: &str, message: OutgoingMessage);
+
+    /// Sends a textual message with an attachment to a channel.
+    async fn send_channel_message_with_attachment(&self, channel_name: &str, message: OutgoingMessageWithAttachment);
+
+    /// Sends a textual message with an attachment to a private conversation.
+    async fn send_private_message_with_attachment(&self, conversation_id: &str, message: OutgoingMessageWithAttachment);
+
+    /// Sends a textual message with an attachment to a person.
+    async fn send_private_message_to_user_with_attachment(&self, username: &str, message: OutgoingMessageWithAttachment);
 
     /// Attempts to resolve the username-like value to an actual username on the server. Potentially
     /// enlists the assistance of relevant plugins.
@@ -150,6 +159,10 @@ pub trait RocketBotPlugin: Send + Sync {
     /// prevent the message from being sent.
     async fn outgoing_channel_message(&self, _channel: &Channel, _message: &OutgoingMessage) -> bool { true }
 
+    /// Called if a textual message with an attachment is being sent to a channel. The plugin can
+    /// return `false` to prevent the message from being sent.
+    async fn outgoing_channel_message_with_attachment(&self, _channel: &Channel, _message: &OutgoingMessageWithAttachment) -> bool { true }
+
     /// Called if a command has been issued in a channel.
     async fn channel_command(&self, _channel_message: &ChannelMessage, _command: &CommandInstance) {}
 
@@ -166,6 +179,10 @@ pub trait RocketBotPlugin: Send + Sync {
     /// Called if a textual private message is being sent. The plugin can return `false` to prevent
     /// the message from being sent.
     async fn outgoing_private_message(&self, _conversation: &PrivateConversation, _message: &OutgoingMessage) -> bool { true }
+
+    /// Called if a textual private message with an attachment is being sent. The plugin can return
+    /// `false` to prevent the message from being sent.
+    async fn outgoing_private_message_with_attachment(&self, _conversation: &PrivateConversation, _message: &OutgoingMessageWithAttachment) -> bool { true }
 
     /// Called if a command has been issued in a private message.
     async fn private_command(&self, _private_message: &PrivateMessage, _command: &CommandInstance) {}

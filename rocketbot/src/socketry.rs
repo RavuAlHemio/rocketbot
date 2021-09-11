@@ -2,7 +2,8 @@ use core::panic;
 use std::collections::{HashMap, HashSet};
 use std::collections::hash_map::Entry as HashMapEntry;
 use std::convert::TryInto;
-use std::fmt::Write;
+use std::fmt::Write as FmtWrite;
+use std::io::Write as IoWrite;
 use std::ops::{Deref, DerefMut};
 use std::sync::Arc;
 use std::time::Duration;
@@ -24,7 +25,8 @@ use rocketbot_interface::interfaces::{RocketBotInterface, RocketBotPlugin};
 use rocketbot_interface::message::MessageFragment;
 use rocketbot_interface::model::{
     Channel, ChannelMessage, ChannelTextType, ChannelType, EditInfo, Emoji, Message,
-    MessageAttachment, OutgoingMessage, PrivateConversation, PrivateMessage, User,
+    MessageAttachment, OutgoingMessage, OutgoingMessageWithAttachment, PrivateConversation,
+    PrivateMessage, User,
 };
 use rocketbot_interface::sync::{Mutex, RwLock};
 use serde_json;
@@ -52,6 +54,8 @@ static SUBSCRIBE_ROOMS_MESSAGE_ID: &'static str = "roomchanges4242";
 static SEND_MESSAGE_MESSAGE_ID: &'static str = "sendmessage4242";
 static ID_ALPHABET: &'static str = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789";
 const ID_LENGTH: usize = 17;
+static BOUNDARY_ALPHABET: &'static str = ID_ALPHABET;
+const BOUNDARY_LENGTH: usize = 64;
 
 
 struct ChannelDatabase {
@@ -190,6 +194,7 @@ struct SharedConnectionState {
     my_auth_token: RwLock<Option<String>>,
     max_message_length: RwLock<Option<usize>>,
     username_to_initial_private_message: Mutex<HashMap<String, OutgoingMessage>>,
+    username_to_initial_private_message_with_attachment: Mutex<HashMap<String, OutgoingMessageWithAttachment>>,
     new_timer_sender: mpsc::UnboundedSender<(DateTime<Utc>, serde_json::Value)>,
     channel_id_to_texts: RwLock<HashMap<(String, ChannelTextType), String>>,
     emoji: RwLock<Vec<Emoji>>,
@@ -209,6 +214,7 @@ impl SharedConnectionState {
         my_auth_token: RwLock<Option<String>>,
         max_message_length: RwLock<Option<usize>>,
         username_to_initial_private_message: Mutex<HashMap<String, OutgoingMessage>>,
+        username_to_initial_private_message_with_attachment: Mutex<HashMap<String, OutgoingMessageWithAttachment>>,
         new_timer_sender: mpsc::UnboundedSender<(DateTime<Utc>, serde_json::Value)>,
         channel_id_to_texts: RwLock<HashMap<(String, ChannelTextType), String>>,
         emoji: RwLock<Vec<Emoji>>,
@@ -227,6 +233,7 @@ impl SharedConnectionState {
             my_auth_token,
             max_message_length,
             username_to_initial_private_message,
+            username_to_initial_private_message_with_attachment,
             new_timer_sender,
             channel_id_to_texts,
             emoji,
@@ -342,6 +349,74 @@ impl RocketBotInterface for ServerConnection {
                 let mut initpm_guard = self.shared_state.username_to_initial_private_message
                     .lock().await;
                 initpm_guard.insert(username.to_owned(), message);
+            }
+
+            // create a new PM channel
+            let message_body = serde_json::json!({
+                "msg": "method",
+                "method": "createDirectMessage",
+                "id": format!("create_dm_{}", username),
+                "params": [
+                    username,
+                ],
+            });
+            self.shared_state.outgoing_sender.send(message_body)
+                .expect("failed to enqueue create-DM message");
+        }
+    }
+
+    async fn send_channel_message_with_attachment(&self, channel_name: &str, message: OutgoingMessageWithAttachment) {
+        let channel_opt = {
+            let cdb_guard = self.shared_state.subscribed_channels
+                .read().await;
+            cdb_guard.get_channel_by_name(channel_name).map(|c| c.clone())
+        };
+        let channel = if let Some(c) = channel_opt {
+            c
+        } else {
+            warn!("trying to send message with attachment to unknown channel {:?}", channel_name);
+            return;
+        };
+
+        do_send_channel_message_with_attachment(&self.shared_state, &channel, message).await;
+    }
+
+    async fn send_private_message_with_attachment(&self, conversation_id: &str, message: OutgoingMessageWithAttachment) {
+        let convo_opt = {
+            let cdb_guard = self.shared_state.subscribed_channels
+                .read().await;
+            cdb_guard.get_private_conversation_by_id(conversation_id).map(|c| c.clone())
+        };
+        let convo = if let Some(c) = convo_opt {
+            c
+        } else {
+            warn!("trying to send message with attachment to unknown private conversation {:?}", conversation_id);
+            return;
+        };
+
+        do_send_private_message_with_attachment(&self.shared_state, &convo, message).await;
+    }
+
+    async fn send_private_message_to_user_with_attachment(&self, username: &str, message: OutgoingMessageWithAttachment) {
+        // find the channel with that user
+        let pc_opt = {
+            let channel_guard = self.shared_state.subscribed_channels
+                .read().await;
+            channel_guard
+                .get_private_conversation_id_by_counterpart_username(username)
+                .map(|chid| channel_guard.get_private_conversation_by_id(&chid).map(|c| c.clone()))
+                .flatten()
+        };
+
+        if let Some(pc) = pc_opt {
+            // send directly to the existing private conversation
+            do_send_private_message_with_attachment(&self.shared_state, &pc, message).await;
+        } else {
+            // remember this message for when the room is created
+            {
+                let mut initpma_guard = self.shared_state.username_to_initial_private_message_with_attachment
+                    .lock().await;
+                initpma_guard.insert(username.to_owned(), message);
             }
 
             // create a new PM channel
@@ -633,19 +708,30 @@ impl RocketBotInterface for ServerConnection {
 }
 
 
-async fn generate_message_id<R: Rng>(rng_lock: &Mutex<R>) -> String {
-    let alphabet_chars: Vec<char> = ID_ALPHABET.chars().collect();
+async fn generate_from_alphabet<R: Rng>(rng_lock: &Mutex<R>, alphabet: &str, output_length: usize) -> String {
+    let alphabet_chars: Vec<char> = alphabet.chars().collect();
     let distribution = Uniform::new(0, alphabet_chars.len());
-    let mut message_id = String::with_capacity(ID_LENGTH);
+    let mut message_id = String::with_capacity(output_length);
 
     {
         let mut rng_guard = rng_lock.lock().await;
-        for _ in 0..ID_LENGTH {
+        for _ in 0..output_length {
             message_id.push(alphabet_chars[distribution.sample(rng_guard.deref_mut())]);
         }
     }
 
     message_id
+}
+
+async fn generate_message_id<R: Rng>(rng_lock: &Mutex<R>) -> String {
+    generate_from_alphabet(rng_lock, ID_ALPHABET, ID_LENGTH).await
+}
+
+async fn generate_boundary_text<R: Rng>(rng_lock: &Mutex<R>) -> String {
+    let mut s = generate_from_alphabet(rng_lock, BOUNDARY_ALPHABET, BOUNDARY_LENGTH).await;
+    // convention dictates lots of dashes
+    s.insert_str(0, "------------------------");
+    s
 }
 
 
@@ -691,6 +777,10 @@ pub(crate) async fn connect() -> Arc<ServerConnection> {
         "SharedConnectionState::username_to_initial_private_message",
         HashMap::new(),
     );
+    let username_to_initial_private_message_with_attachment = Mutex::new(
+        "SharedConnectionState::username_to_initial_private_message_with_attachment",
+        HashMap::new(),
+    );
     let (new_timer_sender, new_timer_receiver) = mpsc::unbounded_channel();
     let channel_id_to_texts = RwLock::new(
         "SharedConnectionState::channel_id_to_texts",
@@ -715,6 +805,7 @@ pub(crate) async fn connect() -> Arc<ServerConnection> {
         my_auth_token,
         max_message_length,
         username_to_initial_private_message,
+        username_to_initial_private_message_with_attachment,
         new_timer_sender,
         channel_id_to_texts,
         emoji,
@@ -932,6 +1023,114 @@ async fn do_send_any_message(shared_state: &SharedConnectionState, target_id: &s
         .expect("failed to enqueue channel message");
 }
 
+async fn do_send_any_message_with_attachment(shared_state: &SharedConnectionState, target_id: &str, message: OutgoingMessageWithAttachment) {
+    // make a boundary text
+    let boundary_text = generate_boundary_text(&shared_state.rng).await;
+
+    // assemble the request body
+    let mut body = Vec::new();
+
+    // -> file
+    write!(body, "--{}\r\n", boundary_text).unwrap();
+    write!(body, "Content-Disposition: form-data; name=\"file\"; filename=\"{}\"\r\n", message.attachment.file_name).unwrap();
+    write!(body, "Content-Type: {}\r\n", message.attachment.mime_type).unwrap();
+    write!(body, "\r\n").unwrap();
+    body.extend_from_slice(&message.attachment.data);
+    write!(body, "\r\n").unwrap();
+
+    // -> message body
+    if let Some(b) = &message.body {
+        write!(body, "--{}\r\n", boundary_text).unwrap();
+        write!(body, "Content-Disposition: form-data; name=\"msg\"\r\n").unwrap();
+        write!(body, "\r\n").unwrap();
+        write!(body, "{}\r\n", b).unwrap();
+    }
+
+    // -> attachment description
+    if let Some(d) = &message.attachment.description {
+        write!(body, "--{}\r\n", boundary_text).unwrap();
+        write!(body, "Content-Disposition: form-data; name=\"description\"\r\n").unwrap();
+        write!(body, "\r\n").unwrap();
+        write!(body, "{}\r\n", d).unwrap();
+    }
+
+    // -> thread
+    if let Some(t) = &message.reply_to_message_id {
+        write!(body, "--{}\r\n", boundary_text).unwrap();
+        write!(body, "Content-Disposition: form-data; name=\"tmid\"\r\n").unwrap();
+        write!(body, "\r\n").unwrap();
+        write!(body, "{}\r\n", t).unwrap();
+    }
+
+    // trailing boundary
+    write!(body, "--{}--\r\n", boundary_text).unwrap();
+
+    // collect data for headers
+    let user_id = {
+        let uid_guard = shared_state.my_user_id
+            .read().await;
+        match uid_guard.deref() {
+            Some(uid) => uid.clone(),
+            None => {
+                error!("cannot send message with attachment; user ID is missing!");
+                return;
+            },
+        }
+    };
+    let auth_token = {
+        let token_guard = shared_state.my_auth_token
+            .read().await;
+        match token_guard.deref() {
+            Some(tok) => tok.clone(),
+            None => {
+                error!("cannot send message with attachment; auth token is missing!");
+                return;
+            },
+        }
+    };
+    let web_uri = {
+        let config_lock = CONFIG
+            .get().expect("no initial configuration set")
+            .read().await;
+        Url::parse(&config_lock.server.web_uri)
+            .expect("failed to parse web URI")
+    };
+
+    let mut full_uri = web_uri.clone();
+
+    {
+        let mut path_segments = full_uri.path_segments_mut().unwrap();
+        path_segments.push("api");
+        path_segments.push("v1");
+        path_segments.push("rooms.upload");
+        path_segments.push(target_id);
+    }
+
+    let request = hyper::Request::builder()
+        .method("POST")
+        .uri(full_uri.as_str())
+        .header("X-User-Id", &user_id)
+        .header("X-Auth-Token", auth_token)
+        .body(hyper::Body::from(body))
+        .expect("failed to construct request");
+
+    // send
+    let response_res = shared_state.http_client
+        .request(request).await;
+    let response = match response_res {
+        Ok(r) => r,
+        Err(e) => {
+            error!("cannot send message with attachment; failed to send request: {}", e);
+            return;
+        },
+    };
+
+    if response.status() != StatusCode::OK {
+        error!("cannot send message with attachment; response code is not OK but {}", response.status());
+        return;
+    }
+}
+
 async fn do_send_channel_message(shared_state: &SharedConnectionState, channel: &Channel, message: OutgoingMessage) {
     {
         // let the plugins review and possibly block the message
@@ -962,6 +1161,38 @@ async fn do_send_private_message(shared_state: &SharedConnectionState, convo: &P
     }
 
     do_send_any_message(shared_state, &convo.id, message).await
+}
+
+async fn do_send_channel_message_with_attachment(shared_state: &SharedConnectionState, channel: &Channel, message: OutgoingMessageWithAttachment) {
+    {
+        // let the plugins review and possibly block the message
+        let plugins = shared_state.plugins
+            .read().await;
+        debug!("asking plugins to review a message");
+        for plugin in plugins.iter() {
+            if !plugin.outgoing_channel_message_with_attachment(&channel, &message).await {
+                return;
+            }
+        }
+    }
+
+    do_send_any_message_with_attachment(shared_state, &channel.id, message).await
+}
+
+async fn do_send_private_message_with_attachment(shared_state: &SharedConnectionState, convo: &PrivateConversation, message: OutgoingMessageWithAttachment) {
+    {
+        // let the plugins review and possibly block the message
+        let plugins = shared_state.plugins
+            .read().await;
+        debug!("asking plugins to review a message");
+        for plugin in plugins.iter() {
+            if !plugin.outgoing_private_message_with_attachment(&convo, &message).await {
+                return;
+            }
+        }
+    }
+
+    do_send_any_message_with_attachment(shared_state, &convo.id, message).await
 }
 
 async fn subscribe_to_messages(state: &mut ConnectionState, channel_id: &str) {
@@ -1521,6 +1752,8 @@ async fn handle_received(body: &serde_json::Value, mut state: &mut ConnectionSta
                 .read().await;
             let mut ipm_guard = state.shared_state.username_to_initial_private_message
                 .lock().await;
+            let mut ipma_guard = state.shared_state.username_to_initial_private_message_with_attachment
+                .lock().await;
 
             let mut successful_usernames: HashSet<String> = HashSet::new();
             for (username, initial_message) in ipm_guard.iter() {
@@ -1532,9 +1765,19 @@ async fn handle_received(body: &serde_json::Value, mut state: &mut ConnectionSta
                     successful_usernames.insert(username.to_owned());
                 }
             }
+            for (username, initial_message_with_attachment) in ipma_guard.iter() {
+                let convo_opt = channel_guard.get_private_conversation_id_by_counterpart_username(username)
+                    .map(|cid| channel_guard.get_private_conversation_by_id(&cid))
+                    .flatten();
+                if let Some(convo) = convo_opt {
+                    do_send_private_message_with_attachment(&state.shared_state, convo, initial_message_with_attachment.clone()).await;
+                    successful_usernames.insert(username.to_owned());
+                }
+            }
 
             for succ in &successful_usernames {
                 ipm_guard.remove(succ);
+                ipma_guard.remove(succ);
             }
         }
     }

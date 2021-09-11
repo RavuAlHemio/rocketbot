@@ -253,6 +253,30 @@ impl ImpersonationInfo {
 
 
 #[derive(Clone, Debug, Eq, Hash, PartialEq)]
+pub struct Attachment {
+    pub data: Vec<u8>,
+    pub file_name: String,
+    pub mime_type: String,
+    pub description: Option<String>,
+}
+impl Attachment {
+    pub fn new(
+        data: Vec<u8>,
+        file_name: String,
+        mime_type: String,
+        description: Option<String>,
+    ) -> Self {
+        Self {
+            data,
+            file_name,
+            mime_type,
+            description,
+        }
+    }
+}
+
+
+#[derive(Clone, Debug, Eq, Hash, PartialEq)]
 pub struct OutgoingMessage {
     pub body: String,
     pub impersonation: Option<ImpersonationInfo>,
@@ -307,6 +331,67 @@ impl OutgoingMessageBuilder {
     }
 
     pub fn build(&self) -> OutgoingMessage {
+        self.message.clone()
+    }
+}
+
+
+#[derive(Clone, Debug, Eq, Hash, PartialEq)]
+pub struct OutgoingMessageWithAttachment {
+    // no impersonation; the protocol does not support it
+    pub attachment: Attachment,
+    pub body: Option<String>,
+    pub reply_to_message_id: Option<String>,
+}
+impl OutgoingMessageWithAttachment {
+    pub fn new(
+        attachment: Attachment,
+        body: Option<String>,
+        reply_to_message_id: Option<String>,
+    ) -> Self {
+        Self {
+            attachment,
+            body,
+            reply_to_message_id,
+        }
+    }
+}
+
+
+#[derive(Clone, Debug, Eq, Hash, PartialEq)]
+pub struct OutgoingMessageWithAttachmentBuilder {
+    message: OutgoingMessageWithAttachment,
+}
+impl OutgoingMessageWithAttachmentBuilder {
+    pub fn new(
+        attachment: Attachment,
+    ) -> Self {
+        let message = OutgoingMessageWithAttachment::new(
+            attachment,
+            None,
+            None,
+        );
+        Self {
+            message,
+        }
+    }
+
+    pub fn attachment(mut self, new_attachment: Attachment) -> Self {
+        self.message.attachment = new_attachment;
+        self
+    }
+
+    pub fn body(mut self, new_body: String) -> Self {
+        self.message.body = Some(new_body);
+        self
+    }
+
+    pub fn reply_to_message_id(mut self, new_reply_to_message_id: String) -> Self {
+        self.message.reply_to_message_id = Some(new_reply_to_message_id);
+        self
+    }
+
+    pub fn build(&self) -> OutgoingMessageWithAttachment {
         self.message.clone()
     }
 }
