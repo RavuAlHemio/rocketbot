@@ -66,6 +66,57 @@ impl CommandDefinition {
     }
 }
 
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub struct CommandDefinitionBuilder {
+    definition: CommandDefinition,
+}
+impl CommandDefinitionBuilder {
+    pub fn new(
+        name: String,
+        plugin_name: String,
+        usage: String,
+        description: String,
+    ) -> Self {
+        let definition = CommandDefinition::new(
+            name,
+            plugin_name,
+            Some(HashSet::new()),
+            HashMap::new(),
+            0,
+            CommandBehaviors::empty(),
+            usage,
+            description,
+        );
+        Self {
+            definition,
+        }
+    }
+
+    pub fn flags(mut self, new_flags: Option<HashSet<String>>) -> Self {
+        self.definition.flags = new_flags;
+        self
+    }
+
+    pub fn options(mut self, new_options: HashMap<String, CommandValueType>) -> Self {
+        self.definition.options = new_options;
+        self
+    }
+
+    pub fn arg_count(mut self, new_arg_count: usize) -> Self {
+        self.definition.arg_count = new_arg_count;
+        self
+    }
+
+    pub fn behaviors(mut self, new_behaviors: CommandBehaviors) -> Self {
+        self.definition.behaviors = new_behaviors;
+        self
+    }
+
+    pub fn build(&self) -> CommandDefinition {
+        self.definition.clone()
+    }
+}
+
 
 #[derive(Clone, Debug, PartialEq)]
 pub enum CommandValue {
