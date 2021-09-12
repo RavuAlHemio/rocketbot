@@ -8,5 +8,6 @@ async-trait = { version = "0.1" }
 datamatrix = { version = "0.2" }
 log = { version = "0.4" }
 png = { version = "0.17" }
+qrcode = { version = "0.12", default-features = false }
 rocketbot_interface = { path = "../rocketbot_interface" }
 serde_json = { version = "1.0" }

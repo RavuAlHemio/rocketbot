@@ -1,4 +1,6 @@
+pub mod bitmap;
 pub mod datamatrix;
+pub mod qr;
 
 
 use std::fmt;
@@ -10,24 +12,26 @@ use rocketbot_interface::commands::{CommandDefinitionBuilder, CommandInstance};
 use rocketbot_interface::interfaces::{RocketBotInterface, RocketBotPlugin};
 use rocketbot_interface::model::{Attachment, ChannelMessage, OutgoingMessageWithAttachment};
 
-use crate::datamatrix::datamatrix_string_to_png;
+use crate::bitmap::{BitmapError, BitmapRenderOptions};
+use crate::datamatrix::datamatrix_string_to_bitmap;
+use crate::qr::qr_string_to_bitmap;
 
 
 #[derive(Debug)]
 pub enum BarcodeError {
     DataMatrixEncoding(::datamatrix::data::DataEncodingError),
-    SizeConversion(&'static str, usize, &'static str, std::num::TryFromIntError),
-    PngEncoding(png::EncodingError),
+    QrEncoding(qrcode::types::QrError),
+    Bitmap(BitmapError),
 }
 impl fmt::Display for BarcodeError {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
             Self::DataMatrixEncoding(e)
                 => write!(f, "Data Matrix encoding error: {:?}", e),
-            Self::SizeConversion(dimension, value, target_type, e)
-                => write!(f, "failed to convert {} ({}) to {}: {}", dimension, value, target_type, e),
-            Self::PngEncoding(e)
-                => write!(f, "PNG encoding error: {}", e),
+            Self::QrEncoding(e)
+                => write!(f, "QR encoding error: {:?}", e),
+            Self::Bitmap(e)
+                => write!(f, "{}", e),
         }
     }
 }
@@ -45,10 +49,17 @@ impl BarcodePlugin {
             Some(i) => i,
         };
 
-        let png = match datamatrix_string_to_png(&command.rest) {
-            Ok(p) => p,
+        let bitmap = match datamatrix_string_to_bitmap(&command.rest) {
+            Ok(b) => b,
             Err(e) => {
                 error!("error rendering Data Matrix barcode for {:?}: {}", command.rest, e);
+                return;
+            },
+        };
+        let png = match bitmap.render(&BitmapRenderOptions::new()).to_png() {
+            Ok(p) => p,
+            Err(e) => {
+                error!("error converting Data Matrix bitmap for {:?} to PNG: {}", command.rest, e);
                 return;
             },
         };
