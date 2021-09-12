@@ -58,6 +58,12 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "cdb031dd78e28731d87d56cc8ffef4a8f36ca26c38fe2de700543e627f8a464a"
 
 [[package]]
+name = "base45"
+version = "3.0.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "a68856703e54c0a1d56b80bdf2dc39f368e910fd565178ab953438125418a59a"
+
+[[package]]
 name = "base64"
 version = "0.13.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -300,6 +306,18 @@ name = "flagset"
 version = "0.4.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "1207393e01e20804589a3fc9781c9df2a70687cd81362ca58e33b2a726ec83cf"
+
+[[package]]
+name = "flate2"
+version = "1.0.21"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "80edafed416a46fb378521624fab1cfa2eb514784fd8921adbe8a8d8321da811"
+dependencies = [
+ "cfg-if",
+ "crc32fast",
+ "libc",
+ "miniz_oxide",
+]
 
 [[package]]
 name = "fnv"
@@ -718,6 +736,12 @@ name = "mime"
 version = "0.3.16"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "2a60c7ce501c71e03a9c9c0d35b861413ae925bd979cc7a4e30d060069aaac8d"
+
+[[package]]
+name = "minicbor"
+version = "0.11.1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "f6dced2db4cf71eff54673f123588a8f7ec25339aab89dc6b5d01e66a2225f34"
 
 [[package]]
 name = "minidom"
@@ -1356,12 +1380,18 @@ name = "rocketbot_plugin_barcode"
 version = "0.1.0"
 dependencies = [
  "async-trait",
+ "base45",
+ "chrono",
  "datamatrix",
+ "flate2",
  "log",
+ "minicbor",
  "png",
  "qrcode",
+ "rand",
  "rocketbot_interface",
  "serde_json",
+ "unicode-normalization",
 ]
 
 [[package]]
