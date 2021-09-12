@@ -6,8 +6,8 @@ use ::datamatrix::{DataMatrix, SymbolList};
 use crate::BarcodeError;
 
 
-const DATAGRID_SQUARE_SIDE_PIXELS: usize = 4;
-const DATAGRID_QUIET_ZONE_PIXELS: usize = 16;
+const DATAMATRIX_SQUARE_SIDE_PIXELS: usize = 4;
+const DATAMATRIX_QUIET_ZONE_PIXELS: usize = 16;
 
 
 fn bools_to_bytes(bools: &[bool]) -> Vec<u8> {
@@ -39,8 +39,8 @@ pub fn datamatrix_string_to_png(string: &str) -> Result<Vec<u8>, BarcodeError> {
     let barcode_bitmap = barcode.bitmap();
 
     // calculate PNG dimensions
-    let width = 2 * DATAGRID_QUIET_ZONE_PIXELS + barcode_bitmap.width() * DATAGRID_SQUARE_SIDE_PIXELS;
-    let height = 2 * DATAGRID_QUIET_ZONE_PIXELS + barcode_bitmap.height() * DATAGRID_SQUARE_SIDE_PIXELS;
+    let width = 2 * DATAMATRIX_QUIET_ZONE_PIXELS + barcode_bitmap.width() * DATAMATRIX_SQUARE_SIDE_PIXELS;
+    let height = 2 * DATAMATRIX_QUIET_ZONE_PIXELS + barcode_bitmap.height() * DATAMATRIX_SQUARE_SIDE_PIXELS;
 
     let width_u32: u32 = width.try_into()
         .map_err(|e| BarcodeError::SizeConversion("width", width, "u32", e))?;
@@ -57,7 +57,7 @@ pub fn datamatrix_string_to_png(string: &str) -> Result<Vec<u8>, BarcodeError> {
     }
 
     // start with rows of quiet zone
-    for _ in 0..DATAGRID_QUIET_ZONE_PIXELS {
+    for _ in 0..DATAMATRIX_QUIET_ZONE_PIXELS {
         bitmap.extend_from_slice(&quiet_zone_row);
     }
 
@@ -66,35 +66,35 @@ pub fn datamatrix_string_to_png(string: &str) -> Result<Vec<u8>, BarcodeError> {
         let mut row = Vec::new();
 
         // pixels of quiet zone
-        for _ in 0..DATAGRID_QUIET_ZONE_PIXELS {
+        for _ in 0..DATAMATRIX_QUIET_ZONE_PIXELS {
             row.push(false);
         }
 
         for x in 0..barcode_bitmap.width() {
             if black_squares.contains(&(x, y)) {
-                for _ in 0..DATAGRID_SQUARE_SIDE_PIXELS {
+                for _ in 0..DATAMATRIX_SQUARE_SIDE_PIXELS {
                     row.push(true);
                 }
             } else {
-                for _ in 0..DATAGRID_SQUARE_SIDE_PIXELS {
+                for _ in 0..DATAMATRIX_SQUARE_SIDE_PIXELS {
                     row.push(false);
                 }
             }
         }
 
         // pixels of quiet zone
-        for _ in 0..DATAGRID_QUIET_ZONE_PIXELS {
+        for _ in 0..DATAMATRIX_QUIET_ZONE_PIXELS {
             row.push(false);
         }
 
         // append the row to match the height
-        for _ in 0..DATAGRID_SQUARE_SIDE_PIXELS {
+        for _ in 0..DATAMATRIX_SQUARE_SIDE_PIXELS {
             bitmap.extend_from_slice(&row);
         }
     }
 
     // end with rows of quiet zone
-    for _ in 0..DATAGRID_QUIET_ZONE_PIXELS {
+    for _ in 0..DATAMATRIX_QUIET_ZONE_PIXELS {
         bitmap.extend_from_slice(&quiet_zone_row);
     }
 
