@@ -123,28 +123,28 @@ impl BarcodePlugin {
             .or_else(|| command.options.get("first-name"))
             .map(|v| v.as_str().unwrap().to_owned());
         if first_name_opt.is_none() {
-            missing_options.push(format!("{}f/{}first-name", sop, lop));
+            missing_options.push(format!("`{}f`/`{}first-name`", sop, lop));
         }
 
         let last_name_opt = command.options.get("l")
             .or_else(|| command.options.get("last-name"))
             .map(|v| v.as_str().unwrap().to_owned());
         if last_name_opt.is_none() {
-            missing_options.push(format!("{}l/{}last-name", sop, lop));
+            missing_options.push(format!("`{}l`/`{}last-name`", sop, lop));
         }
 
         let birthdate_str_opt = command.options.get("b")
             .or_else(|| command.options.get("birthdate"))
             .map(|v| v.as_str().unwrap().to_owned());
         if birthdate_str_opt.is_none() {
-            missing_options.push(format!("{}b/{}birthdate", sop, lop));
+            missing_options.push(format!("`{}b`/`{}birthdate`", sop, lop));
         }
 
         let issue_date_str_opt = command.options.get("d")
             .or_else(|| command.options.get("issue-date"))
             .map(|v| v.as_str().unwrap().to_owned());
         if issue_date_str_opt.is_none() {
-            missing_options.push(format!("{}d/{}issue-date", sop, lop));
+            missing_options.push(format!("`{}d`/`{}issue-date`", sop, lop));
         }
 
         if missing_options.len() > 0 {
