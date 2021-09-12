@@ -97,8 +97,25 @@ impl CommandDefinitionBuilder {
         self
     }
 
+    pub fn any_flags(mut self) -> Self {
+        self.definition.flags = None;
+        self
+    }
+
+    pub fn add_flag(mut self, new_flag: &str) -> Self {
+        if let Some(flags) = &mut self.definition.flags {
+            flags.insert(new_flag.to_owned());
+        }
+        self
+    }
+
     pub fn options(mut self, new_options: HashMap<String, CommandValueType>) -> Self {
         self.definition.options = new_options;
+        self
+    }
+
+    pub fn add_option(mut self, new_option: &str, new_type: CommandValueType) -> Self {
+        self.definition.options.insert(new_option.to_owned(), new_type);
         self
     }
 
