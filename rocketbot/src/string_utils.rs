@@ -1,37 +1,107 @@
-#[derive(Clone, Copy, Debug, Hash, PartialEq, Eq)]
-pub(crate) struct SplitChunk<'a> {
-    pub chunk: &'a str,
-    pub orig_index: usize,
+use std::ops::Range;
+
+
+#[derive(Clone, Debug, Hash, PartialEq, Eq)]
+pub(crate) struct Token {
+    pub value: String,
+    pub orig_range: Range<usize>,
 }
-impl<'a> SplitChunk<'a> {
+impl Token {
     fn new(
-        chunk: &'a str,
-        orig_index: usize,
-    ) -> SplitChunk {
-        SplitChunk {
-            chunk,
-            orig_index,
+        value: String,
+        orig_range: Range<usize>,
+    ) -> Self {
+        Self {
+            value,
+            orig_range,
         }
+    }
+
+    #[cfg(test)]
+    fn new_str(
+        value: &str,
+        orig_range: Range<usize>,
+    ) -> Self {
+        Self::new(
+            value.to_owned(),
+            orig_range,
+        )
     }
 }
 
-pub(crate) struct SplitWhitespace<'a> {
+pub(crate) struct Tokenize<'a> {
     input_string: &'a str,
     current_index: usize,
+    quote_char: Option<char>,
+    escape_char: Option<char>,
 }
-impl<'a> SplitWhitespace<'a> {
+impl<'a> Tokenize<'a> {
     fn new(
         input_string: &'a str,
         current_index: usize,
-    ) -> SplitWhitespace {
-        SplitWhitespace {
+        quote_char: Option<char>,
+        escape_char: Option<char>,
+    ) -> Self {
+        Self {
             input_string,
             current_index,
+            quote_char,
+            escape_char,
         }
     }
 }
-impl<'a> std::iter::Iterator for SplitWhitespace<'a> {
-    type Item = SplitChunk<'a>;
+impl<'a> Tokenize<'a> {
+    fn find_next(&self, start_index: usize, want_whitespace: bool) -> Option<usize> {
+        let mut next_index: Option<usize> = None;
+        let mut escape_at = None;
+        let mut quoting = false;
+        for (i, c) in self.input_string[start_index..].char_indices() {
+            if let Some(ea) = escape_at {
+                escape_at = None;
+                if !want_whitespace {
+                    next_index = Some(start_index + ea);
+                    break;
+                }
+            } else if self.escape_char.map(|e| e == c).unwrap_or(false) {
+                escape_at = Some(i);
+            } else if self.quote_char.map(|q| q == c).unwrap_or(false) {
+                quoting = !quoting;
+                if quoting && !want_whitespace {
+                    next_index = Some(start_index + i);
+                    break;
+                }
+            } else if !quoting && c.is_whitespace() == want_whitespace {
+                next_index = Some(start_index + i);
+                break;
+            }
+        }
+        next_index
+    }
+
+    fn unescape_unquote(&self, part: &str) -> String {
+        let mut ret = String::with_capacity(part.len());
+        let mut escaping = false;
+        let mut quoting = false;
+        for c in part.chars() {
+            if escaping {
+                ret.push(c);
+                escaping = false;
+            } else if self.escape_char.map(|e| e == c).unwrap_or(false) {
+                escaping = true;
+            } else if self.quote_char.map(|q| q == c).unwrap_or(false) {
+                quoting = !quoting;
+            } else {
+                ret.push(c);
+            }
+        }
+        if escaping {
+            ret.push(self.escape_char.unwrap());
+        }
+        ret
+    }
+}
+impl<'a> std::iter::Iterator for Tokenize<'a> {
+    type Item = Token;
 
     fn next(&mut self) -> Option<Self::Item> {
         if self.current_index >= self.input_string.len() {
@@ -39,32 +109,21 @@ impl<'a> std::iter::Iterator for SplitWhitespace<'a> {
         }
 
         // find the first index that is whitespace
-        let mut first_whitespace_index_opt: Option<usize> = None;
-        for (i, c) in self.input_string[self.current_index..].char_indices() {
-            if c.is_whitespace() {
-                first_whitespace_index_opt = Some(self.current_index + i);
-                break;
-            }
-        }
+        let first_whitespace_index_opt: Option<usize> = self.find_next(self.current_index, true);
         let first_whitespace_index = first_whitespace_index_opt
             .unwrap_or(self.input_string.len());
 
         // prepare the output slice
-        let out_slice = &self.input_string[self.current_index..first_whitespace_index];
-        let out_chunk = SplitChunk::new(out_slice, self.current_index);
+        let out_range = self.current_index..first_whitespace_index;
+        let out_slice = &self.input_string[out_range.clone()];
+        let unescaped_unquoted = self.unescape_unquote(out_slice);
+        let out_chunk = Token::new(unescaped_unquoted, out_range);
 
         if first_whitespace_index_opt.is_none() {
             self.current_index = first_whitespace_index;
         } else {
             // there is whitespace to skip; do that
-            let mut next_non_whitespace_index_opt: Option<usize> = None;
-            for (i, c) in self.input_string[first_whitespace_index..].char_indices() {
-                if !c.is_whitespace() {
-                    next_non_whitespace_index_opt = Some(first_whitespace_index + i);
-                    break;
-                }
-            }
-
+            let next_non_whitespace_index_opt: Option<usize> = self.find_next(first_whitespace_index, false);
             if let Some(nnwi) = next_non_whitespace_index_opt {
                 self.current_index = nnwi;
             } else {
@@ -77,8 +136,8 @@ impl<'a> std::iter::Iterator for SplitWhitespace<'a> {
     }
 }
 
-pub(crate) fn split_whitespace<'a>(string: &'a str) -> SplitWhitespace<'a> {
-    SplitWhitespace::new(string, 0)
+pub(crate) fn tokenize<'a>(string: &'a str) -> Tokenize<'a> {
+    Tokenize::new(string, 0, Some('"'), Some('\\'))
 }
 
 #[cfg(test)]
@@ -87,65 +146,99 @@ mod tests {
 
     #[test]
     fn test_no_whitespace() {
-        let mut iter = split_whitespace("foo");
-        assert_eq!(Some(SplitChunk::new("foo", 0)), iter.next());
+        let mut iter = tokenize("foo");
+        assert_eq!(Some(Token::new_str("foo", 0..3)), iter.next());
         assert_eq!(None, iter.next());
         assert_eq!(None, iter.next());
     }
 
     #[test]
     fn test_simple_whitespace() {
-        let mut iter = split_whitespace("the quick brown fox");
-        assert_eq!(Some(SplitChunk::new("the", 0)), iter.next());
-        assert_eq!(Some(SplitChunk::new("quick", 4)), iter.next());
-        assert_eq!(Some(SplitChunk::new("brown", 10)), iter.next());
-        assert_eq!(Some(SplitChunk::new("fox", 16)), iter.next());
+        let mut iter = tokenize("the quick brown fox");
+        assert_eq!(Some(Token::new_str("the", 0..3)), iter.next());
+        assert_eq!(Some(Token::new_str("quick", 4..9)), iter.next());
+        assert_eq!(Some(Token::new_str("brown", 10..15)), iter.next());
+        assert_eq!(Some(Token::new_str("fox", 16..19)), iter.next());
         assert_eq!(None, iter.next());
         assert_eq!(None, iter.next());
     }
 
     #[test]
     fn test_mixed_whitespace() {
-        let mut iter = split_whitespace("the\tquick brown  \t  fox");
-        assert_eq!(Some(SplitChunk::new("the", 0)), iter.next());
-        assert_eq!(Some(SplitChunk::new("quick", 4)), iter.next());
-        assert_eq!(Some(SplitChunk::new("brown", 10)), iter.next());
-        assert_eq!(Some(SplitChunk::new("fox", 20)), iter.next());
+        let mut iter = tokenize("the\tquick brown  \t  fox");
+        assert_eq!(Some(Token::new_str("the", 0..3)), iter.next());
+        assert_eq!(Some(Token::new_str("quick", 4..9)), iter.next());
+        assert_eq!(Some(Token::new_str("brown", 10..15)), iter.next());
+        assert_eq!(Some(Token::new_str("fox", 20..23)), iter.next());
         assert_eq!(None, iter.next());
         assert_eq!(None, iter.next());
     }
 
     #[test]
     fn test_leading_whitespace() {
-        let mut iter = split_whitespace("  the\tquick brown \t fox");
-        assert_eq!(Some(SplitChunk::new("", 0)), iter.next());
-        assert_eq!(Some(SplitChunk::new("the", 2)), iter.next());
-        assert_eq!(Some(SplitChunk::new("quick", 6)), iter.next());
-        assert_eq!(Some(SplitChunk::new("brown", 12)), iter.next());
-        assert_eq!(Some(SplitChunk::new("fox", 20)), iter.next());
+        let mut iter = tokenize("  the\tquick brown \t fox");
+        assert_eq!(Some(Token::new_str("", 0..0)), iter.next());
+        assert_eq!(Some(Token::new_str("the", 2..5)), iter.next());
+        assert_eq!(Some(Token::new_str("quick", 6..11)), iter.next());
+        assert_eq!(Some(Token::new_str("brown", 12..17)), iter.next());
+        assert_eq!(Some(Token::new_str("fox", 20..23)), iter.next());
         assert_eq!(None, iter.next());
         assert_eq!(None, iter.next());
     }
 
     #[test]
     fn test_trailing_whitespace() {
-        let mut iter = split_whitespace("the\tquick brown \t fox  ");
-        assert_eq!(Some(SplitChunk::new("the", 0)), iter.next());
-        assert_eq!(Some(SplitChunk::new("quick", 4)), iter.next());
-        assert_eq!(Some(SplitChunk::new("brown", 10)), iter.next());
-        assert_eq!(Some(SplitChunk::new("fox", 18)), iter.next());
+        let mut iter = tokenize("the\tquick brown \t fox  ");
+        assert_eq!(Some(Token::new_str("the", 0..3)), iter.next());
+        assert_eq!(Some(Token::new_str("quick", 4..9)), iter.next());
+        assert_eq!(Some(Token::new_str("brown", 10..15)), iter.next());
+        assert_eq!(Some(Token::new_str("fox", 18..21)), iter.next());
         assert_eq!(None, iter.next());
         assert_eq!(None, iter.next());
     }
 
     #[test]
     fn test_leading_trailing_whitespace() {
-        let mut iter = split_whitespace("  the\tquick brown \t fox  ");
-        assert_eq!(Some(SplitChunk::new("", 0)), iter.next());
-        assert_eq!(Some(SplitChunk::new("the", 2)), iter.next());
-        assert_eq!(Some(SplitChunk::new("quick", 6)), iter.next());
-        assert_eq!(Some(SplitChunk::new("brown", 12)), iter.next());
-        assert_eq!(Some(SplitChunk::new("fox", 20)), iter.next());
+        let mut iter = tokenize("  the\tquick brown \t fox  ");
+        assert_eq!(Some(Token::new_str("", 0..0)), iter.next());
+        assert_eq!(Some(Token::new_str("the", 2..5)), iter.next());
+        assert_eq!(Some(Token::new_str("quick", 6..11)), iter.next());
+        assert_eq!(Some(Token::new_str("brown", 12..17)), iter.next());
+        assert_eq!(Some(Token::new_str("fox", 20..23)), iter.next());
+        assert_eq!(None, iter.next());
+        assert_eq!(None, iter.next());
+    }
+
+    #[test]
+    fn test_quote() {
+        let mut iter = tokenize("  \"the\"\tquick \"brown \t fox\"  ");
+        assert_eq!(Some(Token::new_str("", 0..0)), iter.next());
+        assert_eq!(Some(Token::new_str("the", 2..7)), iter.next());
+        assert_eq!(Some(Token::new_str("quick", 8..13)), iter.next());
+        assert_eq!(Some(Token::new_str("brown \t fox", 14..27)), iter.next());
+        assert_eq!(None, iter.next());
+        assert_eq!(None, iter.next());
+    }
+
+    #[test]
+    fn test_escape() {
+        let mut iter = tokenize("  the \\\"quick\\\" brown fox  ");
+        assert_eq!(Some(Token::new_str("", 0..0)), iter.next());
+        assert_eq!(Some(Token::new_str("the", 2..5)), iter.next());
+        assert_eq!(Some(Token::new_str("\"quick\"", 6..15)), iter.next());
+        assert_eq!(Some(Token::new_str("brown", 16..21)), iter.next());
+        assert_eq!(Some(Token::new_str("fox", 22..25)), iter.next());
+        assert_eq!(None, iter.next());
+        assert_eq!(None, iter.next());
+    }
+
+    #[test]
+    fn test_quote_and_escape() {
+        let mut iter = tokenize("  the \\\"quick\\\" \"brown \t\\\\ \\\"fox\\\" \"  ");
+        assert_eq!(Some(Token::new_str("", 0..0)), iter.next());
+        assert_eq!(Some(Token::new_str("the", 2..5)), iter.next());
+        assert_eq!(Some(Token::new_str("\"quick\"", 6..15)), iter.next());
+        assert_eq!(Some(Token::new_str("brown \t\\ \"fox\" ", 16..36)), iter.next());
         assert_eq!(None, iter.next());
         assert_eq!(None, iter.next());
     }

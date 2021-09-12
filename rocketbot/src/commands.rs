@@ -5,7 +5,7 @@ use rocketbot_interface::commands::{
     CommandConfiguration, CommandDefinition, CommandInstance, CommandValue, CommandValueType,
 };
 
-use crate::string_utils::SplitChunk;
+use crate::string_utils::Token;
 
 
 #[derive(Clone, Copy, Debug, Eq, Hash, PartialEq)]
@@ -18,7 +18,7 @@ enum OptionHandlingResult {
 pub(crate) fn parse_command(
     command: &CommandDefinition,
     command_config: &CommandConfiguration,
-    pieces: &[SplitChunk],
+    pieces: &[Token],
     raw_message: &str,
 ) -> Option<CommandInstance> {
     let mut i = 1;
@@ -26,7 +26,7 @@ pub(crate) fn parse_command(
     let mut option_values = HashMap::new();
     let mut pos_args = Vec::with_capacity(command.arg_count);
     while i < pieces.len() {
-        if pieces[i].chunk == command_config.stop_parse_option {
+        if pieces[i].value == command_config.stop_parse_option {
             // no more options beyond this point, just positional args
             // move forward and stop parsing
             i += 1;
@@ -37,9 +37,9 @@ pub(crate) fn parse_command(
         // (e.g. short option prefix "--", long option prefix "-")
         assert!(!command_config.short_option_prefix.starts_with(&command_config.long_option_prefix));
 
-        if pieces[i].chunk.starts_with(&command_config.long_option_prefix) {
+        if pieces[i].value.starts_with(&command_config.long_option_prefix) {
             // it's a long option/flag!
-            let option_name = &pieces[i].chunk[command_config.long_option_prefix.len()..];
+            let option_name = &pieces[i].value[command_config.long_option_prefix.len()..];
 
             let handling_result = handle_option(
                 &command,
@@ -56,11 +56,11 @@ pub(crate) fn parse_command(
                 // error messages already logged
                 return None;
             }
-        } else if pieces[i].chunk.starts_with(&command_config.short_option_prefix) {
+        } else if pieces[i].value.starts_with(&command_config.short_option_prefix) {
             // it's a bunch of short options!
             let mut value_consumed_by_option: Option<String> = None;
 
-            for c in pieces[i].chunk[command_config.short_option_prefix.len()..].chars() {
+            for c in pieces[i].value[command_config.short_option_prefix.len()..].chars() {
                 let option_name: String = String::from(c);
 
                 let handling_result = handle_option(
@@ -90,7 +90,7 @@ pub(crate) fn parse_command(
             }
         } else if pos_args.len() < command.arg_count {
             // positional argument
-            pos_args.push(pieces[i].chunk.to_owned());
+            pos_args.push(pieces[i].value.to_owned());
         } else {
             // assume it's part of the rest
             break;
@@ -106,13 +106,13 @@ pub(crate) fn parse_command(
             debug!("command line is {:?}", raw_message);
             return None;
         }
-        pos_args.push(pieces[i].chunk.to_owned());
+        pos_args.push(pieces[i].value.to_owned());
         i += 1;
     }
 
     // take the rest
     let rest_string = if i < pieces.len() {
-        raw_message[pieces[i].orig_index..].to_owned()
+        raw_message[pieces[i].orig_range.start..].to_owned()
     } else {
         String::new()
     };
@@ -134,7 +134,7 @@ fn handle_option(
     i: &mut usize,
     set_flags: &mut HashSet<String>,
     option_values: &mut HashMap<String, CommandValue>,
-    pieces: &[SplitChunk],
+    pieces: &[Token],
     command_name: &str,
     raw_message: &str,
 ) -> OptionHandlingResult {
@@ -177,7 +177,7 @@ fn handle_option(
             debug!("command line is {:?}", raw_message);
             return OptionHandlingResult::Failure;
         }
-        let option_value_str = pieces[*i + 1].chunk;
+        let option_value_str = &pieces[*i + 1].value;
 
         let option_value = match option_type {
             CommandValueType::String => CommandValue::String(option_value_str.to_owned()),
@@ -217,11 +217,11 @@ fn handle_option(
 #[cfg(test)]
 mod tests {
     use super::*;
-    use rocketbot_interface::commands::CommandBehaviors;
-    use crate::string_utils::split_whitespace;
+    use rocketbot_interface::commands::{CommandBehaviors, CommandDefinitionBuilder};
+    use crate::string_utils::tokenize;
 
     fn perform_test(command: &CommandDefinition, message: &str) -> Option<CommandInstance> {
-        let pieces: Vec<SplitChunk> = split_whitespace(&message).collect();
+        let pieces: Vec<Token> = tokenize(&message).collect();
         parse_command(
             command,
             &CommandConfiguration::default(),
@@ -301,5 +301,29 @@ mod tests {
         assert_eq!(1, cmd_inst.args.len());
         assert_eq!("one", cmd_inst.args[0]);
         assert_eq!("two    three", cmd_inst.rest);
+    }
+
+    #[test]
+    fn test_quoting() {
+        let command = CommandDefinitionBuilder::new(
+            "bloop".into(),
+            "bloop".to_owned(),
+            "{cpfx}bloop [STUFF]".to_owned(),
+            "Bloops.".to_owned(),
+        )
+            .arg_count(2)
+            .build();
+        let cmd_inst = perform_test(
+            &command,
+            "!bloop  \"one   two  \"  three",
+        ).unwrap();
+
+        assert_eq!("bloop", cmd_inst.name);
+        assert_eq!(0, cmd_inst.flags.len());
+        assert_eq!(0, cmd_inst.options.len());
+        assert_eq!(2, cmd_inst.args.len());
+        assert_eq!("one   two  ", cmd_inst.args[0]);
+        assert_eq!("three", cmd_inst.args[1]);
+        assert_eq!("", cmd_inst.rest);
     }
 }

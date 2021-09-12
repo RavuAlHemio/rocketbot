@@ -43,7 +43,7 @@ use crate::config::CONFIG;
 use crate::errors::WebSocketError;
 use crate::jsonage::parse_message;
 use crate::plugins::load_plugins;
-use crate::string_utils::{SplitChunk, split_whitespace};
+use crate::string_utils::{Token, tokenize};
 
 
 static LOGIN_MESSAGE_ID: &'static str = "login4242";
@@ -1964,12 +1964,12 @@ async fn distribute_channel_message_commands(channel_message: &ChannelMessage, s
         return;
     }
 
-    let pieces: Vec<SplitChunk> = split_whitespace(&raw_message).collect();
-    let command_text = pieces[0];
-    if !command_text.chunk.starts_with(command_prefix) {
+    let pieces: Vec<Token> = tokenize(&raw_message).collect();
+    let command_text = &pieces[0];
+    if !command_text.value.starts_with(command_prefix) {
         return;
     }
-    let command_name = &command_text.chunk[command_prefix.len()..];
+    let command_name = &command_text.value[command_prefix.len()..];
 
     // do we know this command?
     let command = {
@@ -2017,12 +2017,12 @@ async fn distribute_private_message_commands(private_message: &PrivateMessage, s
         return;
     }
 
-    let pieces: Vec<SplitChunk> = split_whitespace(&raw_message).collect();
-    let command_text = pieces[0];
-    if !command_text.chunk.starts_with(command_prefix) {
+    let pieces: Vec<Token> = tokenize(&raw_message).collect();
+    let command_text = &pieces[0];
+    if !command_text.value.starts_with(command_prefix) {
         return;
     }
-    let command_name = &command_text.chunk[command_prefix.len()..];
+    let command_name = &command_text.value[command_prefix.len()..];
 
     // do we know this command?
     let command = {
