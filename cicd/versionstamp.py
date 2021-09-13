@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
 import os.path
 import subprocess
+import sys
 
 
 CODE_FILE = os.path.join("rocketbot_plugin_version", "src", "lib.rs")
@@ -12,9 +13,14 @@ def get_output(args: list[str]) -> str:
     completed_process = subprocess.run(
         args,
         capture_output=True,
-        check=True,
+        check=False,
         text=True,
     )
+    if completed_process.returncode != 0:
+        sys.stdout.write(completed_process.stdout)
+        sys.stderr.write(completed_process.stderr)
+        sys.exit(completed_process.returncode)
+
     return completed_process.stdout
 
 
