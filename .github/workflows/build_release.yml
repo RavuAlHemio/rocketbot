@@ -14,7 +14,7 @@ jobs:
       - name: verify no plugin omissions
         run: 'python3 cicd/plugincheck.py'
       - name: update version
-        run: 'sed -i -e "s/{{VERSION}}/`git rev-parse HEAD`/" rocketbot_plugin_version/src/lib.rs'
+        run: 'python3 cicd/versionstamp.py'
       - name: fetch dependencies
         run: sh ./cicd/cargo_fetch.sh
       - name: run release build

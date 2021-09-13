@@ -12,6 +12,7 @@ use serde_json;
 
 // should be filled in by CI/CD during a build
 const VERSION_STRING: &str = "{{VERSION}}";
+const COMMIT_MESSAGE_SHORT: &str = "{{COMMIT_MESSAGE_SHORT}}";
 
 
 pub struct VersionPlugin {
@@ -62,9 +63,9 @@ impl RocketBotPlugin for VersionPlugin {
 
         let this_version = if VERSION_STRING == unset_version_string {
             warn!("version requested but unknown!");
-            "unknown"
+            "unknown".to_owned()
         } else {
-            VERSION_STRING
+            format!("`{}` _{}_", VERSION_STRING, COMMIT_MESSAGE_SHORT)
         };
 
         send_channel_message!(
@@ -89,9 +90,9 @@ impl RocketBotPlugin for VersionPlugin {
 
         let this_version = if VERSION_STRING == unset_version_string {
             warn!("version requested but unknown!");
-            "unknown"
+            "unknown".to_owned()
         } else {
-            VERSION_STRING
+            format!("`{}` _{}_", VERSION_STRING, COMMIT_MESSAGE_SHORT)
         };
 
         send_private_message!(
