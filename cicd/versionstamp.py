@@ -21,7 +21,7 @@ def get_output(args: list[str]) -> str:
         sys.stderr.write(completed_process.stderr)
         sys.exit(completed_process.returncode)
 
-    return completed_process.stdout
+    return completed_process.stdout.strip()
 
 
 def main():
