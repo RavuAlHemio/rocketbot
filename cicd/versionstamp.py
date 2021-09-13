@@ -25,8 +25,8 @@ def get_output(args: list[str]) -> str:
 
 
 def main():
-    short_hash = get_output(["git", "show", "--tformat=%h", "--no-patch", "HEAD"])
-    commit_subject = get_output(["git", "show", "--tformat=%s", "--no-patch", "HEAD"])
+    short_hash = get_output(["git", "show", "--pretty=tformat:%h", "--no-patch", "HEAD"])
+    commit_subject = get_output(["git", "show", "--pretty=tformat:%s", "--no-patch", "HEAD"])
 
     with open(CODE_FILE, "r", encoding="utf-8") as f:
         code = f.read()
