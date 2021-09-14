@@ -1,0 +1,9 @@
+[package]
+name = "rocketbot_barcode"
+version = "0.1.0"
+edition = "2018"
+
+[dependencies]
+datamatrix = { version = "0.2" }
+png = { version = "0.17" }
+qrcode = { version = "0.12", default-features = false }

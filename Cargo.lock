@@ -1328,6 +1328,15 @@ dependencies = [
 ]
 
 [[package]]
+name = "rocketbot_barcode"
+version = "0.1.0"
+dependencies = [
+ "datamatrix",
+ "png",
+ "qrcode",
+]
+
+[[package]]
 name = "rocketbot_geocoding"
 version = "0.1.0"
 dependencies = [
@@ -1382,13 +1391,11 @@ dependencies = [
  "async-trait",
  "base45",
  "chrono",
- "datamatrix",
  "flate2",
  "log",
  "minicbor",
- "png",
- "qrcode",
  "rand",
+ "rocketbot_barcode",
  "rocketbot_interface",
  "serde_json",
  "unicode-normalization",

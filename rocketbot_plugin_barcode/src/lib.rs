@@ -1,11 +1,7 @@
-pub mod bitmap;
-pub mod datamatrix;
-pub mod qr;
 pub mod vaxcert;
 
 
 use std::convert::TryFrom;
-use std::fmt;
 use std::sync::Weak;
 
 use async_trait::async_trait;
@@ -13,38 +9,16 @@ use chrono::{Duration, NaiveDate, TimeZone, Utc};
 use log::{debug, error};
 use rand::{Rng, SeedableRng};
 use rand::rngs::StdRng;
+use rocketbot_barcode::bitmap::BitmapRenderOptions;
+use rocketbot_barcode::datamatrix::datamatrix_string_to_bitmap;
+use rocketbot_barcode::qr::qr_string_to_bitmap;
 use rocketbot_interface::commands::{
     CommandDefinitionBuilder, CommandInstance, CommandValueType,
 };
 use rocketbot_interface::interfaces::{RocketBotInterface, RocketBotPlugin};
 use rocketbot_interface::model::{Attachment, ChannelMessage, OutgoingMessageWithAttachment};
 
-use crate::bitmap::{BitmapError, BitmapRenderOptions};
-use crate::datamatrix::datamatrix_string_to_bitmap;
-use crate::qr::qr_string_to_bitmap;
 use crate::vaxcert::{encode_vax, normalize_name, VaxInfo};
-
-
-#[derive(Debug)]
-pub enum BarcodeError {
-    DataMatrixEncoding(::datamatrix::data::DataEncodingError),
-    QrEncoding(qrcode::types::QrError),
-    Bitmap(BitmapError),
-}
-impl fmt::Display for BarcodeError {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        match self {
-            Self::DataMatrixEncoding(e)
-                => write!(f, "Data Matrix encoding error: {:?}", e),
-            Self::QrEncoding(e)
-                => write!(f, "QR encoding error: {:?}", e),
-            Self::Bitmap(e)
-                => write!(f, "{}", e),
-        }
-    }
-}
-impl std::error::Error for BarcodeError {
-}
 
 
 static CERT_ID_ALPHABET: &str = "ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789";
