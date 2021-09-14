@@ -1,19 +1,29 @@
 use std::convert::TryInto;
-use std::io::{Cursor, Write};
+use std::io::{BufWriter, Cursor, Write};
 
 use chrono::{Date, DateTime, Utc};
 use flate2::write::ZlibEncoder;
 use minicbor;
 use minicbor::data::Tag;
+use rocketbot_barcode::qr::qr_string_to_bitmap;
+use rocketbot_makepdf;
+use rocketbot_makepdf::model::{
+    PdfColorDescription, PdfDescription, PdfElementDescription, PdfPathDescription,
+    PdfPathCommandDescription,
+};
+use serde::{Deserialize, Serialize};
 use unicode_normalization::UnicodeNormalization;
 use unicode_normalization::char::is_combining_mark;
 
 
+#[derive(Clone, Debug, Eq, Hash, PartialEq)]
 pub(crate) struct VaxInfo {
     pub issued: DateTime<Utc>,
     pub expires: DateTime<Utc>,
     pub issuer: String,
     pub country_code: String,
+    pub country_name_de: String,
+    pub country_name_en: String,
     pub dose_number: usize,
     pub total_doses: usize,
     pub date_of_birth: Date<Utc>,
@@ -22,6 +32,15 @@ pub(crate) struct VaxInfo {
     pub surname_normalized: String,
     pub given_name: String,
     pub given_name_normalized: String,
+}
+
+#[derive(Clone, Debug, Deserialize, PartialEq, Serialize)]
+pub(crate) struct PdfSettings {
+    pub qr_top_left_x: f64,
+    pub qr_top_left_y: f64,
+    pub qr_pixel_width: f64,
+    pub qr_pixel_height: f64,
+    pub base_description: PdfDescription,
 }
 
 /// Normalizes a name according to ICAO 9303 Part 3 Section 6A
@@ -146,4 +165,70 @@ pub(crate) fn encode_vax(vax_info: &VaxInfo) -> String {
     b45.insert_str(0, "HC1:");
 
     b45
+}
+
+pub(crate) fn make_vax_pdf(vax_info: &VaxInfo, pdf_settings: &PdfSettings) -> Vec<u8> {
+    // generate the QR code data
+    let qr_str = encode_vax(&vax_info);
+    let qr_bitmap = qr_string_to_bitmap(&qr_str)
+        .expect("failed to render QR code");
+
+    // clone the settings
+    let mut my_pdf = pdf_settings.base_description.clone();
+    let first_page = &mut my_pdf.pages[0];
+
+    // find and fill placeholders
+    for elem in &mut first_page.elements {
+        if let PdfElementDescription::Text(txt) = elem {
+            let replacement = match txt.text.as_str() {
+                "{{VAXID}}" => vax_info.cert_id.clone(),
+                "{{NAME}}" => format!("{}, {}", vax_info.surname, vax_info.given_name),
+                "{{DOB}}" => vax_info.date_of_birth.format("%Y-%m-%d").to_string(),
+                "{{VAXNO}}" => format!("{}/{}", vax_info.dose_number, vax_info.total_doses),
+                "{{VAXDATE}}" => vax_info.issued.format("%Y-%m-%d").to_string(),
+                "{{DECOUNTRY}}" => vax_info.country_name_de.clone(),
+                "{{ENCOUNTRY}}" => vax_info.country_name_en.clone(),
+                other => other.to_owned(),
+            };
+            txt.text = replacement;
+        }
+    }
+
+    // paint the QR code
+    for y in 0..qr_bitmap.height() {
+        // PDF's origin is the bottom left; compensate
+        let pdf_y = pdf_settings.qr_top_left_y - (y as f64) * pdf_settings.qr_pixel_height;
+        for x in 0..qr_bitmap.width() {
+            let pdf_x = pdf_settings.qr_top_left_x + (x as f64) * pdf_settings.qr_pixel_width;
+
+            if qr_bitmap.bits()[y * qr_bitmap.width() + x] {
+                let path = PdfPathDescription {
+                    stroke: None,
+                    stroke_width: None,
+                    fill: Some(PdfColorDescription::Grayscale { white: 0.0 }),
+                    close: true,
+                    commands_mm: vec![
+                        PdfPathCommandDescription::MoveTo { x: pdf_x, y: pdf_y },
+                        PdfPathCommandDescription::LineTo { x: pdf_x + pdf_settings.qr_pixel_width, y: pdf_y },
+                        PdfPathCommandDescription::LineTo { x: pdf_x + pdf_settings.qr_pixel_width, y: pdf_y - pdf_settings.qr_pixel_height },
+                        PdfPathCommandDescription::LineTo { x: pdf_x, y: pdf_y - pdf_settings.qr_pixel_height },
+                    ],
+                };
+                first_page.elements.push(PdfElementDescription::Path(path));
+            }
+        }
+    }
+
+    // render the PDF
+    let pdf = rocketbot_makepdf::render_description(&my_pdf)
+        .expect("rendering static PDF data failed");
+
+    // store it into bytes
+    let mut pdf_bytes = Vec::new();
+    {
+        let mut buf_writer = BufWriter::new(&mut pdf_bytes);
+        pdf.save(&mut buf_writer)
+            .expect("rendering PDF failed");
+    }
+    pdf_bytes
 }

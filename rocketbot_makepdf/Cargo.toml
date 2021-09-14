@@ -1,0 +1,11 @@
+[package]
+name = "rocketbot_makepdf"
+version = "0.1.0"
+edition = "2018"
+
+[dependencies]
+base64 = { version = "0.13" }
+flate2 = { version = "1.0" }
+printpdf = { version = "0.4" }
+serde = { version = "1.0", features = ["derive"] }
+serde_json = { version = "1.0" }

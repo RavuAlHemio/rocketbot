@@ -2,6 +2,7 @@ pub mod vaxcert;
 
 
 use std::convert::TryFrom;
+use std::fs::File;
 use std::sync::Weak;
 
 use async_trait::async_trait;
@@ -18,7 +19,7 @@ use rocketbot_interface::commands::{
 use rocketbot_interface::interfaces::{RocketBotInterface, RocketBotPlugin};
 use rocketbot_interface::model::{Attachment, ChannelMessage, OutgoingMessageWithAttachment};
 
-use crate::vaxcert::{encode_vax, normalize_name, VaxInfo};
+use crate::vaxcert::{encode_vax, make_vax_pdf, normalize_name, PdfSettings, VaxInfo};
 
 
 static CERT_ID_ALPHABET: &str = "ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789";
@@ -41,6 +42,7 @@ fn generate_cert_id(country: &str) -> String {
 
 pub struct BarcodePlugin {
     interface: Weak<dyn RocketBotInterface>,
+    vax_pdf_settings: Option<PdfSettings>,
 }
 impl BarcodePlugin {
     async fn handle_datamatrix(&self, channel_message: &ChannelMessage, command: &CommandInstance) {
@@ -141,6 +143,16 @@ impl BarcodePlugin {
             .map(|v| v.as_str().unwrap().to_owned())
             .unwrap_or_else(|| "AT".to_owned());
 
+        let country_name_de = command.options.get("C")
+            .or_else(|| command.options.get("country-name-de"))
+            .map(|v| v.as_str().unwrap().to_owned())
+            .unwrap_or_else(|| "\u{D6}sterreich".to_owned());
+
+        let country_name_en = command.options.get("E")
+            .or_else(|| command.options.get("country-name-en"))
+            .map(|v| v.as_str().unwrap().to_owned())
+            .unwrap_or_else(|| "Austria".to_owned());
+
         let issuer = command.options.get("I")
             .or_else(|| command.options.get("issuer"))
             .map(|v| v.as_str().unwrap().to_owned())
@@ -220,6 +232,8 @@ impl BarcodePlugin {
             expires: valid_date,
             issuer,
             country_code: country,
+            country_name_de,
+            country_name_en,
             dose_number,
             total_doses,
             date_of_birth: birthdate,
@@ -229,6 +243,35 @@ impl BarcodePlugin {
             given_name: first_name,
             given_name_normalized: norm_first_name,
         };
+
+        if command.flags.contains("p") || command.flags.contains("pdf") {
+            let pdf_settings = match &self.vax_pdf_settings {
+                Some(ps) => ps,
+                None => {
+                    interface.send_channel_message(
+                        &channel_message.channel.name,
+                        "Cannot render PDF \u{2013} no template configured.",
+                    ).await;
+                    return;
+                },
+            };
+
+            let pdf_data = make_vax_pdf(&vax_info, pdf_settings);
+            interface.send_channel_message_with_attachment(
+                &channel_message.channel.name,
+                OutgoingMessageWithAttachment::new(
+                    Attachment::new(
+                        pdf_data,
+                        "vaxcert.pdf".to_owned(),
+                        "application/pdf".to_owned(),
+                        None,
+                    ),
+                    None,
+                    None,
+                )
+            ).await;
+            return;
+        }
 
         // generate QR data
         let vax_qr_data = encode_vax(&vax_info);
@@ -267,7 +310,7 @@ impl BarcodePlugin {
 }
 #[async_trait]
 impl RocketBotPlugin for BarcodePlugin {
-    async fn new(interface: Weak<dyn RocketBotInterface>, _config: serde_json::Value) -> Self {
+    async fn new(interface: Weak<dyn RocketBotInterface>, config: serde_json::Value) -> Self {
         let my_interface = match interface.upgrade() {
             None => panic!("interface is gone"),
             Some(i) => i,
@@ -289,6 +332,9 @@ impl RocketBotPlugin for BarcodePlugin {
                 "{cpfx}vaxcert OPTIONS".to_owned(),
                 "Generates a vaccination certificate QR code.".to_owned(),
             )
+                // flags
+                .add_flag("p")
+                .add_flag("pdf")
                 // required options
                 .add_option("f", CommandValueType::String)
                 .add_option("first-name", CommandValueType::String)
@@ -301,6 +347,10 @@ impl RocketBotPlugin for BarcodePlugin {
                 // optional options
                 .add_option("c", CommandValueType::String)
                 .add_option("country", CommandValueType::String)
+                .add_option("C", CommandValueType::String)
+                .add_option("country-name-de", CommandValueType::String)
+                .add_option("E", CommandValueType::String)
+                .add_option("country-name-en", CommandValueType::String)
                 .add_option("I", CommandValueType::String)
                 .add_option("issuer", CommandValueType::String)
                 .add_option("n", CommandValueType::Integer)
@@ -318,8 +368,23 @@ impl RocketBotPlugin for BarcodePlugin {
                 .build()
         ).await;
 
+        let vax_pdf_settings = if config["vax_pdf_settings"].is_null() {
+            None
+        } else {
+            // deserialize
+            let vax_pdf_file_name = config["vax_pdf_settings"]
+                .as_str().expect("vax_pdf_settings not a string");
+            let vax_pdf_file = File::open(vax_pdf_file_name)
+                .expect("failed to open vax_pdf_settings file");
+            Some(
+                serde_json::from_reader(vax_pdf_file)
+                    .expect("failed to deserialize vax_pdf_settings")
+            )
+        };
+
         BarcodePlugin {
             interface,
+            vax_pdf_settings,
         }
     }
 

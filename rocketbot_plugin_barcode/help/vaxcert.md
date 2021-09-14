@@ -1,4 +1,4 @@
-*Usage:* `{cpfx}vaxcert OPTIONS`
+*Usage:* `{cpfx}vaxcert [{sopfx}p|{lopfx}pdf] OPTIONS`
 
 Generates an EU vaccination certificate with a fake signature.
 
@@ -11,7 +11,10 @@ Required options are:
 
 Additional options, by default derived from the values of the required options:
 
+* `{sopfx}p`/`{lopfx}pdf`: Generates a PDF with the QR code instead of only the QR code.
 * `{sopfx}c XY`/`{lopfx}country XY`: ISO 3166 alpha-2 code of the issuing country.
+* `{sopfx}C NAME`/`{lopfx}country-name-en NAME`: English-language name of the issuing country. Only used for PDF output.
+* `{sopfx}E NAME`/`{lopfx}country-name-de NAME`: German-language name of the issuing country. Only used for PDF output.
 * `{sopfx}I NAME`/`{lopfx}issuer NAME`: Name of the issuing authority. Default is the generic-sounding `Ministry of Health`.
 * `{sopfx}n NUMBER`/`{lopfx}dose-number NUMBER`: Number of the dose certified by the certificate.
 * `{sopfx}N NUMBER`/`{lopfx}total-doses NUMBER`: Total number of doses in a regular vaccination series of the used vaccine.

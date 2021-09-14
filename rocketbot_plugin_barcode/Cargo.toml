@@ -13,5 +13,7 @@ minicbor = { version = "0.11", features = ["std"] }
 rand = { version = "0.8" }
 rocketbot_barcode = { path = "../rocketbot_barcode" }
 rocketbot_interface = { path = "../rocketbot_interface" }
+rocketbot_makepdf = { path = "../rocketbot_makepdf" }
+serde = { version = "1.0", features = ["derive"] }
 serde_json = { version = "1.0" }
 unicode-normalization = { version = "0.1" }
