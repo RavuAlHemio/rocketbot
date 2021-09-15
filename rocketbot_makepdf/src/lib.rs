@@ -15,9 +15,11 @@ use printpdf::image::jpeg::JpegDecoder;
 use printpdf::image::png::PngDecoder;
 use printpdf::lopdf::Object;
 use printpdf::lopdf::content::Operation;
+use rustybuzz::{Face, UnicodeBuffer};
 
 use crate::model::{
     PdfColorDescription, PdfDescription, PdfElementDescription, PdfPathCommandDescription,
+    TextAlignmentDescription,
 };
 
 
@@ -26,6 +28,7 @@ pub enum PdfDefinitionError {
     NoPages,
     UndefinedFont(String),
     AddingFont(String, printpdf::Error),
+    LoadingFont(String),
     AddingImage(String, printpdf::image::ImageError),
     UnsupportedImageType(String),
     SavingFailed(printpdf::Error),
@@ -39,6 +42,8 @@ impl fmt::Display for PdfDefinitionError {
                 => write!(f, "font {:?} is referenced but not defined", name),
             PdfDefinitionError::AddingFont(name, e)
                 => write!(f, "failed to add font {:?}: {}", name, e),
+            PdfDefinitionError::LoadingFont(name)
+                => write!(f, "failed to load font {:?}", name),
             PdfDefinitionError::AddingImage(image_type, e)
                 => write!(f, "failed to add image of type {:?}: {}", image_type, e),
             PdfDefinitionError::UnsupportedImageType(image_type)
@@ -91,11 +96,16 @@ pub fn render_description(description: &PdfDescription) -> Result<PdfDocumentRef
         "Layer",
     );
 
-    let mut fonts = HashMap::new();
+    let mut pdf_fonts = HashMap::new();
+    let mut buzz_fonts = HashMap::new();
     for (font_name, font_data) in &description.fonts {
         let font_ref = doc.add_external_font(Cursor::new(&font_data.0))
             .map_err(|e| PdfDefinitionError::AddingFont(font_name.clone(), e))?;
-        fonts.insert(font_name.clone(), font_ref);
+        pdf_fonts.insert(font_name.clone(), font_ref);
+
+        let face = Face::from_slice(&font_data.0, 0)
+            .ok_or_else(|| PdfDefinitionError::LoadingFont(font_name.clone()))?;
+        buzz_fonts.insert(font_name.clone(), face);
     }
 
     for (i, page) in description.pages.iter().enumerate() {
@@ -167,14 +177,44 @@ pub fn render_description(description: &PdfDescription) -> Result<PdfDocumentRef
                     );
                 },
                 PdfElementDescription::Text(txt) => {
+                    if txt.text.len() == 0 {
+                        continue;
+                    }
+
                     this_layer.set_fill_color(Color::Greyscale(Greyscale { percent: 0.0, icc_profile: None }));
 
-                    let font_ref = match fonts.get(&txt.font) {
+                    let font_ref = match pdf_fonts.get(&txt.font) {
                         Some(f) => f,
                         None => return Err(PdfDefinitionError::UndefinedFont(txt.font.clone())),
                     };
 
-                    this_layer.use_text(&txt.text, txt.size_pt, Mm(txt.x), Mm(txt.y), font_ref);
+                    let offset_mm = match txt.alignment {
+                        TextAlignmentDescription::Left => 0.0,
+                        TextAlignmentDescription::Center|TextAlignmentDescription::Right => {
+                            // have rustybuzz calculate text length
+                            let buzz_font = buzz_fonts.get(&txt.font)
+                                .expect("font exists in pdf_fonts but not in buzz_fonts");
+                            let units_per_em = buzz_font.units_per_em();
+                            let mut buf = UnicodeBuffer::new();
+                            buf.push_str(&txt.text);
+                            let glyphs = rustybuzz::shape(buzz_font, &[], buf);
+                            let total_advance_units: i32 = glyphs.glyph_positions()
+                                .iter()
+                                .map(|gp| gp.x_advance)
+                                .sum();
+                            let total_advance_em = (total_advance_units as f64) / (units_per_em as f64);
+                            let total_advance_pt = Pt(txt.size_pt * total_advance_em);
+                            let total_advance_mm = Mm::from(total_advance_pt);
+
+                            if let TextAlignmentDescription::Center = txt.alignment {
+                                -total_advance_mm.0 / 2.0
+                            } else {
+                                -total_advance_mm.0
+                            }
+                        },
+                    };
+
+                    this_layer.use_text(&txt.text, txt.size_pt, Mm(txt.x + offset_mm), Mm(txt.y), font_ref);
                 },
             }
         }

@@ -59,6 +59,19 @@ pub enum PdfPathCommandDescription {
     CubicBezierTo { c1x: f64, c1y: f64, c2x: f64, c2y: f64, x: f64, y: f64 },
 }
 
+#[derive(Clone, Copy, Debug, Deserialize, PartialEq, Serialize)]
+#[serde(rename_all = "lowercase")]
+pub enum TextAlignmentDescription {
+    Left,
+    Center,
+    Right,
+}
+impl Default for TextAlignmentDescription {
+    fn default() -> Self {
+        Self::Left
+    }
+}
+
 #[derive(Clone, Debug, Deserialize, PartialEq, Serialize)]
 pub struct PdfTextDescription {
     pub x: f64,
@@ -66,6 +79,8 @@ pub struct PdfTextDescription {
     pub font: String,
     pub size_pt: f64,
     pub text: String,
+    #[serde(default)]
+    pub alignment: TextAlignmentDescription,
 }
 
 #[derive(Clone, Debug, Deserialize, PartialEq, Serialize)]
