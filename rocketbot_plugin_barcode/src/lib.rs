@@ -23,7 +23,7 @@ use crate::vaxcert::{encode_vax, make_vax_pdf, normalize_name, PdfSettings, VaxI
 
 
 static CERT_ID_ALPHABET: &str = "ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789";
-const CERT_ID_LENGTH: usize = 25;
+const CERT_ID_LENGTH: usize = 26;
 
 
 fn generate_cert_id(country: &str) -> String {
@@ -36,7 +36,7 @@ fn generate_cert_id(country: &str) -> String {
         letters.push(alphabet[index]);
     }
 
-    format!("URN:UVCI:01:{}:{}#C", country, letters)
+    format!("URN:UVCI:01:{}:{}#{}", country, &letters[0..CERT_ID_LENGTH-1], &letters[CERT_ID_LENGTH-1..])
 }
 
 
