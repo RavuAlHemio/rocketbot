@@ -1,7 +1,8 @@
 // START SYMBOL
 
 wtf3
-    : "Ich " verb1construct ", " opt_interjection conjunction " " chosen_person " " verb3construct "."
+    : "Ich " verb1construct{""} ", " opt_interjection conjunction " " chosen_person " " verb3construct "."
+    | conjunction_cap " " chosen_person " " verb3construct ", " opt_interjection verb1construct{" ich"} "."
     ;
 
 // PERSONS
@@ -11,31 +12,32 @@ chosen_person : __IRC_chosen_nick;
 
 // VERBS
 
-verb1construct
-    : !!opt_B   <3> verb1construct_builtin
-    | !opt_g    <1> verb1construct_wg
+verb1construct{pronoun_part}
+    : !!opt_B   <3> verb1construct_builtin{pronoun_part}
+    | !opt_g    <1> verb1construct_wg{pronoun_part}
     ;
 
-verb1construct_builtin
-    : <6> verb1_simple
-    | <1> verb1_simple_reqadverb
-    | <6> verb1_simple_movement
-    | <17> verb1_self
-    | <7> verb1_self_movement
-    | <42> verb1_object_simple
-    | <1> verb1_object_movement
-    | <6> verb1_object_split
-    | <5> verb1_object_complex
+verb1construct_builtin{pronoun_part}
+    : <6> verb1_simple{pronoun_part}
+    | <1> verb1_simple_reqadverb{pronoun_part}
+    | <6> verb1_simple_movement{pronoun_part}
+    | <17> verb1_self{pronoun_part}
+    | <7> verb1_self_movement{pronoun_part}
+    | <42> verb1_object_simple{pronoun_part}
+    | <1> verb1_object_movement{pronoun_part}
+    | <6> verb1_object_split{pronoun_part}
+    | <5> verb1_object_complex{pronoun_part}
     ;
 
-verb1construct_wg
+verb1construct_wg{pronoun_part}
     :   wg_verb1
+        pronoun_part
         [ " " noun4 ]
         [ " " adverb ]
         [ " " adverbial ]
     ;
 
-verb1_simple
+verb1_simple{pronoun_part}
     :   ( "rede"
         | "stinke"
         | "spamme"
@@ -43,18 +45,20 @@ verb1_simple
         | "liege"
         | "singe"
         )
+        pronoun_part
         [ " " adverb ]
         [ " " adverbial ]
     ;
 
-verb1_simple_reqadverb
+verb1_simple_reqadverb{pronoun_part}
     :   ( "klinge"
         )
+        pronoun_part
         " " adverb
         [ " " adverbial ]
     ;
 
-verb1_simple_movement
+verb1_simple_movement{pronoun_part}
     :   ( "wichse"
         | "gehe"
         | "laufe"
@@ -63,11 +67,12 @@ verb1_simple_movement
         | "niese"
         | "purzle"
         )
+        pronoun_part
         [ " " adverb ]
         [ " " movement_adverbial ]
     ;
 
-verb1_self
+verb1_self{pronoun_part}
     :   ( "sehe"
         | "beschreibe"
         | "putze"
@@ -86,20 +91,22 @@ verb1_self
         | "befeuchte"
         | "trockne"
         )
+        pronoun_part
         " mich"
         [ " " adverb ]
         [ " " adverbial ]
     ;
 
-verb1_self_movement
+verb1_self_movement{pronoun_part}
     :   ( "entspanne"
         )
+        pronoun_part
         " mich"
         [ " " adverb ]
         [ " " movement_adverbial ]
     ;
 
-verb1_object_simple
+verb1_object_simple{pronoun_part}
     : <40>  ( "beschreibe"
             | "putze"
             | "erschrecke"
@@ -141,6 +148,7 @@ verb1_object_simple
             | "zerknülle"
             | "knete"
             )
+            pronoun_part
             " "
             noun4
             [ " " adverb ]
@@ -148,6 +156,7 @@ verb1_object_simple
     | <2>   ( "rede"
             | "schreibe"
             )
+            pronoun_part
             [ " " adverb ]
             [ " " adverbial ]
             ( " über " noun4
@@ -155,20 +164,22 @@ verb1_object_simple
             )
     ;
 
-verb1_object_movement
+verb1_object_movement{pronoun_part}
     :   ( "schlage"
         )
+        pronoun_part
         " "
         noun4
         [ " " adverb ]
         [ " " movement_adverbial ]
     ;
 
-verb1_object_split
+verb1_object_split{pronoun_part}
     : <3>   ( "schaue"
             | "zünde"
             | "locke"
             )
+            pronoun_part
             " "
             noun4
             [ " " adverb ]
@@ -177,6 +188,7 @@ verb1_object_split
     | <2>   ( "schule"
             | "packe"
             )
+            pronoun_part
             " "
             noun4
             [ " " adverb ]
@@ -184,6 +196,7 @@ verb1_object_split
             " ein"
     | <1>   ( "spiele"
             )
+            pronoun_part
             " "
             noun4
             [ " " adverb ]
@@ -191,17 +204,20 @@ verb1_object_split
             " herunter"
     ;
 
-verb1_object_complex
+verb1_object_complex{pronoun_part}
     :   ( "verwechsle"
         | "betrüge"
         )
+        pronoun_part
         [ " " adverb ]
         [ " " adverbial ]
         " "
         noun4
         " mit "
         noun3
-    |   "äußere mich"
+    |   "äußere"
+        pronoun_part
+        " mich"
         [ " " adverb ]
         [ " " adverbial ]
         (   " zu "
@@ -212,6 +228,7 @@ verb1_object_complex
     |   ( "spiele"
         | "schlafe"
         )
+        pronoun_part
         [ " " adverb ]
         [ " " adverbial ]
         " mit "
@@ -584,6 +601,10 @@ opt_interjection
 
 conjunction
     : "während" | "zudem" | "bis" | "wodurch" | "da" | "solange" | "womit"
+    ;
+
+conjunction_cap
+    : "Während" | "Bis" | "Da" | "Solange"
     ;
 
 
