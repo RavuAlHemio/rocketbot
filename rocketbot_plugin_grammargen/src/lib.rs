@@ -155,7 +155,7 @@ impl RocketBotPlugin for GrammarGenPlugin {
             },
         };
         let channel_nicks: HashSet<String> = channel_users.iter()
-            .map(|u| u.nickname_or_username().to_owned())
+            .map(|u| u.username.clone())
             .collect();
 
         let mut my_grammar = grammar.clone();
