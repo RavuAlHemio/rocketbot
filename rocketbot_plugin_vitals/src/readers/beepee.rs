@@ -62,6 +62,7 @@ struct BodyTemperatureEntry {
     #[serde(rename = "zoned_timestamp", with = "serde_date_string")]
     pub timestamp: DateTime<Local>,
 
+    #[serde(with = "serde_i64_string")]
     pub location_id: i64,
 
     #[serde(with = "serde_rational")]
@@ -340,6 +341,21 @@ mod serde_date_string {
         let string = String::deserialize(deserializer)?;
         DateTime::parse_from_str(&string, DATE_FORMAT)
             .map(|dtfo| dtfo.with_timezone(&Local))
+            .map_err(|e| serde::de::Error::custom(e))
+    }
+}
+
+
+mod serde_i64_string {
+    use serde::{Deserialize, Deserializer, Serializer};
+
+    pub fn serialize<S: Serializer>(value: &i64, serializer: S) -> Result<S::Ok, S::Error> {
+        serializer.serialize_str(value.to_string().as_str())
+    }
+
+    pub fn deserialize<'de, D: Deserializer<'de>>(deserializer: D) -> Result<i64, D::Error> {
+        let string = String::deserialize(deserializer)?;
+        string.parse()
             .map_err(|e| serde::de::Error::custom(e))
     }
 }
