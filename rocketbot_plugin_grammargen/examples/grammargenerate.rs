@@ -15,7 +15,24 @@ use rocketbot_plugin_grammargen::parsing::parse_grammar;
 #[tokio::main]
 async fn main() {
     let args_os: Vec<OsString> = env::args_os().collect();
-    let grammar_path = PathBuf::from(&args_os[1]);
+    let mut verify = true;
+    let mut path_index: usize = 1;
+    loop {
+        if args_os.len() < path_index {
+            eprintln!("Usage: grammargenerate [--no-verify] GRAMMAR");
+            return;
+        }
+
+        if args_os[path_index] == "--no-verify" {
+            verify = false;
+            path_index += 1;
+            continue;
+        }
+
+        // probably an actual file name
+        break;
+    }
+    let grammar_path = PathBuf::from(&args_os[path_index]);
 
     let grammar_name = grammar_path.file_stem()
         .expect("grammar name cannot be derived from file name")
@@ -85,16 +102,19 @@ async fn main() {
         )),
     );
 
-    if let Err(soundness) = state.verify_soundness() {
-        println!("grammar failed soundness check: {}", soundness);
-    } else {
-        for _ in 0..100 {
-            let generated = state.generate();
-            if let Some(s) = generated {
-                println!("> {}", s);
-            } else {
-                println!("!");
-            }
+    if verify {
+        if let Err(soundness) = state.verify_soundness() {
+            println!("grammar failed soundness check: {}", soundness);
+            return;
+        }
+    }
+
+    for _ in 0..100 {
+        let generated = state.generate();
+        if let Some(s) = generated {
+            println!("> {}", s);
+        } else {
+            println!("!");
         }
     }
 }

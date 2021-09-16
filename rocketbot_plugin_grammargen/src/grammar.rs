@@ -291,15 +291,26 @@ impl TextGenerator for Production {
                         }
                     }
 
+                    // generate each argument in turn
+                    let mut arg_vals = Vec::with_capacity(args.len());
+                    for arg in args {
+                        let mut sub_state = state.clone();
+                        let generated = match arg.generate(&mut sub_state) {
+                            None => return None,
+                            Some(g) => g,
+                        };
+                        arg_vals.push(generated);
+                    }
+
                     // link up arguments with their values
                     let mut sub_state = state.clone();
-                    for (param_name, arg) in rule.param_names.iter().zip(args.iter()) {
+                    for (param_name, arg_val) in rule.param_names.iter().zip(arg_vals.iter()) {
                         sub_state.rulebook.rule_definitions.insert(
                             param_name.clone(),
                             RuleDefinition::new(
                                 param_name.clone(),
                                 Vec::new(),
-                                arg.clone(),
+                                Production::String { string: arg_val.clone() },
                                 false,
                             ),
                         );
@@ -368,14 +379,21 @@ impl TextGenerator for Production {
                         ));
                     }
 
+                    // validate each argument
+                    for arg in args {
+                        let mut sub_state = state.clone();
+                        arg.verify_soundness(&mut sub_state)?;
+                    }
+
+                    // validate this call, substituting empty strings for each argument
                     let mut sub_state = state.clone();
-                    for (param_name, arg) in rule.param_names.iter().zip(args.iter()) {
+                    for param_name in &rule.param_names {
                         sub_state.rulebook.rule_definitions.insert(
                             param_name.clone(),
                             RuleDefinition::new(
                                 param_name.clone(),
                                 Vec::new(),
-                                arg.clone(),
+                                Production::String { string: String::new() },
                                 false,
                             ),
                         );
