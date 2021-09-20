@@ -26,6 +26,7 @@ pub struct GrammarGenPlugin {
     interface: Weak<dyn RocketBotInterface>,
     grammars: HashMap<String, Rulebook>,
     grammar_to_allowed_channel_names: HashMap<String, Option<HashSet<String>>>,
+    word_joiner_in_nicknames: bool,
     rng: Arc<Mutex<StdRng>>,
 }
 #[async_trait]
@@ -86,6 +87,13 @@ impl RocketBotPlugin for GrammarGenPlugin {
             }
         }
 
+        let word_joiner_in_nicknames = if config["word_joiner_in_nicknames"].is_null() {
+            false
+        } else {
+            config["word_joiner_in_nicknames"].as_bool()
+                .expect("word_joiner_in_nicknames not a bool")
+        };
+
         for grammar_name in grammars.keys() {
             let this_grammar_command = CommandDefinition::new(
                 grammar_name.clone(),
@@ -108,6 +116,7 @@ impl RocketBotPlugin for GrammarGenPlugin {
             interface,
             grammars,
             grammar_to_allowed_channel_names,
+            word_joiner_in_nicknames,
             rng,
         }
     }
@@ -155,7 +164,15 @@ impl RocketBotPlugin for GrammarGenPlugin {
             },
         };
         let channel_nicks: HashSet<String> = channel_users.iter()
-            .map(|u| u.username.clone())
+            .map(|u|
+                if self.word_joiner_in_nicknames && u.username.len() > 1 {
+                    let mut nick_chars: Vec<char> = u.username.chars().collect();
+                    nick_chars.insert(1, '\u{2060}');
+                    nick_chars.iter().collect()
+                } else {
+                    u.username.clone()
+                }
+            )
             .collect();
 
         let mut my_grammar = grammar.clone();
