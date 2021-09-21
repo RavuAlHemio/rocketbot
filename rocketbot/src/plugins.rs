@@ -1,5 +1,6 @@
 use std::sync::Weak;
 
+use log::debug;
 use rocketbot_interface::interfaces::{RocketBotInterface, RocketBotPlugin};
 use serde_json;
 
@@ -14,13 +15,15 @@ pub(crate) async fn load_plugins(iface: Weak<dyn RocketBotInterface>) -> Vec<Box
             .get().expect("initial config not set")
             .read().await;
 
-        for plugin_config in &config_guard.plugins {
+        for (i, plugin_config) in config_guard.plugins.iter().enumerate() {
             if !plugin_config.enabled {
                 continue;
             }
 
             let iface_weak = Weak::clone(&iface);
             let inner_config: serde_json::Value = plugin_config.config.clone().into();
+
+            debug!("loading plugin with index {} ({:?})", i, plugin_config.name);
 
             let plugin: Box<dyn RocketBotPlugin> = if plugin_config.name == "allograph" {
                 Box::new(rocketbot_plugin_allograph::AllographPlugin::new(iface_weak, inner_config).await)
