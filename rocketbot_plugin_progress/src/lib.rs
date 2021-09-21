@@ -78,7 +78,7 @@ impl RocketBotPlugin for ProgressPlugin {
                 interface,
                 &channel_message.channel.name,
                 &replaced,
-            );
+            ).await;
         }
     }
 }
