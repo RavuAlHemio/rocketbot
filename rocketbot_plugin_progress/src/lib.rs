@@ -396,4 +396,48 @@ mod tests {
             200,
         );
     }
+
+    #[test]
+    fn test_yolo_negative() {
+        run_yolo_test(
+            "r>>>lollollollollollollollollollollollollollollollollo<<< -2%",
+            true,
+            2,
+        );
+        run_yolo_test(
+            "ro>>>lollollollollollollollollollollollollollollollollo<<< -4%",
+            true,
+            4,
+        );
+        run_yolo_test(
+            "YOLO>>>lollollollollollollollollollollollollollollollollo<<< -8%",
+            true,
+            8,
+        );
+        run_yolo_test(
+            "YrOLO>>>lollollollollollollollollollollollollollollollollo<<< -10%",
+            true,
+            10,
+        );
+        run_yolo_test(
+            "YroOLO>>>lollollollollollollollollollollollollollollollollo<<< -12%",
+            true,
+            12,
+        );
+        run_yolo_test(
+            "YroflroflroflroflroflrOLO>>>lollollollollollollollollollollollollollollollollo<<< -50%",
+            true,
+            50,
+        );
+        run_yolo_test(
+            "YroflroflroflroflroflroflroflroflroflroflroflroOLO>>>lollollollollollollollollollollollollollollollollo<<< -100%",
+            true,
+            100,
+        );
+        run_yolo_test(
+            "YroflroflroflroflroflroflroflroflroflroflroflroflroflroflroflroflroflroflroflroflroflroflroflroflOLO>>>lollollollollollollollollollollollollollollollollo<<< -200%",
+            true,
+            200,
+        );
+    }
 }
