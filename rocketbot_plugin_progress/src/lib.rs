@@ -108,7 +108,7 @@ fn regex_replacement_func(caps: &Captures, bar_length: usize) -> String {
     let left_box = "[";
     let right_box = "]";
 
-    progress_replace(
+    let rendered_bar = progress_replace(
         bar_length,
         has_minus,
         number,
@@ -118,7 +118,8 @@ fn regex_replacement_func(caps: &Captures, bar_length: usize) -> String {
         background_str,
         left_box,
         right_box,
-    )
+    );
+    format!("`{}`", rendered_bar)
 }
 
 fn progress_replace(
