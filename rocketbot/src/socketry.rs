@@ -736,6 +736,7 @@ async fn generate_boundary_text<R: Rng>(rng_lock: &Mutex<R>) -> String {
 
 
 pub(crate) async fn connect() -> Arc<ServerConnection> {
+    debug!("connect: assembling state");
     let (outgoing_sender, outgoing_receiver) = mpsc::unbounded_channel();
     let exit_notify = Notify::new();
     let subscribed_channels = RwLock::new(
@@ -826,7 +827,7 @@ pub(crate) async fn connect() -> Arc<ServerConnection> {
     let second_conn: Arc<ServerConnection> = Arc::clone(&conn);
     let generic_conn: Arc<dyn RocketBotInterface> = second_conn;
 
-    // load the plugins
+    debug!("connect: loading plugins");
     let mut loaded_plugins: Vec<Box<dyn RocketBotPlugin>> = load_plugins(Arc::downgrade(&generic_conn))
         .await;
     {
@@ -835,7 +836,7 @@ pub(crate) async fn connect() -> Arc<ServerConnection> {
         plugins_guard.append(&mut loaded_plugins);
     }
 
-    // obtain builtin emoji
+    debug!("connect: obtaining builtin emoji");
     let mut builtin_emoji = obtain_builtin_emoji(&mut state).await;
     {
         let mut emoji_guard = state.shared_state.emoji
@@ -843,7 +844,7 @@ pub(crate) async fn connect() -> Arc<ServerConnection> {
         emoji_guard.append(&mut builtin_emoji);
     }
 
-    // launch it all
+    debug!("connect: spawning connection handling");
     tokio::spawn(async move {
         run_connections(state).await
     });
@@ -890,6 +891,7 @@ async fn run_connection(mut state: &mut ConnectionState) -> Result<(), WebSocket
         config_lock.server.websocket_uri.clone()
     };
 
+    debug!("run_connection: establishing connection with {}", websocket_uri);
     let (mut stream, _response) = connect_async(&websocket_uri).await
         .map_err(|e| WebSocketError::Connecting(e))?;
 
