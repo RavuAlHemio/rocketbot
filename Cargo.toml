@@ -36,4 +36,5 @@ members = [
     "rocketbot_plugin_vitals",
     "rocketbot_plugin_weather",
     "rocketbot_regex_replace",
+    "rocketbotweb",
 ]

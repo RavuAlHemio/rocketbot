@@ -1,0 +1,13 @@
+{% extends "base.html.tera" %}
+
+{% block title %}404 Not Found{% endblock %}
+
+{% block content %}
+<main>
+
+<h1>404 Not Found</h1>
+
+<p>Nothing here.</p>
+
+</main>
+{% endblock %}

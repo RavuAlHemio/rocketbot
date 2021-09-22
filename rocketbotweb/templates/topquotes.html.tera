@@ -1,0 +1,20 @@
+{% extends "base.html.tera" %}
+
+{% block title %}Top Quotes{% endblock %}
+
+{% block content %}
+<main>
+
+<h1>Top Quotes</h1>
+
+<table class="top-quotes">
+  {% for quote in quotes %}
+    <tr class="quote">
+      <td aria-label="score" class="score {% if not quote.score_changed %}un{% endif %}changed">{{ quote.score }}</td>
+      <td aria-label="body" class="body">{{ quote.body|e }}</td>
+    </tr>
+  {% endfor %}
+</table>
+
+</main>
+{% endblock %}

@@ -1,0 +1,34 @@
+{% extends "base.html.tera" %}
+
+{% block title %}Quotes and Votes{% endblock %}
+
+{% block content %}
+<main>
+
+<h1>Quotes and Votes</h1>
+
+<table class="quotes-votes">
+  {% for quote in quotes %}
+    <tr class="quote">
+      <td aria-label="body" class="quote-body">{{ quote.body|e }}</td>
+      <td aria-label="votes" class="votes">
+        <span class="score">{{ quote.score }}</span>:
+        <ul class="votes">
+          {% for vote in quote.votes %}
+            {%- if vote.value == 1 -%}
+              <span class="sigil positive">+</span>
+            {%- elif vote.value == -1 -%}
+              <span class="sigil negative">&#8722;</span>
+            {%- else -%}
+              <span class="sigil unknown">?</span>
+            {%- endif -%}
+            <span class="voter">{{ vote.voter|e }}</span>
+          {% endfor %}
+        </ul>
+      </td>
+    </tr>
+  {% endfor %}
+</table>
+
+</main>
+{% endblock %}

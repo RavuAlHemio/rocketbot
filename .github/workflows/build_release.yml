@@ -29,6 +29,9 @@ jobs:
           name: rocketbot-release
           path: |
             target/release/rocketbot
+            target/release/rocketbotweb
             rocketbot_plugin_calc/data/unitdb.toml
             rocketbot_plugin_grammargen/grammars/*.grammar
+            rocketbotweb/static/*
+            rocketbotweb/templates/*.tera
             CountryCodes.json

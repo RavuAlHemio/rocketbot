@@ -1,0 +1,41 @@
+{% extends "base.html.tera" %}
+
+{% block title %}Thanks{% endblock %}
+
+{% block content %}
+<main>
+
+<h1>Thanks</h1>
+
+<table class="thanks-grid">
+  <tr>
+    <td class="top-left-spacer" colspan="2" rowspan="2"></td>
+    <td class="recipient-header" colspan="{{ users|length }}"><div class="alibi-div">recipient</div></td>
+  </tr>
+  <tr>
+    {% for recipient in users %}
+      <td class="recipient" data-recipient-index="{{ recipient.index }}"><div class="alibi-div">{{ recipient.name|e }}</div></td>
+    {% endfor %}
+    <td class="recipient sum donor-sum" data-recipient-index="{{ users|length }}"><div class="alibi-div">&#931; given</div></td>
+  </tr>
+  <tr>
+    <td class="donor-header" rowspan="{{ users|length }}"><div class="alibi-div">donor</div></td>
+    {% for donor in users %}
+      <td class="donor" data-donor-index="{{ donor.index }}"><div class="alibi-div">{{ donor.name|e }}</div></td>
+      {% for recipient in users %}
+        <td class="thanks-count{% if donor.index == recipient.index %} self{% endif %} {% if thanks_from_to[donor.index][recipient.index] != 0 %}non{% endif %}zero" data-donor-index="{{ donor.index }}" data-recipient-index="{{ recipient.index }}"><div class="alibi-div">{{ thanks_from_to[donor.index][recipient.index] }}</div></td>
+      {% endfor %}
+      <td class="thanks-count sum donor-sum {% if total_given[donor.index] != 0 %}non{% endif %}zero" data-donor-index="{{ donor.index }}" data-recipient-index="{{ users|length }}"><div class="alibi-div">{{ total_given[donor.index] }}</div></td>
+    {% endfor %}
+  </tr>
+  <tr>
+    <td class="donor sum recipient-sum" data-donor-index="{{ users|length }}"><div class="alibi-div">&#931; received</div></td>
+    {% for recipient in users %}
+      <td class="thanks-count sum recipient-sum {% if total_received[recipient.index] != 0 %}non{% endif %}zero" data-donor-index="{{ users|length }}" data-recipient-index="{{ recipient.index }}"><div class="alibi-div">{{ total_received[recipient.index] }}</div></td>
+    {% endfor %}
+    <td class="thanks-count sum donor-sum recipient-sum total-sum {% if total_count != 0 %}non{% endif %}zero" data-donor-index="{{ users|length }}" data-recipient-index="{{ users|length }}"><div class="alibi-div">{{ total_count }}</div></td>
+  </tr>
+</table>
+
+</main>
+{% endblock %}

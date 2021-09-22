@@ -1,0 +1,20 @@
+{% extends "base.html.tera" %}
+
+{% block title %}Nicks and Aliases{% endblock %}
+
+{% block content %}
+<main>
+
+<h1>Nicks and Aliases</h1>
+
+<table class="nicks-and-aliases">
+  {% for alias in aliases %}
+  <tr>
+    <td aria-label="nick" class="nick {% if not alias.nick_changed %}un{% endif %}changed">{{ alias.nick|e }}</td>
+    <td aria-label="alias" class="alias">{{ alias.alias|e }}</td>
+  </tr>
+  {% endfor %}
+</table>
+
+</main>
+{% endblock %}
