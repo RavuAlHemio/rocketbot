@@ -18,16 +18,18 @@
     {% endfor %}
     <td class="recipient sum donor-sum" data-recipient-index="{{ users|length }}"><div class="alibi-div">&#931; given</div></td>
   </tr>
-  <tr>
-    <td class="donor-header" rowspan="{{ users|length }}"><div class="alibi-div">donor</div></td>
-    {% for donor in users %}
+  {% for donor in users %}
+    <tr>
+      {% if donor.index == "0" %}
+        <td class="donor-header" rowspan="{{ users|length + 1 }}"><div class="alibi-div">donor</div></td>
+      {% endif %}
       <td class="donor" data-donor-index="{{ donor.index }}"><div class="alibi-div">{{ donor.name|escape }}</div></td>
       {% for recipient in users %}
         <td class="thanks-count{% if donor.index == recipient.index %} self{% endif %} {% if thanks_from_to[donor.index][recipient.index] != 0 %}non{% endif %}zero" data-donor-index="{{ donor.index }}" data-recipient-index="{{ recipient.index }}"><div class="alibi-div">{{ thanks_from_to[donor.index][recipient.index] }}</div></td>
       {% endfor %}
       <td class="thanks-count sum donor-sum {% if total_given[donor.index] != 0 %}non{% endif %}zero" data-donor-index="{{ donor.index }}" data-recipient-index="{{ users|length }}"><div class="alibi-div">{{ total_given[donor.index] }}</div></td>
-    {% endfor %}
-  </tr>
+    </tr>
+  {% endfor %}
   <tr>
     <td class="donor sum recipient-sum" data-donor-index="{{ users|length }}"><div class="alibi-div">&#931; received</div></td>
     {% for recipient in users %}
