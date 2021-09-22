@@ -168,7 +168,7 @@ async fn handle_top_quotes(request: &Request<Body>) -> Result<Response<Body>, In
     let mut quotes: Vec<serde_json::Value> = Vec::new();
     let query_res = db_conn.query("
         SELECT
-            q.quote_id, q.author, q.message_type, q.body, COALESCE(SUM(CAST(v.points AS bigint)), 0) vote_sum
+            q.quote_id, q.author, q.message_type, q.body, CAST(COALESCE(SUM(CAST(v.points AS bigint)), 0) AS bigint) vote_sum
         FROM
             quotes.quotes q
             LEFT OUTER JOIN quotes.quote_votes v ON v.quote_id = q.quote_id
@@ -267,7 +267,7 @@ async fn handle_quotes_votes(request: &Request<Body>) -> Result<Response<Body>, 
 
     // add votes
     let vote_statement_res = db_conn.prepare("
-        SELECT v.voter_lowercase, v.points FROM quotes.quote_votes v WHERE v.quote_id = $1 ORDER BY v.vote_id
+        SELECT v.voter_lowercase, CAST(v.points AS bigint) FROM quotes.quote_votes v WHERE v.quote_id = $1 ORDER BY v.vote_id
     ").await;
     let vote_statement = match vote_statement_res {
         Ok(s) => s,
