@@ -14,14 +14,14 @@
   </tr>
   <tr>
     {% for recipient in users %}
-      <td class="recipient" data-recipient-index="{{ recipient.index }}"><div class="alibi-div">{{ recipient.name|e }}</div></td>
+      <td class="recipient" data-recipient-index="{{ recipient.index }}"><div class="alibi-div">{{ recipient.name|escape }}</div></td>
     {% endfor %}
     <td class="recipient sum donor-sum" data-recipient-index="{{ users|length }}"><div class="alibi-div">&#931; given</div></td>
   </tr>
   <tr>
     <td class="donor-header" rowspan="{{ users|length }}"><div class="alibi-div">donor</div></td>
     {% for donor in users %}
-      <td class="donor" data-donor-index="{{ donor.index }}"><div class="alibi-div">{{ donor.name|e }}</div></td>
+      <td class="donor" data-donor-index="{{ donor.index }}"><div class="alibi-div">{{ donor.name|escape }}</div></td>
       {% for recipient in users %}
         <td class="thanks-count{% if donor.index == recipient.index %} self{% endif %} {% if thanks_from_to[donor.index][recipient.index] != 0 %}non{% endif %}zero" data-donor-index="{{ donor.index }}" data-recipient-index="{{ recipient.index }}"><div class="alibi-div">{{ thanks_from_to[donor.index][recipient.index] }}</div></td>
       {% endfor %}

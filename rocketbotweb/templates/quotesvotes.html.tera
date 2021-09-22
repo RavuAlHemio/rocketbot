@@ -10,7 +10,7 @@
 <table class="quotes-votes">
   {% for quote in quotes %}
     <tr class="quote">
-      <td aria-label="body" class="quote-body">{{ quote.body|e }}</td>
+      <td aria-label="body" class="quote-body">{{ quote.body|escape }}</td>
       <td aria-label="votes" class="votes">
         <span class="score">{{ quote.score }}</span>:
         <ul class="votes">
@@ -22,7 +22,7 @@
             {%- else -%}
               <span class="sigil unknown">?</span>
             {%- endif -%}
-            <span class="voter">{{ vote.voter|e }}</span>
+            <span class="voter">{{ vote.voter|escape }}</span>
           {% endfor %}
         </ul>
       </td>

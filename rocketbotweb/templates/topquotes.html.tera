@@ -11,7 +11,7 @@
   {% for quote in quotes %}
     <tr class="quote">
       <td aria-label="score" class="score {% if not quote.score_changed %}un{% endif %}changed">{{ quote.score }}</td>
-      <td aria-label="body" class="body">{{ quote.body|e }}</td>
+      <td aria-label="body" class="body">{{ quote.body|escape }}</td>
     </tr>
   {% endfor %}
 </table>
