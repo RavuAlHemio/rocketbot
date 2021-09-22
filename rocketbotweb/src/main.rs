@@ -302,7 +302,7 @@ async fn handle_quotes_votes(request: &Request<Body>) -> Result<Response<Body>, 
 
     let mut ctx = tera::Context::new();
     ctx.insert("quotes", &quotes);
-    match render_template("topquotes.html.tera", &ctx, 200, vec![]).await {
+    match render_template("quotesvotes.html.tera", &ctx, 200, vec![]).await {
         Some(r) => Ok(r),
         None => return_500(),
     }
