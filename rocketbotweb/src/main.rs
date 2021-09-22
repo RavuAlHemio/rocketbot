@@ -568,11 +568,11 @@ async fn main() {
             .expect("failed to parse config file")
     };
     let listen_address = config.listen.clone();
-    let template_path = config.template_path.clone();
+    let template_glob = config.template_glob.clone();
     CONFIG.set(RwLock::new(config))
         .expect("failed to set initial config");
 
-    let tera = Tera::new(&template_path)
+    let tera = Tera::new(&template_glob)
         .expect("failed to initialize Tera");
     TERA.set(RwLock::new(tera))
         .expect("failed to set initial Tera");
