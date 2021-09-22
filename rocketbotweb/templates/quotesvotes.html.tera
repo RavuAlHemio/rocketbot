@@ -10,7 +10,7 @@
 <table class="quotes-votes">
   {% for quote in quotes %}
     <tr class="quote">
-      <td aria-label="body" class="quote-body">{{ quote.body|escape }}</td>
+      <td aria-label="body" class="body">{{ quote.body|escape }}</td>
       <td aria-label="votes" class="votes">
         <span class="score">{{ quote.score }}</span>:
         <ul class="votes">

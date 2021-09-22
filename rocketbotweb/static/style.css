@@ -7,8 +7,8 @@ table.nicks-and-aliases .nick.unchanged {
   color: white;
 }
 
-table.top-quotes .quote-body,
-table.quotes-votes .quote-body {
+table.top-quotes .quote .body,
+table.quotes-votes .quote .body {
   font-family: monospace;
   white-space: pre-wrap;
 }
@@ -25,8 +25,8 @@ table.top-quotes .score {
   padding: 0.5em;
 }
 
-table.top-quotes .quote-body,
-table.quotes-votes .quote-body,
+table.top-quotes tr.quote .body,
+table.quotes-votes tr.quote .body,
 table.quotes-votes .votes {
   padding: 0.6em 0.3em;
 }
@@ -43,7 +43,7 @@ table.nicks-and-aliases tr:first-child td {
   padding-top: 0.6em;
 }
 
-table.top-quotes td.quote-body,
+table.top-quotes tr.quote td.body,
 table.top-quotes td.score.changed,
 table.quotes-votes td,
 table.nicks-and-aliases td.alias,
