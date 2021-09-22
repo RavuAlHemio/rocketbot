@@ -1,0 +1,19 @@
+{% extends "base.html.tera" %}
+
+{% block title %}rocketbot{% endblock %}
+
+{% block content %}
+<main>
+
+<h1>rocketbot</h1>
+
+<ul>
+  <li><a href="topquotes">Top Quotes</a></li>
+  <li><a href="thanks">Thanks</a></li>
+  <li><a href="nicks-aliases">Nicks and Aliases</a> (<a href="aliases">API</a>)</li>
+</ul>
+
+<p><a href="https://github.com/RavuAlHemio/rocketbot">rocketbot on Github</a></p>
+
+</main>
+{% endblock %}
