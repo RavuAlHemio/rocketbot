@@ -494,6 +494,7 @@ async fn handle_thanks(request: &Request<Body>) -> Result<Response<Body>, Infall
         .collect();
     let mut total_received: HashMap<String, i64> = total_given.clone();
     let mut thanks_from_to: HashMap<String, HashMap<String, i64>> = HashMap::new();
+    let mut total_count = 0;
 
     for (r, thanker) in user_names.iter().enumerate() {
         let r_string = r.to_string();
@@ -508,6 +509,7 @@ async fn handle_thanks(request: &Request<Body>) -> Result<Response<Body>, Infall
             *total_given.get_mut(&r_string).unwrap() += pair_count;
             *total_received.get_mut(&e_string).unwrap() += pair_count;
             thanks_to.insert(e_string, pair_count);
+            total_count += pair_count;
         }
     }
 
@@ -524,6 +526,7 @@ async fn handle_thanks(request: &Request<Body>) -> Result<Response<Body>, Infall
     ctx.insert("thanks_from_to", &thanks_from_to);
     ctx.insert("total_given", &total_given);
     ctx.insert("total_received", &total_received);
+    ctx.insert("total_count", &total_count);
     match render_template("thanks.html.tera", &ctx, 200, vec![]).await {
         Some(r) => Ok(r),
         None => return_500(),
