@@ -1,0 +1,163 @@
+body {
+  font-family: sans-serif;
+}
+
+table.top-quotes .score.unchanged,
+table.nicks-and-aliases .nick.unchanged {
+  color: white;
+}
+
+table.top-quotes .quote-body,
+table.quotes-votes .quote-body {
+  font-family: monospace;
+  white-space: pre-wrap;
+}
+
+table {
+  border-collapse: collapse;
+}
+
+table td {
+  vertical-align: top;
+}
+
+table.top-quotes .score {
+  padding: 0.5em;
+}
+
+table.top-quotes .quote-body,
+table.quotes-votes .quote-body,
+table.quotes-votes .votes {
+  padding: 0.6em 0.3em;
+}
+
+table.nicks-and-aliases .nick,
+table.nicks-and-aliases .alias {
+  padding: 0.3em 0.6em;
+}
+
+table.top-quotes tr:first-child td,
+table.quotes-votes tr:first-child td,
+table.nicks-and-aliases tr:first-child td {
+  border-top: 2px solid black;
+  padding-top: 0.6em;
+}
+
+table.top-quotes td.quote-body,
+table.top-quotes td.score.changed,
+table.quotes-votes td,
+table.nicks-and-aliases td.alias,
+table.nicks-and-aliases td.nick.changed {
+  border-top: 1px solid black;
+}
+
+table.top-quotes tr:first-child td.score.changed,
+table.nicks-and-aliases tr:first-child td.nick.changed {
+  border-top: 2px solid black;
+  padding-top: 0.6em;
+}
+
+table.top-quotes tr:last-child td,
+table.quotes-votes tr:last-child td,
+table.nicks-and-aliases tr:last-child td {
+  border-bottom: 2px solid black;
+  padding-bottom: 0.3em;
+}
+
+table.thanks-grid td.recipient-header,
+table.thanks-grid td.donor-header {
+  text-align: center;
+  font-weight: bold;
+}
+
+table.thanks-grid td.donor-header > div.alibi-div {
+  transform: translate(0, 3em) rotate(-90deg);
+}
+
+table.thanks-grid td.recipient {
+  max-width: 2em;
+  height: 10em;
+  vertical-align: bottom;
+  padding-bottom: 0.8em;
+}
+
+table.thanks-grid td.recipient > div.alibi-div {
+  transform: rotate(-90deg) translateY(0.6em);
+  white-space: nowrap;
+}
+
+table.thanks-grid td.donor {
+  text-align: right;
+  padding-right: 1em;
+}
+
+table.thanks-grid td.thanks-count {
+  text-align: right;
+  min-width: 2em;
+}
+
+table.thanks-grid td.thanks-count.zero {
+  color: white;
+}
+
+table.thanks-grid td.thanks-count.self {
+  background-color: #eee;
+}
+
+table.thanks-grid .highlight {
+  background-color: #eff;
+}
+
+table.thanks-grid .bold-highlight {
+  background-color: #bff;
+}
+
+table.thanks-grid td.sum {
+  font-style: italic;
+}
+
+table.quotes-votes ul.votes {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+table.latest-entries td.entry pre {
+  margin: 0;
+}
+
+section.counter table td,
+section.counter table th {
+  padding: 0.2em 0.5em;
+}
+
+section.counter table td.count,
+section.counter table td.percentage {
+  text-align: right;
+}
+
+section.counter table tr.totals {
+  font-weight: bold;
+}
+
+section.counter table tr:hover {
+  background-color: #dfefff;
+}
+
+section.counter table.stats-user-day-hour th.hour,
+section.counter table.stats-user-week-day th.weekday {
+  text-align: right;
+}
+
+section.counter table.stats-user-day-hour td.hour,
+section.counter table.stats-user-week-day td.weekday {
+  width: 3em;
+}
+
+table.sortable th.sort-key.sort-asc::before {
+  content: " \0025B2";
+}
+
+table.sortable th.sort-key.sort-desc::before {
+  content: " \0025BC";
+}
