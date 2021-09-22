@@ -40,7 +40,7 @@ async fn render_template(name: &str, context: &tera::Context, status: u16, heade
     let rendered = match tera_guard.render(name, context) {
         Ok(s) => s,
         Err(e) => {
-            error!("failed to render template {:?}: {}", name, e);
+            error!("failed to render template {:?}: {:?}", name, e);
             return None;
         }
     };
