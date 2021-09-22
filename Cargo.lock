@@ -2122,6 +2122,7 @@ name = "rocketbotweb"
 version = "0.1.0"
 dependencies = [
  "env_logger",
+ "form_urlencoded",
  "hyper",
  "log",
  "once_cell",
@@ -2131,7 +2132,6 @@ dependencies = [
  "tokio",
  "tokio-postgres",
  "toml",
- "url",
 ]
 
 [[package]]

@@ -5,6 +5,7 @@ edition = "2018"
 
 [dependencies]
 env_logger = { version = "0.9" }
+form_urlencoded = { version = "1.0" }
 hyper = { version = "0.14", features = ["client", "http1", "http2", "server"] }
 log = { version = "0.4" }
 once_cell = { version = "1.8" }
@@ -14,4 +15,3 @@ tera = { version = "1.12" }
 tokio = { version = "1.12", features = ["macros", "rt-multi-thread"] }
 tokio-postgres = { version = "0.7" }
 toml = { version = "0.5" }
-url = { version = "2.2" }

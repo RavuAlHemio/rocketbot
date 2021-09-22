@@ -1,6 +1,7 @@
 mod config;
 
 
+use std::borrow::Cow;
 use std::collections::{BTreeSet, HashMap};
 use std::convert::Infallible;
 use std::env;
@@ -9,6 +10,7 @@ use std::fs::File;
 use std::io::Read;
 use std::path::PathBuf;
 
+use form_urlencoded;
 use hyper::{Body, Method, Request, Response, Server};
 use hyper::service::{make_service_fn, service_fn};
 use log::error;
@@ -19,7 +21,6 @@ use tokio;
 use tokio::sync::{RwLock, RwLockReadGuard};
 use tokio_postgres::{self, NoTls};
 use toml;
-use url::Url;
 
 use crate::config::WebConfig;
 
@@ -312,19 +313,16 @@ async fn handle_plaintext_aliases_for_nick(request: &Request<Body>) -> Result<Re
         return return_405().await;
     }
 
-    let url = match Url::parse(request.uri().to_string().as_str()) {
-        Ok(u) => u,
-        Err(e) => {
-            error!("failed to parse request URI {}: {}", request.uri(), e);
-            return return_500();
-        },
+    let query_pairs: HashMap<Cow<str>, Cow<str>> = if let Some(q) = request.uri().query() {
+        form_urlencoded::parse(q.as_bytes())
+            .collect()
+    } else {
+        HashMap::new()
     };
 
-    let nick_opt = url.query_pairs()
-        .filter_map(|kv| if kv.0 == "nick" { Some(kv.1) } else { None })
-        .nth(0);
+    let nick_opt = query_pairs.get("nick");
     let nick = match nick_opt {
-        Some(n) => n.into_owned(),
+        Some(n) => n.clone().into_owned(),
         None => {
             return Response::builder()
                 .status(400)
