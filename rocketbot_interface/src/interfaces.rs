@@ -132,6 +132,12 @@ pub trait RocketBotInterface : Send + Sync {
 
     /// Obtains a resource from the Rocket.Chat server via HTTP or HTTPS.
     async fn obtain_http_resource(&self, path: &str) -> Result<hyper::Response<hyper::Body>, HttpError>;
+
+    /// Broadcasts, for the given channel, whether the bot is typing or not.
+    async fn set_channel_typing_status(&self, channel_name: &str, typing: bool);
+
+    /// Broadcasts, for the given private conversation, whether the bot is typing or not.
+    async fn set_private_conversation_typing_status(&self, conversation_id: &str, typing: bool);
 }
 
 
@@ -210,4 +216,10 @@ pub trait RocketBotPlugin: Send + Sync {
     /// Called when a timer, registered previously using `RocketBotInterface::register_timer`,
     /// elapses.
     async fn timer_elapsed(&self, _custom_data: &serde_json::Value) {}
+
+    /// Called when a user starts or stops typing in a channel.
+    async fn user_typing_status_in_channel(&self, _channel: &Channel, _user: &User, _typing: bool) {}
+
+    /// Called when a user starts or stops typing in a private conversation.
+    async fn user_typing_status_in_private_conversation(&self, _conversation: &PrivateConversation, _user: &User, _typing: bool) {}
 }

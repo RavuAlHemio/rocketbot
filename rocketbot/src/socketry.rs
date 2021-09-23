@@ -705,6 +705,47 @@ impl RocketBotInterface for ServerConnection {
         let query_options: Vec<(String, Option<String>)> = Vec::with_capacity(0);
         get_http_from_server(&self.shared_state, path, query_options).await
     }
+
+    async fn set_channel_typing_status(&self, channel_name: &str, typing: bool) {
+        // find channel ID
+        let channel_id = {
+            let sub_chan_guard = self.shared_state.subscribed_channels
+                .read().await;
+            match sub_chan_guard.get_channel_by_name(channel_name) {
+                Some(ch) => ch.id.clone(),
+                None => {
+                    error!("failed to find channel named {:?}; cannot set typing status", channel_name);
+                    return;
+                }
+            }
+        };
+
+        let message_body = serde_json::json!({
+            "msg": "method",
+            "method": "stream-notify-room",
+            "id": "nvm",
+            "params": [
+                format!("{}/typing", channel_id),
+                typing,
+            ],
+        });
+        self.shared_state.outgoing_sender.send(message_body)
+            .expect("failed to enqueue set-typing message");
+    }
+
+    async fn set_private_conversation_typing_status(&self, conversation_id: &str, typing: bool) {
+        let message_body = serde_json::json!({
+            "msg": "method",
+            "method": "stream-notify-room",
+            "id": "nvm",
+            "params": [
+                format!("{}/typing", conversation_id),
+                typing,
+            ],
+        });
+        self.shared_state.outgoing_sender.send(message_body)
+            .expect("failed to enqueue set-typing message");
+    }
 }
 
 
@@ -1223,6 +1264,20 @@ async fn subscribe_to_messages(state: &mut ConnectionState, channel_id: &str) {
         .expect("failed to enqueue subscription message");
 }
 
+async fn subscribe_to_typing_events(state: &mut ConnectionState, channel_id: &str) {
+    let sub_body = serde_json::json!({
+        "msg": "sub",
+        "id": format!("sub_notify_{}", channel_id),
+        "name": "stream-notify-room",
+        "params": [
+            format!("{}/typing", channel_id),
+            false,
+        ],
+    });
+    state.shared_state.outgoing_sender.send(sub_body)
+        .expect("failed to enqueue subscription message");
+}
+
 async fn channel_joined(mut state: &mut ConnectionState, channel: Channel) {
     debug!("joined channel {:?}; subscribing to messages", channel.id);
 
@@ -1233,6 +1288,7 @@ async fn channel_joined(mut state: &mut ConnectionState, channel: Channel) {
     }
 
     subscribe_to_messages(&mut state, &channel.id).await;
+    subscribe_to_typing_events(&mut state, &channel.id).await;
     obtain_users_in_room(&mut state, &channel).await;
 }
 
@@ -1280,6 +1336,7 @@ async fn private_conversation_joined(mut state: &mut ConnectionState, convo_id: 
     }
 
     subscribe_to_messages(&mut state, &convo.id).await;
+    subscribe_to_typing_events(&mut state, &convo.id).await;
 }
 
 async fn channel_left(state: &mut ConnectionState, channel_id: &str) {
@@ -1754,6 +1811,83 @@ async fn handle_received(body: &serde_json::Value, mut state: &mut ConnectionSta
                     ));
                 }
                 private_conversation_joined(&mut state, room_id, participants).await;
+            }
+        }
+    } else if body["msg"] == "changed" && body["collection"] == "stream-notify-room" {
+        let event_pieces: Vec<&str> = match body["fields"]["eventName"].as_str() {
+            Some(en) => en.split("/").collect(),
+            None => {
+                error!("notify room event {:?} does not have string eventName; skipping", body);
+                return;
+            },
+        };
+        if event_pieces.get(1) == Some(&"typing") {
+            // typing status changed
+            let convo_id = match event_pieces.get(0) {
+                Some(id) => *id,
+                None => {
+                    error!("failed to extract conversation ID from event name; skipping");
+                    return;
+                },
+            };
+            let event_args = &body["fields"]["args"];
+            let username = match event_args[0].as_str() {
+                Some(un) => un,
+                None => {
+                    error!("first argument to typing event not a string but {:?}; skipping", event_args[0]);
+                    return;
+                },
+            };
+            let is_typing = match event_args[1].as_bool() {
+                Some(t) => t,
+                None => {
+                    error!("second argument to typing event not a bool but {:?}; skipping", event_args[1]);
+                    return;
+                },
+            };
+
+            // lookup channel and user
+            let mut channel = None;
+            let mut private_convo = None;
+
+            let user = {
+                let sub_chans = state.shared_state.subscribed_channels
+                    .read().await;
+                if let Some(chan) = sub_chans.get_channel_by_id(convo_id) {
+                    channel = Some(chan.clone());
+                } else if let Some(convo) = sub_chans.get_private_conversation_by_id(convo_id) {
+                    private_convo = Some(convo.clone());
+                }
+
+                sub_chans.users_in_channel(convo_id)
+                    .iter()
+                    .filter(|u| u.username == username)
+                    .map(|u| u.clone())
+                    .nth(0)
+            };
+
+            if let Some(u) = user {
+                if let Some(chan) = channel {
+                    // distribute as channel
+                    debug!("distributing to plugins that {:?} is typing in channel {:?}", u.username, chan.name);
+                    let plugins = state.shared_state.plugins
+                        .read().await;
+                    for plugin in plugins.iter() {
+                        plugin.user_typing_status_in_channel(&chan, &u, is_typing).await;
+                    }
+                } else if let Some(convo) = private_convo {
+                    // distribute as private convo
+                    debug!("distributing to plugins that {:?} is typing in private conversation {:?}", u.username, convo.id);
+                    let plugins = state.shared_state.plugins
+                        .read().await;
+                    for plugin in plugins.iter() {
+                        plugin.user_typing_status_in_private_conversation(&convo, &u, is_typing).await;
+                    }
+                } else {
+                    error!("found {:?} (where {:?} is typing) neither as channel nor as private conversation", convo_id, u.username);
+                }
+            } else {
+                error!("typing user {:?} not found", username);
             }
         }
     } else if body["msg"] == "result" && body["id"].as_str_or_empty().starts_with("create_dm_") {
