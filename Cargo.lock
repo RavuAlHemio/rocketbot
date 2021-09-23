@@ -1641,6 +1641,7 @@ dependencies = [
  "rocketbot_plugin_quotes",
  "rocketbot_plugin_randreact",
  "rocketbot_plugin_sed",
+ "rocketbot_plugin_simultype",
  "rocketbot_plugin_sockpuppet",
  "rocketbot_plugin_text_commands",
  "rocketbot_plugin_thanks",
@@ -2001,6 +2002,17 @@ dependencies = [
  "log",
  "once_cell",
  "regex",
+ "rocketbot_interface",
+ "serde_json",
+]
+
+[[package]]
+name = "rocketbot_plugin_simultype"
+version = "0.1.0"
+dependencies = [
+ "async-trait",
+ "log",
+ "rand",
  "rocketbot_interface",
  "serde_json",
 ]
