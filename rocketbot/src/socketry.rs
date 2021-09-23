@@ -3,13 +3,14 @@ use std::collections::{HashMap, HashSet};
 use std::collections::hash_map::Entry as HashMapEntry;
 use std::convert::TryInto;
 use std::fmt::Write as FmtWrite;
-use std::io::Write as IoWrite;
+use std::io::{Cursor, Read, Write as IoWrite};
 use std::ops::{Deref, DerefMut};
 use std::sync::Arc;
 use std::time::Duration;
 
 use async_trait::async_trait;
 use chrono::{DateTime, TimeZone, Utc};
+use flate2::read::GzDecoder;
 use futures_util::{SinkExt, StreamExt};
 use hyper::StatusCode;
 use hyper::client::HttpConnector;
@@ -2214,7 +2215,20 @@ async fn get_http_json(state: &SharedConnectionState, request: hyper::Request<hy
             return Err(HttpError::ObtainingResponseBody(e));
         },
     };
-    let response_string = match String::from_utf8(response_bytes) {
+    let unzipped_bytes = if response_bytes.len() > 1 && response_bytes[0] == 0x1f && response_bytes[1] == 0x8b {
+        // gzip; unpack first
+        let cursor = Cursor::new(response_bytes);
+        let mut dec = GzDecoder::new(cursor);
+        let mut gzip_decoded_bytes = Vec::new();
+        if let Err(e) = dec.read_to_end(&mut gzip_decoded_bytes) {
+            error!("{} is a gzipped file but apparently invalid: {}", full_uri, e);
+            return Err(HttpError::DecodingAsGzip(e));
+        }
+        gzip_decoded_bytes
+    } else {
+        response_bytes
+    };
+    let response_string = match String::from_utf8(unzipped_bytes) {
         Ok(s) => s,
         Err(e) => {
             error!("error decoding response for {}: {}", full_uri, e);

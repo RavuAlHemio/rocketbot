@@ -1612,6 +1612,7 @@ dependencies = [
  "async-trait",
  "chrono",
  "env_logger",
+ "flate2",
  "futures-util",
  "hyper",
  "hyper-rustls",

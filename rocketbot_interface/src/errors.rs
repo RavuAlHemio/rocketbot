@@ -40,6 +40,7 @@ pub enum HttpError {
     MissingAuthToken,
     ObtainingResponse(hyper::Error),
     ObtainingResponseBody(hyper::Error),
+    DecodingAsGzip(std::io::Error),
     DecodingAsUtf8(FromUtf8Error),
     StatusNotOk(StatusCode),
     ParsingJson(serde_json::Error),
@@ -55,6 +56,8 @@ impl fmt::Display for HttpError {
                 write!(f, "error obtaining response: {}", e),
             Self::ObtainingResponseBody(e) =>
                 write!(f, "error obtaining response body: {}", e),
+            Self::DecodingAsGzip(e) =>
+                write!(f, "error decoding response body as gzip: {}", e),
             Self::DecodingAsUtf8(e) =>
                 write!(f, "error decoding response body as UTF-8: {}", e),
             Self::StatusNotOk(sc) =>
