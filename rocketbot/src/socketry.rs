@@ -708,6 +708,14 @@ impl RocketBotInterface for ServerConnection {
     }
 
     async fn set_channel_typing_status(&self, channel_name: &str, typing: bool) {
+        // get my username
+        let username = {
+            let config_guard = CONFIG
+                .get().expect("config is set")
+                .read().await;
+            config_guard.server.username.clone()
+        };
+
         // find channel ID
         let channel_id = {
             let sub_chan_guard = self.shared_state.subscribed_channels
@@ -727,6 +735,7 @@ impl RocketBotInterface for ServerConnection {
             "id": "nvm",
             "params": [
                 format!("{}/typing", channel_id),
+                username,
                 typing,
             ],
         });
@@ -735,12 +744,21 @@ impl RocketBotInterface for ServerConnection {
     }
 
     async fn set_private_conversation_typing_status(&self, conversation_id: &str, typing: bool) {
+        // get my username
+        let username = {
+            let config_guard = CONFIG
+                .get().expect("config is set")
+                .read().await;
+            config_guard.server.username.clone()
+        };
+
         let message_body = serde_json::json!({
             "msg": "method",
             "method": "stream-notify-room",
             "id": "nvm",
             "params": [
                 format!("{}/typing", conversation_id),
+                username,
                 typing,
             ],
         });
