@@ -14,12 +14,20 @@ pub struct RandReactPlugin {
     interface: Weak<dyn RocketBotInterface>,
     rng: Arc<Mutex<Box<dyn RngCore + Send>>>,
     probability: f64,
+    specific_emoji: bool,
 }
 #[async_trait]
 impl RocketBotPlugin for RandReactPlugin {
     async fn new(interface: Weak<dyn RocketBotInterface>, config: serde_json::Value) -> Self {
         let probability = config["probability"]
             .as_f64().expect("probability not an f64");
+
+        let specific_emoji = if config["specific_emoji"].is_null() {
+            true
+        } else {
+            config["specific_emoji"]
+                .as_bool().expect("specific_emoji not a bool")
+        };
 
         let rng_box: Box<dyn RngCore + Send> = Box::new(StdRng::from_entropy());
         let rng = Arc::new(Mutex::new(
@@ -31,6 +39,7 @@ impl RocketBotPlugin for RandReactPlugin {
             interface,
             rng,
             probability,
+            specific_emoji,
         }
     }
 
@@ -53,7 +62,10 @@ impl RocketBotPlugin for RandReactPlugin {
                 return;
             }
 
-            let all_emoji = interface.obtain_emoji().await;
+            let mut all_emoji = interface.obtain_emoji().await;
+            if !self.specific_emoji {
+                all_emoji.retain(|e| !e.is_specific);
+            }
             match all_emoji.choose(&mut rng_guard.deref_mut()) {
                 Some(e) => e.short_name.clone(),
                 None => return,
