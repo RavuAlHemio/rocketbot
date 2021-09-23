@@ -402,17 +402,20 @@ pub struct Emoji {
     pub category: String,
     pub order: usize,
     pub short_name: String,
+    pub is_specific: bool,
 }
 impl Emoji {
     pub fn new(
         category: String,
         order: usize,
         short_name: String,
+        is_specific: bool,
     ) -> Self {
         Self {
             category,
             order,
             short_name,
+            is_specific,
         }
     }
 

@@ -1538,6 +1538,7 @@ async fn handle_received(body: &serde_json::Value, mut state: &mut ConnectionSta
                 "custom".to_owned(),
                 i,
                 name,
+                false, // assume custom emoji are generic
             );
             custom_emoji.push(emoji);
         }
@@ -2324,6 +2325,7 @@ async fn obtain_builtin_emoji(state: &ConnectionState) -> Vec<Emoji> {
             error!("emoji {:?} shortname {:?} does not end with a colon", codepoint, short_name);
             continue;
         }
+        let is_specific = !properties["diversity"].is_null() || !properties["gender"].is_null();
 
         // strip off the colons
         let short_name_no_colon = &short_name[1..short_name.len()-1];
@@ -2332,6 +2334,7 @@ async fn obtain_builtin_emoji(state: &ConnectionState) -> Vec<Emoji> {
             category.to_owned(),
             order,
             short_name_no_colon.to_owned(),
+            is_specific,
         );
         emoji.push(e);
     }
