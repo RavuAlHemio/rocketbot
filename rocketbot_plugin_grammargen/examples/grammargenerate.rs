@@ -4,7 +4,6 @@ use std::ffi::OsString;
 use std::fs::File;
 use std::io::Read;
 use std::path::PathBuf;
-use std::sync::{Arc, Mutex};
 
 use rand::{Rng, SeedableRng};
 use rand::rngs::StdRng;
@@ -87,7 +86,7 @@ async fn main() {
     let mut state = GeneratorState::new_topmost(
         rulebook,
         conditions,
-        Arc::new(Mutex::new(rng)),
+        rng,
     );
 
     if verify {

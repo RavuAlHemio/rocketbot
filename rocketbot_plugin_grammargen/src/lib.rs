@@ -6,7 +6,7 @@ use std::collections::{HashMap, HashSet};
 use std::fs::File;
 use std::io::Read;
 use std::path::PathBuf;
-use std::sync::{Arc, Mutex, Weak};
+use std::sync::Weak;
 
 use async_trait::async_trait;
 use log::error;
@@ -27,7 +27,6 @@ pub struct GrammarGenPlugin {
     grammars: HashMap<String, Rulebook>,
     grammar_to_allowed_channel_names: HashMap<String, Option<HashSet<String>>>,
     word_joiner_in_nicknames: bool,
-    rng: Arc<Mutex<StdRng>>,
 }
 #[async_trait]
 impl RocketBotPlugin for GrammarGenPlugin {
@@ -108,16 +107,11 @@ impl RocketBotPlugin for GrammarGenPlugin {
             my_interface.register_channel_command(&this_grammar_command).await;
         }
 
-        let rng = Arc::new(Mutex::new(
-            StdRng::from_entropy(),
-        ));
-
         GrammarGenPlugin {
             interface,
             grammars,
             grammar_to_allowed_channel_names,
             word_joiner_in_nicknames,
-            rng,
         }
     }
 
@@ -178,16 +172,15 @@ impl RocketBotPlugin for GrammarGenPlugin {
         let mut my_grammar = grammar.clone();
         my_grammar.add_builtins(&channel_nicks, chosen_nick_opt);
 
-        let rng = Arc::clone(&self.rng);
+        let mut rng = StdRng::from_entropy();
         let mut conditions = HashSet::new();
 
         // process metacommands
         {
-            let mut rng_guard = rng.lock().unwrap();
             for metacommand in &my_grammar.metacommands {
                 match metacommand {
                     Metacommand::RandomizeCondition(cond) => {
-                        let activate_condition: bool = rng_guard.gen();
+                        let activate_condition: bool = rng.gen();
                         if activate_condition {
                             conditions.insert(cond.clone());
                         }
@@ -203,7 +196,7 @@ impl RocketBotPlugin for GrammarGenPlugin {
         let mut state = GeneratorState::new_topmost(
             my_grammar,
             conditions,
-            Arc::clone(&self.rng),
+            rng,
         );
 
         let phrase = match state.generate() {
