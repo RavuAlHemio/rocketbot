@@ -135,7 +135,7 @@ says_something_else : says_something ;
 
 intellectual
     : "Lacan" | "Derrida" | "Baudrillard" | "Sartre" | "Foucault" | "Marx" | "Debord" | "Bataille"
-    | "Lyotard" | "Sontag"
+    | "Lyotard" | "Sontag" | "Popper" | "Wittgenstein"
     ;
 citable_artist @ : generate_citable_artist ;
 generate_citable_artist
@@ -213,6 +213,8 @@ intell_ist_Debord : "Debordist" ;
 intell_ist_Bataille : "Batailleist" ;
 intell_ist_Lyotard : "Lyotardist" ;
 intell_ist_Sontag : "Sontagist" ;
+intell_ist_Popper : "Popperist" ;
+intell_ist_Wittgenstein : "Wittgensteinian" ;
 
 intell_term_Lacan : "obscurity" | "post-structuralism" | "psychoanalysis" ;
 intell_term_Derrida : "reading" | "deconstruction" | "post-structuralism" ;
@@ -224,6 +226,8 @@ intell_term_Debord : "image" | "situation" ;
 intell_term_Bataille : open_quote1 "powerful communication" close_quote1 | "transgression" | "mysticism" ;
 intell_term_Lyotard : "narrative" | "epistemology" | "sublime" ;
 intell_term_Sontag : "camp" ;
+intell_term_Popper : "falsification" | "demarcation" | "epistemology" ;
+intell_term_Wittgenstein : "anti-foundationalism" | "meaning" | "language-games" ;
 
 adj : adj2 | modifier_prefix adj2 ;
 adj2 : "capitalist" | adj3 | adj3_ist | "cultural" | "dialectic" | "textual" ;
