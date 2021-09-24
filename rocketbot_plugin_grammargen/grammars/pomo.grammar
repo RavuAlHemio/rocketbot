@@ -214,15 +214,15 @@ intell_ist_Bataille : "Batailleist" ;
 intell_ist_Lyotard : "Lyotardist" ;
 intell_ist_Sontag : "Sontagist" ;
 
-intell_term_Lacan : "obscurity" ;
-intell_term_Derrida : "reading" ;
+intell_term_Lacan : "obscurity" | "post-structuralism" | "psychoanalysis" ;
+intell_term_Derrida : "reading" | "deconstruction" | "post-structuralism" ;
 intell_term_Baudrillard : "simulation" | "simulacra" | "hyperreality" ;
 intell_term_Sartre : "absurdity" | "existentialism" ;
 intell_term_Foucault : "power relations" ;
 intell_term_Marx : "capitalism" | "socialism" | "class" ;
 intell_term_Debord : "image" | "situation" ;
-intell_term_Bataille : open_quote1 "powerful communication" close_quote1 ;
-intell_term_Lyotard : "narrative" ;
+intell_term_Bataille : open_quote1 "powerful communication" close_quote1 | "transgression" | "mysticism" ;
+intell_term_Lyotard : "narrative" | "epistemology" | "sublime" ;
 intell_term_Sontag : "camp" ;
 
 adj : adj2 | modifier_prefix adj2 ;
