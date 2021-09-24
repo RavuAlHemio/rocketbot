@@ -184,7 +184,7 @@ concept_desc
     | "a " informal_adj " " big_singular_thing
     ;
 p1_concept_desc{thing}
-    : "not" in_fact " " thing ", but " modifier_prefix thing
+    : "not" [ ", in fact," ] " " thing ", but " modifier_prefix thing
     | "not " thing per_se ", but " modifier_prefix thing
     ;
 predominant_concept
@@ -282,7 +282,6 @@ something_between : "difference" | "bridge" | "common ground" ;
 exist : "exist" | "may be " found;
 found : "found" | "discovered" | "revealed" ;
 in_term : "prevalent in" | "intrinsic to" | "depicted in" | "which is a central theme of" ;
-in_fact : [ ", in fact, " ] ;
 self_adj : "referential" | "sufficient" | "justifying" | "supporting" | "falsifying" | "fulfilling" ;
 makes_statement_about : "affirms" | "denies" | "reiterates" | "deconstructs" | "examines" | "analyses" ;
 however : " " | ", however, " | ", although, " ;
