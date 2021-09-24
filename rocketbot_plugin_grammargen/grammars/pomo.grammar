@@ -18,7 +18,7 @@ sentence2
     ;
 sentence_about_citable_artist{artist}
     : "the " feature_of " " ${"artist_work_" artist} " is also evident in " ${"artist_work_" artist} adverb_postjustify "."
-    | "in " ${"artist_work_" artist} ", " artist " " says_something "; in " ${"artist_work_" artist} however " " artist " " says_something_else "."
+    | "in " ${"artist_work_" artist} ", " artist " " says_something "; in " ${"artist_work_" artist} however artist " " says_something_else "."
     | justifier "the works of " artist " are " works_state_of_being "."
     ;
 
