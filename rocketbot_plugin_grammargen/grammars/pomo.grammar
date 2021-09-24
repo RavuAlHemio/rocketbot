@@ -1,0 +1,339 @@
+// partial reconstruction of pomo.pb from the Dada Engine version 1.03
+// Copyright 1995, 1996 Andrew C. Bulhak
+
+pomo : intro_paragraph | paragraph ;
+intro_paragraph : intro_sentence " " paragraph ;
+paragraph : sentence (" " sentence)+ ;
+
+sentence : upcase_first{sentence2} | upcase_first{preamble} sentence2 ;
+sentence2
+    : assumption " " implies_that result "."
+    | intellectual " uses the term " open_quote term close_quote " to denote " concept_desc "."
+    | justifier "we have to choose between " term " and " term "."
+    | "the " main " theme of " work " is " concept_desc "."
+    | intellectual " " promotes " the use of " term " to " imper_vp "."
+    | plural_numeric_adj " " pluralize{abst_noun} abst_description " " exist "."
+    | sentence_about_citable_artist{citable_artist}
+    | "the subject is " neut_verbed " into a " term_no_the " that includes " big_abst_thing " as a " big_singular_thing "."
+    ;
+sentence_about_citable_artist{artist}
+    : "the " feature_of " " ${"artist_work_" artist} " is also evident in " ${"artist_work_" artist} adverb_postjustify "."
+    | "in " ${"artist_work_" artist} ", " artist " " says_something "; in " ${"artist_work_" artist} however " " artist " " says_something_else "."
+    | justifier "the works of " artist " are " works_state_of_being "."
+    ;
+
+intro_sentence : upcase_first{intro_sentence2} ;
+intro_sentence2
+    : open_quote upcase_first{pseudo_quote} "," close_quote " says " intellectual "."
+    | p_intro_sent_thing_state{big_thing, state_of_being}
+    | "If one examines " term ", one is faced with a choice: either " accept_or_reject " " term " or conclude that " result "."
+    | "In the works of " citable_artist ", a predominant concept is " predominant_concept "."
+    | "the " main " theme of " work " is " concept_desc "."
+    ;
+
+p_intro_sent_thing_state{thing, state}
+    :   open_quote upcase_first{thing} " is " state "," close_quote " says " intellectual
+        "; however, according to " generic_surname ", it is not so much " thing " that is " state ", but rather the "
+        something_of " of " thing "."
+    ;
+
+result : result2 | result2 postcondition ;
+result2
+    : big_abst_thing is_used_to ends
+    | big_nebulous_thing comes_from source
+    | big_thing optional_adv " has " property
+    | big_abst_or_institution " is " state_of_being
+    | "the " purpose_word " of the " role " is " goal
+    | big_abst_or_institution " is capable of " capability
+    ;
+resultm1
+    : result
+    | "we can assume that " result
+    | (
+        intellectual apos "s model of " term " is one of " open_quote new_term close_quote ", and "
+        thus " " state_of_being
+    )
+    ;
+
+pseudo_quote : big_thing " is " state_of_being ;
+
+state_of_being
+    : state_of_being2
+    | abst_adverb " " state_of_being2
+    | "part of the " something_of2 " of " big_abst_thing
+    ;
+state_of_being2
+    : "impossible" | "meaningless" | "unattainable" | "elitist" | "responsible for " bogeyman
+    | "used in the service of " bogeyman | "a legal fiction" | "dead"
+    ;
+
+ends : neg_verb " " victim | pos_neg_verb " " bogeyman ;
+postcondition
+    : ", given that " prim_condition
+    | ", but only if " prim_condition corollary
+    | ""
+    ;
+prim_condition
+    : assumption " is " value_adj
+    | big_abst_thing relation big_abst_thing
+    ;
+assumption
+    : term
+    | intellectual apos "s " work_about " " term
+    | "the premise of " term
+    ;
+corollary
+    : "; if that is not the case, " resultm1
+    | "; otherwise, " resultm1
+    | ""
+    ;
+justifier
+    : generic_surname " " implies_that
+    | "if " term " holds, "
+    ;
+work
+    : generic_surname apos "s " work_about " " term
+    | "the works of " citable_artist
+    ;
+imper_vp : imper_neg_verb " " bogeyman | imper_verb " " big_thing ;
+
+big_thing : "society" | "class" | big_abst_thing | "sexual identity" ;
+big_abst_thing : "culture" | "language" | "art" | "reality" | "truth" | "sexuality" | "narrativity" | "consciousness" ;
+institution
+    : "the Constitution" | "the media" | "academe" | "the law" | "government" | "the State"
+    | "the collective" | "the establishment"
+    ;
+big_nebulous_thing
+    : "reality" | "discourse" | "consensus" | "expression" | "narrative" | "context" ;
+big_abst_or_institution : big_abst_thing | institution;
+big_singular_thing : "reality" | "whole" | "paradox" | "totality" ;
+bogeyman : "capitalism" | "hierarchy" | "the status quo" | "class divisions" | "sexism" | neg_adj " perceptions of " big_thing ;
+victim : "minorities" | "the Other" | "the underprivileged" | "the proletariat" ;
+ideology
+    : "capitalism" | "Marxism" | "socialism" | "feminism" | "libertarianism" | "objectivism"
+    | "rationalism" | "nationalism" | "nihilism"
+    ;
+
+something_of
+    : something_of2
+    | something_of2 ", and subsequent " something_of2 ","
+    | something_of2 ", and " thus " the " something_of2 ","
+    | something_of2 ", and eventually the " something_of2 ","
+    | something_of2 ", and some would say the " something_of2 ","
+    ;
+something_of2
+    : "failure" | "futility" | "collapse" | "fatal flaw" | "rubicon" | "stasis" | "meaninglessness"
+    | "absurdity" | "paradigm" | "genre" | "defining characteristic" | "dialectic" | "economy"
+    ;
+feature_of
+    : dualism_desc " distinction " in_term
+    | "example of " term " " in_term
+    | something_of " of " term " " in_term
+    ;
+says_something : makes_statement_about " " term ;
+says_something_else : says_something ;
+
+intellectual
+    : "Lacan" | "Derrida" | "Baudrillard" | "Sartre" | "Foucault" | "Marx" | "Debord" | "Bataille"
+    | "Lyotard" | "Sontag"
+    ;
+citable_artist @ : generate_citable_artist ;
+generate_citable_artist
+    : "Burroughs" | "Joyce" | "Gibson" | "Stone" | "Pynchon" | "Spelling" | "Tarantino" | "Madonna"
+    | "Rushdie" | "Eco"
+    ;
+artist_work_Spelling : "Beverly Hills 90210" | "Melrose Place" | "Models, Inc." ;
+artist_work_Pynchon : "Gravity" apos "s Rainbow" | "Vineland" | "The Crying of Lot 49" ;
+artist_work_Stone : "JFK" | "Natural Born Killers" | "Heaven and Earth" | "Platoon" ;
+artist_work_Tarantino : "Reservoir Dogs" | "Pulp Fiction" | "Clerks" ;
+artist_work_Joyce : "Ulysses" | "Finnegans Wake" ;
+artist_work_Gibson : "Neuromancer" | "The Burning Chrome" | "Mona Lisa Overdrive" | "Virtual Light" ;
+artist_work_Madonna : "Erotica" | "Sex" | "Material Girl" ;
+artist_work_Rushdie : "Satanic Verses" | "Midnight" apos "s Children" ;
+artist_work_Eco : "The Name of the Rose" | "Foucault" apos "s Pendulum" ;
+artist_work_Burroughs
+    : "The Naked Lunch" | "The Soft Machine" | "Queer" | "Port of Saints" | "Junky"
+    | "The Ticket that Exploded" | "Nova Express" | "The Last Words of Dutch Schultz"
+    ;
+generic_surname
+    : "de Selby" | "Hanfkopf" | "la Fournier" | "la Tournier" | "Hamburger" | "von Junz"
+    | "d" apos "Erlette" | "Geoffrey" | "Prinn" | "Bailey" | "Brophy" | "Cameron" | "Humphrey"
+    | "Pickett" | "Reicher" | "Sargeant" | "Scuglia" | "Werther" | "Wilson" | "McElwaine" | "Abian"
+    | "von Ludwig" | "Parry" | "Drucker" | "Dahmus" | "Dietrich" | "Hubbard" | "Porter" | "Buxton"
+    | "Long" | "Tilton" | "Finnis"
+    ;
+
+term : subject1 | subject2 | subject3 | new_term ;
+term_no_the : regex_replace{"^the ", term, ""} ;
+subject1 @ : new_term ;
+subject2 @ : new_term ;
+subject3 @ : new_term ;
+new_term
+    :<1>    p_intell_term{intellectual}
+    |<2>    adj " " abst_noun
+    |<1>    adj " " adj " theory"
+    |<1> "the " adj " paradigm of " big_nebulous_thing
+    |<1>    adj " " ideology
+    ;
+p_intell_term{i} : ${"intell_ist_" i} " " ${"intell_term_" i} ;
+concept_desc
+    : "the " something_of " of " big_thing
+    | "the " something_between " between " big_thing " and " big_thing
+    | p1_concept_desc{abst_noun}
+    | "the role of the " role " as " role
+    | "a " informal_adj " " big_singular_thing
+    ;
+p1_concept_desc{thing}
+    : "not" in_fact " " thing ", but " modifier_prefix thing
+    | "not " thing per_se ", but " modifier_prefix thing
+    ;
+predominant_concept
+    : "the distinction between " dualism_and_opposite
+    | "the concept of " adj " " big_abst_thing
+    ;
+dualism
+    : "opening" | "closing"
+    | "figure" | "ground"
+    | "within" | "without"
+    | "creation" | "destruction"
+    | "masculine" | "feminine"
+    ;
+dualism_and_opposite : do_dualism_and_opposite{dualism} ;
+do_dualism_and_opposite{d} : d " and " dual_opposite{d} ;
+dualism_desc : do_dualism_desc{dualism} ;
+do_dualism_desc{d} : d "/" dual_opposite{d} ;
+
+intell_ist_Lacan : "Lacanist" ;
+intell_ist_Derrida : "Derridaist" ;
+intell_ist_Baudrillard : "Baudrillardist" ;
+intell_ist_Sartre : "Sartreist" ;
+intell_ist_Foucault : "Foucauldian" ;
+intell_ist_Marx : "Marxist" ;
+intell_ist_Debord : "Debordist" ;
+intell_ist_Bataille : "Batailleist" ;
+intell_ist_Lyotard : "Lyotardist" ;
+intell_ist_Sontag : "Sontagist" ;
+
+intell_term_Lacan : "obscurity" ;
+intell_term_Derrida : "reading" ;
+intell_term_Baudrillard : "simulation" | "simulacra" | "hyperreality" ;
+intell_term_Sartre : "absurdity" | "existentialism" ;
+intell_term_Foucault : "power relations" ;
+intell_term_Marx : "capitalism" | "socialism" | "class" ;
+intell_term_Debord : "image" | "situation" ;
+intell_term_Bataille : open_quote1 "powerful communication" close_quote1 ;
+intell_term_Lyotard : "narrative" ;
+intell_term_Sontag : "camp" ;
+
+adj : adj2 | modifier_prefix adj2 ;
+adj2 : "capitalist" | adj3 | adj3_ist | "cultural" | "dialectic" | "textual" ;
+adj3 : adj3_reg | adj3_noe "e" ;
+adj3_ist : adj3_reg "ist" | adj3_noe "ist" ;
+adj3_ism : adj3_reg "ism" | adj3_noe "ism" ;
+adj3_reg
+    : "structural" | "semiotic" | "modern" | "semantic" | "patriarchal" | "conceptual"
+    | "material" ;
+adj3_noe : [ "de" ] "constructiv" ;
+neg_adj : neg_adj1 | neg_adj2 | neg_adj1 ", " neg_adj2 ;
+neg_adj1 : "outdated" | "outmoded" | "archaic" ;
+neg_adj2 : "sexist" | "colonialist" | "elitist" ;
+value_adj : "valid" | "invalid" ;
+informal_adj : adj | "self-" self_adj | "mythopoetical" ;
+plural_numeric_adj : "any number of" | "a number of" | "many" | "an abundance of" | "several" ;
+
+abst_adverb : "fundamentally" | "intrinsically" ;
+optional_adv : [", " adv "," ] ;
+adv : adv2 | "perhaps " adv2 | "somewhat " adv2 ;
+adv2 : "paradoxically" | "surprisingly" | "ironically" ;
+adverb_postjustify : [", although in a more " informal_adj " sense" ] ;
+
+neg_verb : "marginalize" | "exploit" | "oppress" | "disempower" ;
+pos_neg_verb : "reinforce" | "entrench" ;
+imper_neg_verb : "attack" | "challenge" | "deconstruct" ;
+neut_verbed : "interpolated" | "contextualized" ;
+imper_verb : imper_verb2 [ " and " imper_verb2 ] ;
+imper_verb2 : imper_neg_verb | "analyze" | "read" | "modify" ;
+
+modifier_prefix : "post" | "neo" | "sub" | "pre" ;
+
+abst_noun : abst_noun2 | "theory" | "discourse" | "narrative" | "de" abst_noun2 ;
+abst_noun2
+    : "sublimation" | adj3_ism | "construction" | "appropriation" | "materialism" | "situationism" ;
+
+abst_description : " concerning " ( term | concept_desc ) ;
+
+thus : "thus" | "hence" | "therefore" ;
+accept_or_reject : "accept" | "reject" ;
+is_used_to : " is used to " | " serves to " | " may be used to " ;
+comes_from : " comes from " | " must come from " | " is a product of " | " is created by " ;
+source : "communication" | "the collective unconscious" | "the masses" ;
+property : "intrinsic meaning" | "significance" | "objective value" ;
+purpose_word : "purpose" | "goal" | "_raison d" apos "\u00EAtre_" | "task" | "significance" ;
+role : "artist" | "observer" | "participant" | "reader" | "poet" | "writer" ;
+goal : "significant form" | "deconstruction" | "social comment" ;
+capability : goal | intent_variant | "truth" | "significance" ;
+intent_variant : "intent" | "intention" | "intentionality" ;
+work_about : "critique of" | "essay on" | "analysis of" | "model of" ;
+relation : " is " ( "equal to" | "distinct from" | "interchangeable with" ) " " ;
+implies_that : ("implies" | "states" | "holds" | "suggests") " that " ;
+promotes : "promotes" | "suggests" ;
+main : "main" | "primary" | "characteristic" ;
+something_between : "difference" | "bridge" | "common ground" ;
+exist : "exist" | "may be " found;
+found : "found" | "discovered" | "revealed" ;
+in_term : "prevalent in" | "intrinsic to" | "depicted in" | "which is a central theme of" ;
+in_fact : [ ", in fact, " ] ;
+self_adj : "referential" | "sufficient" | "justifying" | "supporting" | "falsifying" | "fulfilling" ;
+makes_statement_about : "affirms" | "denies" | "reiterates" | "deconstructs" | "examines" | "analyses" ;
+however : " " | ", however, " | ", although, " ;
+per_se
+    : " as such" | " per se" | ", as " intellectual " would have it"
+    | ", as " term " suggests" | ""
+    ;
+works_state_of_being
+    : ["not "] "postmodern"
+    | "modernistic"
+    | "an example of " informal_adj " " ideology
+    | "reminiscent of " artist
+    | "empowering"
+    ;
+preamble :  ( "however,"
+            | "it could be said that"
+            | "thus,"
+            | "therefore,"
+            | "in a sense,"
+            | "but"
+            )
+            " " ;
+
+pluralize{what}
+    :   regex_if_then_else{"y$", what, regex_replace{"y$", what, "ies"},
+            regex_if_then_else{"s$", what, regex_replace{"s$", what, "es"},
+                what "s"
+            }
+        }
+    ;
+
+dual_opposite{what}
+    :   regex_if_then_else{"^opening$", what, "closing",
+        regex_if_then_else{"^closing$", what, "opening",
+        regex_if_then_else{"^figure$", what, "ground",
+        regex_if_then_else{"^ground$", what, "figure",
+        regex_if_then_else{"^within$", what, "without",
+        regex_if_then_else{"^without$", what, "within",
+        regex_if_then_else{"^creation$", what, "destruction",
+        regex_if_then_else{"^destruction$", what, "creation",
+        regex_if_then_else{"^masculine$", what, "feminine",
+        regex_if_then_else{"^feminine$", what, "masculine",
+        "???"
+        }}}}}}}}}}
+    ;
+
+upcase_first{arg} : __iop_uppercase_first{arg} ;
+regex_replace{regex, subj, repl} : __iop_regex_replace_all{regex, subj, repl} ;
+regex_if_then_else{regex, if, then, else} : __iop_regex_if_then_else{regex, if, then, else} ;
+open_quote : "\u201C" ;
+close_quote : "\u201D" ;
+open_quote1 : "\u2018" ;
+close_quote1 : "\u2019" ;
+apos : "\u2019" ;
