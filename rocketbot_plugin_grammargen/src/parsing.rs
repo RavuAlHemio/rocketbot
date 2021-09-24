@@ -9,7 +9,9 @@ use pest::error::Error;
 use pest::iterators::Pair;
 use pest_derive::Parser;
 
-use crate::grammar::{Alternative, Condition, Metacommand, Production, Rulebook, RuleDefinition};
+use crate::grammar::{
+    Alternative, Condition, Metacommand, Production, ProductionKind, Rulebook, RuleDefinition,
+};
 
 
 #[derive(Parser)]
@@ -18,12 +20,13 @@ struct GrammarGenParser;
 
 
 struct ParserState {
-    call_site_id_counter: AtomicUsize,
+    prod_id_counter: AtomicUsize,
 }
 impl ParserState {
     pub fn new() -> Self {
         Self {
-            call_site_id_counter: AtomicUsize::new(0),
+            // 0 is used for builtins
+            prod_id_counter: AtomicUsize::new(1),
         }
     }
 }
@@ -228,7 +231,8 @@ fn parse_production(prod_pair: &Pair<'_, Rule>, state: &mut ParserState) -> Prod
         // trivial case
         alternatives.remove(0).inner
     } else {
-        Production::Choice { options: alternatives }
+        let prod_id = state.prod_id_counter.fetch_add(1, Ordering::SeqCst);
+        Production::new(prod_id, ProductionKind::Choice { options: alternatives })
     }
 }
 
@@ -258,7 +262,8 @@ fn parse_alternative(alt_pair: &Pair<'_, Rule>, state: &mut ParserState) -> Alte
     let inner = if sequence.len() == 1 {
         sequence.remove(0)
     } else {
-        Production::Sequence { prods: sequence }
+        let prod_id = state.prod_id_counter.fetch_add(1, Ordering::SeqCst);
+        Production::new(prod_id, ProductionKind::Sequence { prods: sequence })
     };
 
     Alternative::new(
@@ -302,18 +307,19 @@ fn parse_sequence_elem(seq_elem_pair: &Pair<'_, Rule>, state: &mut ParserState) 
     let single_elem = parse_single_sequence_elem(&single_elem_pair, state);
 
     if let Some(kleene) = inner.next() {
+        let prod_id = state.prod_id_counter.fetch_add(1, Ordering::SeqCst);
         return match kleene.as_str() {
             "*" => {
-                Production::Kleene {
+                Production::new(prod_id, ProductionKind::Kleene {
                     at_least_one: false,
                     inner: Box::new(single_elem),
-                }
+                })
             },
             "+" => {
-                Production::Kleene {
+                Production::new(prod_id, ProductionKind::Kleene {
                     at_least_one: true,
                     inner: Box::new(single_elem),
-                }
+                })
             },
             other => panic!("unexpected single-sequence count symbol: {}", other),
         };
@@ -349,15 +355,33 @@ fn parse_single_sequence_elem(sse_pair: &Pair<'_, Rule>, state: &mut ParserState
 
             let production = parse_production(&next_pair, state);
 
-            Production::Optional {
+            let prod_id = state.prod_id_counter.fetch_add(1, Ordering::SeqCst);
+            Production::new(prod_id, ProductionKind::Optional {
                 weight,
                 inner: Box::new(production),
+            })
+        },
+        Rule::variable_call => {
+            let mut innerer = elem_pair.clone().into_inner();
+            let mut arguments = Vec::new();
+
+            let next_pair = innerer.next().expect("no name production");
+            let identifier_production = parse_production(&next_pair, state);
+
+            while let Some(arg_pair) = innerer.next() {
+                let arg = parse_production(&arg_pair, state);
+                arguments.push(arg);
             }
+
+            let prod_id = state.prod_id_counter.fetch_add(1, Ordering::SeqCst);
+            Production::new(prod_id, ProductionKind::VariableCall {
+                name_production: Box::new(identifier_production),
+                args: arguments,
+            })
         },
         Rule::call_params => {
             let mut innerer = elem_pair.clone().into_inner();
             let mut arguments = Vec::new();
-            let call_site_id = state.call_site_id_counter.fetch_add(1, Ordering::SeqCst);
 
             let identifier_pair = innerer.next().expect("no identifier");
             let identifier = parse_identifier(&identifier_pair);
@@ -371,29 +395,29 @@ fn parse_single_sequence_elem(sse_pair: &Pair<'_, Rule>, state: &mut ParserState
                 arguments.push(arg);
             }
 
-            Production::Call {
+            let prod_id = state.prod_id_counter.fetch_add(1, Ordering::SeqCst);
+            Production::new(prod_id, ProductionKind::Call {
                 name: identifier,
                 args: arguments,
-                call_site_id,
-            }
+            })
         },
         Rule::identifier => {
             let identifier = parse_identifier(&elem_pair);
             let arguments = Vec::new();
-            let call_site_id = state.call_site_id_counter.fetch_add(1, Ordering::SeqCst);
 
-            Production::Call {
+            let prod_id = state.prod_id_counter.fetch_add(1, Ordering::SeqCst);
+            Production::new(prod_id, ProductionKind::Call {
                 name: identifier,
                 args: arguments,
-                call_site_id,
-            }
+            })
         },
         Rule::escaped_string => {
             let value = parse_escaped_string(&elem_pair);
 
-            Production::String {
+            let prod_id = state.prod_id_counter.fetch_add(1, Ordering::SeqCst);
+            Production::new(prod_id, ProductionKind::String {
                 string: value,
-            }
+            })
         },
         other => panic!("unexpected single sequence element: {:?}", other),
     }

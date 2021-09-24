@@ -200,16 +200,18 @@ impl RocketBotPlugin for GrammarGenPlugin {
             conditions.insert(format!("opt_{}", flag));
         }
 
-        let mut state = GeneratorState::new(
+        let mut state = GeneratorState::new_topmost(
             my_grammar,
             conditions,
             Arc::clone(&self.rng),
-            Arc::new(Mutex::new(HashMap::new())),
         );
 
         let phrase = match state.generate() {
-            None => return,
-            Some(s) => s,
+            Ok(s) => s,
+            Err(e) => {
+                error!("error generating {:?}: {}", command.name, e);
+                return;
+            },
         };
         send_channel_message!(
             interface,

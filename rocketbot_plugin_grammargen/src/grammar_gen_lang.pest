@@ -57,6 +57,7 @@ kleene = { "*" | "+" }
 single_sequence_elem =
     { parenthesized
     | optional
+    | variable_call
     | call_params
     | identifier
     | escaped_string
@@ -65,6 +66,7 @@ single_sequence_elem =
 parenthesized = { "(" ~ ggproduction ~ ")" }
 optional = { "[" ~ weight? ~ ggproduction ~ "]" }
 call_params = { identifier ~ "{" ~ ggproduction ~ ("," ~ ggproduction)* ~ "}" }
+variable_call = { "$" ~ "{" ~ ggproduction ~ ("," ~ ggproduction)* ~ "}" }
 
 metacommand_definition =
     { randomize_condition_metacommand
