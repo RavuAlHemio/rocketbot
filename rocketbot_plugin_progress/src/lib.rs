@@ -52,8 +52,12 @@ impl RocketBotPlugin for ProgressPlugin {
                 .add_option("b", CommandValueType::String)
                 .add_option("background", CommandValueType::String)
                 .add_option("s", CommandValueType::String)
-                .add_option("start-box", CommandValueType::String)
+                .add_option("start-bar", CommandValueType::String)
                 .add_option("e", CommandValueType::String)
+                .add_option("end-bar", CommandValueType::String)
+                .add_option("S", CommandValueType::String)
+                .add_option("start-box", CommandValueType::String)
+                .add_option("E", CommandValueType::String)
                 .add_option("end-box", CommandValueType::String)
                 .build()
         ).await;
@@ -87,13 +91,23 @@ impl RocketBotPlugin for ProgressPlugin {
             .map(|v| v.as_str())
             .flatten()
             .unwrap_or(" ");
-        let start_box = command.options.get("start-box")
+        let start_bar = command.options.get("start-bar")
             .or_else(|| command.options.get("s"))
+            .map(|v| v.as_str())
+            .flatten()
+            .unwrap_or("");
+        let end_bar = command.options.get("end-bar")
+            .or_else(|| command.options.get("e"))
+            .map(|v| v.as_str())
+            .flatten()
+            .unwrap_or("");
+        let start_box = command.options.get("start-box")
+            .or_else(|| command.options.get("S"))
             .map(|v| v.as_str())
             .flatten()
             .unwrap_or("[");
         let end_box = command.options.get("end-box")
-            .or_else(|| command.options.get("e"))
+            .or_else(|| command.options.get("E"))
             .map(|v| v.as_str())
             .flatten()
             .unwrap_or("]");
@@ -102,7 +116,7 @@ impl RocketBotPlugin for ProgressPlugin {
             &command.rest,
             |caps: &Captures| regex_replacement_func(
                 caps, self.bar_length,
-                foreground, background, start_box, end_box,
+                foreground, background, start_bar, end_bar, start_box, end_box,
             ),
         );
         if replaced != command.rest {
@@ -118,7 +132,9 @@ impl RocketBotPlugin for ProgressPlugin {
 
 fn regex_replacement_func(
     caps: &Captures, bar_length: usize,
-    foreground_str: &str, background_str: &str, start_box: &str, end_box: &str,
+    foreground_str: &str, background_str: &str,
+    default_start_bar: &str, default_end_bar: &str,
+    start_box: &str, end_box: &str,
 ) -> String {
     let has_minus = caps
         .name("minus").expect("minus not captured")
@@ -132,11 +148,11 @@ fn regex_replacement_func(
     let start_str = caps
         .name("start")
         .map(|s| s.as_str())
-        .unwrap_or("");
+        .unwrap_or(default_start_bar);
     let end_str = caps
         .name("end")
         .map(|s| s.as_str())
-        .unwrap_or("");
+        .unwrap_or(default_end_bar);
 
     let rendered_bar = progress_replace(
         bar_length,
