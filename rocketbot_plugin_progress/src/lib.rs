@@ -51,10 +51,10 @@ impl RocketBotPlugin for ProgressPlugin {
                 .add_option("foreground", CommandValueType::String)
                 .add_option("b", CommandValueType::String)
                 .add_option("background", CommandValueType::String)
-                .add_option("l", CommandValueType::String)
-                .add_option("left-box", CommandValueType::String)
-                .add_option("r", CommandValueType::String)
-                .add_option("right-box", CommandValueType::String)
+                .add_option("s", CommandValueType::String)
+                .add_option("start-box", CommandValueType::String)
+                .add_option("e", CommandValueType::String)
+                .add_option("end-box", CommandValueType::String)
                 .build()
         ).await;
 
@@ -87,13 +87,13 @@ impl RocketBotPlugin for ProgressPlugin {
             .map(|v| v.as_str())
             .flatten()
             .unwrap_or(" ");
-        let left_box = command.options.get("left-box")
-            .or_else(|| command.options.get("l"))
+        let start_box = command.options.get("start-box")
+            .or_else(|| command.options.get("s"))
             .map(|v| v.as_str())
             .flatten()
             .unwrap_or("[");
-        let right_box = command.options.get("right-box")
-            .or_else(|| command.options.get("r"))
+        let end_box = command.options.get("end-box")
+            .or_else(|| command.options.get("e"))
             .map(|v| v.as_str())
             .flatten()
             .unwrap_or("]");
@@ -102,7 +102,7 @@ impl RocketBotPlugin for ProgressPlugin {
             &command.rest,
             |caps: &Captures| regex_replacement_func(
                 caps, self.bar_length,
-                foreground, background, left_box, right_box,
+                foreground, background, start_box, end_box,
             ),
         );
         if replaced != command.rest {
@@ -118,7 +118,7 @@ impl RocketBotPlugin for ProgressPlugin {
 
 fn regex_replacement_func(
     caps: &Captures, bar_length: usize,
-    foreground_str: &str, background_str: &str, left_box: &str, right_box: &str,
+    foreground_str: &str, background_str: &str, start_box: &str, end_box: &str,
 ) -> String {
     let has_minus = caps
         .name("minus").expect("minus not captured")
@@ -146,8 +146,8 @@ fn regex_replacement_func(
         end_str,
         foreground_str,
         background_str,
-        left_box,
-        right_box,
+        start_box,
+        end_box,
     );
     format!("`{}`", rendered_bar)
 }
@@ -160,8 +160,8 @@ fn progress_replace(
     end_str: &str,
     foreground_str: &str,
     background_str: &str,
-    left_box: &str,
-    right_box: &str,
+    start_box: &str,
+    end_box: &str,
 ) -> String {
     let full_foreground = repeat_string(foreground_str, 2*bar_length);
     let full_background = repeat_string(background_str, bar_length);
@@ -183,7 +183,7 @@ fn progress_replace(
         // segments come before the box
         format!(
             "{}{}{}{} -{}%",
-            segs, left_box, full_background, right_box, number,
+            segs, start_box, full_background, end_box, number,
         )
     } else {
         // segments are inside and sometimes outside the box
@@ -206,7 +206,7 @@ fn progress_replace(
 
         format!(
             "{}{}{}{}{} {}%",
-            left_box, segs_inside_box, bg_inside_box, right_box, segs_outside_box, number,
+            start_box, segs_inside_box, bg_inside_box, end_box, segs_outside_box, number,
         )
     }
 }
@@ -233,7 +233,7 @@ mod tests {
             "=",
             " ",
             "[",
-            "]"
+            "]",
         );
         assert_eq!(expected, obtained);
     }
@@ -248,7 +248,7 @@ mod tests {
             "rofl",
             "lol",
             ">>>",
-            "<<<"
+            "<<<",
         );
         assert_eq!(expected, obtained);
     }
