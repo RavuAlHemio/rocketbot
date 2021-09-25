@@ -4,7 +4,7 @@ use async_trait::async_trait;
 use once_cell::sync::Lazy;
 use regex::{Captures, Regex};
 use rocketbot_interface::{JsonValueExtensions, send_channel_message};
-use rocketbot_interface::commands::{CommandDefinitionBuilder, CommandInstance};
+use rocketbot_interface::commands::{CommandDefinitionBuilder, CommandInstance, CommandValueType};
 use rocketbot_interface::interfaces::{RocketBotInterface, RocketBotPlugin};
 use rocketbot_interface::model::ChannelMessage;
 use serde_json;
@@ -47,6 +47,14 @@ impl RocketBotPlugin for ProgressPlugin {
                 "{cpfx}progress TEXT".to_owned(),
                 "Annotates percentages in the text with progress bars.".to_owned(),
             )
+                .add_option("f", CommandValueType::String)
+                .add_option("foreground", CommandValueType::String)
+                .add_option("b", CommandValueType::String)
+                .add_option("background", CommandValueType::String)
+                .add_option("l", CommandValueType::String)
+                .add_option("left-box", CommandValueType::String)
+                .add_option("r", CommandValueType::String)
+                .add_option("right-box", CommandValueType::String)
                 .build()
         ).await;
 
@@ -69,9 +77,33 @@ impl RocketBotPlugin for ProgressPlugin {
             Some(i) => i,
         };
 
+        let foreground = command.options.get("foreground")
+            .or_else(|| command.options.get("f"))
+            .map(|v| v.as_str())
+            .flatten()
+            .unwrap_or("=");
+        let background = command.options.get("background")
+            .or_else(|| command.options.get("b"))
+            .map(|v| v.as_str())
+            .flatten()
+            .unwrap_or(" ");
+        let left_box = command.options.get("left-box")
+            .or_else(|| command.options.get("l"))
+            .map(|v| v.as_str())
+            .flatten()
+            .unwrap_or("[");
+        let right_box = command.options.get("right-box")
+            .or_else(|| command.options.get("r"))
+            .map(|v| v.as_str())
+            .flatten()
+            .unwrap_or("]");
+
         let replaced = PROGRESS_INDICATOR_RE.replace_all(
             &command.rest,
-            |caps: &Captures| regex_replacement_func(caps, self.bar_length),
+            |caps: &Captures| regex_replacement_func(
+                caps, self.bar_length,
+                foreground, background, left_box, right_box,
+            ),
         );
         if replaced != command.rest {
             send_channel_message!(
@@ -84,7 +116,10 @@ impl RocketBotPlugin for ProgressPlugin {
 }
 
 
-fn regex_replacement_func(caps: &Captures, bar_length: usize) -> String {
+fn regex_replacement_func(
+    caps: &Captures, bar_length: usize,
+    foreground_str: &str, background_str: &str, left_box: &str, right_box: &str,
+) -> String {
     let has_minus = caps
         .name("minus").expect("minus not captured")
         .as_str() == "-";
@@ -102,11 +137,6 @@ fn regex_replacement_func(caps: &Captures, bar_length: usize) -> String {
         .name("end")
         .map(|s| s.as_str())
         .unwrap_or("");
-
-    let foreground_str = "=";
-    let background_str = " ";
-    let left_box = "[";
-    let right_box = "]";
 
     let rendered_bar = progress_replace(
         bar_length,
