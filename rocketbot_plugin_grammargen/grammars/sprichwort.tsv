@@ -1,10 +1,14 @@
 group	left	right
+adverbial	Am Abend	
+adverbial	An der Leine	fängt der Hund keinen Hasen.
 adverbial	Auch auf dem höchsten Thron	sitzt man auf dem eigenen Hintern.
 adverbial	Auch in einer alten Kirche	kann man die Glocken noch läuten lassen.
 adverbial	Auf alten Pfannen	lernt man kochen.
 adverbial	Auf alten Schiffen	lernt man segeln.
 adverbial	Auf der Kanzel	kann man eine schöne Messe lesen.
+adverbial	Auf einem Bein	kann man nicht stehen.
 adverbial	Auf fremdem Arsch	ist gut durch Feuer reiten.
+adverbial	Auf seinem Misthaufen	ist der Hahn König.
 adverbial	Bei Wölfen und Eulen	lernt man heulen.
 adverbial	Im Dunkeln	ist gut munkeln.
 adverbial	Im Mund	ist alles rund.
@@ -15,33 +19,37 @@ adverbial	In der Not	frisst der Teufel fliegen.
 adverbial	In der Ruhe	liegt die Kraft.
 adverbial	Nachher	ist man immer klüger.
 adverbial	Unter Blinden	ist der Einäugige König.
-adverbial	Vor Gott	sind alle gleich.
-adverbial	Auf seinem Misthaufen	ist der Hahn König.
-adverbial	Auf einem Bein	kann man nicht stehen.
-adverbial	Wo gehobelt wird,	fallen Späne.
+adverbial	Vor Gott	sind alle Menschen gleich.
 comparative	Besser arm dran	als Arm ab.
 comparative	Besser den Spatz in der Hand	als die Taube auf dem Dach.
+comparative	Besser eigenes Brot	als fremder Braten.
 comparative	Besser ein Ende mit Schrecken	als Schrecken ohne Ende.
 comparative	Besser einäugig	als blind.
 comparative	Besser schnell gestorben	als langsam verdorben.
 comparative	Lieber arm und gesund	als reich und krank.
 comparative	Lieber einen dicken Bauch vom Saufen	als einen krummen Buckel vom Arbeiten.
-comparative	Besser eigenes Brot	als fremder Braten.
+dative	Dem Betrübten	ist übel geigen.
 dative	Dem Glücklichen	schlägt keine Stunde.
+dative	Dem Hahn, der zu früh kräht,	dreht man den Hals um.
 dative	Einem geschenkten Gaul	schaut man nicht ins Maul.
+dative	Einem nackten Mann	kann man nicht in die Taschen greifen.
 plural	Alle Wege	führen nach Rom.
 plural	Alte Füchse	gehen schwer in die Falle.
 plural	Andere Mütter	haben auch schöne Töchter.
 plural	Ärzte	sind des Herrgotts Menschenflicker.
 plural	Ausnahmen	bestätigen die Regel.
+plural	Bäume	wachsen nicht in den Himmel.
 plural	Betrunkene und Kinder	sagen die Wahrheit.
 plural	Die dümmsten Bauern	haben die dicksten Kartoffeln.
 plural	Die Letzten	werden die Ersten sein.
+plural	Die Schweine von heute	sind die Schinken von morgen.
 plural	Gegensätze	ziehen sich an.
 plural	Getroffene Hunde	bellen.
 plural	Gottes Wege	sind unergründlich.
 plural	Heim und Herd	sind Goldes wert.
 plural	Hund und Katz	vertragen sich nicht.
+plural	Hunde, die bellen,	beißen nicht.
+plural	Kinder und Narren	sagen die Wahrheit.
 plural	Kleider	machen Leute.
 plural	Lügen	haben kurze Beine.
 plural	Neue Besen	kehren gut.
@@ -52,33 +60,34 @@ plural	Scherben	bringen Glück.
 plural	Schlafende Hunde	soll man nicht wecken.
 plural	Stille Wasser	sind tief.
 plural	Taten	
+plural	Torheit und Stolz	wachsen auf einem Holz.
 plural	Totgesagte	leben länger.
+plural	Viele Köche	verderben den Brei.
 plural	Vögel, die morgens singen,	holt abends die Katze.
 plural	Zwei Hähne auf dem Mist	bleiben selten ohne Zwist.
-plural	Viele Köche	verderben den Brei.
-plural	Die Schweine von heute	sind die Schinken von morgen.
-plural	Bäume	wachsen nicht in den Himmel.
 singular	Adel	verpflichtet.
 singular	Aller Anfang	ist schwer.
 singular	Alles Gute	kommt von oben.
-singular	Alter	
+singular	Alter	schützt vor Torheit nicht.
 singular	Angst	verleiht Flügel.
 singular	Arbeit	zieht Arbeit nach sich.
-singular	Argwohn	ist des Teufels Hure.
 singular	Argwohn	isst mit dem Teufel aus der gleichen Schüssel.
+singular	Argwohn	ist des Teufels Hure.
 singular	Armut	ist aller Künste Stiefmutter.
 singular	Blut	ist dicker als Wasser.
+singular	Borgen	bringt Sorgen.
 singular	Das Glück	belohnt den Tüchtigen.
-singular	Das Leben	ist kein Zuckerschlecken.
 singular	Das Leben	ist kein Wunschkonzert.
+singular	Das Leben	ist kein Zuckerschlecken.
 singular	Das letzte Hemd	hat keine Taschen.
+singular	Der Appetit	kommt beim Essen.
 singular	Der Blitz	schlägt nirgends zweimal ein.
-singular	Der Blitz	stinkt.
 singular	Der Faule	wird am Abend fleißig.
 singular	Der Fisch	stinkt vom Kopf her.
 singular	Der Schuster	hat die schlechtesten Schuhe.
 singular	Der Teufel	scheißt immer auf den größten Haufen.
 singular	Der Teufel	steckt im Detail.
+singular	Der Zweck	heiligt die Mittel.
 singular	Des einen Freud'	ist des anderen Leid.
 singular	Die Axt im Haus	erspart den Zimmermann.
 singular	Die Frau	ist des Mannes Visitenkarte.
@@ -86,6 +95,7 @@ singular	Die Hoffnung	stirbt zuletzt.
 singular	Die Katze	
 singular	Die Tat	wirkt mächtiger als das Wort.
 singular	Die Wahrheit	liegt in der Mitte.
+singular	Die Zeit	heilt alle Wunden.
 singular	Ehrlich	währt am längsten.
 singular	Eigener Herd	ist Goldes wert.
 singular	Eigenlob	stinkt.
@@ -94,30 +104,40 @@ singular	Ein blindes Huhn	findet auch mal ein Korn.
 singular	Ein gebranntes Kind	scheut das Feuer.
 singular	Ein gutes Gewissen	ist ein sanftes Ruhekissen.
 singular	Ein leichter Schlag auf den Hinterkopf	erhöht das Denkvermögen.
+singular	Ein rollender Stein	setzt kein Moos an.
 singular	Ein schlafender Fuchs	fängt kein Huhn.
 singular	Ein Unglück	kommt selten allein.
 singular	Eine Schwalbe	macht noch keinen Sommer.
+singular	Einsicht	ist der erste Weg zur Besserung.
+singular	Ende gut,	alles gut.
 singular	Faulheit	lohnt mit Armut.
 singular	Geld	regiert die Welt.
 singular	Geld allein	macht nicht glücklich.
+singular	Gelegenheit	macht Diebe.
 singular	Geteiltes Leid	ist halbes Leid.
 singular	Gott	
 singular	Guter Rat	ist teuer.
-singular	Habgier	
+singular	Habgier	ist die Wurzel allen Übels.
 singular	Handwerk	hat goldenen Boden.
 singular	Hochmut	kommt vor dem Fall.
+singular	Hunger	ist der beste Koch.
 singular	Irren	ist menschlich.
+singular	Jammern	füllt keine Kammern.
 singular	Jeder Topf	hat einen Deckel.
 singular	Jedes Böhnchen	gibt ein Tönchen.
 singular	Jugend	kennt keine Tugend.
 singular	Kapital	hat keine Moral.
+singular	Keine Antwort	ist auch eine Antwort.
+singular	Kindermund	tut Wahrheit kund.
 singular	Kleinvieh	macht auch Mist.
+singular	Lachen	ist die beste Medizin.
 singular	Lesen	gefährdet die Dummheit.
-singular	Liebe	macht blind.
 singular	Liebe	geht durch den Magen.
+singular	Liebe	macht blind.
 singular	Menschenfleisch	muss gepeinigt werden.
 singular	Morgenstund	hat Gold im Mund.
 singular	Nichts	ist so alt wie die Zeitung von gestern.
+singular	Nur der Tod	ist umsonst.
 singular	Nur ein guter Seemann	sticht auch ins rote Meer.
 singular	Nur wer gegen den Strom schwimmt,	kommt an die Quelle.
 singular	Papier	ist geduldig.
@@ -129,11 +149,15 @@ singular	Sauer	macht lustig.
 singular	Spinne am Morgen	bringt Kummer und Sorgen.
 singular	Sport	ist Mord.
 singular	Stadtluft	macht frei.
+singular	Steter Tropfen	höhlt den Stein.
 singular	Stillstand	ist Rückschritt.
+singular	Trautes Heim,	Glück allein.
 singular	Trunkener Mund	spricht aus Herzens Grund.
 singular	Übung	macht den Meister.
+singular	Unkraut	vergeht nicht.
 singular	Unwissenheit	schützt vor Strafe nicht.
 singular	Voller Bauch	studiert nicht gern.
+singular	Vorfreude	ist die schönste Freude.
 singular	Vorsicht	ist besser als Nachsicht.
 singular	Was dem einen recht ist,	ist dem anderen billig.
 singular	Was du heute kannst besorgen,	das verschiebe nicht auf morgen.
@@ -147,27 +171,30 @@ singular	Was nicht ist,	kann noch werden.
 singular	Wasser	hat keine Balken.
 singular	Wer anderen eine Grube gräbt,	fällt selbst hinein.
 singular	Wer den Pfennig nicht ehrt,	ist des Talers nicht wert.
+singular	Wer den Schaden hat,	braucht für den Spott nicht zu sorgen.
 singular	Wer die Wahl hat,	hat die Qual.
 singular	Wer flüstert,	der lügt.
+singular	Wer Grillen jagt,	wird Grillen fangen.
+singular	Wer hoch steigt,	fällt tief.
 singular	Wer im Glashaus sitzt,	sollte nicht mit Steinen werfen.
+singular	Wer lang hustet,	lebt lang.
 singular	Wer nicht hören will,	muss fühlen.
 singular	Wer nichts wird,	wird Wirt.
 singular	Wer rastet,	rostet.
+singular	Wer schläft,	der sündigt nicht.
 singular	Wer schön sein will,	muss leiden.
 singular	Wer wagt,	gewinnt.
 singular	Wer weit kommen will,	muss früh aufstehen.
 singular	Wer Wind sät,	wird Sturm ernten.
+singular	Wer zu spät kommt,	den bestraft das Leben.
 singular	Wer zuerst kommt,	mahlt zuerst.
 singular	Wer zuletzt lacht,	lacht am besten.
 singular	Zeit	ist Geld.
-singular	Wer zu spät kommt,	den bestraft das Leben.
-singular	Wer schläft,	der sündigt nicht.
-singular	Hunger	ist der beste Koch.
-singular	Vorfreude	ist die schönste Freude.
-singular	Einsicht	ist der erste Weg zur Besserung.
 situational	Ist der Ruf erst ruiniert,	lebt es sich recht ungeniert.
 situational	Ist die Katze aus dem Haus,	tanzen die Mäuse auf dem Tisch.
 situational	Wenn der Berg nicht zum Propheten kommt,	muss der Prophet zum Berge gehen.
 situational	Wenn der Fuchs predigt,	bewahr' man die Gänse.
 situational	Wenn der Kuchen spricht,	schweigen die Krümel.
 situational	Wenn zwei sich streiten,	freut sich der Dritte.
+situational	Wo gehobelt wird,	fallen Späne.
+situational	Wo nichts ist,	hat der Kaiser das Recht verloren.
