@@ -1,51 +1,52 @@
 use std::collections::HashSet;
-use std::env;
-use std::ffi::OsString;
 use std::fs::File;
 use std::io::Read;
 use std::path::PathBuf;
 
+use clap::Clap;
 use rand::{Rng, SeedableRng};
 use rand::rngs::StdRng;
 use rocketbot_plugin_grammargen::grammar::{GeneratorState, Metacommand};
 use rocketbot_plugin_grammargen::parsing::parse_grammar;
 
 
-#[tokio::main]
-async fn main() {
-    let args_os: Vec<OsString> = env::args_os().collect();
-    let mut verify = true;
-    let mut output_grammar = false;
-    let mut path_index: usize = 1;
-    loop {
-        if args_os.len() < path_index {
-            eprintln!("Usage: grammargenerate [--no-verify|--output-grammar]... GRAMMAR");
-            return;
-        }
+#[derive(Clap)]
+struct Opts {
+    #[clap(short = 'n', long = "no-verify")]
+    pub no_verify: bool,
 
-        if args_os[path_index] == "--no-verify" {
-            verify = false;
-            path_index += 1;
-            continue;
-        } else if args_os[path_index] == "--output-grammar" {
-            output_grammar = true;
-            path_index += 1;
-            continue;
-        }
+    #[clap(short = 'g', long = "output-grammar")]
+    pub output_grammar: bool,
 
-        // probably an actual file name
-        break;
-    }
-    let grammar_path = PathBuf::from(&args_os[path_index]);
+    #[clap(short = 's', long = "seed")]
+    pub seed: Option<u64>,
 
-    let grammar_name = grammar_path.file_stem()
+    pub grammar_path: PathBuf,
+}
+impl Opts {
+    pub fn verify(&self) -> bool { !self.no_verify }
+}
+
+
+fn main() {
+    let opts: Opts = Clap::parse();
+    /*
+    let opts: Opts = Opts {
+        no_verify: false,
+        output_grammar: false,
+        seed: Some(0),
+        grammar_path: PathBuf::from(r".\rocketbot_plugin_grammargen\grammars\eqn.grammar"),
+    };
+    */
+
+    let grammar_name = opts.grammar_path.file_stem()
         .expect("grammar name cannot be derived from file name")
         .to_str()
         .expect("grammar name is not valid Unicode")
         .to_owned();
 
     let grammar_str = {
-        let mut grammar_file = File::open(&grammar_path)
+        let mut grammar_file = File::open(&opts.grammar_path)
             .expect("failed to open grammar file");
 
         let mut grammar_string = String::new();
@@ -59,7 +60,7 @@ async fn main() {
     let mut rulebook = parse_grammar(&grammar_name, &grammar_str)
         .expect("failed to parse grammar");
 
-    if output_grammar {
+    if opts.output_grammar {
         println!("{:#?}", rulebook);
     }
 
@@ -68,7 +69,11 @@ async fn main() {
     nicks.insert("SampleNick".to_owned());
     rulebook.add_builtins(&nicks, Some("SampleNick"));
 
-    let mut rng = StdRng::from_entropy();
+    let mut rng = if let Some(seed) = opts.seed {
+        StdRng::seed_from_u64(seed)
+    } else {
+        StdRng::from_entropy()
+    };
     let mut conditions = HashSet::new();
 
     // process metacommands
@@ -83,23 +88,29 @@ async fn main() {
         }
     }
 
+    let start_production = rulebook.rule_definitions
+        .get(&grammar_name).unwrap()
+        .top_production;
     let mut state = GeneratorState::new_topmost(
-        rulebook,
+        rulebook.clone(),
+        start_production,
         conditions,
         rng,
     );
 
-    if verify {
-        if let Err(soundness) = state.verify_soundness() {
+    if opts.verify() {
+        if let Err(soundness) = rocketbot_plugin_grammargen::grammar::verify(&mut state) {
             println!("grammar failed soundness check: {}", soundness);
             return;
         }
+        state.prepare_again(rulebook.clone(), start_production);
     }
 
     for _ in 0..100 {
-        match state.generate() {
-            Ok(s) => println!("> {}", s),
+        match rocketbot_plugin_grammargen::grammar::generate(&mut state) {
+            Ok(g) => println!("> {}", g),
             Err(e) => println!("! {}", e),
-        }
+        };
+        state.prepare_again(rulebook.clone(), start_production);
     }
 }

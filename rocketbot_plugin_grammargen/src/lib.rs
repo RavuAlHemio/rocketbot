@@ -193,16 +193,20 @@ impl RocketBotPlugin for GrammarGenPlugin {
             conditions.insert(format!("opt_{}", flag));
         }
 
+        let start_production = my_grammar.rule_definitions
+            .get(&command.name).unwrap()
+            .top_production;
         let mut state = GeneratorState::new_topmost(
             my_grammar,
+            start_production,
             conditions,
             rng,
         );
 
-        let phrase = match state.generate() {
+        let phrase = match crate::grammar::generate(&mut state) {
             Ok(s) => s,
             Err(e) => {
-                error!("error generating {:?}: {}", command.name, e);
+                error!("failed to generate {:?}: {}", command.name, e);
                 return;
             },
         };
