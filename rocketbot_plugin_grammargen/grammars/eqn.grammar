@@ -1,0 +1,55 @@
+eqn : "\\[" expression "\\]" ;
+
+expression : big_thing_expression{variable, variable} ;
+
+big_thing_expression{outer_var, inner_var}
+    : integral{outer_var, inner_var}
+    | sumprod{outer_var, inner_var}
+    | derivation{outer_var, inner_var}
+    | pow_expression{outer_var, inner_var}
+    ;
+
+pow_expression{outer_var, inner_var}
+    : term{outer_var, inner_var} "^{" term{outer_var, inner_var} "}"
+    | muldiv_expression{outer_var, inner_var}
+    ;
+
+muldiv_expression{outer_var, inner_var}
+    : term{outer_var, inner_var} ( "\\cdot " term{outer_var, inner_var} )+
+    | "\\frac{" big_thing_expression{inner_var, variable} "}{" big_thing_expression{inner_var, variable} "}"
+    | addsub_expression{outer_var, inner_var}
+    ;
+
+addsub_expression{outer_var, inner_var} : term{outer_var, inner_var} ( ( "+" | "-" ) term{outer_var, inner_var} )* ;
+
+term{outer_var, inner_var}
+    : outer_var | inner_var | constant | number | trig_term{outer_var, inner_var}
+    | "\\left(" big_thing_expression{inner_var, variable} "\\right)"
+    ;
+
+trig_term{outer_var, inner_var} : "\\" ("sin" | "cos" | "tan") " " term{outer_var, inner_var} ;
+
+integral{outer_var, inner_var} : "\\int" ( int_limits{outer_var} | " " ) big_thing_expression{inner_var, variable} "\\,\\text{d}" inner_var ;
+sumprod{outer_var, inner_var} : ("\\sum" | "\\prod") "_{" inner_var "=" sum_bottom{outer_var} "}^{" sum_top{outer_var} "}" big_thing_expression{inner_var, variable} ;
+derivation{outer_var, inner_var}
+    : "\\frac{\\text{d}}{\\text{d}" inner_var "}" big_thing_expression{inner_var, variable}
+    | "\\frac{\\partial}{\\partial " inner_var "}" big_thing_expression{inner_var, variable}
+    ;
+
+variable
+    : <10>  ("x" | "y" | "z" | "t" | "n" | "\\theta" | "\\phi")
+    | <5>   ("a" | "b" | "c" | "i" | "j" | "k" | "m" | "u" | "v" | "w")
+    | <1>   ("d" | "e" | "f" | "g" | "h" | "l" | "o" | "p" | "q" | "r" | "s")
+    ;
+constant : "\\pi" | "\\text{e}" | "\\text{i}" ;
+number : one_to_nine zero_to_nine* ;
+one_to_nine : "1" | "2" | "3" | "4" | "5" | "6" | "7" | "8" | "9" ;
+zero_to_nine :<1> "0" |<9> one_to_nine ;
+
+int_limits{var}
+    : "_{-\\infty}^{" (<50> "0" |<50> var |<1> number ) "}"
+    | "_0^{" (<50> "\\infty" |<50> var |<1> number ) "}"
+    | "_{" (<50> variable |<50> var |<1> number) "}^{" (<50> variable |<50> var |<1> number) "}"
+    ;
+sum_bottom{var} :<100> "0" |<100> variable |<100> var |<1> number ;
+sum_top{var} :<100> variable |<100> var |<50> "\\infty" |<1> number ;
