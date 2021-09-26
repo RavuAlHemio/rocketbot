@@ -57,8 +57,18 @@ def generate_grammar(tsv_path):
         print("// generated from a TSV file -- no sense in editing this!", file=f)
         print("", file=f)
 
-        category_pair_or = " | ".join(f"{category}_pair" for category in categories)
-        print(f"{grammar_name} : {category_pair_or} ;", file=f)
+        category_pair_strings = []
+        first = True
+        for category in categories:
+            if first:
+                symbol = ":"
+                first = False
+            else:
+                symbol = "|"
+            category_pair_strings.append(f" {symbol}<{len(category_to_heads[category])}> {category}_pair")
+        category_pairs = "".join(category_pair_strings)
+
+        print(f"{grammar_name}{category_pairs} ;", file=f)
         print("", file=f)
 
         for category in categories:
