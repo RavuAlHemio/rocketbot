@@ -1,2 +1,5 @@
 /target
 config.json
+
+# CI/CDed:
+rocketbot_plugin_grammargen/grammars/sprichwort.grammar
