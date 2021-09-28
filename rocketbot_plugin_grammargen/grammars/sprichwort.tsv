@@ -1,4 +1,4 @@
-group	left	right
+group	left	right	subversive_left	subversive_right
 adverbial	Am Abend	wird der Faule fleißig.
 adverbial	An der Leine	fängt der Hund keinen Hasen.
 adverbial	Auch auf dem höchsten Thron	sitzt man auf dem eigenen Hintern.
@@ -166,7 +166,7 @@ singular	Liebe	geht durch den Magen.
 singular	Liebe	macht blind.
 singular	Mäßig?	wird alt.
 singular	Menschenfleisch	muss gepeinigt werden.
-singular	Morgenstund	hat Gold im Mund.
+singular	Morgenstund	hat Gold im Mund.		hat Blei im Arsch.
 singular	Müßiggang	ist aller Laster Anfang.
 singular	Nichts	ist so alt wie die Zeitung von gestern.
 singular	Not	macht erfinderisch.
@@ -193,7 +193,7 @@ singular	Übung	macht den Meister.
 singular	Unkraut	vergeht nicht.
 singular	Unwissenheit	schützt vor Strafe nicht.
 singular	Voller Bauch	studiert nicht gern.
-singular	Vorfreude	ist die schönste Freude.
+singular	Vorfreude	ist die schönste Freude.	Schadenfreude
 singular	Vorsicht	ist besser als Nachsicht.
 singular	Vorsicht	ist die Mutter der Porzellankiste.
 singular	Was dem einen recht ist,	ist dem anderen billig.
@@ -208,7 +208,7 @@ singular	Was man sich eingebrockt hat,	das muss man auch auslöffeln.
 singular	Was nicht ist,	kann noch werden.
 singular	Wasser	hat keine Balken.
 singular	Wer "A" sagt,	muss auch "B" sagen.
-singular	Wer Anderen eine Grube gräbt,	fällt selbst hinein.
+singular	Wer Anderen eine Grube gräbt,	fällt selbst hinein.		hat ein Grubengrabgerät.
 singular	Wer auf zwei Hasen zielt,	trifft keinen.
 singular	Wer den Pfennig nicht ehrt,	ist des Talers nicht wert.
 singular	Wer den Schaden hat,	braucht für den Spott nicht zu sorgen.
@@ -218,7 +218,7 @@ singular	Wer ernten will,	muss säen.
 singular	Wer flüstert,	der lügt.
 singular	Wer Grillen jagt,	wird Grillen fangen.
 singular	Wer hoch steigt,	kann tief fallen.
-singular	Wer im Glashaus sitzt,	sollte nicht mit Steinen werfen.
+singular	Wer im Glashaus sitzt,	sollte nicht mit Steinen werfen.		sollte zum Scheißen in den Keller gehen.
 singular	Wer lang hustet,	lebt lang.
 singular	Wer nicht hören will,	muss fühlen.
 singular	Wer nicht wagt,	der nicht gewinnt.
