@@ -127,6 +127,14 @@ impl RocketBotPlugin for ProgressPlugin {
             ).await;
         }
     }
+
+    async fn get_command_help(&self, command_name: &str) -> Option<String> {
+        if command_name == "progress" {
+            Some(include_str!("../help/progress.md").to_owned())
+        } else {
+            None
+        }
+    }
 }
 
 
