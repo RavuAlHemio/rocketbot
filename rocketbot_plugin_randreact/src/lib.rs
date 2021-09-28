@@ -2,6 +2,7 @@ use std::ops::DerefMut;
 use std::sync::{Arc, Weak};
 
 use async_trait::async_trait;
+use chrono::Local;
 use rand::{Rng, RngCore, SeedableRng};
 use rand::rngs::StdRng;
 use rand::seq::SliceRandom;
@@ -52,6 +53,14 @@ impl RocketBotPlugin for RandReactPlugin {
             None => return,
             Some(i) => i,
         };
+
+        // do not trigger if Serious Mode is active
+        let behavior_flags = serde_json::Value::Object(interface.obtain_behavior_flags().await);
+        if let Some(ts) = behavior_flags["srs"][&channel_message.channel.id].as_i64() {
+            if ts < Local::now().timestamp() {
+                return;
+            }
+        }
 
         let emoji_short_name = {
             let mut rng_guard = self.rng.lock().await;

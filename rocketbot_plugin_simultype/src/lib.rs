@@ -2,6 +2,7 @@ use std::collections::{HashMap, HashSet};
 use std::sync::Weak;
 
 use async_trait::async_trait;
+use chrono::Local;
 use rand::{Rng, SeedableRng};
 use rand::rngs::StdRng;
 use rocketbot_interface::interfaces::{RocketBotInterface, RocketBotPlugin};
@@ -88,6 +89,14 @@ impl RocketBotPlugin for SimultypePlugin {
                     // no
 
                     // should we start?
+                    let behavior_flags = serde_json::Value::Object(interface.obtain_behavior_flags().await);
+                    if let Some(ts) = behavior_flags["srs"][&channel.id].as_i64() {
+                        if ts < Local::now().timestamp() {
+                            // no, Serious Mode is active
+                            return;
+                        }
+                    }
+
                     let random_value: f64 = status_guard.rng.gen();
                     if random_value < self.probability {
                         // yes

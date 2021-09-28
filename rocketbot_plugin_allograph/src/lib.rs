@@ -2,6 +2,7 @@ use std::collections::HashMap;
 use std::sync::Weak;
 
 use async_trait::async_trait;
+use chrono::Local;
 use log::debug;
 use rand::{Rng, SeedableRng};
 use rand::rngs::StdRng;
@@ -199,6 +200,15 @@ impl RocketBotPlugin for AllographPlugin {
 
         if &changing_body == original_body {
             return;
+        }
+
+        // do not trigger output logic if Serious Mode is active
+        // (but do count against cooldown values)
+        let behavior_flags = serde_json::Value::Object(interface.obtain_behavior_flags().await);
+        if let Some(ts) = behavior_flags["srs"][&channel_message.channel.id].as_i64() {
+            if ts < Local::now().timestamp() {
+                return;
+            }
         }
 
         let main_prob = inner_state.rng.gen_range(0..100);

@@ -1791,6 +1791,7 @@ name = "rocketbot_plugin_allograph"
 version = "0.1.0"
 dependencies = [
  "async-trait",
+ "chrono",
  "log",
  "rand",
  "regex",
@@ -1954,6 +1955,7 @@ name = "rocketbot_plugin_group_pressure"
 version = "0.1.0"
 dependencies = [
  "async-trait",
+ "chrono",
  "log",
  "rocketbot_interface",
  "serde_json",
@@ -1974,6 +1976,7 @@ name = "rocketbot_plugin_link_react"
 version = "0.1.0"
 dependencies = [
  "async-trait",
+ "chrono",
  "regex",
  "rocketbot_interface",
  "serde_json",
@@ -2063,6 +2066,7 @@ name = "rocketbot_plugin_randreact"
 version = "0.1.0"
 dependencies = [
  "async-trait",
+ "chrono",
  "log",
  "rand",
  "rocketbot_interface",
@@ -2098,6 +2102,7 @@ name = "rocketbot_plugin_simultype"
 version = "0.1.0"
 dependencies = [
  "async-trait",
+ "chrono",
  "log",
  "rand",
  "rocketbot_interface",

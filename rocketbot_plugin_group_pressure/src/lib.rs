@@ -2,6 +2,7 @@ use std::collections::{HashMap, HashSet, VecDeque};
 use std::sync::Weak;
 
 use async_trait::async_trait;
+use chrono::Local;
 use rocketbot_interface::{JsonValueExtensions, send_channel_message};
 use rocketbot_interface::interfaces::{RocketBotInterface, RocketBotPlugin};
 use rocketbot_interface::model::ChannelMessage;
@@ -68,6 +69,15 @@ impl RocketBotPlugin for GroupPressurePlugin {
 
         if usernames_said.len() >= self.trigger_count {
             // yes
+
+            // do not output anything if Serious Mode is active
+            // (but do remember it)
+            let behavior_flags = serde_json::Value::Object(interface.obtain_behavior_flags().await);
+            if let Some(ts) = behavior_flags["srs"][&channel_message.channel.id].as_i64() {
+                if ts < Local::now().timestamp() {
+                    return;
+                }
+            }
 
             // remove matching messages from the queue
             recent_messages_queue
