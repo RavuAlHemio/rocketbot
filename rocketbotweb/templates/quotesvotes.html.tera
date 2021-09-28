@@ -15,14 +15,16 @@
         <span class="score">{{ quote.score }}</span>:
         <ul class="votes">
           {% for vote in quote.votes %}
-            {%- if vote.value == 1 -%}
-              <span class="sigil positive">+</span>
-            {%- elif vote.value == -1 -%}
-              <span class="sigil negative">&#8722;</span>
-            {%- else -%}
-              <span class="sigil unknown">?</span>
-            {%- endif -%}
-            <span class="voter">{{ vote.voter|escape }}</span>
+            <li class="vote">
+              {%- if vote.value == 1 -%}
+                <span class="sigil positive">+</span>
+              {%- elif vote.value == -1 -%}
+                <span class="sigil negative">&#8722;</span>
+              {%- else -%}
+                <span class="sigil unknown">?</span>
+              {%- endif -%}
+              <span class="voter">{{ vote.voter|escape }}</span>
+            </li>
           {% endfor %}
         </ul>
       </td>
