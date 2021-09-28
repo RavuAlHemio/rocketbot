@@ -1,0 +1,1178 @@
+[metadata]
+top_level_categories = ["adverbial", "comparative", "counterpoint", "dative", "plural", "singular", "situational", "what", "who"]
+flags = { subversive = "s" }
+glue = " "
+
+[[entries]]
+category = "adverbial"
+lefts = ["Am Abend"]
+rights = ["wird der Faule fleißig."]
+
+[[entries]]
+category = "adverbial"
+lefts = ["An der Leine"]
+rights = ["fängt der Hund keinen Hasen."]
+
+[[entries]]
+category = "adverbial"
+lefts = ["Auch auf dem höchsten Thron"]
+rights = ["sitzt man auf dem eigenen Hintern."]
+
+[[entries]]
+category = "adverbial"
+lefts = ["Auch in einer alten Kirche"]
+rights = ["kann man die Glocken noch läuten lassen."]
+
+[[entries]]
+category = "adverbial"
+lefts = ["Auf alten Pfannen"]
+rights = ["lernt man kochen."]
+
+[[entries]]
+category = "adverbial"
+lefts = ["Auf alten Pferden"]
+rights = ["lernt man's reiten."]
+
+[[entries]]
+category = "adverbial"
+lefts = ["Auf alten Schiffen"]
+rights = ["lernt man segeln."]
+
+[[entries]]
+category = "adverbial"
+lefts = ["Auf der Kanzel"]
+rights = ["ist der Mönch keusch.", "kann man eine schöne Messe lesen."]
+
+[[entries]]
+category = "adverbial"
+lefts = ["Auf einem Bein"]
+rights = ["kann man nicht stehen."]
+
+[[entries]]
+category = "adverbial"
+lefts = ["Auf fremdem Arsch"]
+rights = ["ist gut durch Feuer reiten."]
+
+[[entries]]
+category = "adverbial"
+lefts = ["Auf seinem Misthaufen"]
+rights = ["ist der Hahn König."]
+
+[[entries]]
+category = "adverbial"
+lefts = ["Bei Wölfen und Eulen"]
+rights = ["lernt man heulen."]
+
+[[entries]]
+category = "adverbial"
+lefts = ["Hinterher"]
+rights = ["ist man immer klüger."]
+
+[[entries]]
+category = "adverbial"
+lefts = ["Im Dunkeln"]
+rights = ["ist gut munkeln."]
+
+[[entries]]
+category = "adverbial"
+lefts = ["Im Mund"]
+rights = ["ist alles rund."]
+
+[[entries]]
+category = "adverbial"
+lefts = ["Im Wein"]
+rights = ["liegt die Wahrheit."]
+
+[[entries]]
+category = "adverbial"
+lefts = ["In der Kürze"]
+rights = ["liegt die Würze."]
+
+[[entries]]
+category = "adverbial"
+lefts = ["In der Mitte"]
+rights = ["geht man am sichersten."]
+
+[[entries]]
+category = "adverbial"
+lefts = ["In der Nacht"]
+rights = ["sind alle Katzen grau."]
+
+[[entries]]
+category = "adverbial"
+lefts = ["In der Not"]
+rights = ["frisst der Teufel Fliegen.", "isst der König Brot."]
+
+[[entries]]
+category = "adverbial"
+lefts = ["In der Ruhe"]
+rights = ["liegt die Kraft."]
+
+[[entries]]
+category = "adverbial"
+lefts = ["Unter Blinden"]
+rights = ["ist der Einäugige König."]
+
+[[entries]]
+category = "adverbial"
+lefts = ["Vor Gott"]
+rights = ["sind alle Menschen gleich."]
+
+[[entries]]
+category = "adverbial"
+lefts = ["Wo gehobelt wird,"]
+rights = ["fallen Späne."]
+
+[[entries]]
+category = "adverbial"
+lefts = ["Wo nichts ist,"]
+rights = ["hat der Kaiser sein Recht verloren."]
+
+[[entries]]
+category = "comparative"
+lefts = ["Besser arm dran"]
+rights = ["als Arm ab."]
+
+[[entries]]
+category = "comparative"
+lefts = ["Besser den Spatz in der Hand"]
+rights = ["als die Taube auf dem Dach."]
+
+[[entries]]
+category = "comparative"
+lefts = ["Besser eigenes Brot"]
+rights = ["als fremder Braten."]
+
+[[entries]]
+category = "comparative"
+lefts = ["Besser ein Ende mit Schrecken"]
+rights = ["als Schrecken ohne Ende."]
+
+[[entries]]
+category = "comparative"
+lefts = ["Besser einäugig"]
+rights = ["als blind."]
+
+[[entries]]
+category = "comparative"
+lefts = ["Besser schnell gestorben"]
+rights = ["als langsam verdorben."]
+
+[[entries]]
+category = "comparative"
+lefts = ["Lieber arm und gesund"]
+rights = ["als reich und krank."]
+
+[[entries]]
+category = "comparative"
+lefts = ["Lieber einen dicken Bauch vom Saufen"]
+rights = ["als einen krummen Buckel vom Arbeiten."]
+
+[[entries]]
+category = "counterpoint"
+lefts = ["Ende gut,"]
+rights = ["alles gut."]
+
+[[entries]]
+category = "counterpoint"
+lefts = ["Klappe zu,"]
+rights = ["Affe tot."]
+
+[[entries]]
+category = "counterpoint"
+lefts = ["Lange Rede,"]
+rights = ["kurzer Sinn."]
+
+[[entries]]
+category = "counterpoint"
+lefts = ["Pech im Spiel,"]
+rights = ["Glück in der Liebe."]
+
+[[entries]]
+category = "counterpoint"
+lefts = ["Trautes Heim,"]
+rights = ["Glück allein."]
+
+[[entries]]
+category = "dative"
+lefts = ["Dem Betrübten"]
+rights = ["ist übel geigen."]
+
+[[entries]]
+category = "dative"
+lefts = ["Dem Glücklichen"]
+rights = ["schlägt keine Stunde."]
+
+[[entries]]
+category = "dative"
+lefts = ["Dem Hahn, der zu früh kräht,"]
+rights = ["dreht man den Hals um."]
+
+[[entries]]
+category = "dative"
+lefts = ["Einem geschenkten Gaul"]
+rights = ["schaut man nicht ins Maul."]
+
+[[entries]]
+category = "dative"
+lefts = ["Einem nackten Mann"]
+rights = ["kann man nicht in die Taschen greifen."]
+
+[[entries]]
+category = "dative"
+lefts = ["Worten"]
+rights = ["sollten Taten folgen."]
+
+[[entries]]
+category = "plural"
+lefts = ["Alle Wege"]
+rights = ["führen nach Rom."]
+
+[[entries]]
+category = "plural"
+lefts = ["Alte Füchse"]
+rights = ["gehen schwer in die Falle."]
+
+[[entries]]
+category = "plural"
+lefts = ["Andere Mütter"]
+rights = ["haben auch schöne Töchter."]
+
+[[entries]]
+category = "plural"
+lefts = ["Ausnahmen"]
+rights = ["bestätigen die Regel."]
+
+[[entries]]
+category = "plural"
+lefts = ["Betrunkene und Kinder"]
+rights = ["sagen die Wahrheit."]
+
+[[entries]]
+category = "plural"
+lefts = ["Bilder"]
+rights = ["sagen mehr als Worte."]
+
+[[entries]]
+category = "plural"
+lefts = ["Bäume"]
+rights = ["wachsen nicht in den Himmel."]
+
+[[entries]]
+category = "plural"
+lefts = ["Die dümmsten Bauern"]
+rights = ["haben die dicksten Kartoffeln."]
+
+[[entries]]
+category = "plural"
+lefts = ["Die Letzten"]
+rights = ["werden die Ersten sein."]
+
+[[entries]]
+category = "plural"
+lefts = ["Die Schweine von heute"]
+rights = ["sind die Schinken von morgen."]
+
+[[entries]]
+category = "plural"
+lefts = ["Gegensätze"]
+rights = ["ziehen sich an."]
+
+[[entries]]
+category = "plural"
+lefts = ["Getroffene Hunde"]
+rights = ["bellen."]
+
+[[entries]]
+category = "plural"
+lefts = ["Gottes Wege"]
+rights = ["sind unergründlich."]
+
+[[entries]]
+category = "plural"
+lefts = ["Heim und Herd"]
+rights = ["sind Goldes wert."]
+
+[[entries]]
+category = "plural"
+lefts = ["Herrenfürze"]
+rights = ["sind nun mal edler."]
+
+[[entries]]
+category = "plural"
+lefts = ["Hund und Katz"]
+rights = ["vertragen sich nicht."]
+
+[[entries]]
+category = "plural"
+lefts = ["Hunde, die bellen,"]
+rights = ["beißen nicht."]
+
+[[entries]]
+category = "plural"
+lefts = ["Kinder und Narren"]
+rights = ["sagen die Wahrheit."]
+
+[[entries]]
+category = "plural"
+lefts = ["Kleider"]
+rights = ["machen Leute."]
+
+[[entries]]
+category = "plural"
+lefts = ["Kleine Geschenke"]
+rights = ["erhalten die Freundschaft."]
+
+[[entries]]
+category = "plural"
+lefts = ["Lügen"]
+rights = ["haben kurze Beine."]
+
+[[entries]]
+category = "plural"
+lefts = ["Narrenhände"]
+rights = ["beschmieren Tisch und Wände."]
+
+[[entries]]
+category = "plural"
+lefts = ["Neue Besen"]
+rights = ["kehren gut."]
+
+[[entries]]
+category = "plural"
+lefts = ["Raubvögel"]
+rights = ["singen nicht."]
+
+[[entries]]
+category = "plural"
+lefts = ["Reisende"]
+rights = ["soll man nicht aufhalten."]
+
+[[entries]]
+category = "plural"
+lefts = ["Rostige Dächer"]
+rights = ["haben meist feuchte Keller."]
+
+[[entries]]
+category = "plural"
+lefts = ["Scherben"]
+rights = ["bringen Glück."]
+
+[[entries]]
+category = "plural"
+lefts = ["Schlafende Hunde"]
+rights = ["soll man nicht wecken."]
+
+[[entries]]
+category = "plural"
+lefts = ["Selbst die größten Könige"]
+rights = ["gehen zu Fuß aufs Klo."]
+
+[[entries]]
+category = "plural"
+lefts = ["Stille Wasser"]
+rights = ["sind tief."]
+
+[[entries]]
+category = "plural"
+lefts = ["Taten"]
+rights = []
+
+[[entries]]
+category = "plural"
+lefts = ["Torheit und Stolz"]
+rights = ["wachsen auf einem Holz."]
+
+[[entries]]
+category = "plural"
+lefts = ["Totgesagte"]
+rights = ["leben länger."]
+
+[[entries]]
+category = "plural"
+lefts = ["Träume"]
+rights = ["sind Schäume."]
+
+[[entries]]
+category = "plural"
+lefts = ["Viele Köche"]
+rights = ["verderben den Brei."]
+
+[[entries]]
+category = "plural"
+lefts = ["Vögel, die morgens singen,"]
+rights = ["holt am Abend die Katze."]
+
+[[entries]]
+category = "plural"
+lefts = ["Zwei Hähne auf dem Mist"]
+rights = ["bleiben selten ohne Zwist."]
+
+[[entries]]
+category = "plural"
+lefts = ["Ärzte"]
+rights = ["sind des Herrgotts Menschenflicker."]
+
+[[entries]]
+category = "singular"
+lefts = ["Adel"]
+rights = ["verpflichtet."]
+
+[[entries]]
+category = "singular"
+lefts = ["Aller Anfang"]
+rights = ["ist schwer."]
+
+[[entries]]
+category = "singular"
+lefts = ["Alles Gute"]
+rights = ["kommt von oben."]
+
+[[entries]]
+category = "singular"
+lefts = ["Alte Liebe"]
+rights = ["rostet nicht."]
+
+[[entries]]
+category = "singular"
+lefts = ["Alter"]
+rights = ["schützt vor Torheit nicht."]
+
+[[entries]]
+category = "singular"
+lefts = ["Angst"]
+rights = ["verleiht Flügel."]
+
+[[entries]]
+category = "singular"
+lefts = ["Arbeit"]
+rights = ["zieht Arbeit nach sich."]
+
+[[entries]]
+category = "singular"
+lefts = ["Argwohn"]
+rights = ["isst mit dem Teufel aus der gleichen Schüssel.", "ist des Teufels Hure."]
+
+[[entries]]
+category = "singular"
+lefts = ["Armut"]
+rights = ["ist aller Künste Stiefmutter."]
+
+[[entries]]
+category = "singular"
+lefts = ["Blut"]
+rights = ["ist dicker als Wasser."]
+
+[[entries]]
+category = "singular"
+lefts = ["Borgen"]
+rights = ["bringt Sorgen."]
+
+[[entries]]
+category = "singular"
+lefts = ["Das Glück"]
+rights = ["belohnt den Tüchtigen."]
+
+[[entries]]
+category = "singular"
+lefts = ["Das Leben"]
+rights = ["ist kein Ponyhof.", "ist kein Wunschkonzert.", "ist kein Zuckerschlecken."]
+
+[[entries]]
+category = "singular"
+lefts = ["Das letzte Hemd"]
+rights = ["hat keine Taschen."]
+
+[[entries]]
+category = "singular"
+lefts = ["Der Adler"]
+rights = ["fängt keine Mücken."]
+
+[[entries]]
+category = "singular"
+lefts = ["Der Apfel"]
+rights = ["fällt nicht weit vom Stamm."]
+
+[[entries]]
+category = "singular"
+lefts = ["Der Appetit"]
+rights = ["kommt beim Essen."]
+
+[[entries]]
+category = "singular"
+lefts = ["Der Blitz"]
+rights = ["schlägt nirgends zweimal ein."]
+
+[[entries]]
+category = "singular"
+lefts = ["Der Faule"]
+rights = ["wird am Abend fleißig."]
+
+[[entries]]
+category = "singular"
+lefts = ["Der Fisch"]
+rights = ["stinkt vom Kopf her."]
+
+[[entries]]
+category = "singular"
+lefts = ["Der frühe Vogel"]
+rights = ["fängt den Wurm."]
+
+[[entries]]
+category = "singular"
+lefts = ["Der Klügere"]
+rights = ["gibt nach."]
+
+[[entries]]
+category = "singular"
+lefts = ["Der Schuster"]
+rights = ["hat die schlechtesten Schuhe."]
+
+[[entries]]
+category = "singular"
+lefts = ["Der Teufel"]
+rights = ["ist ein Eichhörnchen.", "scheißt immer auf den größten Haufen.", "steckt im Detail."]
+
+[[entries]]
+category = "singular"
+lefts = ["Der Ton"]
+rights = ["macht die Musik."]
+
+[[entries]]
+category = "singular"
+lefts = ["Der Zweck"]
+rights = ["heiligt die Mittel."]
+
+[[entries]]
+category = "singular"
+lefts = ["Des einen Freud'"]
+rights = ["ist des anderen Leid."]
+
+[[entries]]
+category = "singular"
+lefts = ["Die Axt im Haus"]
+rights = ["erspart den Zimmermann."]
+
+[[entries]]
+category = "singular"
+lefts = ["Die Frau"]
+rights = ["ist des Mannes Visitenkarte."]
+
+[[entries]]
+category = "singular"
+lefts = ["Die Hoffnung"]
+rights = ["stirbt zuletzt."]
+
+[[entries]]
+category = "singular"
+lefts = ["Die Katze"]
+rights = ["lässt das Mausen nicht."]
+
+[[entries]]
+category = "singular"
+lefts = ["Die Tat"]
+rights = ["wirkt mächtiger als das Wort."]
+
+[[entries]]
+category = "singular"
+lefts = ["Die Wahrheit"]
+rights = ["liegt in der Mitte."]
+
+[[entries]]
+category = "singular"
+lefts = ["Die Zeit"]
+rights = ["heilt alle Wunden."]
+
+[[entries]]
+category = "singular"
+lefts = ["Ehrlich"]
+rights = ["währt am längsten."]
+
+[[entries]]
+category = "singular"
+lefts = ["Eigener Herd"]
+rights = ["ist Goldes wert."]
+
+[[entries]]
+category = "singular"
+lefts = ["Eigenlob"]
+rights = ["stinkt."]
+
+[[entries]]
+category = "singular"
+lefts = ["Ein Bild"]
+rights = ["sagt mehr als tausend Worte."]
+
+[[entries]]
+category = "singular"
+lefts = ["Ein blindes Huhn"]
+rights = ["findet auch mal ein Korn."]
+
+[[entries]]
+category = "singular"
+lefts = ["Ein gebranntes Kind"]
+rights = ["scheut das Feuer."]
+
+[[entries]]
+category = "singular"
+lefts = ["Ein guter Seemann"]
+rights = ["sticht auch ins rote Meer."]
+
+[[entries]]
+category = "singular"
+lefts = ["Ein gutes Gewissen"]
+rights = ["ist ein sanftes Ruhekissen."]
+
+[[entries]]
+category = "singular"
+lefts = ["Ein leichter Schlag auf den Hinterkopf"]
+rights = ["erhöht das Denkvermögen."]
+
+[[entries]]
+category = "singular"
+lefts = ["Ein rollender Stein"]
+rights = ["setzt kein Moos an."]
+
+[[entries]]
+category = "singular"
+lefts = ["Ein schlafender Fuchs"]
+rights = ["fängt kein Huhn."]
+
+[[entries]]
+category = "singular"
+lefts = ["Ein Unglück"]
+rights = ["kommt selten allein."]
+
+[[entries]]
+category = "singular"
+lefts = ["Eine Schwalbe"]
+rights = ["macht noch keinen Sommer."]
+
+[[entries]]
+category = "singular"
+lefts = ["Einsicht"]
+rights = ["ist der erste Weg zur Besserung."]
+
+[[entries]]
+category = "singular"
+lefts = ["Faulheit"]
+rights = ["lohnt mit Armut."]
+
+[[entries]]
+category = "singular"
+lefts = ["Geld"]
+rights = ["regiert die Welt."]
+
+[[entries]]
+category = "singular"
+lefts = ["Geld allein"]
+rights = ["macht nicht glücklich."]
+
+[[entries]]
+category = "singular"
+lefts = ["Gelegenheit"]
+rights = ["macht Diebe."]
+
+[[entries]]
+category = "singular"
+lefts = ["Gesundheit"]
+rights = ["ist der größte Reichtum."]
+
+[[entries]]
+category = "singular"
+lefts = ["Geteilte Freude"]
+rights = ["ist doppelte Freude."]
+
+[[entries]]
+category = "singular"
+lefts = ["Geteiltes Leid"]
+rights = ["ist halbes Leid."]
+
+[[entries]]
+category = "singular"
+lefts = ["Gott"]
+rights = []
+
+[[entries]]
+category = "singular"
+lefts = ["Gut Ding"]
+rights = ["will Weile haben."]
+
+[[entries]]
+category = "singular"
+lefts = ["Guter Rat"]
+rights = ["ist teuer."]
+
+[[entries]]
+category = "singular"
+lefts = ["Habgier"]
+rights = ["ist die Wurzel allen Übels."]
+
+[[entries]]
+category = "singular"
+lefts = ["Handwerk"]
+rights = ["hat goldenen Boden."]
+
+[[entries]]
+category = "singular"
+lefts = ["Hochmut"]
+rights = ["kommt vor dem Fall."]
+
+[[entries]]
+category = "singular"
+lefts = ["Hunger"]
+rights = ["ist der beste Koch."]
+
+[[entries]]
+category = "singular"
+lefts = ["Irren"]
+rights = ["ist menschlich."]
+
+[[entries]]
+category = "singular"
+lefts = ["Jammern"]
+rights = ["füllt keine Kammern."]
+
+[[entries]]
+category = "singular"
+lefts = ["Jeder Topf"]
+rights = ["findet seinen Deckel."]
+
+[[entries]]
+category = "singular"
+lefts = ["Jedes Böhnchen"]
+rights = ["gibt ein Tönchen."]
+
+[[entries]]
+category = "singular"
+lefts = ["Jedes Ding"]
+rights = ["hat seine zwei Seiten."]
+
+[[entries]]
+category = "singular"
+lefts = ["Jugend"]
+rights = ["kennt keine Tugend."]
+
+[[entries]]
+category = "singular"
+lefts = ["Kapital"]
+rights = ["hat keine Moral."]
+
+[[entries]]
+category = "singular"
+lefts = ["Keine Antwort"]
+rights = ["ist auch eine Antwort."]
+
+[[entries]]
+category = "singular"
+lefts = ["Kindermund"]
+rights = ["tut Wahrheit kund."]
+
+[[entries]]
+category = "singular"
+lefts = ["Kleinvieh"]
+rights = ["macht auch Mist."]
+
+[[entries]]
+category = "singular"
+lefts = ["Lachen"]
+rights = ["ist die beste Medizin."]
+
+[[entries]]
+category = "singular"
+lefts = ["Lesen"]
+rights = ["gefährdet die Dummheit."]
+
+[[entries]]
+category = "singular"
+lefts = ["Liebe"]
+rights = ["geht durch den Magen.", "macht blind."]
+
+[[entries]]
+category = "singular"
+lefts = ["Menschenfleisch"]
+rights = ["muss gepeinigt werden."]
+
+[[entries]]
+category = "singular"
+lefts = ["Morgenstund"]
+rights = ["hat Blei im Arsch.", "hat Gold im Mund."]
+rights_flags = [["subversive"], []]
+
+[[entries]]
+category = "singular"
+lefts = ["Mäßig"]
+rights = ["wird alt."]
+
+[[entries]]
+category = "singular"
+lefts = ["Müßiggang"]
+rights = ["ist aller Laster Anfang."]
+
+[[entries]]
+category = "singular"
+lefts = ["Nichts"]
+rights = ["ist so alt wie die Zeitung von gestern."]
+
+[[entries]]
+category = "singular"
+lefts = ["Not"]
+rights = ["macht erfinderisch."]
+
+[[entries]]
+category = "singular"
+lefts = ["Nur der Tod"]
+rights = ["ist umsonst."]
+
+[[entries]]
+category = "singular"
+lefts = ["Nur wer gegen den Strom schwimmt,"]
+rights = ["kommt an die Quelle."]
+
+[[entries]]
+category = "singular"
+lefts = ["Ordnung"]
+rights = ["ist das halbe Leben."]
+
+[[entries]]
+category = "singular"
+lefts = ["Papier"]
+rights = ["ist geduldig."]
+
+[[entries]]
+category = "singular"
+lefts = ["Politik"]
+rights = ["verdirbt den Charakter."]
+
+[[entries]]
+category = "singular"
+lefts = ["Probieren"]
+rights = ["geht über studieren."]
+
+[[entries]]
+category = "singular"
+lefts = ["Rache"]
+rights = ["ist süß."]
+
+[[entries]]
+category = "singular"
+lefts = ["Reden ist Silber, Schweigen"]
+rights = ["ist Gold."]
+
+[[entries]]
+category = "singular"
+lefts = ["Rom"]
+rights = ["wurde nicht an einem Tag erbaut."]
+
+[[entries]]
+category = "singular"
+lefts = ["Sauer"]
+rights = ["macht lustig."]
+
+[[entries]]
+category = "singular"
+lefts = ["Schadenfreude", "Vorfreude"]
+rights = ["ist die schönste Freude."]
+lefts_flags = [["subversive"], []]
+
+[[entries]]
+category = "singular"
+lefts = ["Schlaf"]
+rights = ["ist die beste Medizin."]
+
+[[entries]]
+category = "singular"
+lefts = ["Selbsterkenntnis"]
+rights = ["ist der erste Schritt zur Besserung."]
+
+[[entries]]
+category = "singular"
+lefts = ["Spinne am Morgen"]
+rights = ["bringt Kummer und Sorgen."]
+
+[[entries]]
+category = "singular"
+lefts = ["Sport"]
+rights = ["ist Mord."]
+
+[[entries]]
+category = "singular"
+lefts = ["Stadtluft"]
+rights = ["macht frei."]
+
+[[entries]]
+category = "singular"
+lefts = ["Steter Tropfen"]
+rights = ["höhlt den Stein."]
+
+[[entries]]
+category = "singular"
+lefts = ["Stillstand"]
+rights = ["ist Rückschritt."]
+
+[[entries]]
+category = "singular"
+lefts = ["Trunkener Mund"]
+rights = ["spricht aus Herzens Grund."]
+
+[[entries]]
+category = "singular"
+lefts = ["Unkraut"]
+rights = ["vergeht nicht."]
+
+[[entries]]
+category = "singular"
+lefts = ["Unwissenheit"]
+rights = ["schützt vor Strafe nicht."]
+
+[[entries]]
+category = "singular"
+lefts = ["Voller Bauch"]
+rights = ["studiert nicht gern."]
+
+[[entries]]
+category = "singular"
+lefts = ["Vorsicht"]
+rights = ["ist besser als Nachsicht.", "ist die Mutter der Porzellankiste."]
+
+[[entries]]
+category = "singular"
+lefts = ["Wasser"]
+rights = ["hat keine Balken."]
+
+[[entries]]
+category = "singular"
+lefts = ["Zeit"]
+rights = ["ist Geld."]
+
+[[entries]]
+category = "singular"
+lefts = ["Zufriedenheit"]
+rights = []
+
+[[entries]]
+category = "singular"
+lefts = ["Übermut"]
+rights = ["tut selten gut."]
+
+[[entries]]
+category = "singular"
+lefts = ["Übung"]
+rights = ["macht den Meister."]
+
+[[entries]]
+category = "situational"
+lefts = ["Ist der Ruf erst ruiniert,"]
+rights = ["lebt es sich recht ungeniert."]
+
+[[entries]]
+category = "situational"
+lefts = ["Ist die Katze aus dem Haus,"]
+rights = ["tanzen die Mäuse auf dem Tisch."]
+
+[[entries]]
+category = "situational"
+lefts = ["Wenn der Berg nicht zum Propheten kommt,"]
+rights = ["muss der Prophet zum Berge gehen."]
+
+[[entries]]
+category = "situational"
+lefts = ["Wenn der Fuchs predigt,"]
+rights = ["bewahr' man die Gänse."]
+
+[[entries]]
+category = "situational"
+lefts = ["Wenn der Kuchen spricht,"]
+rights = ["haben die Krümel zu schweigen."]
+
+[[entries]]
+category = "situational"
+lefts = ["Wenn zwei sich streiten,"]
+rights = ["freut sich der Dritte."]
+
+[[entries]]
+category = "what"
+lefts = ["Was dem einen recht ist,"]
+lefts_add_categories = [["singular"]]
+rights = ["ist dem anderen billig."]
+rights_add_categories = [["singular"]]
+
+[[entries]]
+category = "what"
+lefts = ["Was du heute kannst besorgen,"]
+lefts_add_categories = [["singular"]]
+rights = ["das verschiebe nicht auf morgen."]
+
+[[entries]]
+category = "what"
+lefts = ["Was du nicht willst, das man dir tu,"]
+lefts_add_categories = [["singular"]]
+rights = ["das füg' auch keinem andern zu."]
+
+[[entries]]
+category = "what"
+lefts = ["Was einen nicht umbringt,"]
+lefts_add_categories = [["singular"]]
+rights = ["macht einen stark."]
+rights_add_categories = [["singular"]]
+
+[[entries]]
+category = "what"
+lefts = ["Was Hänschen nicht lernt,"]
+lefts_add_categories = [["singular"]]
+rights = ["lernt Hans nimmermehr."]
+rights_add_categories = [["singular"]]
+
+[[entries]]
+category = "what"
+lefts = ["Was ich nicht weiß,"]
+lefts_add_categories = [["singular"]]
+rights = ["macht mich nicht heiß."]
+rights_add_categories = [["singular"]]
+
+[[entries]]
+category = "what"
+lefts = ["Was lange währt"]
+lefts_add_categories = [["singular"]]
+rights = ["wird endlich gut."]
+rights_add_categories = [["singular"]]
+
+[[entries]]
+category = "what"
+lefts = ["Was man nicht im Kopf hat,"]
+lefts_add_categories = [["singular"]]
+rights = ["muss man in den Beinen haben."]
+
+[[entries]]
+category = "what"
+lefts = ["Was man sich eingebrockt hat,"]
+lefts_add_categories = [["singular"]]
+rights = ["das muss man auch auslöffeln."]
+
+[[entries]]
+category = "what"
+lefts = ["Was nicht ist,"]
+lefts_add_categories = [["singular"]]
+rights = ["kann noch werden."]
+
+[[entries]]
+category = "who"
+lefts = ["Wer \"A\" sagt,"]
+rights = ["muss auch \"B\" sagen."]
+
+[[entries]]
+category = "who"
+lefts = ["Wer Anderen eine Grube gräbt,"]
+rights = ["fällt selbst hinein.", "hat ein Grubengrabgerät."]
+rights_flags = [[], ["subversive"]]
+
+[[entries]]
+category = "who"
+lefts = ["Wer auf zwei Hasen zielt,"]
+rights = ["trifft keinen."]
+
+[[entries]]
+category = "who"
+lefts = ["Wer den Pfennig nicht ehrt,"]
+rights = ["ist des Talers nicht wert."]
+
+[[entries]]
+category = "who"
+lefts = ["Wer den Schaden hat,"]
+rights = ["braucht für den Spott nicht zu sorgen."]
+
+[[entries]]
+category = "who"
+lefts = ["Wer den Teufel reinlegen will,"]
+rights = ["muss früh aufstehen."]
+
+[[entries]]
+category = "who"
+lefts = ["Wer die Wahl hat,"]
+rights = ["hat die Qual."]
+
+[[entries]]
+category = "who"
+lefts = ["Wer ernten will,"]
+rights = ["muss säen."]
+
+[[entries]]
+category = "who"
+lefts = ["Wer flüstert,"]
+rights = ["der lügt."]
+
+[[entries]]
+category = "who"
+lefts = ["Wer Grillen jagt,"]
+rights = ["wird Grillen fangen."]
+
+[[entries]]
+category = "who"
+lefts = ["Wer hoch steigt,"]
+rights = ["kann tief fallen."]
+
+[[entries]]
+category = "who"
+lefts = ["Wer im Glashaus sitzt,"]
+rights = ["sollte nicht mit Steinen werfen.", "sollte zum Scheißen in den Keller gehen."]
+rights_flags = [[], ["subversive"]]
+
+[[entries]]
+category = "who"
+lefts = ["Wer lang hustet,"]
+rights = ["lebt lang."]
+
+[[entries]]
+category = "who"
+lefts = ["Wer nicht hören will,"]
+rights = ["muss fühlen."]
+
+[[entries]]
+category = "who"
+lefts = ["Wer nicht wagt,"]
+rights = ["der nicht gewinnt."]
+
+[[entries]]
+category = "who"
+lefts = ["Wer nichts wird,"]
+rights = ["wird Wirt."]
+
+[[entries]]
+category = "who"
+lefts = ["Wer rastet,"]
+rights = ["rostet."]
+
+[[entries]]
+category = "who"
+lefts = ["Wer schläft,"]
+rights = ["der sündigt nicht."]
+
+[[entries]]
+category = "who"
+lefts = ["Wer schön sein will,"]
+rights = ["muss leiden."]
+
+[[entries]]
+category = "who"
+lefts = ["Wer wagt,"]
+rights = ["gewinnt."]
+
+[[entries]]
+category = "who"
+lefts = ["Wer Wind sät,"]
+rights = ["wird Sturm ernten."]
+
+[[entries]]
+category = "who"
+lefts = ["Wer zu spät kommt,"]
+rights = ["den bestraft das Leben."]
+
+[[entries]]
+category = "who"
+lefts = ["Wer zuerst kommt,"]
+rights = ["mahlt zuerst."]
+
+[[entries]]
+category = "who"
+lefts = ["Wer zuletzt lacht,"]
+rights = ["lacht am besten."]

@@ -16,7 +16,7 @@ jobs:
       - name: update version
         run: 'python3 cicd/version_stamp.py'
       - name: generate TSV grammars
-        run: 'python3 cicd/tsv2grammar.py rocketbot_plugin_grammargen/grammars/*.tsv'
+        run: 'python3 cicd/toml2grammar.py rocketbot_plugin_grammargen/grammars/*.toml'
       - name: fetch dependencies
         run: sh ./cicd/cargo_fetch.sh
       - name: run release build
