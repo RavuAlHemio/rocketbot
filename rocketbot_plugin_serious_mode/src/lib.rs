@@ -52,11 +52,16 @@ impl RocketBotPlugin for SeriousModePlugin {
         let mut current_srs_value = interface
             .obtain_behavior_flags().await
             .remove("srs").unwrap_or_else(|| serde_json::Value::Object(serde_json::Map::new()));
-        let current_srs_object = current_srs_value
-            .as_object_mut().expect("srs behavior flag is not a JSON object");
-
         let until = Local::now() + Duration::seconds(60 * 60);
-        current_srs_object.insert(channel_message.channel.id.clone(), serde_json::json!(until.timestamp()));
+
+        {
+            let current_srs_object = current_srs_value
+                .as_object_mut().expect("srs behavior flag is not a JSON object");
+
+            current_srs_object.insert(channel_message.channel.id.clone(), serde_json::json!(until.timestamp()));
+        }
+
+        interface.set_behavior_flag("srs", &current_srs_value).await;
 
         send_channel_message!(
             interface,
