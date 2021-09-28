@@ -39,11 +39,10 @@ def generate_grammar(tsv_path):
             ln = ln.rstrip("\r\n")
 
             (category, head, tail) = ln.split("\t")
-            if not head or not tail:
-                # incomplete; skip
-                continue
-            category_to_heads[category].append(head)
-            category_to_tails[category].append(tail)
+            if head:
+                category_to_heads[category].append(head)
+            if tail:
+                category_to_tails[category].append(tail)
 
     # sort
     for heads in category_to_heads.values():
