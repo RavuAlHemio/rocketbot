@@ -138,6 +138,15 @@ pub trait RocketBotInterface : Send + Sync {
 
     /// Broadcasts, for the given private conversation, whether the bot is typing or not.
     async fn set_private_conversation_typing_status(&self, conversation_id: &str, typing: bool);
+
+    /// Obtain the currently active behavior flags.
+    async fn obtain_behavior_flags(&self) -> serde_json::Map<String, serde_json::Value>;
+
+    /// Set the value of a behavior flag.
+    async fn set_behavior_flag(&self, key: &str, value: &serde_json::Value);
+
+    /// Remove a behavior flag.
+    async fn remove_behavior_flag(&self, key: &str);
 }
 
 

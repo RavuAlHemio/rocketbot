@@ -199,6 +199,7 @@ struct SharedConnectionState {
     new_timer_sender: mpsc::UnboundedSender<(DateTime<Utc>, serde_json::Value)>,
     channel_id_to_texts: RwLock<HashMap<(String, ChannelTextType), String>>,
     emoji: RwLock<Vec<Emoji>>,
+    active_behavior_flags: RwLock<serde_json::Map<String, serde_json::Value>>,
 }
 impl SharedConnectionState {
     fn new(
@@ -219,6 +220,7 @@ impl SharedConnectionState {
         new_timer_sender: mpsc::UnboundedSender<(DateTime<Utc>, serde_json::Value)>,
         channel_id_to_texts: RwLock<HashMap<(String, ChannelTextType), String>>,
         emoji: RwLock<Vec<Emoji>>,
+        active_behavior_flags: RwLock<serde_json::Map<String, serde_json::Value>>,
     ) -> Self {
         Self {
             outgoing_sender,
@@ -238,6 +240,7 @@ impl SharedConnectionState {
             new_timer_sender,
             channel_id_to_texts,
             emoji,
+            active_behavior_flags,
         }
     }
 }
@@ -765,6 +768,31 @@ impl RocketBotInterface for ServerConnection {
         self.shared_state.outgoing_sender.send(message_body)
             .expect("failed to enqueue set-typing message");
     }
+
+    async fn obtain_behavior_flags(&self) -> serde_json::Map<String, serde_json::Value> {
+        let flags_guard = self.shared_state.active_behavior_flags
+            .read().await;
+        flags_guard.deref().clone()
+    }
+
+    async fn set_behavior_flag(&self, key: &str, value: &serde_json::Value) {
+        let owned_key = key.to_owned();
+        let owned_value = value.clone();
+
+        {
+            let mut flags_guard = self.shared_state.active_behavior_flags
+                .write().await;
+            flags_guard.insert(owned_key, owned_value);
+        }
+    }
+
+    async fn remove_behavior_flag(&self, key: &str) {
+        {
+            let mut flags_guard = self.shared_state.active_behavior_flags
+                .write().await;
+            flags_guard.remove(key);
+        }
+    }
 }
 
 
@@ -851,6 +879,10 @@ pub(crate) async fn connect() -> Arc<ServerConnection> {
         "SharedConnectionState::emoji",
         Vec::new(),
     );
+    let active_behavior_flags = RwLock::new(
+        "SharedConnectionState::active_behavior_flags",
+        serde_json::Map::new(),
+    );
 
     let shared_state = Arc::new(SharedConnectionState::new(
         outgoing_sender,
@@ -870,6 +902,7 @@ pub(crate) async fn connect() -> Arc<ServerConnection> {
         new_timer_sender,
         channel_id_to_texts,
         emoji,
+        active_behavior_flags,
     ));
 
     let conn = Arc::new(ServerConnection::new(
