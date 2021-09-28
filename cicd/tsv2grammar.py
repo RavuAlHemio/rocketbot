@@ -2,12 +2,18 @@
 from collections import defaultdict
 import os
 import sys
+from typing import DefaultDict, NamedTuple
 
 
-GLUE = " "
+GLUE: str = " "
 
 
-def grammar_quote(s):
+class GrammarVariant(NamedTuple):
+    text: str
+    subversive: bool
+
+
+def grammar_quote(s: str) -> str:
     ret = ['"']
     for c in s:
         if c == '"':
@@ -20,29 +26,35 @@ def grammar_quote(s):
     return "".join(ret)
 
 
-def generate_grammar(tsv_path):
+def generate_grammar(tsv_path: str) -> None:
     if tsv_path.lower().endswith(".tsv"):
-        grammar_path = tsv_path[:-len(".tsv")] + ".grammar"
+        grammar_path: str = tsv_path[:-len(".tsv")] + ".grammar"
     else:
         grammar_path = tsv_path + ".grammar"
-    grammar_name = os.path.splitext(os.path.basename(grammar_path))[0]
+    grammar_name: str = os.path.splitext(os.path.basename(grammar_path))[0]
 
-    category_to_heads = defaultdict(list)
-    category_to_tails = defaultdict(list)
+    category_to_heads: DefaultDict[str, list[GrammarVariant]] = defaultdict(list)
+    category_to_tails: DefaultDict[str, list[GrammarVariant]] = defaultdict(list)
 
     with open(tsv_path, "r", encoding="utf-8") as f:
         for i, ln in enumerate(f.readlines()):
-            if i == 0:
+            if i == 0 and ln.startswith("group\tleft\tright"):
                 # header
                 continue
 
             ln = ln.rstrip("\r\n")
 
-            (category, head, tail) = ln.split("\t")
+            (category, head, tail, *more) = ln.split("\t")
             if head:
-                category_to_heads[category].append(head)
+                category_to_heads[category].append(GrammarVariant(head, False))
             if tail:
-                category_to_tails[category].append(tail)
+                category_to_tails[category].append(GrammarVariant(tail, False))
+
+            if len(more) > 0 and more[0]:
+                # subversive head
+                category_to_heads[category].append(GrammarVariant(more[0], True))
+            if len(more) > 1 and more[1]:
+                category_to_tails[category].append(GrammarVariant(more[1], True))
 
     # sort
     for heads in category_to_heads.values():
@@ -80,14 +92,19 @@ def generate_grammar(tsv_path):
                 print(f"{category}_{piece}", file=f)
 
                 first = True
-                for head in category_to_ends[category]:
+                for end in category_to_ends[category]:
                     if first:
                         symbol = ":"
                         first = False
                     else:
                         symbol = "|"
 
-                    print(f"    {symbol} {grammar_quote(head)}", file=f)
+                    if end.subversive:
+                        subversive_option = " !opt_s"
+                    else:
+                        subversive_option = ""
+
+                    print(f"    {symbol}{subversive_option} {grammar_quote(end.text)}", file=f)
 
                 print("    ;", file=f)
 
