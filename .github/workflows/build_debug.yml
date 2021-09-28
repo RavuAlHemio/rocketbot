@@ -12,9 +12,9 @@ jobs:
       - name: check out repository code
         uses: actions/checkout@v2
       - name: verify no plugin omissions
-        run: 'python3 cicd/plugincheck.py'
+        run: 'python3 cicd/plugin_check.py'
       - name: update version
-        run: 'python3 cicd/versionstamp.py'
+        run: 'python3 cicd/version_stamp.py'
       - name: generate TSV grammars
         run: 'python3 cicd/tsv2grammar.py rocketbot_plugin_grammargen/grammars/*.tsv'
       - name: fetch dependencies
