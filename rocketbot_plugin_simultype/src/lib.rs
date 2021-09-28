@@ -90,8 +90,8 @@ impl RocketBotPlugin for SimultypePlugin {
 
                     // should we start?
                     let behavior_flags = serde_json::Value::Object(interface.obtain_behavior_flags().await);
-                    if let Some(ts) = behavior_flags["srs"][&channel.id].as_i64() {
-                        if ts < Local::now().timestamp() {
+                    if let Some(serious_mode_until) = behavior_flags["srs"][&channel.id].as_i64() {
+                        if serious_mode_until > Local::now().timestamp() {
                             // no, Serious Mode is active
                             return;
                         }

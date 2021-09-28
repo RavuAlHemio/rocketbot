@@ -73,8 +73,8 @@ impl RocketBotPlugin for GroupPressurePlugin {
             // do not output anything if Serious Mode is active
             // (but do remember it)
             let behavior_flags = serde_json::Value::Object(interface.obtain_behavior_flags().await);
-            if let Some(ts) = behavior_flags["srs"][&channel_message.channel.id].as_i64() {
-                if ts < Local::now().timestamp() {
+            if let Some(serious_mode_until) = behavior_flags["srs"][&channel_message.channel.id].as_i64() {
+                if serious_mode_until > Local::now().timestamp() {
                     return;
                 }
             }
