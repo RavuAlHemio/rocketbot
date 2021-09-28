@@ -27,6 +27,7 @@ members = [
     "rocketbot_plugin_quotes",
     "rocketbot_plugin_randreact",
     "rocketbot_plugin_sed",
+    "rocketbot_plugin_serious_mode",
     "rocketbot_plugin_simultype",
     "rocketbot_plugin_sockpuppet",
     "rocketbot_plugin_text_commands",

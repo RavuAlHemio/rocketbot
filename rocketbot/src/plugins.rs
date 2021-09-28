@@ -69,6 +69,8 @@ pub(crate) async fn load_plugins(iface: Weak<dyn RocketBotInterface>) -> Vec<Box
                 Box::new(rocketbot_plugin_randreact::RandReactPlugin::new(iface_weak, inner_config).await)
             } else if plugin_config.name == "sed" {
                 Box::new(rocketbot_plugin_sed::SedPlugin::new(iface_weak, inner_config).await)
+            } else if plugin_config.name == "serious_mode" {
+                Box::new(rocketbot_plugin_serious_mode::SeriousModePlugin::new(iface_weak, inner_config).await)
             } else if plugin_config.name == "simultype" {
                 Box::new(rocketbot_plugin_simultype::SimultypePlugin::new(iface_weak, inner_config).await)
             } else if plugin_config.name == "sockpuppet" {

@@ -1712,6 +1712,7 @@ dependencies = [
  "rocketbot_plugin_quotes",
  "rocketbot_plugin_randreact",
  "rocketbot_plugin_sed",
+ "rocketbot_plugin_serious_mode",
  "rocketbot_plugin_simultype",
  "rocketbot_plugin_sockpuppet",
  "rocketbot_plugin_text_commands",
@@ -2076,6 +2077,18 @@ dependencies = [
  "log",
  "once_cell",
  "regex",
+ "rocketbot_interface",
+ "serde_json",
+]
+
+[[package]]
+name = "rocketbot_plugin_serious_mode"
+version = "0.1.0"
+dependencies = [
+ "async-trait",
+ "chrono",
+ "log",
+ "once_cell",
  "rocketbot_interface",
  "serde_json",
 ]
