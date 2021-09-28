@@ -770,9 +770,13 @@ impl RocketBotInterface for ServerConnection {
     }
 
     async fn obtain_behavior_flags(&self) -> serde_json::Map<String, serde_json::Value> {
-        let flags_guard = self.shared_state.active_behavior_flags
-            .read().await;
-        flags_guard.deref().clone()
+        let cloned_flags = {
+            let flags_guard = self.shared_state.active_behavior_flags
+                .read().await;
+            flags_guard.deref().clone()
+        };
+        debug!("currently set behavior flags: {:?}", cloned_flags);
+        cloned_flags
     }
 
     async fn set_behavior_flag(&self, key: &str, value: &serde_json::Value) {
@@ -783,6 +787,7 @@ impl RocketBotInterface for ServerConnection {
             let mut flags_guard = self.shared_state.active_behavior_flags
                 .write().await;
             flags_guard.insert(owned_key, owned_value);
+            debug!("behavior flags after setting {:?} to {}: {:?}", key, value, flags_guard.deref());
         }
     }
 
@@ -791,6 +796,7 @@ impl RocketBotInterface for ServerConnection {
             let mut flags_guard = self.shared_state.active_behavior_flags
                 .write().await;
             flags_guard.remove(key);
+            debug!("behavior flags after removing {:?}: {:?}", key, flags_guard.deref());
         }
     }
 }
