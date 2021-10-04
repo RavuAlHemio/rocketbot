@@ -1,0 +1,806 @@
+// https://www.springer.com/cda/content/document/cda_downloaddocument/Free+Download+-+Useful+Phrases.pdf?SGWID=0-0-45-1543172-p177775190
+
+toiletpaper
+    : sect_why_important
+    newline sect_recent_history
+    newline sect_possible_future
+    newline sect_knowledge_gap
+    newline sect_paper_aim
+    newline sect_key_terminology
+    newline sect_acronyms
+    newline sect_paper_structure
+    newline sect_lit_panorama
+    newline sect_past_lit
+    newline sect_recent_lit
+    newline sect_author_quotes
+    newline sect_ass_kissing_prev_work
+    newline ( sect_insulting_prev_work_anon | sect_insulting_prev_work_named )
+    newline sect_piling_on_prev_work
+    newline sect_methods
+    newline sect_similarities_to_others
+    newline sect_apparatus_materials
+    newline sect_reporting_sw
+    newline sect_reporting_customizations
+    newline sect_formulating
+    newline sect_explaining_weapons_of_choice
+    newline sect_explaining_prep
+    newline sect_sample_selection_outline
+    newline sect_time_frame_past
+    newline sect_time_frame_present
+    newline sect_take_care
+    newline sect_why_my_weapons_of_choice_r0x0r
+    newline sect_alternative_weaponry
+    newline sect_detailing_whose_ass_i_pulled_my_results_from
+    newline sect_detailing_questionnaires_from_people_that_made_me_lose_faith_in_humanity
+    newline sect_what_did_i_find
+    newline sect_what_did_i_not_find
+    newline sect_significant_results
+    newline sect_same_result_like_the_previous_squad
+    newline sect_different_result_than_the_previous_squad
+    newline sect_why_only_my_results_are_valid
+    newline sect_why_my_results_are_actually_bullshit
+    newline sect_i_did_not_want_this_to_happen
+    newline sect_why_our_methodology_is_horseshit
+    newline sect_where_i_try_to_explain_why_the_bullshit_results_arent_that_bad
+    newline sect_where_i_try_to_pretend_the_bullshit_results_dont_exist
+    newline sect_opinions_i_pulled_out_of_my_own_ass
+    newline sect_summary_of_paper
+    newline sect_restating_results_to_pad_word_count
+    newline sect_why_i_am_the_best
+    newline sect_why_i_am_not_the_best
+    newline sect_where_i_pretend_this_crap_is_useful
+    newline sect_we_havent_abandoned_this_subject_yet
+    newline sect_well_leave_the_rest_to_someone_else
+    newline sect_ack
+    ;
+
+sect_why_important
+    : "X is the " ( "main" | "leading" | "primary" | "major" ) " cause of Y."
+    | "Xs are a " ( "common" | "useful" | "critical" ) " part of Y."
+    | "Xs are among the most " ( "widely used" | "commonly discussed" | "well-known" | "well-documented" | "widespread" | "commonly investigated" ) " types of Y."
+    | "X is " ( "recognized as being" | "believed to be" | "widely considered to be" ) " the most important Y."
+    | "It is " ( "well known" | "generally accepted" | "common knowledge" ) " that X is Y."
+    | "X is " ( "increasingly becoming" | "set to become" ) " a vital factor in Y."
+    | "Xs are " ( "undergoing a revolution" | "generating considerable interest" ) " in terms of Y."
+    | "Xs are attracting " ( "considerable" | "increasing" | "widespread" ) " interest due to Y."
+    | "X has many " ( "uses" | "roles" | "applications" ) " in the field of Y."
+    | "A " ( "striking" | "useful" | "remarkable" ) " feature of X is Y."
+    | "The " ( "main" | "principal" | "fundamental" ) " characteristics of X are: Y, Y and Y."
+    | "X " ( "accounts" | "is responsible" ) " for Y."
+    ;
+
+sect_recent_history
+    : "Last century X was " ( "considered to be" | "viewed as" | "seen as" ) " the most Y."
+    | ( "Initial" | "Preliminary" | "The first" ) " studies of X considered it to be Y."
+    | ( "Traditionally, X" | "In the history of X, the focus" ) " has always been Y."
+    | ( "Scientists" | "Researchers" | "Experts" ) " have always seen X as Y."
+    | ( "Until now" | "For many years" | "Since 1990" ) " Xs have been considered as Y."
+    | "X has received much attention " ( "in the last TWO years" | "in the past DECADE" | "over the last two DECADES" ) "."
+    | ( "For the past FIVE years" | "Since 1990" ) " there has been a rapid rise in the use of Xs."
+    | "The last TWO years have " ( "witnessed" | "seen" ) " a huge growth in X."
+    | "The " ( "past DECADE" | "last YEAR" ) " has seen a renewed importance in X."
+    | "Recent " ( "developments in" | "findings regarding" ) " X have led to Y."
+    | "X has become " ( "a central" | "an important" | "a critical" ) " issue in Y."
+    ;
+
+sect_possible_future
+    : "The next DECADE is likely to " ( "see" | "witness" ) " a considerable rise in X."
+    | "In the next few years X " ( "will become" | "is likely to have become" ) " Y."
+    | "Within the next few years, X is " ( "set" | "destined" | "likely" ) " to become an important component in Y."
+    | ( "By 1990" | "Within the next TEN years" ) ", X will have become Y."
+    | "X will " ( "soon" | "shortly" | "rapidly" | "inevitably" ) " be an issue that Y."
+    ;
+
+sect_knowledge_gap
+    : "Few researchers have addressed the " ( "problem" | "issue" | "question" ) " of X."
+    | "Previous work has " ( "only focused on" | "been limited to" | "failed to address" ) " X."
+    | "A " ( "basic" | "common" | "fundamental" | "crucial" | "major" ) " issue of X is Y."
+    | "The " ( "central" | "core" ) " problem of X is Y."
+    | ( "A challenging" | "An intriguing" | "An important" | "A neglected area" ) " in the field of X is Y."
+    | "Current solutions to X are " ( "inconsistent" | "inadequate" | "incorrect" | "ineffective" | "inefficient" | "oversimplistic" | "unsatisfactory" ) "."
+    | "Many hypotheses regarding X appear to be " ( "ill-defined" | "unfounded" | "not well grounded" | "unsupported" | "questionable" | "disputable" | "debatable" ) "."
+    | "The characteristics of X " ( "are not well understood" | "are misunderstood" | "have not been dealt with in depth" ) "."
+    | "It " ( "is not yet known" | "has not yet been established" ) " whether X can do Y."
+    | "X is still " ( "poorly" | "not widely" ) " understood."
+    | "X is often " ( "impractical" | "not feasible" | "costly" ) "."
+    | "Techniques to solve X are " ( "computationally demanding" | "subject to high overheads" | "time consuming" | "impractical" | "frequently unfeasible" ) "."
+    | "A major " ( "defect" | "difficulty" | "drawback" | "disadvantage" | "flaw" ) " of X is Y."
+    | "One of the main issues in " ( "our knowledge of" | "what we know about" ) " X is a lack of Y."
+    | "This " ( "particular" | "specific" ) " area of X " ( "has been overlooked" | "has been neglected" | "remains unclear" ) "."
+    | "Despite this interest, no one " ( "to the best of our knowledge" | "as far as we know" ) " has studied X."
+    | "Although this approach is interesting, it " ( "suffers from" | "fails to take into account" | "does not allow for" ) " X."
+    | ( "In spite of" | "Despite its" ) " shortcomings, this method has been widely applied to X."
+    | "However, there " ( "is still a need for" | "has been little discussion on" ) " X."
+    | "Moreover, other " ( "solutions" | "research programs" | "approaches" ) " have failed to provide X."
+    | "Most studies have only " ( "focused" | "tended to focus" ) " on X."
+    | ( "To date" | "Until now" ) " this methodology has only been applied to X."
+    | "There is still " ( "some" | "much" | "considerable" ) " controversy surrounding X."
+    | "There has been some disagreement " ( "concerning" | "regarding" | "with regard to" ) " whether X."
+    | "There is " ( "little" | "no" ) " general agreement on X."
+    | "The community has raised some " ( "issues" | "concerns" ) " about X."
+    | "Concerns have " ( "arisen" | "been raised" ) " which " ( "question" | "call into question" ) " the validity of X."
+    | "In the light of recent events in X, there is now " ( "some" | "much" | "considerable" ) " concern about Y."
+    ;
+
+sect_paper_aim
+    : "In this " ( "report" | "paper" | "review" | "study" ) " we X."
+    | "This paper " ( "outlines" | "proposes" | "describes" | "presents" ) " a new approach to X."
+    | "This paper " ( "examines" | "seeks to address" | "focuses on" | "discusses" | "investigates" ) " how to solve X."
+    | "This paper is " ( "an overview of" | "a review of" | "a report on" | "a preliminary attempt to" ) " X."
+    | "The present paper aims to " ( "validate" | "call into question" | "refute" ) " PERSON" apos "s findings regarding X."
+    | "X is " ( "presented" | "described" | "analyzed" | "computed" | "investigated" | "examined" | "introduced" | "discussed" ) " in order to X."
+    | "The aim of our " ( "work" | "research" | "study" | "analysis" ) " was to " ( "further" | "extend" | "widen" | "broaden" ) " current knowledge of X."
+    | "Our knowledge of X is largely based on very limited data. The aim of the research was " ( "thus" | "therefore" | "consequently" ) " to X."
+    | "The aim of this study is to " ( "study" | "evaluate" | "validate" | "determine" | "examine" | "analyze" | "calculate" | "estimate" | "formulate" ) " X."
+    | "This paper " ( "calls into question" | "takes a new look at" | "re-examines" | "revisits" | "sheds new light on" ) " X."
+    | ( "With this in mind" | "Within the framework of these criteria" | "In this context" ) " we tried to X."
+    | "We " ( "undertook this study" | "initiated this research" | "developed this methodology" ) " to X."
+    | "We believe that we have " ( "found" | "developed" | "discovered" | "designed" ) " an innovative solution to X."
+    | "We " ( "describe" | "present" | "consider" | "analyze" ) " a " ( "novel" | "simple" | "radical" | "interesting" ) " solution for X."
+    ;
+
+sect_key_terminology
+    : "The term " single_quote{"X"} " " ( "is generally understood to mean" | "has come to be used to refer to" | "has been applied to" ) " Y."
+    | "In the literature, X " ( "usually refers" | "often refers" | "tends to be used to refer" ) " to Y."
+    | "In the field of X, " ( "several" | "various" | "many" ) " definitions of Y can be found."
+    | "The term X " ( "is" | "was" | "has been" ) " used by PERSON [CITATION] to refer to Y."
+    | "PERSON uses the term X [CITATION] to " ( "refer to" | "denominate" ) " Y."
+    | "X is defined by PERSON [CITATION] to " ( "refer to" | "mean" ) " Y."
+    | "PERSON [CITATION] has " ( "provided" | "put forward" | "proposed" ) " a new definition of X, in which Y."
+    | "X is " ( "defined" | "identified" | "described" ) " as Y [CITATION]."
+    | "In the literature " ( "there seems to be no general definition of X" | "a general definition of X is lacking" | "there is no clear definition of X" ) "."
+    | "Several authors have attempted to define X, but " ( "as yet" | "currently" | "at the time of writing" ) " there is still no accepted definition."
+    | "In " ( "broad" | "general" ) " terms, X " ( "is" | "can be" ) " defined as a way to Y."
+    | "The " ( "broad" | "general" | "generally accepted" ) " use of the term X refers to Y."
+    | "X " ( "is sometimes equated with Y" | "embodies a series of Ys" ) "."
+    | "X, Y and Z are THREE " ( "kinds" | "types" | "categories" | "classes" ) " of As."
+    | ( "There are THREE kinds of As:" | "The THREE kinds of As are:" | "As can be divided into THREE kinds:" ) " X, Y and Z."
+    ;
+
+sect_acronyms
+    : "The acronym XY " ( "stands for" | "denotes" ) " Z."
+    | "The subjects (" ( "henceforth named" | "hereafter" ) " " single_quote{"X"} ") are Y."
+    | "The subject, which we shall " ( "call" | "refer to as" ) " " single_quote{"X"} ", is Y."
+    | "Throughout this " ( "paper" | "section" ) " we use the terms " single_quote{"X"} " and " single_quote{"Y"} " interchangeably, " ( "following" | "in accordance with" ) " the practice of the department where this study was conducted."
+    | "The Xs, " ( "i.e." | "that is to say" ) " the Ys, are of various types."
+    | "There are THREE different types, " ( "namely" | "specifically" ) ": X, Y and Z."
+    | ( "Throughout the" | "In this" ) " paper we " ( "use" | "will use" ) " the term X to refer to Y."
+    | "In this chapter X " ( "is" | "will be" ) " used to refer to Y."
+    | "In this paper the standard meaning of X " ( "is" | "will be" ) " used."
+    | "This aspect " ( "is" | "will be" ) " dealt with in more detail in SECTION."
+    | "We will " ( "see" | "learn" | "appreciate" ) " how relevant this is in the next subsection."
+    ;
+
+sect_paper_structure
+    : "This paper is " ( "organized as follows:" | "divided into FIVE sections." )
+    " " ( "The first section" | "Section 1" ) " gives a brief overview of X."
+    " " "The second section " ( "examines" | "analyzes" ) " X."
+    " " "In the third section a case study is " ( "presented" | "analyzed" ) "."
+    " " ( "A new methodology is " ( "described" | "outlined" ) " in the fourth section."
+        | ( "We" | "I" ) " propose a new procedure in Section 4."
+        )
+    " " ( "Some" | "Our" ) " conclusions are drawn in the final section."
+    newline "This " ( "paper" | "chapter" | "section" | "subsection" ) " begins by examining X."
+    " " "The next chapter " ( "looks at" | "examines" | "investigates" ) " the question of X."
+    " " ( "Problems" | "Questions" | "Issues" ) " regarding X are discussed in later sections."
+    " " ( "A discussion of X " ( "is" | "falls" ) " outside the scope of this paper."
+        | "For reasons of space, X is not " ( "addressed" | "dealt with" | "considered" ) " in this paper."
+        )
+    ;
+
+sect_lit_panorama
+    : "There is a " ( "considerable" | "vast" ) " amount of literature on X."
+    | "In the literature there are " ( "many" | "several" | "a surprising number of" | "few" ) " examples of X."
+    | "What " ( "we know" | "is known" ) " about X is largely based on Y."
+    | ( "Much" | "Not much" | "Very little" ) " is known about X."
+    | ( "Many" | "Few" ) " studies have been published on X. [REFERENCE]"
+    | "Various approaches have been " ( "proposed" | "put forward" | "suggested" | "hypothesized" ) " to solve this issue. [REFERENCE]"
+    | "X has been " ( "identified" | "indicated" ) " as being Y. [REFERENCE]"
+    | "X has been " ( "shown" | "demonstrated" | "proved" | "found to be" ) " Y. [REFERENCE]"
+    | "X has been widely " ( "investigated" | "studied" | "addressed" ) " in Y. [REFERENCE]"
+    | "Xs have been " ( "receiving" | "gaining" ) " much attention due to Y."
+    | "In the " ( "traditional" | "classical" ) " approach, X is used to Y."
+    | "In recent years there has been " ( "considerable" | "growing" ) " interest in X. [REFERENCE]"
+    | "A growing body of literature has " ( "examined" | "investigated" | "studied" | "analyzed" | "evaluated" ) " X. [REFERENCE]"
+    | "Much work on the potential of X has been carried out [REFERENCE], " ( "yet" | "however" ) " there are still some critical issues. [REFERENCE]"
+    ;
+
+sect_past_lit
+    : "In their " ( "seminal" | "groundbreaking" | "cutting edge" ) " paper of 1990, SCIENTIST and SCIENTIST describe X."
+    | ( "Initial" | "Preliminary" ) " work in this field focused primarily on X."
+    | "Some preliminary work was carried out " ( "in the early 1990s" | "several years ago" ) "."
+    | "SCIENTIST in 1990 was " ( "among" | "one of the first to" ) " X."
+    | "The first " ( "investigations into" | "studies on" ) " X found that Y."
+    | "The first " ( "systematic study" | "report" ) " on X was " ( "carried out" | "conducted" | "performed" ) " in 1990 by SCIENTIST."
+    | "An increase in X was first " ( "noted" | "reported" | "found" ) " by SCIENTIST."
+    ;
+
+sect_recent_lit
+    : "Experiments on X were " ( "conducted" | "carried out" | "performed" ) " in 1990 by a group of researches from INSTITUTION."
+    | "In a major advance in 1990, SCIENTIST et al. " ( "surveyed" | "interviewed" ) " X."
+    | "SCIENTIST and co-workers [REFERENCE] " ( "measured" | "calculated" | "estimated" ) " X."
+    | "In [REFERENCE] the authors " ( "investigated" | "studied" | "analyzed" ) " X."
+    | "A recent review of the literature on this " ( "topic" | "subject" | "matter" | "area" ) " [REFERENCE] found that X."
+    | ( "A number" | "An increasing number" ) " of studies have found that X."
+    | ( "Since 1990," | "In the last few years," ) " much more information on X has become available."
+    | "Several studies, for " ( "example" | "instance" ) " [REFERENCE], [REFERENCE] and [REFERENCE], has been " ( "carried out" | "conducted" | "performed" ) " on X."
+    | "More recent evidence [REFERENCE] " ( "shows" | "suggests" | "highlights" | "reveals" | "proposes" ) " that X."
+    | "It has now been " ( "suggested" | "hypothesized" | "proposed" | "shown" | "demonstrated" ) " that X."
+    | "Many attempts have been made [REFERENCE] [REFERENCE] [REFERENCE] " ( "in order to" | "with the purpose of" | "aimed at" ) " X."
+    ;
+
+sect_author_quotes
+    :   ( "In THEIR " ( "analysis" | "review" | "overview" | "critique" ) " of X, SCIENTIST [REFERENCE] questions the need for Y."
+        | "In THEIR " ( "introduction to" | "seminal article on" | "investigation into" ) " X, SCIENTIST [REFERENCE] shows that Y."
+        | "SCIENTIST [REFERENCE] " ( "developed" | "reported" ) " on a new method for X and concluded that Y."
+        | "SCIENTIST" apos "s group [REFERENCE] calls into question some past " ( "assumptions" | "hypotheses" | "theories" ) " about X."
+        | "SCIENTIST [REFERENCE], an authority on X, " ( "notes" | "mentions" | "highlights" | "states" | "affirms" ) " that Y."
+        )
+    " "
+        ( "THEY " ( "question" | "wonder" | "consider" | "investigate" ) " whether" [ " or not" ] " X can Y."
+        | "THEY trace the " ( "advances in" | "development of" | "history of" | "evolution of" ) " X."
+        | "THEY draw our " ( "attention to" | "focus on" ) " X."
+        | "THEY " ( "make" | "draw" ) " a distinction between X and Y."
+        | "THEY " ( "claim" | "argue" | "maintain" | "suggest" | "point out" | "underline" ) " that X."
+        | "THEY " ( "conclude" | "come to the conclusion" | "reach the conclusion" ) " that X."
+        | "THEY " ( "list" | "outline" | "describe" | "provide" ) " several reasons for X."
+        | "THEIR " ( "theory" | "solution" | "proposal" | "method" | "approach" ) " is based on X."
+        )
+    ;
+
+sect_ass_kissing_prev_work
+    : "SCIENTIST" apos "s [REFERENCE] use of X is " ( "fully justified" | "very plausible" | "endorsed by experience") "."
+    | "SCIENTIST" apos "s [REFERENCE] assumptions seem to be " ( "realistic" | "well-founded" | "well-grounded" | "plausible" | "reasonable" | "acceptable" ) "."
+    | "The equations given in [REFERENCE] are " ( "accurate" | "comprehensive" ) "."
+    | "It has been suggested [REFERENCE] that X and this seems to be a " ("reliable" | "useful" | "innovative") " approach."
+    ;
+
+sect_insulting_prev_work_anon
+    :   ( "Research has tended to focus on X rather than Y. " ( "An additional problem is that" | "Moreover X is") " Z."
+        | "The main " ( "limitation" | "downside" | "disadvantage" | "pitfall" | "shortfall" ) " of X is Y."
+        | "One of the major drawbacks to " ( "adopting" | "using" | "exploiting" ) " this system is X."
+        | "A " ( "well-known" | "major" | "serious" ) " criticism of X is Y."
+        | "A key problem with much of the literature " ( "on" | "regarding" | "in relation to" ) " X is that Y."
+        | "There is still considerable " ( "ambiguity" | "disagreement" | "uncertainty" ) " with regard to X."
+        | "Many experts contend, " ( "however" | "instead" | "on the other hand" ) ", that this evidence is not conclusive."
+        )
+        [ " "   ( "This is something of a " ( "pitfall" | "disadvantage" ) "."
+                | "This raises many questions " ( "about" | "as to" | "regarding" ) " whether X should be used for Y."
+                | "One " ( "question" | "issue" ) " that needs to be " ( "asked" | "raised" ) " is X."
+                | "Unfortunately, it " ( "does not" | "fails to" | "neglects to" ) " explain why X."
+                | "This method suffers from a " ( "number" | "series" | "plethora" ) " of pitfalls."
+                | "A related hypothesis " ( "holds" | "maintains" ) " that X is equal to Y, " ( "suggesting" | "indicating" ) " that Z."
+                | "Other observations " ( "indicate" | "would seem to suggest" ) " that this explanation is insufficient."
+                )
+        ]
+    ;
+
+sect_insulting_prev_work_named
+    :   ( "SCIENTIST [REFERENCE] " ( "claimed" | "contended" ) " that X is Y but THEY failed to provide adequate proof of this finding."
+        | "SCIENTIST" apos "s findings do not " ( "seem" | "appear" ) " to support THEIR conclusions."
+        |   "This has led authors " ( "such as" | "for example" | "for instance" ) " SCIENTIST [REFERENCE], SCIENTIST [REFERENCE] and SCIENTIST [REFERENCE] to investigate X."
+            " " ( "The " ( "shortcomings" | "pitfalls" | "flaws" ) " of THEIR method have been clearly recognized."
+                | "A serious " ( "weakness" | "limitation" | "drawback" ) " with this argument, however, is that X."
+                | "THEIR approach is not " ( "well suited to" | "appropriate for" | "suitable for" ) " X."
+                | "The main weakness in THEIR study is that THEY " ( "make no attempt to" | "offer no explanation for" | "overlook" ) " Y."
+                | "THEIR experiments were " ( "marred" | "flawed" | "undermined" ) " by X."
+                | "X is the " ( "major flaw in" | "drawback to" | "disadvantage of" ) " THEIR experiments."
+                | "The major defect in THEIR experiments is that they entail " ( "tedious" | "repetitive" | "time-consuming" | "laborious" | "labor-intensive" ) " calculations with regard to X."
+                | "Such an " ( "unreasonable" | "unjustified" | "inappropriate" | "unsuitable" | "misleading" ) " assumption can lead to " ( "serious" | "grave" ) " consequences with regard to X."
+                | "Their claims seem to be somewhat " ( "exaggerated" | "inaccurate" | "unreliable" | "speculative" | "superficial" ) "."
+                | "In our view, their findings are only " ( "conjectures" | "speculations" ) " based on " ( "unjustified" | "implausible" | "unsatisfactory" | "ambivalent" | "unsubstantiated" ) " assumptions."
+                | "Their " ( "paper" | "work" | "study" | "research" | "approach" | "findings" | "results" ) " might have been more " ( "interesting" | "innovative" | "useful" | "convincing" | "persuasive" ) " if X."
+                | "Their attempts to do X are " ( "cumbersome" | "unnecessarily complicated" | "financially unfeasible" ) "."
+                | "Their explanations are " ( "superficial" | "impenetrable" | "doubtful" | "confusing" | "misleading" | "irrelevant" ) "."
+                | ( "Another" | "An additional" ) " weakness is X."
+                )
+        )
+        [ " "   ( ( "Another" | "An additional" ) " weakness is X."
+                | "An ever greater source of " ( "concern" | "issue" | "problem" ) " is X."
+                )
+        ]
+    ;
+
+sect_piling_on_prev_work
+    : "As mentioned by SCIENTIST [REFERENCE], SCIENTIST" apos "s " ( "argument" | "approach" | "reasoning" ) " relies too heavily on X."
+    | "As others have highlighted [REFERENCE] [REFERENCE] [REFERENCE], SCIENTIST" apos "s approach " ( "raises many doubts" | "is questionable" ) "."
+    | "Several " ( "authors" | "experts" | "researchers" | "analysts" ) " have " ( "expressed doubts about" | "called into question" | "challenged" ) " SCIENTIST on the grounds that X."
+    | "SCIENTIST [REFERENCE] has already noted an inconsistency with SCIENTIST" apos "s " ( "claim" | "methodology" | "method" | "results" | "approach" ) "."
+    | "SCIENTIST" apos "s approach [REFERENCE] has " ( "not escaped" | "been subjected to much" ) " criticism and has been " ( "strongly" | "vigorously" ) " challenged."
+    | "Many experts now " ( "contend" | "believe" | "argue" ) " that rather than using SCIENTIST" apos "s approach it might be more useful to X."
+    | "THEIR analysis has not " ( "found" | "met with" | "received" ) " general acceptance."
+    | "Some recent " ( "criticisms of" | "critical comments on" ) " SCIENTIST" apos "s work are summarized in [REFERENCE]."
+    | "The most well-known critic of SCIENTIST" apos "s findings is SCIENTIST who " ( "argued" | "proposed" | "suggested" ) " that an alternative explanation " ( "might be that" | "could be found in" ) " X."
+    ;
+
+sect_methods
+    :   ( "In order to " ( "identify" | "understand" | "investigate" | "study" | "analyze" ) " X"
+        | "To " ( "enable" | "allow" ) " us to X"
+        | "To " ( "see" | "determine" | "check" | "verify" | "determine" ) " whether X"
+        | "To " ( "control" | "test" ) " for X"
+        | "So that we " ( "could" | "would be able to" ) " do X"
+        | "In an " ( "attempt" | "effort" ) " to do X"
+        )
+        ", "
+        ( "we did Y."
+        | "Y was done."
+        )
+    | ( "X was done" | "We did X" ) " in order to Y."
+    ;
+
+sect_similarities_to_others
+    : "The set up we used " ( "can be found" | "is reported" | "is detailed" ) " in [REFERENCE]."
+    | "Our experimental set up " ( "bears a close resemblance to" | "is reminiscent of" | "is based on" | "is a variation on" | "was inspired by" | "owes a lot to" | "is more or less identical to" | "is pratically the same as") " the one proposed by SCIENTIST [REFERENCE]."
+    | "We used a variation of SCIENTIST" apos "s procedure. " ( "In fact," | "Specifically," ) " in our procedure we X."
+    | "Our steps " ( "proceed very much in the same way as" | "follow what is indicated in" ) " [REFERENCE]."
+    | "The procedure used is as " ( "described" | "explained" | "reported" | "proposed" ) " by SCIENTIST [REFERENCE]."
+    | "The method is " ( "in line with a variation of" | "essentially the same as" ) " that used by SCIENTIST [REFERENCE] with some " ( "changes" | "modifications" | "alterations" | "adjustments" ) "."
+    | "We " ( "refined" | "altered" | "adapted" | "modified" | "revised" ) " the method " ( "used" | "reported" | "suggested" | "explained" | "proposed" | "put forward" ) " by SCIENTIST [REFERENCE]."
+    | "Our technique was " ( "loosely" | "partially" | "partly" | "to some extent" ) " based on X."
+    | "More details " ( "can be found" | "are given" ) " in our previous paper [REFERENCE]."
+    | "This component is fully compliant with international " ( "norms" | "regulations" | "standards" ) "."
+    ;
+
+sect_apparatus_materials
+    :   ( "The instrument " ( "used" | "utilized" | "adopted" | "employed" ) " was X."
+        | "The apparatus " ( "consists of" | "is made up of" | "is composed of" | "is based on" ) " X."
+        | "The device was " ( "designed" | "developed" | "set up" ) " in order to X."
+        | "X " ( "incorporates" | "exploits" | "makes use of" ) " the latest technological advances."
+        | "The system " ( "comes complete" | "is equipped" | "is fully integrated" | "is fitted" ) " with a X."
+        | "X was " ( "obtained from" | "supplied by" ) " Big Company Inc."
+        | "X was kindly " ( "provided" | "supplied" ) " by Prof SCIENTIST."
+        )
+        [ " " "It is " ( "mounted on" | "connected to" | "attached to" | "fastened to" | "fixed to" | "surrounded by" | "covered with" | "integrated into" | "embedded onto" | "encased in" | "housed in" | "aligned with" ) " X."
+        ]
+        [ " " "It is " ( "located in" | "situated in" | "positioned on" ) " X."
+        ]
+    ;
+
+sect_reporting_sw
+    :   ( "The software " ( "application" | "program" | "package" ) " used to analyze the data was"
+        | "The data were " ( "obtained" | "collected" ) " using"
+        | "Data " ( "management" | "analysis" ) " was performed " ( "by" | "using" )
+        | "X was " ( "carried out" | "performed" | "analyzed" | "calculated" | "determined" ) " using"
+        | "Statistical significance was analyzed " ( "by using" | "through the use of" )
+        )
+        " SOFTWARE (COMPANY, CITY)."
+    |   "We used " ( "commercially available software" | "a commercially available software package" ) "."
+    |   "Free software, downloaded from WEBSITE, was " ( "used" | "adopted" ) " to X."
+    ;
+
+sect_reporting_customizations
+    : "X was " ( "tailored" | "customized" ) " for use with Y."
+    | "X can easily be " ( "customized" | "adapted" | "modified" ) " to suit all requirements."
+    | "Measurements were taken using " ( "purpose-built" | "custom-built" | "customized" ) " equipment."
+    | "The apparatus was adapted " ( "as in [REFERENCE]" | "in accordance with [REFERENCE]" | "as follows: X, Y, Z" ) "."
+    | "The following " ( "changes" | "modifications" ) " were made: X, Y, Z."
+    | "The resulting ad hoc device " ( "can" | "is able to" | "has the capacity to" ) " X."
+    ;
+
+sect_formulating
+    :   ( "This problem can be " ( "outlined" | "phrased" | "posed" ) " in terms of X."
+        | "The problem is " ( "ruled by" | "governed by" | "related to" | "correlated to" ) " X."
+        )
+        [ " " "This theorem " ( "asserts" | "states" ) " that X." ]
+        [ " " "The resulting " ( "integrals" | "solution to X" ) " can be expressed as Y, where T " ( "stands for" | "denotes" | "identifies" | "is an abbreviation for" ) " TIME." ]
+        [ " " ( "By substituting" | "Substituting" | "Substitution into" ) " X," math_consequence{"Y"} ]
+        [ " " ( "Combining" | "Integrating" | "Eliminating" ) " X," math_consequence{"Y"} ]
+        [ " " ( "Taking advantage of" | "Exploiting" | "Making use of" ) " X," math_consequence{"Y"} ]
+        [ " " "On combining this result with X, we " ( "deduce" | "conclude" ) " Y." ]
+        [ " " "Subtracting X from Y," math_consequence{"Z"} ]
+        [ " " "Equation 1 " ( "shows" | "reveals" ) " that X." ]
+        [ " " "This " ( "gives the formal solution." | "allows a formal solution to be found." ) ]
+        [ " "   ( "It may be " ( "easily" | "simply" ) " verified that X."
+                | "It is " ( "straightforward" | "easy" | "trivial" ) " to verify that X."
+                )
+        ]
+        [ " " "For " ( "the sake of simplicity," | "reasons of space," ) " we omit X." ]
+    ;
+
+sect_explaining_weapons_of_choice
+    : "The " ( "aim" | "purpose" ) " of X is to do Y. " ( "Consequently we" | "As a result we" | "Therefore we" | "We thus" ) " X."
+    | "This " ( "method" | "model" | "system" ) " was chosen because it is one of the most " ( "practical" | "feasible" | "economic" | "rapid" ) " ways to X."
+    | "We chose this particular apparatus " ( "because" | "on account of the fact that" | "due to" | "since" ) " X."
+    | "It was decided that the best " ( "procedure" | "method" | "equipment" ) " for this " ( "investigation" | "study" ) " was to X."
+    | "An X approach was " ( "chosen" | "selected" ) " in order to Y."
+    | "The design of the X " ( "was based on" | "is geared towards" ) " Y."
+    | "We " ( "opted for" | "chose" ) " a small sample size " ( "because" | "due to" | "on the basis of" ) " X."
+    | ( "By having" | "By exploiting" | "Through the use of" ) " X, we were able to Y."
+    | "Having an X " ( "enabled us to" | "allowed us to" | "meant that we could" ) " do Y."
+    ;
+
+sect_explaining_prep
+    :   ( "We used " ( "reliable" | "innovative" | "classic" | "traditional" ) " techniques based on the recommendations of SCIENTIST."
+        | "Xs were prepared " ( "as described by" | "according to" | "following" ) " SCIENTIST [REFERENCE]."
+        | "Xs were prepared " ( "in accordance with" | "in compliance with" | "as required by" ) " RULE."
+        )
+        [ " " "Y was prepared using " ( "the same" | "a similar" ) " procedure as for X." ]
+        [ " " "All samples were " ( "carefully" | "thoroughly" ) " checked for X." ]
+        [ " " "X was " ( "gradually" | "slowly" | "rapidly" | "gently" ) " heated." ]
+        [ " " "The resulting solutions contained X." ]
+        [ " " "This was done " ( "by means of" | "using" | "with" ) " a TOOL." ]
+    ;
+
+sect_sample_selection_outline
+    :   "The " ( "traditional" | "classical" | "normal" | "usual" ) " approach to sample collection is to X."
+        [ " " "The " ( "criteria" | "reasons" ) " for selecting Xs were: Y, Z." ]
+        [ " " "The sample was " ( "selected" | "subdivided" ) " on the basis of X and Y." ]
+        [ " " "The initial sample " ( "consisted" | "was made up" | "was composed" ) " of X." ]
+        [ " " ( "Approximately" | "Just over" | "Slightly under" ) " a " ( "HALF" | "THIRD" | "QUARTER" ) " of the sample were X." ]
+        [ " " "A total of 333 Xs were recruited for " ( "this study" | "this survey" | "interviews" ) "." ]
+        [ " " "At the beginning of the study, all of the " ( "participants" | "subjects" | "patients" ) " were aged X." ]
+        [ " " "In all cases " ( "patients" | "subjects" | "participants" ) apos " consent was obtained." ]
+        [ " " "Interviews were " ( "performed" | "conducted" | "carried out" ) " informally." ]
+        [ " " "The interviews were " ( "divided" | "split" | "broken down" ) " into TWO groups " ( "based on" | "on the basis of" ) " X." ]
+    ;
+
+sect_time_frame_past
+    :   "Initial studies were " ( "made" | "performed" | "done" | "carried out" | "executed" ) " using the conditions described above " ( "over" | "for a period of" ) " X."
+        [ " " "X was " ( "collected" | "used" | "tested" | "characterized" | "assessed" ) " during the " ( "first" | "initial" ) " step." ]
+        [ " " ( "Prior to" | "Before doing" ) " X, we did Y." ]
+        [ " " "First we " ( "estimated" | "determined" ) " the value of X, " ( "then" | "subsequently" ) " we " ( "studied" | "analyzed" | "evaluated" ) " Y." ]
+        [ " " ( "Once " | "As soon as" | "After" ) " X had been done, we then did Y." ]
+        [ " " "The levels were " ( "thus" | "consequently" | "therefore" ) " set at X." ]
+        [ " " ( "After," | "Afterwards," | "Following this," ) " X was subjected to Y." ]
+        [ " " "The " ( "resulting" | "remaining" ) " Xs were then Y." ]
+        [ " " "The experiment was then " ( "repeated" | "replicated" ) " under conditions in which X." ]
+        [ " " "Finally, " ( "independent" | "separate" | "further" | "additional" ) " tests were performed on the X." ]
+    ;
+
+sect_time_frame_present
+    :   ( "In the first step" | "During the first phase" | "In the initial stage" ) " of the process, X happens."
+        [ " " ( "Once" | "As soon as" | "After" ) " X has been done, we can then do Y." ]
+        [ " " ( "This sets the stage" | "We are now ready" ) " for the next step." ]
+        [ " " ( "At this point" | "Now X" ) " can be Y." ]
+        [ " "   ( ( "After" | "When" | "As soon as" ) " these steps have been carried out, X."
+                | ( "With the completion of these steps," | "When these steps have been completed," ) " we are now ready to X."
+                )
+        ]
+        [ " " "This condition cannot be reached " ( "until" | "unless" ) " X has been made." ]
+        [ " " "The completed X can " ( "now" | "then" | "subsequently" ) " be used to Y." ]
+        [ " " ( "By reducing the number of X," | "If the amount of X is reduced," ) " Y can then be done." ]
+        [ " " ( "To reduce the risk of Y, place" | "The risk of X can be reduced by placing" ) " all the Xs in a CONTAINER." ]
+        [ " " "The experiment " ( "proceeds" | "continues" ) " following the steps outlined below." ]
+    ;
+
+sect_take_care
+    : "To do this " ( "entails" | "involves" | "requires" ) " doing X."
+    | "It is " ( "seldom" | "rarely" | "usually" | "generally" | "often" | "always" ) " practical to X."
+    | ( "Considerable" | "Great" ) " care must be " ( "taken" | "exercised" ) " when X."
+    | ( "A great deal of" | "Considerable" ) " attention must be paid when X."
+    | "Extreme caution must be " ( "taken" | "used" ) " when X."
+    ;
+
+sect_why_my_weapons_of_choice_r0x0r
+    : "This method represents a " ( "viable" | "valuable" | "useful" | "groundbreaking" | "innovative" ) " alternative to X."
+    | "This equipment has the " ( "ability" | "capacity" | "potential" ) " to outperform all previous Xs."
+    | "This apparatus has " ( "several" | "many" ) " interesting " ( "features" | "characteristics" ) "."
+    | "Our method has many " ( "interesting" | "attractive" | "beneficial" | "useful" | "practical" | "effective" | "valuable" ) " applications."
+    | "Of " ( "particular" | "major" | "fundamental" ) " interest is X."
+    | "The " ( "key" | "basic" | "chief" | "crucial" | "decisive" | "essential" | "fundamental" | "important" | "main" | "major" | "principal" ) " advantages are: X, Y."
+    | "Our procedure is a clear " ( "improvement" | "advance" ) " on current methods."
+    | "We believe this solution will " ( "aid" | "assist" ) " researchers to X."
+    | "This solution " ( "improves on" | "enhances" | "furthers" | "advances" ) " previous methods by X."
+    | "The " ( "benefits" | "advantages" ) " in terms of X far outweigh the disadvantages with regard to Y."
+    ;
+
+sect_alternative_weaponry
+    : "A less " ( "lengthy" | "time-consuming" | "cumbersome" | "costly" ) " approach is X."
+    | "A " ( "neater" | "more elegant" | "simplified" | "more practical" ) " solution for this problem is X."
+    | "An alternative solution, though " ( "with high overheads" | "slightly more complicated" | "less exhaustive" ) " is X."
+    | ( "One" | "One possible" | "A good" ) " way to avoid the use of X is to use Y instead."
+    ;
+
+sect_detailing_whose_ass_i_pulled_my_results_from
+    : "To " ( "assess X," | "evaluate X," | "distinguish between X and Y," ) " Z was used."
+    | "X analysis was used to " ( "test" | "predict" | "confirm" ) " Y."
+    | "Changes in X were " ( "identified" | "calculated" | "compared" ) " using Y."
+    | "The " ( "correlation" | "difference" ) " between X and Y was tested."
+    | "The first set of analyses " ( "investigated" | "examined" | "confirmed" | "highlighted" ) " the impact of X."
+    ;
+
+sect_detailing_questionnaires_from_people_that_made_me_lose_faith_in_humanity
+    :   "Of the " ( "study population," | "initial sample," | "initial cohort," ) " 90 subjects completed and returned the questionnaire."
+        " " "The response rate was 70% " ( "at" | "after" | "for" ) " the first six months."
+        ( " " "The majority of " ( "respondents" | "those who responded" ) " felt that X."
+        | ( "Over half" | "Sixty per cent" ) " of those " ( "surveyed" | "questioned" ) " reported that X."
+        | ( "Almost" | "Just under" | "Approximately" ) " two-thirds of the participants (64%) " ( "said" | "felt" | "commented" ) " that X."
+        | "Of the 82 subjects who " ( "completed the questionnaire," | "took part in the survey," | "agreed to participate," ) " just " ( "under" | "over" ) " half replied that X."
+        )
+        ( " " ( "Only" | "Just a small number" | "Fifteen per cent" ) " of those interviewed " ( "reported" | "suggested" | "indicated" ) " that X."
+        | ( "A small minority of" | "Hardly any" | "Very few" ) " participants (4%) indicated X."
+        )
+        [ " " "In response to Question 1, " ( "most" | "nearly all" | "the majority" ) " of those surveyed indicated that X." ]
+        [ " " "When the subjects were " ( "asked about" | "questioned on" ) " X, the majority commented that Y." ]
+        [ " " "The overall response to this question was " ( "surprisingly" | "unexpectedly" | "very" | "quite" ) " negative." ]
+    ;
+
+sect_what_did_i_find
+    :   ( "These tests " ( "revealed" | "showed" | "highlighted" ) " that X."
+        | ( "Strong" | "Some" | "No" ) " evidence of X was found."
+        | ( "Interestingly," | "Surprisingly," | "Unexpectedly," ) " for high values of X, Y was found."
+        )
+        [ " " "There was " ( "a significant positive" | "no" ) " correlation between X and Y." ]
+        [ " " ( "On average," | "Generally speaking," | "Broadly speaking," ) " we found values for X of Y." ]
+        [ " " "The " ( "average" | "mean" ) " score for X was Y." ]
+        [ " " "This result is significant " ( "only" | "exclusively" ) " at an X level." ]
+        [ " " "Further " ( "analysis" | "analyses" | "tests" | "examinations" | "replications" ) " showed that X." ]
+    ;
+
+sect_what_did_i_not_find
+    : "No significant " ( "difference" | "correlation" ) " was " ( "found" | "identified" | "revealed" | "detected" | "observed" | "highlighted" ) " between X and Y."
+    | "There were no significant differences between X and Y " ( "in terms of Z" | "with regard to Z" | "as far as Z is concerned" ) "."
+    | "The analysis did not " ( "show" | "reveal" | "identify" | "confirm" ) " any significant differences between X and Y."
+    | ( "None of these differences were" | "Not one of these differences was" ) " statistically significant."
+    | ( "Overall," | "Taken as a whole," | "Generally speaking," | "With a few exceptions," ) " our results show X did not affect Y."
+    ;
+
+sect_significant_results
+    : "The most " ( "striking" | "remarkable" ) " result to emerge from the data is that X."
+    | ( "Interestingly," | "Curiously," | "Remarkably," | "Inexplicably," ) " this correlation is related to X."
+    | ( "Significantly," | "Importantly," | "Crucially," | "Critically," ) " X is Y."
+    | "The correlation between X and Y is " ( "interesting" | "of interest" | "worth noting" | "noteworthy" | "worth mentioning" ) " because Z."
+    | "The most " ( "surprising" | "remarkable" | "intriguing" ) " correlation is with the X."
+    | "The single most " ( "striking" | "conspicuous" | "marked" ) " observation to emerge from the data comparison was X."
+    | "It is " ( "interesting" | "critical" | "crucial" | "important" | "fundamental" ) " to note that X."
+    | ( "We believe that" | "As far as we know" | "As far as we aware" ) " this is the first time that X."
+    | ( "We believe that" | "We are of the opinion that" | "In our view" ) " the result emphasizes the validity of our model."
+    | "This result has further strengthened our " ( "confidence in X" | "conviction that X is Y" | "hypothesis that X is Y" ) "."
+    | "Our technique " ( "shows a clear" | "clearly has an" ) " advantage over X."
+    | "The importance of X cannot be " ( "stressed" | "emphasized" ) " too much."
+    | "This " ( "underlines" | "highlights" | "stresses" | "proves" | "demonstrates" ) " just how important X is."
+    | "The utility of X is thus " ( "underlined" | "highlighted" | "stressed" | "proved" | "demonstrated" ) "."
+    | "This finding " ( "confirms" | "points to" | "highlights" | "reinforces" | "validates" ) " the usefulness of X as a Y."
+    | "Our study provides " ( "additional support for" | "further evidence for" | "considerable insight into" ) " X."
+    | "These results " ( "extend" | "further" | "widen" ) " our knowledge of X."
+    | "These results offer " ( "compelling" | "indisputable" | "crucial" | "overwhelming" | "powerful" | "invaluable" | "unprecedented" | "unique" | "vital" ) " evidence for X."
+    ;
+
+sect_same_result_like_the_previous_squad
+    : "Our experiments " ( "confirm" | "corroborate" | "are in line with" | "are consistent with" ) " previous results [REFERENCE]."
+    | "The values are " ( "barely" | "scarcely" | "hardly" ) " distinguishable from [REFERENCE] who X."
+    | "This value " ( "has been found to be" | "is" ) " typical of X."
+    | "This is " ( "in good agreement" | "in complete agreement" | "consistent" ) " with X."
+    | "This " ( "fits" | "matches" | "concurs" ) " well with [REFERENCE] and also confirms our " ( "earlier" | "previous") " findings [REFERENCE, REFERENCE, REFERENCE]."
+    | "This " ( "confirms" | "supports" | "lends support to" | "substantiates" ) " previous findings in the literature [REFERENCE, REFERENCE]."
+    | "These values correlate " ( "favorably" | "satisfactorily" | "fairly well" ) " with [REFERENCE] and further support the " ( "idea" | "role" | "concept" ) " of X."
+    | "Further tests carried out with X " ( "confirmed" | "corroborated" | "concurred with" ) " our initial findings."
+    | "As " ( "proposed" | "suggested" | "reported" | "indicated" | "put forward" ) " by [REFERENCE], the evidence we found points to X."
+    | "Our results " ( "share" | "have a number of" ) " similarities with SCIENTIST" apos "s [REFERENCE] findings."
+    ;
+
+sect_different_result_than_the_previous_squad
+    : "It was found that X = 2" ( ", whereas" | "; on the other hand" ) " SCIENTIST [REFERENCE] found that X."
+    | "We found much higher values for X " ( "than" | "with respect to" ) " those reported by SCIENTIST [REFERENCE]."
+    | ( "Although" | "Despite the fact that" ) " SCIENTIST [REFERENCE] found that X = 2 we found that X = 3."
+    | "In " ( "contrast to" | "contradiction with" ) " earlier findings [REFERENCE], we X."
+    | "This study has not confirmed previous research on X. " ( "However," | "Nevertheless," | "Despite this," ) " it serves to Y."
+    | "Even though these results differ from some " ( "published" | "previous" | "earlier" ) " studies ([REFERENCE], [REFERENCE]), they are consistent with those of [REFERENCE]."
+    | "SCIENTIST noted that x = y. Our results do not " ( "support" | "appear to corroborate" | "seem to confirm " ) " THEIR observation; in fact Z."
+    | "SCIENTIST is correct to " ( "argue" | "propose" | "claim" ) " that x = y. However, THEIR calculation only referred to the limited case of A, and our conclusion of x = z would thus seem to be " ( "justified" | "justifiable" | "defensible" | "correct" | "acceptable" | "warranted" ) "."
+    | "Although our results differ " ( "slightly" | "to some extent" | "considerably" ) " from those of SCIENTIST [REFERENCE], SCIENTIST [REFERENCE], and SCIENTIST [REFERENCE], it " ( "can" | "could" ) " nevertheless be argued that X."
+    | ( "Our findings do" | "The current study does" ) " not support previous research in this area. In fact, " ( "contrary to" | "unlike" | "in contrast with" ) " what was previously thought, we found that X."
+    | "These findings " ( "refute" | "disprove" | "are in contradiction with" | "contrast with" | "significantly differ from" ) " previous results reported in the literature."
+    ;
+
+sect_why_only_my_results_are_valid
+    : "As " ( "expected," | "anticipated," | "predicted," | "forecast," | "hypothesized," ) " our experiments " ( "show" | "demonstrate" | "prove" ) " that X."
+    | "Our formula " ( "captures" | "reproduces" ) " the response of X."
+    | "Apart from this slight " ( "discordance," | "discrepancy," | "disagreement," | "non-alignment," ) " the result is confirmation of X."
+    | ( "Despite" | "Notwithstanding" ) " the lack of agreement, we believe our findings compare well with X."
+    | ( "Although" | "Even though" | "Despite the fact that" ) " there was some inconsistency, X."
+    | "There is " ( "satisfactory" | "good" | "exceptional" | "perfect" ) " agreement between X and Y."
+    | "No " ( "significant" | "substantial" | "appreciable" | "noteworthy" ) " differences were found between X and Y."
+    | "Our findings appear to be well " ( "substantiated" | "supported" ) " by X."
+    | "The number of Xs that confirmed our findings was " ( "appreciable" | "significant" | "substantial" ) "."
+    ;
+
+sect_why_my_results_are_actually_bullshit
+    : "Initially we thought that x was equal to y. However, a " ( "more careful analysis" | "closer inspection" ) " revealed that Z."
+    | "These " ( "results" | "data" | "findings" ) " thus need to be interpreted with " ( "caution" | "care" | "attention" ) "."
+    | "The conclusions of the review should be " ( "treated" | "interpreted" | "analyzed" | "read" ) " with caution."
+    | "However, " ( "due care" | "careful attention" | "extreme caution" ) " must be " ( "exercised" | "paid" ) " in X."
+    | "Given that our findings are based on a limited number of Xs, the results from such analyses should " ( "thus" | "consequently" | "therefore" ) " be treated with " ( "considerable" | "the utmost" ) " caution."
+    | ( "Other researchers have sounded" | "We should sound" ) " a note of caution with regard to such findings."
+    ;
+
+sect_i_did_not_want_this_to_happen
+    : "As " ( "was" | "might have been" ) " expected, our findings were often contradictory."
+    | ( "Contrary to expectations," | "Unlike other research carried out in this area," ) " we did not find a significant difference between X and Y."
+    | "Our results were " ( "disappointing" | "poor" | "inadequate" | "unsatisfactory" | "below expectations" ) ". However, X."
+    | "Our study was " ( "unsuccessful" | "not successful" ) " in proving that X."
+    | "Our research failed to " ( "account for" | "justify" | "explain" | "give an explanation for" | "give a reason for" ) " the low values of X."
+    | ( "Surprisingly," | "Unfortunately," | "Disappointingly," | "Regrettably," ) " no " ( "signs of X were" | "evidence for X was" ) " found."
+    | "What " ( "is surprising" | "we were surprised to find" | "we are unable to account for" ) " is the fact that X."
+    | "A " ( "substantial" | "appreciable" | "noticeable" ) " disagreement is evident."
+    | "The Xs appear to be " ( "over-predicted" | "overestimated" | "overstated" ) "."
+    | "This number is slightly lower than the value we " ( "expected" | "anticipated" | "predicted" ) " and there is certainly room for improvement."
+    ;
+
+sect_why_our_methodology_is_horseshit
+    : "We aware that our research may have two limitations. The first is X. The second is Y. These limitations " ( "highlight" | "reveal" | "underline" | "are evidence of" ) " the difficulty of collecting data on Z."
+    | "It is plausible that a number of limitations " ( "may" | "might" | "could" ) " have influenced the results obtained."
+    | ( "First," | "To begin with," ) " X. " ( "An additional" | "Another possible" ) " source of error is Y."
+    | ( "Since" | "Given that" | "As" ) " the focus of the study was on X, " ( "there is a possibility" | "there is some likelihood" | "it is not inconceivable" ) " that dissimilar evaluations would have arisen if the focus had been on Y."
+    | "The restricted use of X could " ( "account for" | "be the reason for" | "explain why" ) " Y."
+    | "There are several " ( "sources for" | "causes of" | "reasons for" ) " possible error."
+    | "A major source of " ( "unreliability" | "uncertainty" | "contamination" ) " is in the method used to X."
+    | "Unfortunately, " ( "it was not possible" | "we were unable" ) " to investigate the significant relationships of X and Y further " ( "because" | "due to the fact that" ) " Z is A."
+    | ( "Inevitably," | "Not surprisingly," | "As expected," | "As anticipated," ) " there were some " ( "discrepancies" | "inaccuracies" | "problems" ) " due to X."
+    | "The performance was " ( "rather" | "slightly" | "a little" ) " disappointing. This was probably as a result of X."
+    | "One " ( "downside" | "disadvantage" | "negative factor" ) " regarding our methodology is that X."
+    | "Further data collection " ( "is required" | "would be needed" ) " to determine exactly how X affects Y."
+    ;
+
+sect_where_i_try_to_explain_why_the_bullshit_results_arent_that_bad
+    : "It is " ( "very likely" | "probable" | "possible" ) " that participants may have erroneously X and this may have " ( "led to" | "brought about changes in" ) " Y."
+    | "The " ( "prime" | "primary" | "foremost" ) " cause of the discrepancy is " ( "due to" | "a result of" | "a consequence of" ) " X."
+    | "This apparent lack of correlation can be " ( "attributed to" | "explained by" | "justified by" ) " X."
+    | "The reason for this rather contradictory result is still not " ( "entirely" | "completely " ) " clear, but X."
+    | "There are several possible explanations for this " ( "result" | "finding" | "outcome" ) "."
+    | "These differences can be " ( "explained" | "justified" | "accounted for ") " in part by X."
+    | "It can thus be " ( "suggested" | "conceivably hypothesized" | "reasonably assumed " ) " that X."
+    | "The unexpectedly " ( "high" | "low" ) " level of X is " ( "undoubtedly" | "certainly" | "without any doubt" ) " due to Y."
+    | "A " ( "possible" | "reasonable" | "satisfactory" ) " explanation for X may be that Y."
+    | "Another possible " ( "explanation" | "rationalization" | "reason" ) " for this is that X."
+    | ( "Clearly" | "Evidently" | "Naturally" ) " there may be other possible explanations."
+    | "This " [ "may have " ] ( "happened" | "occurred" ) " because we had not examined X " ( "sufficiently" | "in enough depth" ) " due to Y."
+    | "The reasons for this result are not yet " ( "wholly" | "completely" | "entirely" ) " understood."
+    | "It cannot be " ( "ruled out" | "ignored" ) " that there was some unintended bias in X."
+    | "An unintended bias " ( "cannot be ruled out" | "should be taken into consideration" ) "."
+    | "We cannot rule out that X " ( "might" | "may" ) " have influenced Y."
+    | "The observed increase in X " ( "could be attributed to" | "might be explained by" | "could be interpreted as being a result of" ) " Y."
+    | "Despite the fact that" | "Although X was expected to do Y, it was not predicted that X would also do Z."
+    | "However, this is not particularly surprising " ( "given the fact" | "in light of the fact" | "if we consider" ) " that X."
+    ;
+
+sect_where_i_try_to_pretend_the_bullshit_results_dont_exist
+    : "Although performance was not " ( "ideal," | "perfect," | "optimal," ) " we " ( "still" | "nevertheless" ) " believe that X."
+    | "This poor performance was not " ( "unexpected" | "surprising" | "very significant" ) ". In fact, X."
+    | "This result was not " ( "expected" | "predicted" | "anticipated" ) ". However, " ( "the reason for this is probably" | "it is likely that the reason for this is" | "it is probable that the reason for this is" ) " that X."
+    | "Our investigations so far have only been " ( "on a small scale" | "applied to X" ) "."
+    | "These discrepancies " ( "are negligible" | "can be neglected" | "can be considered as insignificant" | "are of no real consequence" ) " due to the fact that X."
+    | "Despite the limitations of this method, and consequently the poor results in Test 2, our findings do " ( "nevertheless" | "in any case" | "however" ) " suggest that X."
+    | ( "Given that" | "Since" | "On account of the fact that" ) " this was only a preliminary attempt to do X, it is hardly surprising that Y."
+    | "As is well known, Xs are extremely " ( "hard" | "difficult" | "problematic" | "time-consuming" | "cumbersome" ) " to control, " ( "so" | "thus" | "consequently" ) " Y."
+    | "In fact, X was " ( "beyond the scope of this study" | "not a primary goal in this research" | "not the focus of this study" | "not attempted in this study" ) "."
+    | "Consequently, it is " ( "inevitable" | "understandable" | "not hard to appreciate" | "not surprising " ) " that X."
+    | ( "Note" | "It should be noted" | "It is worthwhile noting" ) " that X."
+    | ( "A" | "One" ) " limitation of our research is that the surveys were not conducted in the same period."
+    | ( "However," | "Nevertheless," | "Despite this," ) " we can still state that X."
+    | "We " ( "failed" | "were not able" | "were unable" ) " to find a link between X and Y, but this " ( "may" | "might" ) " depend on the methodology chosen for our research."
+    ;
+
+sect_opinions_i_pulled_out_of_my_own_ass
+    : ( "To the best of our knowledge" | "As far as we know" | "We believe that" ) " no other authors have found that X."
+    | "It would " ( "seem" | "appear" ) " that X."
+    | "Our findings would seem to " ( "show" | "demonstrate" | "suggest" | "imply" ) " that X."
+    | "This factor " ( "may be" | "is probably" | "could well be" ) " responsible for this result."
+    | ( "Presumably" | "We hypothesize" | "I argue" ) " that this factor is X."
+    | "We believe that our method could " ( "be used" | "probably be usefully employed" ) " in X."
+    | "Our approach " ( "would lend itself well for use by" | "may be useful for" ) " X."
+    | "In our " ( "opinion," | "view," ) " this method could be used in X."
+    | "We " ( "believe" | "feel strongly" ) " that X."
+    | "There is evidence to " ( "suggest" | "support the hypothesis" ) " that X."
+    | ( "It is proposed" | "This may mean" | "It seems likely" | "It may be assumed" ) " that X."
+    | "This " ( "implies" | "suggests" | "would appear to indicate" ) " that X."
+    | "The results point to the " ( "likelihood" | "probability" ) " that X."
+    | "There is a " ( "strong" | "definite" | "clear" | "good" ) " probability that X."
+    ;
+
+sect_summary_of_paper
+    : ( "In conclusion," | "In summary," | "In sum," | "To sum up," ) " our work X."
+    | "Our work has led us to  " ( "conclude" | "the conclusion" ) " that X."
+    | "We have " ( "presented" | "outlined" | "described" ) " X."
+    | "In this " ( "paper" | "study" | "review" ) " we have X."
+    | "This paper has " ( "investigated" | "explained" | "given an account of" ) " X."
+    ;
+
+sect_restating_results_to_pad_word_count
+    : "The evidence from this study " ( "suggests" | "implies" | "points towards the idea" | "intimates" ) " that X."
+    | "The " ( "results" | "findings" ) " of this study " ( "indicate" | "support the idea" | "suggest" ) " that X."
+    | ( "In general," | "Taken together," ) " these results " ( "suggest" | "would seem to suggest" ) " that X."
+    | ( "An implication" | "A consequence" | "The upshot" ) " of this is the possibility that X."
+    ;
+
+sect_why_i_am_the_best
+    : ( "Our research" | "This paper" ) " has " ( "highlighted" | "stressed" | "underlined" ) " the importance of X."
+    | "We have " ( "managed to do" | "succeeded in doing" | "been able to do" | "found a way to do" ) " X."
+    | "We have found " ( "an innovative" | "a new" | "a novel" | "a cutting-edge" ) " solution for X."
+    | "We have obtained " ( "accurate" | "satisfactory" | "comprehensive" ) " results " ( "proving" | "demonstrating" | "showing" ) " that X."
+    | "We have devised a " ( "methodology" | "procedure" | "strategy" ) " which X."
+    | "We have " ( "confirmed" | "provided further evidence" | "demonstrated" ) " that X."
+    | "Considerable " ( "progress has been made" | "insight has been gained" ) " with regard to X."
+    | "Taken together, these findings " ( "suggest" | "implicate" | "highlight" ) " a role for X."
+    | "Our study provides " ( "the framework" | "a springboard" | "the backbone" | "the basis" | "a blueprint" | "an agenda" | "a stimulus" | "encouragement" ) " for a new way to do X."
+    | "The " ( "strength" | "strong point" | "value" | "impact" | "benefit" | "usefulness" | "significance" | "importance" ) " of our " ( "work" | "study" | "contribution" ) " lies in X."
+    | "X provides a powerful " ( "tool" | "methodology" ) " for X."
+    | "X " ( "ensures" | "guarantees" ) " that Y will do Z, and it can be generalized to A."
+    | "Our investigations into this area are still " ( "ongoing" | "in progress" ) " and seem likely to confirm our hypothesis."
+    | "These findings add " ( "to a growing body of literature on" | "substantially to our understanding of" ) " X."
+    ;
+
+sect_why_i_am_not_the_best
+    : "Our work clearly has some limitations. " ( "Nevertheless" | "Despite this" ) " we believe our work could be " ( "the basis" | "a framework" | "a starting point" | "a springboard for" ) " X."
+    | ( "Despite the fact that there are" | "In spite of the fact that" | "Although there are" ) " limitations due to Y, we X."
+    | "The most important limitation " ( "lies in" | "is due to" | "is a result of" ) " the fact that X."
+    | "The current study was " ( "limited by" | "unable to" | "not specifically designed to" ) " X."
+    | "The present study has only " ( "investigated" | "examined" ) " X. " ( "Therefore," | "Consequently," ) " X."
+    | "The " ( "project" | "analysis" | "testing" | "sampling" ) " was limited in several ways. First, X. Second, Y."
+    | "Finally, a number of potential " ( "limitations" | "weaknesses" | "shortfalls" | "shortcomings" | "weak points" ) " need to be considered. First, X. Second, Y."
+    | "However, given the small sample size, caution must be " ( "exercised" | "taken" | "used" | "applied" ) "."
+    | "The findings might not be " ( "transferable to" | "generalized to" | "representative of" ) " X."
+    | "The " ( "picture" | "situation" ) " is thus still incomplete."
+    ;
+
+sect_where_i_pretend_this_crap_is_useful
+    :   ( "This study " ( "is the first step" | "has gone some way" ) " towards enhancing our understanding of X."
+        | "These observations have " ( "several" | "THREE main" | "many" ) " implications for research into X."
+        | "This work has " ( "revealed" | "shown" | "highlighted" | "demonstrated" | "proved" ) " that X."
+        | "The present findings might " ( "help to solve" | "have important implications for solving" | "suggest several courses of action in order to solve" ) " this problem."
+        | "X " ( "is suitable for" | "has the potential to" ) " X."
+        | "Our " ( "method" | "technique" | "approach" | "procedure" ) " could be applied to X."
+        | "One " ( "possible" | "potential" | "promising" ) " application of our technique would be X."
+        | "Results so far have been very " ( "promising" | "encouraging" ) " and X."
+        | "This approach has the " ( "potential" | "requirements" | "characteristics" | "features" ) " to X."
+        | "This could " ( "eventually" | "conceivably" | "potentially" | "hypothetically" ) " lead to X."
+        | "Our data suggest that X could be " ( "used" | "exploited" | "taken advantage of" | "made use of" ) " in order to X."
+        | "In our view these results " ( "are" | "constitute" | "represent" ) " an excellent initial step toward X."
+        | "We " ( "believe" | "are confident" ) " that our results may improve knowledge about X."
+        | "These early successes may hope to " ( "resolve" | "tackle" | "solve" | "deal with" ) " X."
+        | "Our research could " ( "help" | "be a useful aid for" | "possibly support" ) " decision makers because X."
+        | "We think that our findings " ( "could" | "might be useful for" ) " X."
+        | "We hope that our research will be " ( "helpful" | "useful" | "beneficial" | "constructive" | "valuable" ) " in solving the difficulty of X. " ( "At the same time" | "In addition" | "Further" | "Furthermore" ) " we believe that Y."
+        | "Our research suggests that " ( "the policy makers should" | "it is important for policy makers to" ) " encourage stakeholders to X."
+        | "The findings of my research have " ( "serious" | "considerable" | "important" ) " managerial implications."
+        )
+        [" " ( "Another" | "An additional" | "A further" ) " important implication is X." ]
+    ;
+
+sect_we_havent_abandoned_this_subject_yet
+    : "We are " ( "currently" | "now" | "in the process of" ) " investigating X."
+    | "Research into solving this problem is already " ( "underway" | "in progress" ) "."
+    | "To further our research we " ( "plan" | "are planning" | "intend" ) " to X."
+    | "Future work will " ( "concentrate on" | "focus on" | "explore" | "investigate" | "look into" ) " X."
+    | "Further studies, which take X into account, will need to be " ( "undertaken" | "performed" ) "."
+    | "We hope that further tests will " ( "prove our theory" | "confirm our findings" ) "."
+    | "These topics are " ( "reserved for" | "deferred to" ) " future work."
+    ;
+
+sect_well_leave_the_rest_to_someone_else
+    : "Further work needs to be " ( "done" | "carried out" | "performed" ) " to establish whether X."
+    | "Further experimental " ( "investigations" | "tests" | "studies" ) " are needed to estimate X."
+    | ( "More" | "Additional" | "Further" ) " work on X would help us to do Y."
+    | "We " ( "hope" | "believe" | "are confident" ) " that our research will serve as a base for future studies on X."
+    | ( "It is recommended" | "We recommend" | "We suggest" | "We propose" ) " that further research should be undertaken in the following areas: X, Y, Z."
+    | ( "More broadly," | "On a wider level," ) " research is also needed to determine X."
+    | "This research has " ( "raised" | "given rise to" | "thrown up" ) " many questions in need of further " ( "investigation" | "study" | "examination" ) "."
+    | "This is " ( "an important" | "a fundamental" | "a vital" ) " issue for future research."
+    | "The design and development of Xs will " ( "challenge" | "be a challenge for" ) " us for years."
+    | "Future work should " ( "concentrate" | "focus" ) " on enhancing the quality of X."
+    | "Future studies should " ( "target" | "aim at" | "examine" | "deal with" | "address" ) " X."
+    | "Future studies on the current topic are therefore " ( "required" | "needed" | "recommended" | "suggested" ) " in order to " ( "establish" | "verify" | "validate" | "elucidate" ) " X."
+    | "Our results are " ( "encouraging" | "promising" ) " and should be validated by a larger sample size."
+    | "These findings suggest the following " ( "directions" | "opportunities" ) " for future research: X, Y."
+    | "An important " ( "issue" | "matter" | "question" | "problem" ) " to resolve for future studies is X."
+    | "The prospect of being able to do X, serves as a continuous " ( "incentive for" | "stimulus for" | "impulse for" | "spur to" ) " future research."
+    ;
+
+sect_ack
+    : "This work was " ( "carried out" | "performed" ) " within the framework of an EU project and was partly sponsored by X."
+    | "This research " ( "was made possible by" | "benefited from a grant from" ) " X."
+    | "Support was given by the Institute of X, who funded the work in " ( "all its" | "its initial" ) " stages."
+    | "We " [ "would like to " ] "thank the following people for their support, without whose help this work would never have been possible: X, Y, Z."
+    | "We gratefully acknowledge the " ( "help provided by COLLEAGUE" | "constructive comments of the anonymous referees" ) "."
+    | "We are " ( "indebted" | "particularly grateful" ) " to COLLEAGUE for X."
+    | "We " ( "thank" | "are grateful to" | "gratefully acknowledge" ) " COLLEAGUE for THEIR " ( "help" | "valuable suggestions and discussions" ) "."
+    | ( "Thanks are also due to" | "The authors wish to thank" ) " COLLEAGUE, who gave us much valuable advice in the early stages of this work."
+    | "COLLEAGUE " ( "collaborated with" | "worked alongside" ) " our staff during this research project."
+    | "We also thank COLLEAGUE for THEIR ongoing " ( "collaboration with our department" | "technical assistance" ) " in all our experimental work."
+    ;
+
+math_consequence{var_placeholder} : " we " ( "have that" | "obtain" | "get" ) " " var_placeholder "." ;
+
+newline : "\u000A" ;
+apos : "\u2019" ;
+single_quote{what} : "\u2018" what "\u2019" ;
