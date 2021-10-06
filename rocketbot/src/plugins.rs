@@ -67,6 +67,8 @@ pub(crate) async fn load_plugins(iface: Weak<dyn RocketBotInterface>) -> Vec<Box
                 Box::new(rocketbot_plugin_quotes::QuotesPlugin::new(iface_weak, inner_config).await)
             } else if plugin_config.name == "randreact" {
                 Box::new(rocketbot_plugin_randreact::RandReactPlugin::new(iface_weak, inner_config).await)
+            } else if plugin_config.name == "roman_num" {
+                Box::new(rocketbot_plugin_roman_num::RomanNumPlugin::new(iface_weak, inner_config).await)
             } else if plugin_config.name == "sed" {
                 Box::new(rocketbot_plugin_sed::SedPlugin::new(iface_weak, inner_config).await)
             } else if plugin_config.name == "serious_mode" {

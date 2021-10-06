@@ -1711,6 +1711,7 @@ dependencies = [
  "rocketbot_plugin_progress",
  "rocketbot_plugin_quotes",
  "rocketbot_plugin_randreact",
+ "rocketbot_plugin_roman_num",
  "rocketbot_plugin_sed",
  "rocketbot_plugin_serious_mode",
  "rocketbot_plugin_simultype",
@@ -2069,6 +2070,18 @@ dependencies = [
  "chrono",
  "log",
  "rand",
+ "rocketbot_interface",
+ "serde_json",
+]
+
+[[package]]
+name = "rocketbot_plugin_roman_num"
+version = "0.1.0"
+dependencies = [
+ "async-trait",
+ "log",
+ "once_cell",
+ "regex",
  "rocketbot_interface",
  "serde_json",
 ]
