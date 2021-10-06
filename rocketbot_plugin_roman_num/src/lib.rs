@@ -19,8 +19,8 @@ impl RomanNumPlugin {
             Some(i) => i,
         };
 
-        let arabic_digits = command.rest.trim().to_lowercase();
-        let roman_numerals = arabic2roman(&arabic_digits)
+        let arabic_digits = command.rest.trim();
+        let roman_numerals = arabic2roman(arabic_digits)
             .unwrap_or_else(|| "?".to_owned());
 
         send_channel_message!(
@@ -36,9 +36,23 @@ impl RomanNumPlugin {
             Some(i) => i,
         };
 
-        let roman_numerals = command.rest.trim().to_lowercase();
-        let arabic_digits = roman2arabic(&roman_numerals)
-            .unwrap_or_else(|| "?".to_owned());
+        let roman_numerals = command.rest.trim().to_uppercase();
+        let arabic_digits = match roman2arabic(&roman_numerals) {
+            Some(a) => {
+                // try to convert it back
+                let reromanized = arabic2roman(&a);
+                if let Some(rerom) = reromanized {
+                    if roman_numerals != rerom {
+                        format!("{} (canonically {})", a, rerom)
+                    } else {
+                        a
+                    }
+                } else {
+                    a
+                }
+            },
+            None => "?".to_owned(),
+        };
 
         send_channel_message!(
             interface,
