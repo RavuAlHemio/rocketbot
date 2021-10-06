@@ -19,14 +19,14 @@ impl RomanNumPlugin {
             Some(i) => i,
         };
 
-        let roman_numerals = command.rest.trim();
-        let arabic_digits = roman2arabic(roman_numerals)
+        let arabic_digits = command.rest.trim();
+        let roman_numerals = arabic2roman(arabic_digits)
             .unwrap_or_else(|| "?".to_owned());
 
         send_channel_message!(
             interface,
             &channel_message.channel.name,
-            &arabic_digits,
+            &roman_numerals,
         ).await;
     }
 
@@ -36,14 +36,14 @@ impl RomanNumPlugin {
             Some(i) => i,
         };
 
-        let arabic_digits = command.rest.trim();
-        let roman_numerals = arabic2roman(arabic_digits)
+        let roman_numerals = command.rest.trim();
+        let arabic_digits = roman2arabic(roman_numerals)
             .unwrap_or_else(|| "?".to_owned());
 
         send_channel_message!(
             interface,
             &channel_message.channel.name,
-            &roman_numerals,
+            &arabic_digits,
         ).await;
     }
 }
