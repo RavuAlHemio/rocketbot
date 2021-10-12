@@ -59,6 +59,8 @@ pub(crate) async fn load_plugins(iface: Weak<dyn RocketBotInterface>) -> Vec<Box
                 Box::new(rocketbot_plugin_new_year::NewYearPlugin::new(iface_weak, inner_config).await)
             } else if plugin_config.name == "nines" {
                 Box::new(rocketbot_plugin_nines::NinesPlugin::new(iface_weak, inner_config).await)
+            } else if plugin_config.name == "numberword" {
+                Box::new(rocketbot_plugin_numberword::NumberwordPlugin::new(iface_weak, inner_config).await)
             } else if plugin_config.name == "paper" {
                 Box::new(rocketbot_plugin_paper::PaperPlugin::new(iface_weak, inner_config).await)
             } else if plugin_config.name == "progress" {
