@@ -235,9 +235,9 @@ mod tests {
 
         let ptrie_vec = ptrie.to_vec();
         assert_eq!(4, ptrie_vec.len());
-        assert_eq!(("a".to_owned(), &0), ptrie_vec[0]);
-        assert_eq!(("an".to_owned(), &10), ptrie_vec[1]);
-        assert_eq!(("and".to_owned(), &20), ptrie_vec[2]);
-        assert_eq!(("banana".to_owned(), &30), ptrie_vec[3]);
+        assert!(ptrie_vec.contains(&("a".to_owned(), &0)));
+        assert!(ptrie_vec.contains(&("an".to_owned(), &10)));
+        assert!(ptrie_vec.contains(&("and".to_owned(), &20)));
+        assert!(ptrie_vec.contains(&("banana".to_owned(), &30)));
     }
 }
