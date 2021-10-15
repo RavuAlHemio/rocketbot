@@ -69,6 +69,8 @@ impl DatePlugin {
         let in_days = delta.num_days();
         let response_text = if in_days < 0 {
             format!("{} was {} days ago", date.format(DATE_OUTPUT_FORMAT), -in_days)
+        } else if in_days == 0 {
+            format!("{} is today", date.format(DATE_OUTPUT_FORMAT))
         } else {
             format!("{} is in {} days", date.format(DATE_OUTPUT_FORMAT), in_days)
         };
