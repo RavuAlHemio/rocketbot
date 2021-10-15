@@ -68,11 +68,13 @@ impl DatePlugin {
         let delta = date.signed_duration_since(Local::today().naive_local());
         let in_days = delta.num_days();
         let response_text = if in_days < 0 {
-            format!("{} was {} days ago", date.format(DATE_OUTPUT_FORMAT), -in_days)
+            let day_days = if in_days == -1 { "day" } else { "days" };
+            format!("{} was {} {} ago", date.format(DATE_OUTPUT_FORMAT), -in_days, day_days)
         } else if in_days == 0 {
             format!("{} is today", date.format(DATE_OUTPUT_FORMAT))
         } else {
-            format!("{} is in {} days", date.format(DATE_OUTPUT_FORMAT), in_days)
+            let day_days = if in_days == 1 { "day" } else { "days" };
+            format!("{} is in {} {}", date.format(DATE_OUTPUT_FORMAT), in_days, day_days)
         };
 
         send_channel_message!(
