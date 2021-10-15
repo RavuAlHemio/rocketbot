@@ -24,6 +24,18 @@ def get_output(args: list[str]) -> str:
     return completed_process.stdout.strip()
 
 
+def rust_escape(s: str) -> str:
+    ret = []
+    for c in s:
+        if c == "\\":
+            ret.append("\\\\")
+        elif c == '"':
+            ret.append('\\"')
+        else:
+            ret.append(c)
+    return "".join(ret)
+
+
 def main():
     short_hash = get_output(["git", "show", "--pretty=tformat:%h", "--no-patch", "HEAD"])
     commit_subject = get_output(["git", "show", "--pretty=tformat:%s", "--no-patch", "HEAD"])
@@ -33,8 +45,8 @@ def main():
 
     code = (
         code
-            .replace(SHORT_HASH_PLACEHOLDER, short_hash)
-            .replace(COMMIT_SUBJECT_PLACEHOLDER, commit_subject)
+            .replace(SHORT_HASH_PLACEHOLDER, rust_escape(short_hash))
+            .replace(COMMIT_SUBJECT_PLACEHOLDER, rust_escape(commit_subject))
     )
 
     with open(CODE_FILE, "w", encoding="utf-8") as f:
