@@ -103,10 +103,19 @@ impl DatePlugin {
             Weekday::Sun => "Sunday",
         };
 
+        let today = Local::today().naive_local();
+        let verb = if date < today {
+            "was"
+        } else if date == today {
+            "is"
+        } else {
+            "will be"
+        };
+
         send_channel_message!(
             interface,
             &channel_message.channel.name,
-            &format!("{} was a {}", date.format(DATE_OUTPUT_FORMAT), weekday_name),
+            &format!("{} {} a {}", date.format(DATE_OUTPUT_FORMAT), verb, weekday_name),
         ).await;
     }
 }
