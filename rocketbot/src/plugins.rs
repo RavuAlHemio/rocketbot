@@ -37,6 +37,8 @@ pub(crate) async fn load_plugins(iface: Weak<dyn RocketBotInterface>) -> Vec<Box
                 Box::new(rocketbot_plugin_catchword::CatchwordPlugin::new(iface_weak, inner_config).await)
             } else if plugin_config.name == "config_user_alias" {
                 Box::new(rocketbot_plugin_config_user_alias::ConfigUserAliasPlugin::new(iface_weak, inner_config).await)
+            } else if plugin_config.name == "date" {
+                Box::new(rocketbot_plugin_date::DatePlugin::new(iface_weak, inner_config).await)
             } else if plugin_config.name == "dice" {
                 Box::new(rocketbot_plugin_dice::DicePlugin::new(iface_weak, inner_config).await)
             } else if plugin_config.name == "exiftell" {

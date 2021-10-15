@@ -11,6 +11,7 @@ members = [
     "rocketbot_plugin_calc",
     "rocketbot_plugin_catchword",
     "rocketbot_plugin_config_user_alias",
+    "rocketbot_plugin_date",
     "rocketbot_plugin_dice",
     "rocketbot_plugin_exiftell",
     "rocketbot_plugin_fact",
