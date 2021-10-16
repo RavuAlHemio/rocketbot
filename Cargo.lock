@@ -1710,6 +1710,7 @@ dependencies = [
  "rocketbot_plugin_nines",
  "rocketbot_plugin_numberword",
  "rocketbot_plugin_paper",
+ "rocketbot_plugin_picrespond",
  "rocketbot_plugin_progress",
  "rocketbot_plugin_quotes",
  "rocketbot_plugin_randreact",
@@ -2057,6 +2058,19 @@ dependencies = [
  "num-bigint",
  "num-traits",
  "once_cell",
+ "regex",
+ "rocketbot_interface",
+ "serde_json",
+]
+
+[[package]]
+name = "rocketbot_plugin_picrespond"
+version = "0.1.0"
+dependencies = [
+ "async-trait",
+ "chrono",
+ "log",
+ "rand",
  "regex",
  "rocketbot_interface",
  "serde_json",

@@ -36,6 +36,7 @@ rocketbot_plugin_new_year = { path = "../rocketbot_plugin_new_year" }
 rocketbot_plugin_nines = { path = "../rocketbot_plugin_nines" }
 rocketbot_plugin_numberword = { path = "../rocketbot_plugin_numberword" }
 rocketbot_plugin_paper = { path = "../rocketbot_plugin_paper" }
+rocketbot_plugin_picrespond = { path = "../rocketbot_plugin_picrespond" }
 rocketbot_plugin_progress = { path = "../rocketbot_plugin_progress" }
 rocketbot_plugin_quotes = { path = "../rocketbot_plugin_quotes" }
 rocketbot_plugin_randreact = { path = "../rocketbot_plugin_randreact" }

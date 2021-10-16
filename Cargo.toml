@@ -25,6 +25,7 @@ members = [
     "rocketbot_plugin_nines",
     "rocketbot_plugin_numberword",
     "rocketbot_plugin_paper",
+    "rocketbot_plugin_picrespond",
     "rocketbot_plugin_progress",
     "rocketbot_plugin_quotes",
     "rocketbot_plugin_randreact",

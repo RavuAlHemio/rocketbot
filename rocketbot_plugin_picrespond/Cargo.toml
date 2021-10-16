@@ -1,0 +1,13 @@
+[package]
+name = "rocketbot_plugin_picrespond"
+version = "0.1.0"
+edition = "2018"
+
+[dependencies]
+async-trait = { version = "0.1" }
+chrono = { version = "0.4" }
+log = { version = "0.4" }
+rand = { version = "0.8" }
+regex = { version = "1.5" }
+rocketbot_interface = { path = "../rocketbot_interface" }
+serde_json = { version = "1.0" }

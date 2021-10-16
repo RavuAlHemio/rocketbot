@@ -65,6 +65,8 @@ pub(crate) async fn load_plugins(iface: Weak<dyn RocketBotInterface>) -> Vec<Box
                 Box::new(rocketbot_plugin_numberword::NumberwordPlugin::new(iface_weak, inner_config).await)
             } else if plugin_config.name == "paper" {
                 Box::new(rocketbot_plugin_paper::PaperPlugin::new(iface_weak, inner_config).await)
+            } else if plugin_config.name == "picrespond" {
+                Box::new(rocketbot_plugin_picrespond::PicRespondPlugin::new(iface_weak, inner_config).await)
             } else if plugin_config.name == "progress" {
                 Box::new(rocketbot_plugin_progress::ProgressPlugin::new(iface_weak, inner_config).await)
             } else if plugin_config.name == "quotes" {
