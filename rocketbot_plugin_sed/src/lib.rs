@@ -32,6 +32,10 @@ impl SedPlugin {
             Some(rm) => rm,
             None => return false, // non-textual messages do not contain commands
         };
+        if raw_message.len() == 0 {
+            // this message is non-textual too
+            return false;
+        }
 
         let transformations = match parse_replacement_commands(&raw_message) {
             Some(sc) => sc,
