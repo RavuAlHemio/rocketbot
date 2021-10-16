@@ -50,6 +50,10 @@ impl RocketBotPlugin for GroupPressurePlugin {
             Some(rm) => rm,
             None => return, // no group pressure for non-textual messages
         };
+        if raw_message.len() == 0 {
+            // no group pressure for empty (e.g. attachment-only) messages
+            return;
+        }
 
         let mut recent_messages_guard = self.channel_name_to_recent_messages
             .lock().await;
