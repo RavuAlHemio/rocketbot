@@ -800,6 +800,10 @@ impl RocketBotPlugin for QuotesPlugin {
             Some(rm) => rm,
             None => return, // no remembering pictorial messages
         };
+        if raw_message.len() == 0 {
+            // this one is probably attachment-only too
+            return;
+        }
 
         let potential_quote = Quote::new(
             -1,
