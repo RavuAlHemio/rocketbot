@@ -30,6 +30,13 @@ pub(crate) fn parse_full_expression(text: &str) -> Result<AstNodeAtLocation, Err
     Ok(parse_expression(&expression))
 }
 
+fn parse_parens_expression(pair: &Pair<'_, Rule>) -> AstNodeAtLocation {
+    trace!("parse_parens_expression: {:?}", pair.as_rule());
+    let mut inner = pair.clone().into_inner();
+    let expression = inner.next().expect("no expression");
+    parse_expression(&expression)
+}
+
 fn parse_expression(pair: &Pair<'_, Rule>) -> AstNodeAtLocation {
     trace!("parse_expression: {:?}", pair.as_rule());
     let mut inner = pair.clone().into_inner();
@@ -168,7 +175,7 @@ fn parse_atom_expression(pair: &Pair<'_, Rule>) -> AstNodeAtLocation {
             node: AstNode::Constant(child.as_str().to_owned()),
             start_end: Some((pair.as_span().start(), pair.as_span().end())),
         },
-        Rule::parens_expression => parse_expression(&child),
+        Rule::parens_expression => parse_parens_expression(&child),
         Rule::integer_expression => {
             let mut innerer = child.into_inner();
             let integer: BigInt = innerer

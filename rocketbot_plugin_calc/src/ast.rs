@@ -480,4 +480,9 @@ mod tests {
     fn test_parse_decimal_with_unit() {
         run_test("123.4#W", "123.4#W");
     }
+
+    #[test]
+    fn test_div_pow() {
+        run_test("4", "(16**2)/(4**3)");
+    }
 }
