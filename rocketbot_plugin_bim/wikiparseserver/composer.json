@@ -1,0 +1,8 @@
+{
+  "name": "ravualhemio/rocketbot-plugin-bim-wikiparseserver",
+  "require": {
+    "ext-sockets": "*",
+    "monolog/monolog": "^2.3.5",
+    "wikimedia/parsoid": "^0.15.0-a4"
+  }
+}

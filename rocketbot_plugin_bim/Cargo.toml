@@ -1,0 +1,18 @@
+[package]
+name = "rocketbot_plugin_bim"
+version = "0.1.0"
+edition = "2018"
+
+[dependencies]
+async-trait = { version = "0.1" }
+log = { version = "0.4" }
+rocketbot_interface = { path = "../rocketbot_interface" }
+serde = { version = "1.0", features = ["derive"] }
+serde_json = { version = "1.0" }
+
+[dev-dependencies]
+form_urlencoded = { version = "1.0" }
+reqwest = { version = "0.11", features = ["rustls-tls"] }
+sxd-document = { version = "0.3" }
+sxd-xpath = { version = "0.4" }
+tokio = { version = "1.7", features = ["macros", "rt-multi-thread"] }
