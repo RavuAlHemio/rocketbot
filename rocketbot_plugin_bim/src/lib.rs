@@ -5,7 +5,7 @@ use std::sync::Weak;
 
 use async_trait::async_trait;
 use log::error;
-use rocketbot_interface::send_channel_message;
+use rocketbot_interface::{JsonValueExtensions, send_channel_message};
 use rocketbot_interface::commands::{CommandDefinitionBuilder, CommandInstance};
 use rocketbot_interface::interfaces::{RocketBotInterface, RocketBotPlugin};
 use rocketbot_interface::model::ChannelMessage;
@@ -19,6 +19,7 @@ pub struct VehicleInfo {
     pub type_code: String,
     pub in_service_since: Option<String>,
     pub out_of_service_since: Option<String>,
+    pub manufacturer: Option<String>,
     pub other_data: HashMap<String, String>,
 }
 impl VehicleInfo {
@@ -28,6 +29,7 @@ impl VehicleInfo {
             type_code,
             in_service_since: None,
             out_of_service_since: None,
+            manufacturer: None,
             other_data: HashMap::new(),
         }
     }
@@ -37,6 +39,7 @@ impl VehicleInfo {
 pub struct BimPlugin {
     interface: Weak<dyn RocketBotInterface>,
     bim_database_path: String,
+    company_mapping: HashMap<String, String>,
 }
 impl BimPlugin {
     fn load_database(&self) -> Option<HashMap<u32, VehicleInfo>> {
@@ -72,6 +75,17 @@ impl RocketBotPlugin for BimPlugin {
             .as_str().expect("bim_database_path is not a string")
             .to_owned();
 
+        let company_mapping = if config["company_mapping"].is_null() {
+            HashMap::new()
+        } else {
+            let mut mapping = HashMap::new();
+            for (k, v) in config["company_mapping"].entries().expect("company_mapping not an object") {
+                let v_str = v.as_str().expect("company_mapping value not a string");
+                mapping.insert(k.to_owned(), v_str.to_owned());
+            }
+            mapping
+        };
+
         my_interface.register_channel_command(
             &CommandDefinitionBuilder::new(
                 "bim".to_owned(),
@@ -85,6 +99,7 @@ impl RocketBotPlugin for BimPlugin {
         Self {
             interface,
             bim_database_path,
+            company_mapping,
         }
     }
 
@@ -137,6 +152,11 @@ impl RocketBotPlugin for BimPlugin {
             },
             (None, None) => {},
         };
+
+        if let Some(manuf) = &vehicle.manufacturer {
+            let full_manuf = self.company_mapping.get(manuf).unwrap_or(manuf);
+            write!(response, "\n*hergestellt von* {}", full_manuf).expect("failed to write");
+        }
 
         let mut other_props: Vec<(&str, &str)> = vehicle.other_data.iter()
             .map(|(k, v)| (k.as_str(), v.as_str()))

@@ -81,6 +81,8 @@ pub(crate) fn row_data_to_trams(type_code: &str, row_data: Vec<(String, String)>
             vehicle.in_service_since = Some(val.clone());
         } else if key == "Ausgemustert" {
             vehicle.out_of_service_since = Some(val.clone());
+        } else if key == "Firma" {
+            vehicle.manufacturer = Some(val.clone());
         } else {
             vehicle.other_data.insert(key.clone(), val.clone());
         }
