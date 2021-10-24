@@ -1851,8 +1851,11 @@ name = "rocketbot_plugin_bim"
 version = "0.1.0"
 dependencies = [
  "async-trait",
+ "chrono",
  "form_urlencoded",
  "log",
+ "once_cell",
+ "regex",
  "reqwest",
  "rocketbot_interface",
  "serde",
@@ -1860,6 +1863,7 @@ dependencies = [
  "sxd-document",
  "sxd-xpath",
  "tokio",
+ "tokio-postgres",
 ]
 
 [[package]]
