@@ -30,34 +30,22 @@ fn with_thou_sep(int_str: &mut String, group_size: usize, sep: char) {
     }
 }
 
-fn format_stat(value: &BigUint, delta: Option<&BigUint>, percentage: Option<f64>, name: &str) -> String {
-    let mut ret = String::new();
+fn format_stat(dose_number: usize, value: &BigUint, delta: &BigUint, percentage: f64) -> String {
     let mut value_str = value.to_string();
     with_thou_sep(&mut value_str, 3, ',');
-    ret.push_str(&value_str);
 
-    if let Some(d) = delta {
-        let mut delta_str = d.to_string();
-        with_thou_sep(&mut delta_str, 3, ',');
+    let mut delta_str = delta.to_string();
+    with_thou_sep(&mut delta_str, 3, ',');
 
-        if let Some(p) = percentage {
-            ret.push_str(&format!(" ({:.2}%, +{})", p, delta_str));
-        } else {
-            ret.push_str(&format!(" (+{})", delta_str));
-        }
-    } else if let Some(p) = percentage {
-        ret.push_str(&format!(" ({:.2}%)", p));
-    }
-    ret.push(' ');
-    ret.push_str(name);
-    ret
+    format!("vaccine {}: {} ({:.2}%, +{})", dose_number, value_str, percentage, delta_str)
 }
 
 
 pub struct VaccinePlugin {
     interface: Weak<dyn RocketBotInterface>,
     default_target: String,
-    vaccine_csv_uri: String,
+    doses_timeline_url: String,
+    vax_certs_url: String,
     max_age_h: i64,
 
     vaccine_database: RwLock<VaccineDatabase>,
@@ -73,15 +61,18 @@ impl RocketBotPlugin for VaccinePlugin {
         let default_target = config["default_target"]
             .as_str().expect("default_target missing or not a string")
             .to_owned();
-        let vaccine_csv_uri = config["vaccine_csv_uri"]
-            .as_str().expect("vaccine_csv_uri missing or not a string")
+        let doses_timeline_url = config["doses_timeline_url"]
+            .as_str().expect("doses_timeline_url missing or not a string")
+            .to_owned();
+        let vax_certs_url = config["vax_certs_url"]
+            .as_str().expect("vax_certs_url missing or not a string")
             .to_owned();
         let max_age_h = config["max_age_h"]
             .as_i64().expect("max_age_h missing or not an i64");
 
         let vaccine_database = RwLock::new(
             "VaccinePlugin::vaccine_database",
-            match VaccineDatabase::new_from_url(&vaccine_csv_uri).await {
+            match VaccineDatabase::new_from_urls(&doses_timeline_url, &vax_certs_url).await {
                 Ok(d) => d,
                 Err(e) => {
                     panic!("initial database population failed: {}", e);
@@ -104,7 +95,8 @@ impl RocketBotPlugin for VaccinePlugin {
         VaccinePlugin {
             interface,
             default_target,
-            vaccine_csv_uri,
+            doses_timeline_url,
+            vax_certs_url,
             max_age_h,
             vaccine_database,
         }
@@ -138,7 +130,7 @@ impl RocketBotPlugin for VaccinePlugin {
             Utc::now() - db_guard.corona_timestamp
         };
         if update_delta.num_hours() > self.max_age_h {
-            match VaccineDatabase::new_from_url(&self.vaccine_csv_uri).await {
+            match VaccineDatabase::new_from_urls(&self.doses_timeline_url, &self.vax_certs_url).await {
                 Ok(d) => {
                     let mut db_guard = self.vaccine_database
                         .write().await;
@@ -150,7 +142,7 @@ impl RocketBotPlugin for VaccinePlugin {
             };
         }
 
-        let (freshest_entries, freshest_date, delta, part_percent, full_percent, state_name) = {
+        let (freshest_entries, freshest_date, delta, dose_to_percent, state_name) = {
             let db_guard = self.vaccine_database
                 .read().await;
             let state_id = match db_guard.lower_name_to_state_id.get(&name_lower) {
@@ -188,45 +180,59 @@ impl RocketBotPlugin for VaccinePlugin {
             let mut actual_entries: Vec<VaccinationStats> = freshest_entries.iter()
                 .map(|(_date, stats)| (*stats).clone())
                 .collect();
-            while actual_entries.len() < 2 {
+            if actual_entries.len() == 0 {
+                // nothing to show
+                return;
+            } else if actual_entries.len() == 1 {
+                let only_entry = &actual_entries[0];
+                let dose_to_zero_count: HashMap<usize, BigUint> = only_entry.dose_to_count.keys()
+                    .map(|&d| (d, BigUint::from(0u32)))
+                    .collect();
                 actual_entries.push(VaccinationStats {
-                    vaccinations: BigUint::from(0u32),
-                    partially_immune: BigUint::from(0u32),
-                    fully_immune: BigUint::from(0u32),
+                    dose_to_count: dose_to_zero_count,
                 });
             }
 
+            let mut dose_to_percent = HashMap::new();
             let ten_thousand = BigUint::from(10000u32);
-            let part_percent: f64 = (&actual_entries[0].partially_immune * &ten_thousand / &pop).to_f64().expect("BigUint to f64") / 100.0;
-            let full_percent: f64 = (&actual_entries[0].fully_immune * &ten_thousand / &pop).to_f64().expect("BigUint to f64") / 100.0;
+            for (dose_number, dose_count) in actual_entries[0].dose_to_count.iter() {
+                let percent: f64 = if pop == BigUint::from(0u32) {
+                    f64::INFINITY
+                } else {
+                    (dose_count * &ten_thousand / &pop).to_f64().expect("BigUint to f64") / 100.0
+                };
+                dose_to_percent.insert(*dose_number, percent);
+            }
 
-            let delta = actual_entries[0].clone() - actual_entries[1].clone();
+            let mut delta_dose_to_count = HashMap::new();
+            let zero = BigUint::from(0u32);
+            for (dose_number, dose_count) in actual_entries[0].dose_to_count.iter() {
+                let prev_count = actual_entries[1].dose_to_count.get(dose_number)
+                    .unwrap_or(&zero);
+                if prev_count <= dose_count {
+                    delta_dose_to_count.insert(*dose_number, dose_count - prev_count);
+                }
+            }
+            let delta = VaccinationStats {
+                dose_to_count: delta_dose_to_count,
+            };
 
-            (actual_entries, freshest_date, delta, part_percent, full_percent, state_name)
+            (actual_entries, freshest_date, delta, dose_to_percent, state_name)
         };
 
         let mut response = String::new();
         response.push_str(&format!("@{} {} ({}): ", channel_message.message.sender.username, state_name, freshest_date.format("%Y-%m-%d")));
-        response.push_str(&format_stat(
-            &freshest_entries[0].vaccinations,
-            delta.as_ref().map(|d| &d.vaccinations),
-            None,
-            "vaccinations",
-        ));
-        response.push_str(" => ");
-        response.push_str(&format_stat(
-            &freshest_entries[0].partially_immune,
-            delta.as_ref().map(|d| &d.partially_immune),
-            Some(part_percent),
-            "at least partially",
-        ));
-        response.push_str(", ");
-        response.push_str(&format_stat(
-            &freshest_entries[0].fully_immune,
-            delta.as_ref().map(|d| &d.fully_immune),
-            Some(full_percent),
-            "fully immune",
-        ));
+        let mut dose_numbers: Vec<usize> = dose_to_percent.keys().map(|k| *k).collect();
+        dose_numbers.sort_unstable();
+        let dose_texts: Vec<String> = dose_numbers.iter()
+            .map(|&dose_number| format_stat(
+                dose_number,
+                &freshest_entries[0].dose_to_count[&dose_number],
+                &delta.dose_to_count[&dose_number],
+                dose_to_percent[&dose_number],
+            ))
+            .collect();
+        response.push_str(&dose_texts.join(", "));
 
         send_channel_message!(
             interface,
