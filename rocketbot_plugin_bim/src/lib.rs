@@ -1,7 +1,8 @@
 use std::collections::HashMap;
 use std::convert::TryInto;
-use std::fmt::Write;
+use std::fmt::{self, Write};
 use std::fs::File;
+use std::num::ParseIntError;
 use std::sync::Weak;
 
 use async_trait::async_trait;
@@ -18,9 +19,39 @@ use serde_json;
 use tokio_postgres::NoTls;
 
 
-static BIMRIDE_RE: Lazy<Regex> = Lazy::new(|| Regex::new(
+pub static BIMRIDE_RE: Lazy<Regex> = Lazy::new(|| Regex::new(
     "^(?P<vehicles>[0-9]+(?:[+][0-9]+)*)(?:/(?P<line>[0-9A-Z]+|Sonderzug))?$"
 ).expect("failed to parse bimride regex"));
+pub const UPSERT_RIDE_QUERY: &'static str = "
+INSERT INTO bim.last_rides AS blr
+    (vehicle_number, rider_username, ride_count, last_ride, last_line)
+VALUES
+    ($1, $2, 1, $3, $4)
+ON CONFLICT (vehicle_number, rider_username) DO UPDATE
+    SET
+        ride_count = blr.ride_count + 1,
+        last_ride = $3,
+        last_line = $4
+RETURNING
+    (
+        SELECT prev.ride_count
+        FROM bim.last_rides prev
+        WHERE prev.vehicle_number = blr.vehicle_number
+        AND prev.rider_username = blr.rider_username
+    ) ride_count,
+    (
+        SELECT prev.last_ride
+        FROM bim.last_rides prev
+        WHERE prev.vehicle_number = blr.vehicle_number
+        AND prev.rider_username = blr.rider_username
+    ) last_ride,
+    (
+        SELECT prev.last_line
+        FROM bim.last_rides prev
+        WHERE prev.vehicle_number = blr.vehicle_number
+        AND prev.rider_username = blr.rider_username
+    ) last_line
+";
 
 
 macro_rules! write_expect {
@@ -54,10 +85,21 @@ impl VehicleInfo {
 
 
 #[derive(Clone, Debug, Eq, PartialEq)]
-struct LastRideInfo {
+pub struct LastRideInfo {
     pub ride_count: usize,
     pub last_ride: DateTime<Local>,
     pub last_line: Option<String>,
+}
+
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub struct VehicleRideInfo {
+    pub vehicle_number: u32,
+    pub last_ride: Option<LastRideInfo>,
+}
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub struct RideInfo {
+    pub line: Option<String>,
+    pub vehicles: Vec<VehicleRideInfo>,
 }
 
 
@@ -101,58 +143,6 @@ impl BimPlugin {
             connection.await
         });
         Ok(client)
-    }
-
-    async fn increment_last_ride(&self, ride_conn: &tokio_postgres::Client, vehicle_number: u32, rider_username: &str, line: Option<&str>) -> Result<Option<LastRideInfo>, tokio_postgres::Error> {
-        let vehicle_number_i64: i64 = vehicle_number.into();
-
-        let query = "
-            INSERT INTO bim.last_rides AS blr
-                (vehicle_number, rider_username, ride_count, last_ride, last_line)
-            VALUES
-                ($1, $2, 1, CURRENT_TIMESTAMP, $3)
-            ON CONFLICT (vehicle_number, rider_username) DO UPDATE
-                SET
-                    ride_count = blr.ride_count + 1,
-                    last_ride = CURRENT_TIMESTAMP,
-                    last_line = $3
-            RETURNING
-                (
-                    SELECT prev.ride_count
-                    FROM bim.last_rides prev
-                    WHERE prev.vehicle_number = blr.vehicle_number
-                    AND prev.rider_username = blr.rider_username
-                ) ride_count,
-                (
-                    SELECT prev.last_ride
-                    FROM bim.last_rides prev
-                    WHERE prev.vehicle_number = blr.vehicle_number
-                    AND prev.rider_username = blr.rider_username
-                ) last_ride,
-                (
-                    SELECT prev.last_line
-                    FROM bim.last_rides prev
-                    WHERE prev.vehicle_number = blr.vehicle_number
-                    AND prev.rider_username = blr.rider_username
-                ) last_line
-        ";
-
-        let row = ride_conn.query_one(query, &[&vehicle_number_i64, &rider_username, &line]).await?;
-        let prev_ride_count: Option<i64> = row.get(0);
-        let prev_last_ride: Option<DateTime<Local>> = row.get(1);
-        let prev_last_line: Option<String> = row.get(2);
-
-        if let Some(prc) = prev_ride_count {
-            let prc_usize: usize = prc.try_into().unwrap();
-
-            Ok(Some(LastRideInfo {
-                ride_count: prc_usize,
-                last_ride: prev_last_ride.unwrap(),
-                last_line: prev_last_line,
-            }))
-        } else {
-            Ok(None)
-        }
     }
 
     async fn channel_command_bim(&self, channel_message: &ChannelMessage, command: &CommandInstance) {
@@ -232,24 +222,7 @@ impl BimPlugin {
         };
 
         let bim_database_opt = self.load_bim_database();
-
-        let rest_no_spaces = command.rest.replace(" ", "");
-        let caps = match BIMRIDE_RE.captures(&rest_no_spaces) {
-            Some(c) => c,
-            None => {
-                send_channel_message!(
-                    interface,
-                    &channel_message.channel.name,
-                    &format!("Failed to parse vehicle/line specification `{:?}`.", rest_no_spaces),
-                ).await;
-                return;
-            },
-        };
-
-        let vehicles_str = caps.name("vehicles").expect("failed to capture vehicles").as_str();
-        let line_str_opt = caps.name("line").map(|l| l.as_str());
-
-        let ride_conn = match self.connect_ride_db().await {
+        let mut ride_conn = match self.connect_ride_db().await {
             Ok(c) => c,
             Err(_) => {
                 send_channel_message!(
@@ -261,53 +234,46 @@ impl BimPlugin {
             },
         };
 
-        let mut vehicle_nums = Vec::new();
-        for vehicle_num_str in vehicles_str.split("+") {
-            let vehicle_num: u32 = match vehicle_num_str.parse() {
-                Ok(vn) => vn,
-                Err(_) => {
-                    send_channel_message!(
-                        interface,
-                        &channel_message.channel.name,
-                        &format!("Failed to parse vehicle number {:?}.", vehicle_num_str),
-                    ).await;
-                    return;
-                },
-            };
-            vehicle_nums.push(vehicle_num);
-        }
+        let increment_res = increment_rides_by_spec(
+            &mut ride_conn,
+            &channel_message.message.sender.username,
+            channel_message.message.timestamp.with_timezone(&Local),
+            &command.rest,
+        ).await;
+        let last_ride_infos = match increment_res {
+            Ok(lri) => lri,
+            Err(IncrementBySpecError::SpecParseFailure(spec)) => {
+                send_channel_message!(
+                    interface,
+                    &channel_message.channel.name,
+                    &format!("Failed to parse line specification {:?}.", spec),
+                ).await;
+                return;
+            },
+            Err(IncrementBySpecError::VehicleNumberParseFailure(vn, _error)) => {
+                send_channel_message!(
+                    interface,
+                    &channel_message.channel.name,
+                    &format!("Failed to parse vehicle number {:?}.", vn),
+                ).await;
+                return;
+            },
+            Err(e) => {
+                error!("increment-by-spec error: {}", e);
+                send_channel_message!(
+                    interface,
+                    &channel_message.channel.name,
+                    "A database error occurred. :disappointed:",
+                ).await;
+                return;
+            },
+        };
 
-        let mut last_rides = Vec::with_capacity(vehicle_nums.len());
-        for &vehicle_num in &vehicle_nums {
-            let increment_res = self.increment_last_ride(
-                &ride_conn,
-                vehicle_num,
-                &channel_message.message.sender.username,
-                line_str_opt,
-            ).await;
-            let last_ride_opt = match increment_res {
-                Ok(lro) => lro,
-                Err(e) => {
-                    error!(
-                        "failed to increment last ride by {} of {} on {:?}: {}",
-                        channel_message.message.sender.username,
-                        vehicle_num,
-                        line_str_opt,
-                        e,
-                    );
-                    return;
-                },
-            };
-            last_rides.push(last_ride_opt);
-        }
-
-        let response_str = if last_rides.len() == 1 {
-            let &vehicle_num = &vehicle_nums[0];
-            let last_ride_opt = &last_rides[0];
-
+        let response_str = if last_ride_infos.vehicles.len() == 1 {
+            let vehicle_ride = &last_ride_infos.vehicles[0];
             let vehicle_type = if let Some(bd) = &bim_database_opt {
                 bd
-                    .get(&vehicle_num)
+                    .get(&vehicle_ride.vehicle_number)
                     .map(|vi| vi.type_code.as_str())
             } else {
                 None
@@ -317,14 +283,14 @@ impl BimPlugin {
                 "{} is currently riding {} number {}",
                 channel_message.message.sender.username,
                 vehicle_type,
-                vehicle_num,
+                vehicle_ride.vehicle_number,
             );
-            if let Some(line) = line_str_opt {
+            if let Some(line) = last_ride_infos.line {
                 write_expect!(&mut resp, " on line {}", line);
             }
             write_expect!(&mut resp, ". ");
 
-            if let Some(lr) = last_ride_opt {
+            if let Some(lr) = &vehicle_ride.last_ride {
                 write_expect!(
                     &mut resp,
                     "This is their {}{} ride in this vehicle (previously {}",
@@ -347,17 +313,17 @@ impl BimPlugin {
                 "{} is currently riding:",
                 channel_message.message.sender.username,
             );
-            for (&vehicle_num, last_ride_opt) in vehicle_nums.iter().zip(last_rides.iter()) {
+            for vehicle_ride in &last_ride_infos.vehicles {
                 let vehicle_type = if let Some(bd) = &bim_database_opt {
                     bd
-                        .get(&vehicle_num)
+                        .get(&vehicle_ride.vehicle_number)
                         .map(|vi| vi.type_code.as_str())
                 } else {
                     None
                 }.unwrap_or("vehicle");
 
-                write_expect!(&mut resp, "\n* {} number {} (", vehicle_type, vehicle_num);
-                if let Some(lr) = last_ride_opt {
+                write_expect!(&mut resp, "\n* {} number {} (", vehicle_type, vehicle_ride.vehicle_number);
+                if let Some(lr) = &vehicle_ride.last_ride {
                     write_expect!(
                         &mut resp,
                         "{}{} time, previously {}",
@@ -373,7 +339,7 @@ impl BimPlugin {
                 }
                 write_expect!(&mut resp, ")");
             }
-            if let Some(ln) = line_str_opt {
+            if let Some(ln) = &last_ride_infos.line {
                 write_expect!(&mut resp, "\non line {}", ln);
             }
             resp
@@ -480,4 +446,93 @@ impl RocketBotPlugin for BimPlugin {
             None
         }
     }
+}
+
+
+pub async fn increment_last_ride(ride_conn: &tokio_postgres::Transaction<'_>, vehicle_number: u32, rider_username: &str, timestamp: DateTime<Local>, line: Option<&str>) -> Result<Option<LastRideInfo>, tokio_postgres::Error> {
+    let vehicle_number_i64: i64 = vehicle_number.into();
+
+    let row = ride_conn.query_one(UPSERT_RIDE_QUERY, &[&vehicle_number_i64, &rider_username, &timestamp, &line]).await?;
+    let prev_ride_count: Option<i64> = row.get(0);
+    let prev_last_ride: Option<DateTime<Local>> = row.get(1);
+    let prev_last_line: Option<String> = row.get(2);
+
+    if let Some(prc) = prev_ride_count {
+        let prc_usize: usize = prc.try_into().unwrap();
+
+        Ok(Some(LastRideInfo {
+            ride_count: prc_usize,
+            last_ride: prev_last_ride.unwrap(),
+            last_line: prev_last_line,
+        }))
+    } else {
+        Ok(None)
+    }
+}
+
+#[derive(Debug)]
+pub enum IncrementBySpecError {
+    SpecParseFailure(String),
+    VehicleNumberParseFailure(String, ParseIntError),
+    DatabaseQuery(String, u32, Option<String>, tokio_postgres::Error),
+    DatabaseBeginTransaction(tokio_postgres::Error),
+    DatabaseCommitTransaction(tokio_postgres::Error),
+}
+impl fmt::Display for IncrementBySpecError {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match self {
+            Self::SpecParseFailure(spec) => write!(f, "failed to parse spec {:?}", spec),
+            Self::VehicleNumberParseFailure(num_str, e) => write!(f, "failed to parse vehicle number {:?}: {}", num_str, e),
+            Self::DatabaseQuery(rider, vehicle_num, line_opt, e) => write!(f, "database query error registering {} riding on vehicle {} on line {:?}: {}", rider, vehicle_num, line_opt, e),
+            Self::DatabaseBeginTransaction(e) => write!(f, "database error beginning transaction: {}", e),
+            Self::DatabaseCommitTransaction(e) => write!(f, "database error committing transaction: {}", e),
+        }
+    }
+}
+impl std::error::Error for IncrementBySpecError {
+}
+
+pub async fn increment_rides_by_spec(ride_conn: &mut tokio_postgres::Client, rider_username: &str, timestamp: DateTime<Local>, rides_spec: &str) -> Result<RideInfo, IncrementBySpecError> {
+    let spec_no_spaces = rides_spec.replace(" ", "");
+    let caps = match BIMRIDE_RE.captures(&spec_no_spaces) {
+        Some(c) => c,
+        None => return Err(IncrementBySpecError::SpecParseFailure(spec_no_spaces)),
+    };
+
+    let vehicles_str = caps.name("vehicles").expect("failed to capture vehicles").as_str();
+    let line_str_opt = caps.name("line").map(|l| l.as_str());
+
+    let mut vehicle_nums = Vec::new();
+    for vehicle_num_str in vehicles_str.split("+") {
+        let vehicle_num: u32 = match vehicle_num_str.parse() {
+            Ok(vn) => vn,
+            Err(e) => return Err(IncrementBySpecError::VehicleNumberParseFailure(vehicle_num_str.to_owned(), e)),
+        };
+        vehicle_nums.push(vehicle_num);
+    }
+
+    let vehicle_ride_infos = {
+        let xact = ride_conn.transaction().await
+            .map_err(|e| IncrementBySpecError::DatabaseBeginTransaction(e))?;
+
+        let mut vehicle_ride_infos = Vec::new();
+        for &vehicle_num in &vehicle_nums {
+            let lri_opt = increment_last_ride(&xact, vehicle_num, rider_username, timestamp, line_str_opt).await
+                .map_err(|e| IncrementBySpecError::DatabaseQuery(rider_username.to_owned(), vehicle_num, line_str_opt.map(|l| l.to_owned()), e))?;
+            vehicle_ride_infos.push(VehicleRideInfo {
+                vehicle_number: vehicle_num,
+                last_ride: lri_opt,
+            });
+        }
+
+        xact.commit().await
+            .map_err(|e| IncrementBySpecError::DatabaseBeginTransaction(e))?;
+
+        vehicle_ride_infos
+    };
+
+    Ok(RideInfo {
+        line: line_str_opt.map(|s| s.to_owned()),
+        vehicles: vehicle_ride_infos,
+    })
 }
