@@ -40,7 +40,7 @@ impl From<io::Error> for ParserError {
 
 
 pub(crate) struct WikiParser {
-    parser: Option<DroppableChild>,
+    _parser: Option<DroppableChild>,
     socket: Option<TcpStream>,
 }
 impl WikiParser {
@@ -54,7 +54,7 @@ impl WikiParser {
         let parser = Some(parser_child.into());
         let socket = None;
         Ok(Self {
-            parser,
+            _parser: parser,
             socket,
         })
     }
@@ -63,7 +63,7 @@ impl WikiParser {
         let parser = None;
         let socket = None;
         Self {
-            parser,
+            _parser: parser,
             socket,
         }
     }
