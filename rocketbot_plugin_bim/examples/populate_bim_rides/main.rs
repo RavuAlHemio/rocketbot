@@ -53,7 +53,13 @@ async fn main() {
             .expect("failed to parse timestamp");
         let timestamp = Local.from_utc_datetime(&naive_utc_timestamp);
         println!("[{}] <{}> {}", timestamp, message.username, message.message);
-        increment_rides_by_spec(&mut db_client, &message.username, timestamp, &message.message).await
+        increment_rides_by_spec(
+            &mut db_client,
+            None,
+            &message.username,
+            timestamp,
+            &message.message,
+        ).await
             .expect("failed to increment ride");
     }
 }

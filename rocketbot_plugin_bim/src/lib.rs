@@ -1,4 +1,4 @@
-use std::collections::HashMap;
+use std::collections::{BTreeSet, BTreeMap, HashMap};
 use std::convert::TryInto;
 use std::fmt::{self, Write};
 use std::fs::File;
@@ -68,7 +68,8 @@ pub struct VehicleInfo {
     pub in_service_since: Option<String>,
     pub out_of_service_since: Option<String>,
     pub manufacturer: Option<String>,
-    pub other_data: HashMap<String, String>,
+    pub other_data: BTreeMap<String, String>,
+    pub fixed_coupling_with: BTreeSet<u32>,
 }
 impl VehicleInfo {
     pub fn new(number: u32, type_code: String) -> Self {
@@ -78,7 +79,8 @@ impl VehicleInfo {
             in_service_since: None,
             out_of_service_since: None,
             manufacturer: None,
-            other_data: HashMap::new(),
+            other_data: BTreeMap::new(),
+            fixed_coupling_with: BTreeSet::new(),
         }
     }
 }
@@ -94,6 +96,7 @@ pub struct LastRideInfo {
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub struct VehicleRideInfo {
     pub vehicle_number: u32,
+    pub ridden_within_fixed_coupling: bool,
     pub last_ride: Option<LastRideInfo>,
 }
 #[derive(Clone, Debug, Eq, PartialEq)]
@@ -236,11 +239,12 @@ impl BimPlugin {
 
         let increment_res = increment_rides_by_spec(
             &mut ride_conn,
+            bim_database_opt.as_ref(),
             &channel_message.message.sender.username,
             channel_message.message.timestamp.with_timezone(&Local),
             &command.rest,
         ).await;
-        let last_ride_infos = match increment_res {
+        let mut last_ride_infos = match increment_res {
             Ok(lri) => lri,
             Err(IncrementBySpecError::SpecParseFailure(spec)) => {
                 send_channel_message!(
@@ -258,6 +262,14 @@ impl BimPlugin {
                 ).await;
                 return;
             },
+            Err(IncrementBySpecError::FixedCouplingCombo(vn)) => {
+                send_channel_message!(
+                    interface,
+                    &channel_message.channel.name,
+                    &format!("Vehicle with number {} is part of a fixed coupling and must therefore appear alone.", vn),
+                ).await;
+                return;
+            },
             Err(e) => {
                 error!("increment-by-spec error: {}", e);
                 send_channel_message!(
@@ -268,6 +280,9 @@ impl BimPlugin {
                 return;
             },
         };
+
+        // do not output fixed-coupling vehicles
+        last_ride_infos.vehicles.retain(|v| !v.ridden_within_fixed_coupling);
 
         let response_str = if last_ride_infos.vehicles.len() == 1 {
             let vehicle_ride = &last_ride_infos.vehicles[0];
@@ -474,6 +489,7 @@ pub async fn increment_last_ride(ride_conn: &tokio_postgres::Transaction<'_>, ve
 pub enum IncrementBySpecError {
     SpecParseFailure(String),
     VehicleNumberParseFailure(String, ParseIntError),
+    FixedCouplingCombo(u32),
     DatabaseQuery(String, u32, Option<String>, tokio_postgres::Error),
     DatabaseBeginTransaction(tokio_postgres::Error),
     DatabaseCommitTransaction(tokio_postgres::Error),
@@ -483,6 +499,7 @@ impl fmt::Display for IncrementBySpecError {
         match self {
             Self::SpecParseFailure(spec) => write!(f, "failed to parse spec {:?}", spec),
             Self::VehicleNumberParseFailure(num_str, e) => write!(f, "failed to parse vehicle number {:?}: {}", num_str, e),
+            Self::FixedCouplingCombo(coupled_number) => write!(f, "vehicle number {} is part of a fixed coupling and cannot be ridden in combination with other vehicles", coupled_number),
             Self::DatabaseQuery(rider, vehicle_num, line_opt, e) => write!(f, "database query error registering {} riding on vehicle {} on line {:?}: {}", rider, vehicle_num, line_opt, e),
             Self::DatabaseBeginTransaction(e) => write!(f, "database error beginning transaction: {}", e),
             Self::DatabaseCommitTransaction(e) => write!(f, "database error committing transaction: {}", e),
@@ -492,7 +509,7 @@ impl fmt::Display for IncrementBySpecError {
 impl std::error::Error for IncrementBySpecError {
 }
 
-pub async fn increment_rides_by_spec(ride_conn: &mut tokio_postgres::Client, rider_username: &str, timestamp: DateTime<Local>, rides_spec: &str) -> Result<RideInfo, IncrementBySpecError> {
+pub async fn increment_rides_by_spec(ride_conn: &mut tokio_postgres::Client, bim_database_opt: Option<&HashMap<u32, VehicleInfo>>, rider_username: &str, timestamp: DateTime<Local>, rides_spec: &str) -> Result<RideInfo, IncrementBySpecError> {
     let spec_no_spaces = rides_spec.replace(" ", "");
     let caps = match BIMRIDE_RE.captures(&spec_no_spaces) {
         Some(c) => c,
@@ -502,13 +519,36 @@ pub async fn increment_rides_by_spec(ride_conn: &mut tokio_postgres::Client, rid
     let vehicles_str = caps.name("vehicles").expect("failed to capture vehicles").as_str();
     let line_str_opt = caps.name("line").map(|l| l.as_str());
 
+    let vehicle_num_strs: Vec<&str> = vehicles_str.split("+").collect();
     let mut vehicle_nums = Vec::new();
-    for vehicle_num_str in vehicles_str.split("+") {
+    for &vehicle_num_str in &vehicle_num_strs {
         let vehicle_num: u32 = match vehicle_num_str.parse() {
             Ok(vn) => vn,
             Err(e) => return Err(IncrementBySpecError::VehicleNumberParseFailure(vehicle_num_str.to_owned(), e)),
         };
+        if let Some(bim_database) = bim_database_opt {
+            if let Some(veh) = bim_database.get(&vehicle_num) {
+                if veh.fixed_coupling_with.len() > 0 && vehicle_num_strs.len() > 1 {
+                    // this vehicle is in a fixed coupling but we have more than one vehicle
+                    // this is forbidden
+                    return Err(IncrementBySpecError::FixedCouplingCombo(vehicle_num));
+                }
+            }
+        }
         vehicle_nums.push(vehicle_num);
+    }
+
+    // also count vehicles ridden in a fixed coupling with the given vehicle
+    let mut all_vehicle_nums: Vec<(u32, bool)> = Vec::new();
+    if let Some(bim_database) = bim_database_opt {
+        for &vehicle_num in &vehicle_nums {
+            all_vehicle_nums.push((vehicle_num, false));
+            if let Some(veh) = bim_database.get(&vehicle_num) {
+                for &fcw in &veh.fixed_coupling_with {
+                    all_vehicle_nums.push((fcw, true));
+                }
+            }
+        }
     }
 
     let vehicle_ride_infos = {
@@ -516,11 +556,12 @@ pub async fn increment_rides_by_spec(ride_conn: &mut tokio_postgres::Client, rid
             .map_err(|e| IncrementBySpecError::DatabaseBeginTransaction(e))?;
 
         let mut vehicle_ride_infos = Vec::new();
-        for &vehicle_num in &vehicle_nums {
+        for &(vehicle_num, is_fixed_coupling) in &all_vehicle_nums {
             let lri_opt = increment_last_ride(&xact, vehicle_num, rider_username, timestamp, line_str_opt).await
                 .map_err(|e| IncrementBySpecError::DatabaseQuery(rider_username.to_owned(), vehicle_num, line_str_opt.map(|l| l.to_owned()), e))?;
             vehicle_ride_infos.push(VehicleRideInfo {
                 vehicle_number: vehicle_num,
+                ridden_within_fixed_coupling: is_fixed_coupling,
                 last_ride: lri_opt,
             });
         }

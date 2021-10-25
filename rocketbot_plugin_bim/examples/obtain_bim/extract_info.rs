@@ -1,3 +1,4 @@
+use std::collections::BTreeSet;
 use std::io::Read;
 use std::fs::File;
 
@@ -59,6 +60,7 @@ pub(crate) fn row_data_to_trams(type_code: &str, row_data: Vec<(String, String)>
     let type_code_parts: Vec<&str> = type_code.split("/").collect();
 
     let mut numbers_types: Vec<(u32, &str)> = Vec::new();
+    let mut fixed_coupling = false;
     for (key, val) in &row_data {
         if val.len() == 0 {
             continue;
@@ -77,6 +79,9 @@ pub(crate) fn row_data_to_trams(type_code: &str, row_data: Vec<(String, String)>
             if let Ok(number) = val.parse() {
                 numbers_types.push((number, this_type_code));
             }
+
+            // also, this creates a fixed coupling
+            fixed_coupling = true;
         } else if key == "Instandnahme" || key == "Inbetriebnahme" || key == "Genehmigung" {
             vehicle.in_service_since = Some(val.clone());
         } else if key == "Ausgemustert" {
@@ -88,9 +93,24 @@ pub(crate) fn row_data_to_trams(type_code: &str, row_data: Vec<(String, String)>
         }
     }
 
+    let all_numbers: BTreeSet<u32> = numbers_types
+        .iter()
+        .map(|(num, _tc)| *num)
+        .collect();
+
     for &(vehicle_number, vehicle_type_code) in &numbers_types {
         vehicle.number = vehicle_number;
         vehicle.type_code = vehicle_type_code.to_owned();
+
+        if fixed_coupling {
+            // add related vehicles
+            let mut coupled_numbers = all_numbers.clone();
+            coupled_numbers.remove(&vehicle_number);
+            vehicle.fixed_coupling_with = coupled_numbers;
+        } else {
+            vehicle.fixed_coupling_with = BTreeSet::new();
+        }
+
         vehicles.push(vehicle.clone());
     }
 
