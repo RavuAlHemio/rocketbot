@@ -9,7 +9,7 @@ WHITESPACE =
 
 decimal = @{ ('0'..'9')+ ~ "." ~ ('0'..'9')+ }
 identifier = @{ ('A'..'Z' | 'a'..'z') ~ ('A'..'Z' | 'a'..'z' | '0'..'9' | "_")* }
-integer = @{ integer10 | integer16 | integer8 | integer2 }
+integer = @{ integer16 | integer8 | integer2 | integer10 }
 integer10 = @{ ('0'..'9' | "_")+ }
 integer16 = @{ "0x" ~ ('0'..'9' | 'A'..'F' | 'a'..'f' | "_")+ }
 integer8 = @{ "0o" ~ ('0'..'7' | "_")+ }

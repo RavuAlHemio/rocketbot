@@ -485,4 +485,20 @@ mod tests {
     fn test_div_pow() {
         run_test("4", "(16**2)/(4**3)");
     }
+
+    #[test]
+    fn test_bases() {
+        run_test("42", "42");
+        run_test("42", "042");
+        run_test("42", "0042");
+        run_test("42", "0b101010");
+        run_test("42", "0b000101010");
+        run_test("42", "0x2a");
+        run_test("42", "0x2A");
+        run_test("42", "0x02a");
+        run_test("42", "0x0002A");
+        run_test("42", "0o52");
+        run_test("42", "0o052");
+        run_test("42", "0o00052");
+    }
 }

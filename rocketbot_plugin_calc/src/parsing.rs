@@ -2,6 +2,7 @@ use std::collections::VecDeque;
 
 use log::trace;
 use num_bigint::BigInt;
+use num_traits::Num;
 use pest::Parser;
 use pest::error::Error;
 use pest::iterators::{Pair, Pairs};
@@ -178,9 +179,18 @@ fn parse_atom_expression(pair: &Pair<'_, Rule>) -> AstNodeAtLocation {
         Rule::parens_expression => parse_parens_expression(&child),
         Rule::integer_expression => {
             let mut innerer = child.into_inner();
-            let integer: BigInt = innerer
+            let integer_str = innerer
                 .next().expect("missing integer")
-                .as_str().parse().expect("failed to parse integer");
+                .as_str();
+            let integer = if integer_str.starts_with("0x") {
+                BigInt::from_str_radix(&integer_str[2..], 16).expect("failed to parse base-16 integer")
+            } else if integer_str.starts_with("0o") {
+                BigInt::from_str_radix(&integer_str[2..], 8).expect("failed to parse base-8 integer")
+            } else if integer_str.starts_with("0b") {
+                BigInt::from_str_radix(&integer_str[2..], 2).expect("failed to parse base-2 integer")
+            } else {
+                integer_str.parse().expect("failed to parse integer")
+            };
             let units = parse_unit_suffixes(innerer);
             AstNodeAtLocation {
                 node: AstNode::Number(Number::new(
