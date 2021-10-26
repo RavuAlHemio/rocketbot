@@ -28,17 +28,19 @@ async fn main() {
     // load messages
     let args: Vec<OsString> = env::args_os().collect();
     if args.len() != 3 {
-        eprintln!("Usage: populate_bim_rides DBCONNSTRING MESSAGES");
+        eprintln!("Usage: populate_bim_rides DBCONNSTRING COMPANY MESSAGES");
         std::process::exit(1);
     }
 
     let mut log: Log = {
-        let file = File::open(&args[2])
+        let file = File::open(&args[3])
             .expect("failed to open file");
         serde_json::from_reader(file)
             .expect("failed to load log")
     };
     log.messages.sort_unstable_by_key(|e| e.timestamp.clone());
+
+    let company = args[2].to_str().expect("company name is not valid UTF-8");
 
     let conn_string = args[1].to_str().expect("connection string is not valid UTF-8");
     let (mut db_client, db_conn) = tokio_postgres::connect(conn_string, NoTls).await
@@ -56,6 +58,7 @@ async fn main() {
         increment_rides_by_spec(
             &mut db_client,
             None,
+            company,
             &message.username,
             timestamp,
             &message.message,

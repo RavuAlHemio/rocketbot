@@ -11,7 +11,7 @@ use log::error;
 use once_cell::sync::Lazy;
 use regex::Regex;
 use rocketbot_interface::{JsonValueExtensions, send_channel_message};
-use rocketbot_interface::commands::{CommandDefinitionBuilder, CommandInstance};
+use rocketbot_interface::commands::{CommandDefinitionBuilder, CommandInstance, CommandValueType};
 use rocketbot_interface::interfaces::{RocketBotInterface, RocketBotPlugin};
 use rocketbot_interface::model::ChannelMessage;
 use serde::{Deserialize, Serialize};
@@ -24,31 +24,34 @@ pub static BIMRIDE_RE: Lazy<Regex> = Lazy::new(|| Regex::new(
 ).expect("failed to parse bimride regex"));
 pub const UPSERT_RIDE_QUERY: &'static str = "
 INSERT INTO bim.last_rides AS blr
-    (vehicle_number, rider_username, ride_count, last_ride, last_line)
+    (company, vehicle_number, rider_username, ride_count, last_ride, last_line)
 VALUES
-    ($1, $2, 1, $3, $4)
-ON CONFLICT (vehicle_number, rider_username) DO UPDATE
+    ($1, $2, $3, 1, $4, $5)
+ON CONFLICT (company, vehicle_number, rider_username) DO UPDATE
     SET
         ride_count = blr.ride_count + 1,
-        last_ride = $3,
-        last_line = $4
+        last_ride = $4,
+        last_line = $5
 RETURNING
     (
         SELECT prev.ride_count
         FROM bim.last_rides prev
-        WHERE prev.vehicle_number = blr.vehicle_number
+        WHERE prev.company = blr.company
+        AND prev.vehicle_number = blr.vehicle_number
         AND prev.rider_username = blr.rider_username
     ) ride_count,
     (
         SELECT prev.last_ride
         FROM bim.last_rides prev
-        WHERE prev.vehicle_number = blr.vehicle_number
+        WHERE prev.company = blr.company
+        AND prev.vehicle_number = blr.vehicle_number
         AND prev.rider_username = blr.rider_username
     ) last_ride,
     (
         SELECT prev.last_line
         FROM bim.last_rides prev
-        WHERE prev.vehicle_number = blr.vehicle_number
+        WHERE prev.company = blr.company
+        AND prev.vehicle_number = blr.vehicle_number
         AND prev.rider_username = blr.rider_username
     ) last_line
 ";
@@ -108,13 +111,25 @@ pub struct RideInfo {
 
 pub struct BimPlugin {
     interface: Weak<dyn RocketBotInterface>,
-    bim_database_path: String,
-    company_mapping: HashMap<String, String>,
+    company_to_bim_database_path: HashMap<String, Option<String>>,
+    default_company: String,
+    manufacturer_mapping: HashMap<String, String>,
     ride_db_conn_string: String,
 }
 impl BimPlugin {
-    fn load_bim_database(&self) -> Option<HashMap<u32, VehicleInfo>> {
-        let f = match File::open(&self.bim_database_path) {
+    fn load_bim_database(&self, company: &str) -> Option<HashMap<u32, VehicleInfo>> {
+        let path_opt = match self.company_to_bim_database_path.get(company) {
+            Some(p) => p,
+            None => {
+                error!("unknown company {:?}", company);
+                return None;
+            },
+        };
+        let path = match path_opt {
+            Some(p) => p,
+            None => return None, // valid company but no database
+        };
+        let f = match File::open(path) {
             Ok(f) => f,
             Err(e) => {
                 error!("failed to open bim database: {}", e);
@@ -163,7 +178,12 @@ impl BimPlugin {
             },
         };
 
-        let database = match self.load_bim_database() {
+        let company = command.options.get("company")
+            .or_else(|| command.options.get("c"))
+            .map(|v| v.as_str().unwrap())
+            .unwrap_or(self.default_company.as_str());
+
+        let database = match self.load_bim_database(company) {
             Some(db) => db,
             None => {
                 return;
@@ -199,7 +219,7 @@ impl BimPlugin {
         };
 
         if let Some(manuf) = &vehicle.manufacturer {
-            let full_manuf = self.company_mapping.get(manuf).unwrap_or(manuf);
+            let full_manuf = self.manufacturer_mapping.get(manuf).unwrap_or(manuf);
             write!(response, "\n*hergestellt von* {}", full_manuf).expect("failed to write");
         }
 
@@ -224,7 +244,21 @@ impl BimPlugin {
             Some(i) => i,
         };
 
-        let bim_database_opt = self.load_bim_database();
+        let company = command.options.get("company")
+            .or_else(|| command.options.get("c"))
+            .map(|v| v.as_str().unwrap())
+            .unwrap_or(self.default_company.as_str());
+
+        if !self.company_to_bim_database_path.contains_key(company) {
+            send_channel_message!(
+                interface,
+                &channel_message.channel.name,
+                "Unknown company.",
+            ).await;
+            return;
+        }
+
+        let bim_database_opt = self.load_bim_database(company);
         let mut ride_conn = match self.connect_ride_db().await {
             Ok(c) => c,
             Err(_) => {
@@ -240,6 +274,7 @@ impl BimPlugin {
         let increment_res = increment_rides_by_spec(
             &mut ride_conn,
             bim_database_opt.as_ref(),
+            company,
             &channel_message.message.sender.username,
             channel_message.message.timestamp.with_timezone(&Local),
             &command.rest,
@@ -394,16 +429,27 @@ impl RocketBotPlugin for BimPlugin {
             Some(i) => i,
         };
 
-        let bim_database_path = config["bim_database_path"]
-            .as_str().expect("bim_database_path is not a string")
+        let mut company_to_bim_database_path = HashMap::new();
+        let c2db_map = config["company_to_bim_database_path"].as_object().expect("company_to_bim_database_path not an object");
+        for (company, db_path_value) in c2db_map {
+            let db_path = if db_path_value.is_null() {
+                None
+            } else {
+                Some(db_path_value.as_str().expect("company_to_bim_database_path value not a string").to_owned())
+            };
+            company_to_bim_database_path.insert(company.to_owned(), db_path);
+        }
+
+        let default_company = config["default_company"]
+            .as_str().expect("default_company not a string")
             .to_owned();
 
-        let company_mapping = if config["company_mapping"].is_null() {
+        let manufacturer_mapping = if config["manufacturer_mapping"].is_null() {
             HashMap::new()
         } else {
             let mut mapping = HashMap::new();
-            for (k, v) in config["company_mapping"].entries().expect("company_mapping not an object") {
-                let v_str = v.as_str().expect("company_mapping value not a string");
+            for (k, v) in config["manufacturer_mapping"].entries().expect("manufacturer_mapping not an object") {
+                let v_str = v.as_str().expect("manufacturer_mapping value not a string");
                 mapping.insert(k.to_owned(), v_str.to_owned());
             }
             mapping
@@ -420,6 +466,8 @@ impl RocketBotPlugin for BimPlugin {
                 "{cpfx}bim NUMBER".to_owned(),
                 "Obtains information about the public transport vehicle with the given number.".to_owned(),
             )
+                .add_option("company", CommandValueType::String)
+                .add_option("c", CommandValueType::String)
                 .build()
         ).await;
         my_interface.register_channel_command(
@@ -429,13 +477,16 @@ impl RocketBotPlugin for BimPlugin {
                 "{cpfx}bimride VEHICLE[+VEHICLE...][/LINE]".to_owned(),
                 "Registers a ride with the given vehicle(s) on the given line.".to_owned(),
             )
+                .add_option("company", CommandValueType::String)
+                .add_option("c", CommandValueType::String)
                 .build()
         ).await;
 
         Self {
             interface,
-            bim_database_path,
-            company_mapping,
+            company_to_bim_database_path,
+            default_company,
+            manufacturer_mapping,
             ride_db_conn_string,
         }
     }
@@ -464,10 +515,45 @@ impl RocketBotPlugin for BimPlugin {
 }
 
 
-pub async fn increment_last_ride(ride_conn: &tokio_postgres::Transaction<'_>, vehicle_number: u32, rider_username: &str, timestamp: DateTime<Local>, line: Option<&str>) -> Result<Option<LastRideInfo>, tokio_postgres::Error> {
+pub async fn increment_last_ride(ride_conn: &tokio_postgres::Transaction<'_>, company: &str, vehicle_number: u32, rider_username: &str, timestamp: DateTime<Local>, line: Option<&str>) -> Result<Option<LastRideInfo>, tokio_postgres::Error> {
     let vehicle_number_i64: i64 = vehicle_number.into();
 
-    let row = ride_conn.query_one(UPSERT_RIDE_QUERY, &[&vehicle_number_i64, &rider_username, &timestamp, &line]).await?;
+    let row = ride_conn.query_one(
+        "
+            INSERT INTO bim.last_rides AS blr
+                (company, vehicle_number, rider_username, ride_count, last_ride, last_line)
+            VALUES
+                ($1, $2, $3, 1, $4, $5)
+            ON CONFLICT (company, vehicle_number, rider_username) DO UPDATE
+                SET
+                    ride_count = blr.ride_count + 1,
+                    last_ride = $4,
+                    last_line = $5
+            RETURNING
+                (
+                    SELECT prev.ride_count
+                    FROM bim.last_rides prev
+                    WHERE prev.company = blr.company
+                    AND prev.vehicle_number = blr.vehicle_number
+                    AND prev.rider_username = blr.rider_username
+                ) ride_count,
+                (
+                    SELECT prev.last_ride
+                    FROM bim.last_rides prev
+                    WHERE prev.company = blr.company
+                    AND prev.vehicle_number = blr.vehicle_number
+                    AND prev.rider_username = blr.rider_username
+                ) last_ride,
+                (
+                    SELECT prev.last_line
+                    FROM bim.last_rides prev
+                    WHERE prev.company = blr.company
+                    AND prev.vehicle_number = blr.vehicle_number
+                    AND prev.rider_username = blr.rider_username
+                ) last_line
+        ",
+        &[&company, &vehicle_number_i64, &rider_username, &timestamp, &line],
+    ).await?;
     let prev_ride_count: Option<i64> = row.get(0);
     let prev_last_ride: Option<DateTime<Local>> = row.get(1);
     let prev_last_line: Option<String> = row.get(2);
@@ -509,7 +595,7 @@ impl fmt::Display for IncrementBySpecError {
 impl std::error::Error for IncrementBySpecError {
 }
 
-pub async fn increment_rides_by_spec(ride_conn: &mut tokio_postgres::Client, bim_database_opt: Option<&HashMap<u32, VehicleInfo>>, rider_username: &str, timestamp: DateTime<Local>, rides_spec: &str) -> Result<RideInfo, IncrementBySpecError> {
+pub async fn increment_rides_by_spec(ride_conn: &mut tokio_postgres::Client, bim_database_opt: Option<&HashMap<u32, VehicleInfo>>, company: &str, rider_username: &str, timestamp: DateTime<Local>, rides_spec: &str) -> Result<RideInfo, IncrementBySpecError> {
     let spec_no_spaces = rides_spec.replace(" ", "");
     let caps = match BIMRIDE_RE.captures(&spec_no_spaces) {
         Some(c) => c,
@@ -557,7 +643,7 @@ pub async fn increment_rides_by_spec(ride_conn: &mut tokio_postgres::Client, bim
 
         let mut vehicle_ride_infos = Vec::new();
         for &(vehicle_num, is_fixed_coupling) in &all_vehicle_nums {
-            let lri_opt = increment_last_ride(&xact, vehicle_num, rider_username, timestamp, line_str_opt).await
+            let lri_opt = increment_last_ride(&xact, company, vehicle_num, rider_username, timestamp, line_str_opt).await
                 .map_err(|e| IncrementBySpecError::DatabaseQuery(rider_username.to_owned(), vehicle_num, line_str_opt.map(|l| l.to_owned()), e))?;
             vehicle_ride_infos.push(VehicleRideInfo {
                 vehicle_number: vehicle_num,

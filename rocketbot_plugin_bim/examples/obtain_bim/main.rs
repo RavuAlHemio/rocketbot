@@ -16,6 +16,7 @@ use crate::wiki_parsing::WikiParser;
 
 #[derive(Clone, Debug, Deserialize, Eq, Hash, PartialEq, Serialize)]
 struct Config {
+    pub output_path: String,
     pub php_path: Option<String>,
     pub wiki_parse_server_dir: String,
     pub parser_already_running: bool,
@@ -67,7 +68,7 @@ async fn main() {
 
     // output
     {
-        let f = File::create("bims.json")
+        let f = File::create(config.output_path)
             .expect("failed to open output file");
         serde_json::to_writer_pretty(f, &all_vehicles)
             .expect("failed to write vehicles");
