@@ -82,7 +82,7 @@ pub(crate) fn row_data_to_trams(type_code: &str, row_data: Vec<(String, String)>
 
             // also, this creates a fixed coupling
             fixed_coupling = true;
-        } else if key == "Instandnahme" || key == "Inbetriebnahme" || key == "Genehmigung" || key == "Erstzulassung" {
+        } else if key == "Instandnahme" || key == "Inbetriebnahme" || key == "Genehmigung" || key == "Erstzulassung" || key == "Ersteinsatz" {
             vehicle.in_service_since = Some(val.clone());
         } else if key == "Ausgemustert" || key == "Ausmusterung" {
             vehicle.out_of_service_since = Some(val.clone());
