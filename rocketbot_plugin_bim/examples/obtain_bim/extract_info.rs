@@ -46,14 +46,6 @@ fn compile_xpath(factory: &sxd_xpath::Factory, xpath_str: &str) -> XPath {
 }
 
 
-fn strip_prefix_or_dont<'a, 'b>(string: &'a str, putative_prefix: &'b str) -> &'a str {
-    string.strip_prefix(putative_prefix).unwrap_or(string)
-}
-fn strip_suffix_or_dont<'a, 'b>(string: &'a str, putative_suffix: &'b str) -> &'a str {
-    string.strip_suffix(putative_suffix).unwrap_or(string)
-}
-
-
 pub(crate) fn row_data_to_trams(type_code: &str, row_data: Vec<(String, String)>) -> Vec<VehicleInfo> {
     let mut vehicles = Vec::new();
     let mut vehicle = VehicleInfo::new(0, type_code.to_owned());
@@ -162,8 +154,10 @@ pub(crate) fn process_table<F>(vehicles: &mut Vec<VehicleInfo>, table: Element, 
 }
 
 
-pub(crate) async fn process_page<F, G>(page_url_pattern: &str, page_title: &str, parser: &mut WikiParser, mut process_table: F, row_data_to_vehicles: G) -> Vec<VehicleInfo>
+pub(crate) async fn process_page<P, S, F, G>(page_url_pattern: &str, page_title: &str, parser: &mut WikiParser, strip_prefixes: &[P], strip_suffixes: &[S], mut process_table: F, row_data_to_vehicles: G) -> Vec<VehicleInfo>
     where
+        P : AsRef<str>,
+        S : AsRef<str>,
         F : FnMut(&mut Vec<VehicleInfo>, Element, &str, G),
         G : FnMut(&str, Vec<(String, String)>) -> Vec<VehicleInfo> + Copy,
 {
@@ -181,10 +175,22 @@ pub(crate) async fn process_page<F, G>(page_url_pattern: &str, page_title: &str,
     let actual_title = page_dict["title"].as_str().expect("page title not a string");
     let body_wikitext = page_dict["revisions"][0]["*"].as_str().expect("page body not a string");
 
-    let type_code = strip_suffix_or_dont(
-        strip_prefix_or_dont(actual_title, "Type "),
-        " (Wien)"
-    );
+    let type_code = {
+        let mut tc = actual_title;
+        for prefix in strip_prefixes {
+            if let Some(no_prefix) = tc.strip_prefix(prefix.as_ref()) {
+                tc = no_prefix;
+                break;
+            }
+        }
+        for suffix in strip_suffixes {
+            if let Some(no_suffix) = tc.strip_suffix(suffix.as_ref()) {
+                tc = no_suffix;
+                break;
+            }
+        }
+        tc
+    };
 
     // parse wikitext
     let parsed = parser.parse_article(actual_title, body_wikitext)

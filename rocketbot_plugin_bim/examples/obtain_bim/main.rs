@@ -22,6 +22,8 @@ struct Config {
     pub parser_already_running: bool,
     pub page_url_pattern: String,
     pub page_names: Vec<String>,
+    pub strip_prefixes: Vec<String>,
+    pub strip_suffixes: Vec<String>,
 }
 
 
@@ -56,6 +58,8 @@ async fn main() {
                 &config.page_url_pattern,
                 page_title,
                 &mut parser,
+                &config.strip_prefixes,
+                &config.strip_suffixes,
                 process_table,
                 row_data_to_trams,
             ).await;
