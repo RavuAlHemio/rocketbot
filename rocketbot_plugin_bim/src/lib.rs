@@ -97,10 +97,18 @@ pub struct LastRideInfo {
 }
 
 #[derive(Clone, Debug, Eq, PartialEq)]
+pub struct OtherRiderInfo {
+    pub rider_username: String,
+    pub last_ride: DateTime<Local>,
+    pub last_line: Option<String>,
+}
+
+#[derive(Clone, Debug, Eq, PartialEq)]
 pub struct VehicleRideInfo {
     pub vehicle_number: u32,
     pub ridden_within_fixed_coupling: bool,
     pub last_ride: Option<LastRideInfo>,
+    pub last_ride_other_rider: Option<OtherRiderInfo>,
 }
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub struct RideInfo {
@@ -353,7 +361,19 @@ impl BimPlugin {
                 }
                 write_expect!(&mut resp, ").");
             } else {
-                write_expect!(&mut resp, "This is their first ride in this vehicle!");
+                write_expect!(&mut resp, "This is their first ride in this vehicle");
+                if let Some(or) = &vehicle_ride.last_ride_other_rider {
+                    write_expect!(
+                        &mut resp,
+                        ", but {} has previously ridden it {}",
+                        or.rider_username,
+                        or.last_ride.format("on %Y-%m-%d at %H:%M"),
+                    );
+                    if let Some(ln) = &or.last_line {
+                        write_expect!(&mut resp, " on line {}", ln);
+                    }
+                }
+                write_expect!(&mut resp, "!");
             }
 
             resp
@@ -385,7 +405,19 @@ impl BimPlugin {
                         write_expect!(&mut resp, " on line {}", ln);
                     }
                 } else {
-                    write_expect!(&mut resp, "first time!");
+                    write_expect!(&mut resp, "first time");
+                    if let Some(or) = &vehicle_ride.last_ride_other_rider {
+                        write_expect!(
+                            &mut resp,
+                            " since {} {}",
+                            or.rider_username,
+                            or.last_ride.format("on %Y-%m-%d at %H:%M"),
+                        );
+                        if let Some(ln) = &or.last_line {
+                            write_expect!(&mut resp, " on line {}", ln);
+                        }
+                    }
+                    write_expect!(&mut resp, "!");
                 }
                 write_expect!(&mut resp, ")");
             }
@@ -515,7 +547,7 @@ impl RocketBotPlugin for BimPlugin {
 }
 
 
-pub async fn increment_last_ride(ride_conn: &tokio_postgres::Transaction<'_>, company: &str, vehicle_number: u32, rider_username: &str, timestamp: DateTime<Local>, line: Option<&str>) -> Result<Option<LastRideInfo>, tokio_postgres::Error> {
+pub async fn increment_last_ride(ride_conn: &tokio_postgres::Transaction<'_>, company: &str, vehicle_number: u32, rider_username: &str, timestamp: DateTime<Local>, line: Option<&str>) -> Result<(Option<LastRideInfo>, Option<OtherRiderInfo>), tokio_postgres::Error> {
     let vehicle_number_i64: i64 = vehicle_number.into();
 
     let row = ride_conn.query_one(
@@ -550,25 +582,66 @@ pub async fn increment_last_ride(ride_conn: &tokio_postgres::Transaction<'_>, co
                     WHERE prev.company = blr.company
                     AND prev.vehicle_number = blr.vehicle_number
                     AND prev.rider_username = blr.rider_username
-                ) last_line
+                ) last_line,
+                (
+                    SELECT prev.rider_username
+                    FROM bim.last_rides prev
+                    WHERE prev.company = blr.company
+                    AND prev.vehicle_number = blr.vehicle_number
+                    AND prev.rider_username <> blr.rider_username
+                    ORDER BY prev.last_ride DESC
+                    LIMIT 1
+                ) other_rider,
+                (
+                    SELECT prev.last_ride
+                    FROM bim.last_rides prev
+                    WHERE prev.company = blr.company
+                    AND prev.vehicle_number = blr.vehicle_number
+                    AND prev.rider_username <> blr.rider_username
+                    ORDER BY prev.last_ride DESC
+                    LIMIT 1
+                ) other_last_ride,
+                (
+                    SELECT prev.last_line
+                    FROM bim.last_rides prev
+                    WHERE prev.company = blr.company
+                    AND prev.vehicle_number = blr.vehicle_number
+                    AND prev.rider_username <> blr.rider_username
+                    ORDER BY prev.last_ride DESC
+                    LIMIT 1
+                ) other_last_line
         ",
         &[&company, &vehicle_number_i64, &rider_username, &timestamp, &line],
     ).await?;
     let prev_ride_count: Option<i64> = row.get(0);
     let prev_last_ride: Option<DateTime<Local>> = row.get(1);
     let prev_last_line: Option<String> = row.get(2);
+    let other_rider: Option<String> = row.get(3);
+    let other_ride: Option<DateTime<Local>> = row.get(4);
+    let other_line: Option<String> = row.get(5);
 
-    if let Some(prc) = prev_ride_count {
+    let last_info = if let Some(prc) = prev_ride_count {
         let prc_usize: usize = prc.try_into().unwrap();
-
-        Ok(Some(LastRideInfo {
+        Some(LastRideInfo {
             ride_count: prc_usize,
             last_ride: prev_last_ride.unwrap(),
             last_line: prev_last_line,
-        }))
+        })
     } else {
-        Ok(None)
-    }
+        None
+    };
+
+    let other_info = if let Some(or) = other_rider {
+        Some(OtherRiderInfo {
+            rider_username: or,
+            last_ride: other_ride.unwrap(),
+            last_line: other_line,
+        })
+    } else {
+        None
+    };
+
+    Ok((last_info, other_info))
 }
 
 #[derive(Debug)]
@@ -643,12 +716,13 @@ pub async fn increment_rides_by_spec(ride_conn: &mut tokio_postgres::Client, bim
 
         let mut vehicle_ride_infos = Vec::new();
         for &(vehicle_num, is_fixed_coupling) in &all_vehicle_nums {
-            let lri_opt = increment_last_ride(&xact, company, vehicle_num, rider_username, timestamp, line_str_opt).await
+            let (lri_opt, ori_opt) = increment_last_ride(&xact, company, vehicle_num, rider_username, timestamp, line_str_opt).await
                 .map_err(|e| IncrementBySpecError::DatabaseQuery(rider_username.to_owned(), vehicle_num, line_str_opt.map(|l| l.to_owned()), e))?;
             vehicle_ride_infos.push(VehicleRideInfo {
                 vehicle_number: vehicle_num,
                 ridden_within_fixed_coupling: is_fixed_coupling,
                 last_ride: lri_opt,
+                last_ride_other_rider: ori_opt,
             });
         }
 
