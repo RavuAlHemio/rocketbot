@@ -22,39 +22,6 @@ use tokio_postgres::NoTls;
 pub static BIMRIDE_RE: Lazy<Regex> = Lazy::new(|| Regex::new(
     "^(?P<vehicles>[0-9]+(?:[+][0-9]+)*)(?:/(?P<line>[0-9A-Z]+|Sonderzug))?$"
 ).expect("failed to parse bimride regex"));
-pub const UPSERT_RIDE_QUERY: &'static str = "
-INSERT INTO bim.last_rides AS blr
-    (company, vehicle_number, rider_username, ride_count, last_ride, last_line)
-VALUES
-    ($1, $2, $3, 1, $4, $5)
-ON CONFLICT (company, vehicle_number, rider_username) DO UPDATE
-    SET
-        ride_count = blr.ride_count + 1,
-        last_ride = $4,
-        last_line = $5
-RETURNING
-    (
-        SELECT prev.ride_count
-        FROM bim.last_rides prev
-        WHERE prev.company = blr.company
-        AND prev.vehicle_number = blr.vehicle_number
-        AND prev.rider_username = blr.rider_username
-    ) ride_count,
-    (
-        SELECT prev.last_ride
-        FROM bim.last_rides prev
-        WHERE prev.company = blr.company
-        AND prev.vehicle_number = blr.vehicle_number
-        AND prev.rider_username = blr.rider_username
-    ) last_ride,
-    (
-        SELECT prev.last_line
-        FROM bim.last_rides prev
-        WHERE prev.company = blr.company
-        AND prev.vehicle_number = blr.vehicle_number
-        AND prev.rider_username = blr.rider_username
-    ) last_line
-";
 
 
 macro_rules! write_expect {
