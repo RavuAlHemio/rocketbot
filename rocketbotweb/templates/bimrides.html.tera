@@ -19,7 +19,7 @@
     <td class="company">{{ ride[0]|escape }}</td>
     <td class="vehicle-number">{{ ride[1] }}</td>
     <td class="ride-count">{{ ride[2] }}</td>
-    <td class="line">{% if ride[3] is string %}{{ ride[3]|escape }}{% endif %}</td>
+    <td class="line">{% set line = ride[3] %}{% if line is string %}{{ line|escape }}{% endif %}</td>
   </tr>
   {% endfor %}
 </table>
