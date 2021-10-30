@@ -666,9 +666,9 @@ pub async fn increment_rides_by_spec(ride_conn: &mut tokio_postgres::Client, bim
 
     // also count vehicles ridden in a fixed coupling with the given vehicle
     let mut all_vehicle_nums: Vec<(u32, bool)> = Vec::new();
-    if let Some(bim_database) = bim_database_opt {
-        for &vehicle_num in &vehicle_nums {
-            all_vehicle_nums.push((vehicle_num, false));
+    for &vehicle_num in &vehicle_nums {
+        all_vehicle_nums.push((vehicle_num, false));
+        if let Some(bim_database) = bim_database_opt {
             if let Some(veh) = bim_database.get(&vehicle_num) {
                 for &fcw in &veh.fixed_coupling_with {
                     all_vehicle_nums.push((fcw, true));
@@ -694,7 +694,7 @@ pub async fn increment_rides_by_spec(ride_conn: &mut tokio_postgres::Client, bim
         }
 
         xact.commit().await
-            .map_err(|e| IncrementBySpecError::DatabaseBeginTransaction(e))?;
+            .map_err(|e| IncrementBySpecError::DatabaseCommitTransaction(e))?;
 
         vehicle_ride_infos
     };
