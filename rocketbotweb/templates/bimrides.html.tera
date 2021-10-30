@@ -1,0 +1,28 @@
+{% extends "base.html.tera" %}
+
+{% block title %}Public Transport Rides{% endblock %}
+
+{% block content %}
+<main>
+
+<h1>Public Transport Rides</h1>
+
+<table class="bim-rides">
+  <tr>
+    <th class="company">Company</th>
+    <th class="vehicle-number">Vehicle number</th>
+    <th class="ride-count">Ride count</th>
+    <th class="line">Example line</th>
+  </tr>
+  {% for ride in rides %}
+  <tr>
+    <td class="company">{{ ride[0]|escape }}</td>
+    <td class="vehicle-number">{{ ride[1] }}</td>
+    <td class="ride-count">{{ ride[2] }}</td>
+    <td class="line">{{ ride[3]|escape }}</td>
+  </tr>
+  {% endfor %}
+</table>
+
+</main>
+{% endblock %}

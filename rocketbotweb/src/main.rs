@@ -533,6 +533,46 @@ async fn handle_thanks(request: &Request<Body>) -> Result<Response<Body>, Infall
     }
 }
 
+async fn handle_bim_rides(request: &Request<Body>) -> Result<Response<Body>, Infallible> {
+    if request.method() != Method::GET {
+        return return_405().await;
+    }
+
+    let db_conn = match connect_to_db().await {
+        Some(c) => c,
+        None => return return_500(),
+    };
+
+    let mut rides: Vec<(String, i64, i64, Option<String>)> = Vec::new();
+    let query_res = db_conn.query("
+        SELECT lr.company, lr.vehicle_number, SUM(lr.ride_count), MAX(lr.last_line)
+        FROM bim.last_rides lr
+        GROUP BY lr.company, lr.vehicle_number
+        ORDER BY lr.company, lr.vehicle_number
+    ", &[]).await;
+    let rows = match query_res {
+        Ok(r) => r,
+        Err(e) => {
+            error!("failed to query rides: {}", e);
+            return return_500();
+        },
+    };
+    for row in rows {
+        let company: String = row.get(0);
+        let vehicle_number: i64 = row.get(1);
+        let ride_count: i64 = row.get(2);
+        let last_line: Option<String> = row.get(3);
+        rides.push((company, vehicle_number, ride_count, last_line));
+    }
+
+    let mut ctx = tera::Context::new();
+    ctx.insert("rides", &rides);
+    match render_template("bimrides.html.tera", &ctx, 200, vec![]).await {
+        Some(r) => Ok(r),
+        None => return_500(),
+    }
+}
+
 
 async fn handle_request(request: Request<Body>) -> Result<Response<Body>, Infallible> {
     match request.uri().path() {
@@ -542,6 +582,7 @@ async fn handle_request(request: Request<Body>) -> Result<Response<Body>, Infall
         "/nicks-aliases" => handle_nicks_aliases(&request).await,
         "/aliases" => handle_plaintext_aliases_for_nick(&request).await,
         "/thanks" => handle_thanks(&request).await,
+        "/bim-rides" => handle_bim_rides(&request).await,
         _ => return_404().await,
     }
 }
