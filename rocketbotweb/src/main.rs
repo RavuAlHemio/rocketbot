@@ -457,20 +457,10 @@ async fn handle_nicks_aliases(request: &Request<Body>) -> Result<Response<Body>,
     alias_list.sort_unstable();
 
     let mut aliases = Vec::new();
-    let mut last_nick = None;
     for (base_nick, alias) in &alias_list {
-        let new_last_nick = Some(base_nick.clone());
-        let nick_changed = if last_nick == new_last_nick {
-            false
-        } else {
-            last_nick = new_last_nick;
-            true
-        };
-
         aliases.push(serde_json::json!({
             "nick": base_nick,
             "alias": alias,
-            "nick_changed": nick_changed,
         }));
     }
 
@@ -481,6 +471,21 @@ async fn handle_nicks_aliases(request: &Request<Body>) -> Result<Response<Body>,
             None => return_500(),
         }
     } else {
+        let mut last_nick = None;
+        for alias_value in &mut aliases {
+            let alias_obj = alias_value.as_object_mut().unwrap();
+
+            let new_last_nick = alias_obj["nick"].as_str().map(|s| s.to_owned());
+            let nick_changed = if last_nick == new_last_nick {
+                false
+            } else {
+                last_nick = new_last_nick;
+                true
+            };
+
+            alias_obj["nick_changed"] = serde_json::Value::Bool(nick_changed);
+        }
+
         let mut ctx = tera::Context::new();
         ctx.insert("aliases", &aliases);
         match render_template("aliases.html.tera", &ctx, 200, vec![]).await {
