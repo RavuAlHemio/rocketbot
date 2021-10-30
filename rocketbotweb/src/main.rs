@@ -545,7 +545,7 @@ async fn handle_bim_rides(request: &Request<Body>) -> Result<Response<Body>, Inf
 
     let mut rides: Vec<(String, i64, i64, Option<String>)> = Vec::new();
     let query_res = db_conn.query("
-        SELECT lr.company, lr.vehicle_number, SUM(lr.ride_count), MAX(lr.last_line)
+        SELECT lr.company, lr.vehicle_number, CAST(SUM(lr.ride_count) AS bigint), MAX(lr.last_line)
         FROM bim.last_rides lr
         GROUP BY lr.company, lr.vehicle_number
         ORDER BY lr.company, lr.vehicle_number
