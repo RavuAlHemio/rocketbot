@@ -27,7 +27,7 @@ struct Log {
 async fn main() {
     // load messages
     let args: Vec<OsString> = env::args_os().collect();
-    if args.len() != 3 {
+    if args.len() != 4 {
         eprintln!("Usage: populate_bim_rides DBCONNSTRING COMPANY MESSAGES");
         std::process::exit(1);
     }
