@@ -559,8 +559,8 @@ pub async fn increment_last_ride(ride_conn: &tokio_postgres::Transaction<'_>, co
             ON CONFLICT (company, vehicle_number, rider_username) DO UPDATE
                 SET
                     ride_count = blr.ride_count + 1,
-                    last_ride = MAX(blr.last_ride, $4),
-                    last_line = CASE WHEN blr.last_ride > $4 THEN blr.last_ride ELSE $5 END
+                    last_ride = CASE WHEN blr.last_ride > $4 THEN blr.last_ride ELSE $4 END,
+                    last_line = CASE WHEN blr.last_ride > $4 THEN blr.last_line ELSE $5 END
             RETURNING
                 (
                     SELECT prev.ride_count
