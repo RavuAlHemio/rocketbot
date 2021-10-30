@@ -32,13 +32,17 @@ table.quotes-votes .votes {
 }
 
 table.nicks-and-aliases .nick,
-table.nicks-and-aliases .alias {
+table.nicks-and-aliases .alias,
+table.bim-rides th,
+table.bim-rides td {
   padding: 0.3em 0.6em;
 }
 
 table.top-quotes tr.quote:first-child td.body,
 table.quotes-votes tr:first-child td,
-table.nicks-and-aliases tr:first-child td {
+table.nicks-and-aliases tr:first-child td,
+table.bim-rides tr:first-child th,
+table.bim-rides tr:first-child td {
   border-top: 2px solid black;
   padding-top: 0.6em;
 }
@@ -59,7 +63,9 @@ table.nicks-and-aliases tr:first-child td.nick.changed {
 
 table.top-quotes tr:last-child td,
 table.quotes-votes tr:last-child td,
-table.nicks-and-aliases tr:last-child td {
+table.nicks-and-aliases tr:last-child td,
+table.bim-rides tr:last-child th,
+table.bim-rides tr:last-child td {
   border-bottom: 2px solid black;
   padding-bottom: 0.3em;
 }
