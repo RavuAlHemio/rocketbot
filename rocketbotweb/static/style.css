@@ -63,11 +63,15 @@ table.nicks-and-aliases tr:first-child td.nick.changed {
 
 table.top-quotes tr:last-child td,
 table.quotes-votes tr:last-child td,
-table.nicks-and-aliases tr:last-child td,
+table.nicks-and-aliases tr:last-child td {
+  border-bottom: 2px solid black;
+  padding-bottom: 0.3em;
+}
+
 table.bim-rides tr:last-child th,
 table.bim-rides tr:last-child td {
   border-bottom: 2px solid black;
-  padding-bottom: 0.3em;
+  padding-bottom: 0.6em;
 }
 
 table.thanks-grid td.recipient-header,
