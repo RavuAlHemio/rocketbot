@@ -29,6 +29,16 @@ pub(crate) static CONFIG: OnceCell<RwLock<WebConfig>> = OnceCell::new();
 pub(crate) static TERA: OnceCell<RwLock<Tera>> = OnceCell::new();
 
 
+fn get_query_pairs<T>(request: &Request<T>) -> HashMap<Cow<str>, Cow<str>> {
+    if let Some(q) = request.uri().query() {
+        form_urlencoded::parse(q.as_bytes())
+            .collect()
+    } else {
+        HashMap::new()
+    }
+}
+
+
 async fn render_template(name: &str, context: &tera::Context, status: u16, headers: Vec<(String, String)>) -> Option<Response<Body>> {
     let tera_lock = match TERA.get() {
         Some(t) => t,
@@ -49,6 +59,31 @@ async fn render_template(name: &str, context: &tera::Context, status: u16, heade
     let mut builder = Response::builder()
         .status(status)
         .header("Content-Type", "text/html; charset=utf-8");
+    for (k, v) in &headers {
+        builder = builder.header(k, v);
+    }
+    match builder.body(Body::from(rendered)) {
+        Ok(r) => Some(r),
+        Err(e) => {
+            error!("failed to assemble response: {}", e);
+            None
+        },
+    }
+}
+
+
+async fn render_json(json_value: &serde_json::Value, status: u16, headers: Vec<(String, String)>) -> Option<Response<Body>> {
+    let rendered = match serde_json::to_string_pretty(json_value) {
+        Ok(s) => s,
+        Err(e) => {
+            error!("failed to render JSON: {}", e);
+            return None;
+        },
+    };
+
+    let mut builder = Response::builder()
+        .status(status)
+        .header("Content-Type", "application/json");
     for (k, v) in &headers {
         builder = builder.header(k, v);
     }
@@ -228,6 +263,8 @@ async fn handle_quotes_votes(request: &Request<Body>) -> Result<Response<Body>, 
         return return_405().await;
     }
 
+    let query_pairs = get_query_pairs(request);
+
     let db_conn = match connect_to_db().await {
         Some(c) => c,
         None => return return_500(),
@@ -300,11 +337,19 @@ async fn handle_quotes_votes(request: &Request<Body>) -> Result<Response<Body>, 
         quote["votes"] = votes.into();
     }
 
-    let mut ctx = tera::Context::new();
-    ctx.insert("quotes", &quotes);
-    match render_template("quotesvotes.html.tera", &ctx, 200, vec![]).await {
-        Some(r) => Ok(r),
-        None => return_500(),
+    if query_pairs.get("format").map(|f| f == "json").unwrap_or(false) {
+        let quotes_json = serde_json::Value::Array(quotes);
+        match render_json(&quotes_json, 200, vec![]).await {
+            Some(r) => Ok(r),
+            None => return_500(),
+        }
+    } else {
+        let mut ctx = tera::Context::new();
+        ctx.insert("quotes", &quotes);
+        match render_template("quotesvotes.html.tera", &ctx, 200, vec![]).await {
+            Some(r) => Ok(r),
+            None => return_500(),
+        }
     }
 }
 
@@ -313,12 +358,7 @@ async fn handle_plaintext_aliases_for_nick(request: &Request<Body>) -> Result<Re
         return return_405().await;
     }
 
-    let query_pairs: HashMap<Cow<str>, Cow<str>> = if let Some(q) = request.uri().query() {
-        form_urlencoded::parse(q.as_bytes())
-            .collect()
-    } else {
-        HashMap::new()
-    };
+    let query_pairs = get_query_pairs(request);
 
     let nick_opt = query_pairs.get("nick");
     let nick = match nick_opt {
@@ -392,6 +432,8 @@ async fn handle_nicks_aliases(request: &Request<Body>) -> Result<Response<Body>,
         return return_405().await;
     }
 
+    let query_pairs = get_query_pairs(request);
+
     // read bot config
     let bot_config = match get_bot_config().await {
         Some(bc) => bc,
@@ -432,11 +474,19 @@ async fn handle_nicks_aliases(request: &Request<Body>) -> Result<Response<Body>,
         }));
     }
 
-    let mut ctx = tera::Context::new();
-    ctx.insert("aliases", &aliases);
-    match render_template("aliases.html.tera", &ctx, 200, vec![]).await {
-        Some(r) => Ok(r),
-        None => return_500(),
+    if query_pairs.get("format").map(|f| f == "json").unwrap_or(false) {
+        let aliases_json = serde_json::Value::Array(aliases);
+        match render_json(&aliases_json, 200, vec![]).await {
+            Some(r) => Ok(r),
+            None => return_500(),
+        }
+    } else {
+        let mut ctx = tera::Context::new();
+        ctx.insert("aliases", &aliases);
+        match render_template("aliases.html.tera", &ctx, 200, vec![]).await {
+            Some(r) => Ok(r),
+            None => return_500(),
+        }
     }
 }
 
@@ -444,6 +494,8 @@ async fn handle_thanks(request: &Request<Body>) -> Result<Response<Body>, Infall
     if request.method() != Method::GET {
         return return_405().await;
     }
+
+    let query_pairs = get_query_pairs(request);
 
     let db_conn = match connect_to_db().await {
         Some(c) => c,
@@ -521,15 +573,34 @@ async fn handle_thanks(request: &Request<Body>) -> Result<Response<Body>, Infall
         }))
         .collect();
 
-    let mut ctx = tera::Context::new();
-    ctx.insert("users", &users);
-    ctx.insert("thanks_from_to", &thanks_from_to);
-    ctx.insert("total_given", &total_given);
-    ctx.insert("total_received", &total_received);
-    ctx.insert("total_count", &total_count);
-    match render_template("thanks.html.tera", &ctx, 200, vec![]).await {
-        Some(r) => Ok(r),
-        None => return_500(),
+    if query_pairs.get("format").map(|f| f == "json").unwrap_or(false) {
+        let thanks_from_to_json_map: serde_json::Map<String, serde_json::Value> = thanks_from_to.iter()
+            .map(|(f, t_c)| {
+                let thanks_to: serde_json::Map<String, serde_json::Value> = t_c.iter()
+                    .map(|(t, c)| (
+                        t.clone(),
+                        serde_json::Value::Number(serde_json::Number::from(*c)),
+                    ))
+                    .collect();
+                (f.clone(), serde_json::Value::Object(thanks_to))
+            })
+            .collect();
+        let thanks_from_to_json = serde_json::Value::Object(thanks_from_to_json_map);
+        match render_json(&thanks_from_to_json, 200, vec![]).await {
+            Some(r) => Ok(r),
+            None => return_500(),
+        }
+    } else {
+        let mut ctx = tera::Context::new();
+        ctx.insert("users", &users);
+        ctx.insert("thanks_from_to", &thanks_from_to);
+        ctx.insert("total_given", &total_given);
+        ctx.insert("total_received", &total_received);
+        ctx.insert("total_count", &total_count);
+        match render_template("thanks.html.tera", &ctx, 200, vec![]).await {
+            Some(r) => Ok(r),
+            None => return_500(),
+        }
     }
 }
 
@@ -537,6 +608,8 @@ async fn handle_bim_rides(request: &Request<Body>) -> Result<Response<Body>, Inf
     if request.method() != Method::GET {
         return return_405().await;
     }
+
+    let query_pairs = get_query_pairs(request);
 
     let db_conn = match connect_to_db().await {
         Some(c) => c,
@@ -565,11 +638,27 @@ async fn handle_bim_rides(request: &Request<Body>) -> Result<Response<Body>, Inf
         rides.push((company, vehicle_number, ride_count, last_line));
     }
 
-    let mut ctx = tera::Context::new();
-    ctx.insert("rides", &rides);
-    match render_template("bimrides.html.tera", &ctx, 200, vec![]).await {
-        Some(r) => Ok(r),
-        None => return_500(),
+    if query_pairs.get("format").map(|f| f == "json").unwrap_or(false) {
+        let rides_json_vec: Vec<serde_json::Value> = rides.iter()
+            .map(|(comp, veh_num, ride_count, last_line)| serde_json::json!({
+                "company": comp.clone(),
+                "vehicle_number": *veh_num,
+                "ride_count": *ride_count,
+                "last_line": last_line.clone(),
+            }))
+            .collect();
+        let rides_json = serde_json::Value::Array(rides_json_vec);
+        match render_json(&rides_json, 200, vec![]).await {
+            Some(r) => Ok(r),
+            None => return_500(),
+        }
+    } else {
+        let mut ctx = tera::Context::new();
+        ctx.insert("rides", &rides);
+        match render_template("bimrides.html.tera", &ctx, 200, vec![]).await {
+            Some(r) => Ok(r),
+            None => return_500(),
+        }
     }
 }
 
