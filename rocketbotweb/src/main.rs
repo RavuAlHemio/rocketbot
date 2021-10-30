@@ -483,7 +483,7 @@ async fn handle_nicks_aliases(request: &Request<Body>) -> Result<Response<Body>,
                 true
             };
 
-            alias_obj["nick_changed"] = serde_json::Value::Bool(nick_changed);
+            alias_obj.insert("nick_changed".to_owned(), serde_json::Value::Bool(nick_changed));
         }
 
         let mut ctx = tera::Context::new();
