@@ -528,69 +528,71 @@ async fn handle_thanks(request: &Request<Body>) -> Result<Response<Body>, Infall
         thanks_counts.insert((thanker, thankee), count);
     }
 
-    let user_names: Vec<String> = user_name_set.iter()
-        .map(|un| un.clone())
-        .collect();
-
-    // complete the values
-    for thanker in &user_names {
-        for thankee in &user_names {
-            thanks_counts.entry((thanker.clone(), thankee.clone()))
-                .or_insert(0);
-        }
-    }
-
-    let mut total_given: HashMap<String, i64> = user_names.iter()
-        .enumerate()
-        .map(|(i, _name)| (i.to_string(), 0))
-        .collect();
-    let mut total_received: HashMap<String, i64> = total_given.clone();
-    let mut thanks_from_to: HashMap<String, HashMap<String, i64>> = HashMap::new();
-    let mut total_count = 0;
-
-    for (r, thanker) in user_names.iter().enumerate() {
-        let r_string = r.to_string();
-        let thanks_to = thanks_from_to.entry(r_string.clone())
-            .or_insert_with(|| HashMap::new());
-
-        for (e, thankee) in user_names.iter().enumerate() {
-            let e_string = e.to_string();
-
-            let pair_count = *thanks_counts.get(&(thanker.clone(), thankee.clone())).unwrap();
-
-            *total_given.get_mut(&r_string).unwrap() += pair_count;
-            *total_received.get_mut(&e_string).unwrap() += pair_count;
-            thanks_to.insert(e_string, pair_count);
-            total_count += pair_count;
-        }
-    }
-
-    let users: Vec<serde_json::Value> = user_names.iter()
-        .enumerate()
-        .map(|(i, name)| serde_json::json!({
-            "index": i.to_string(),
-            "name": name,
-        }))
-        .collect();
-
     if query_pairs.get("format").map(|f| f == "json").unwrap_or(false) {
-        let thanks_from_to_json_map: serde_json::Map<String, serde_json::Value> = thanks_from_to.iter()
-            .map(|(f, t_c)| {
-                let thanks_to: serde_json::Map<String, serde_json::Value> = t_c.iter()
-                    .map(|(t, c)| (
-                        t.clone(),
-                        serde_json::Value::Number(serde_json::Number::from(*c)),
-                    ))
-                    .collect();
-                (f.clone(), serde_json::Value::Object(thanks_to))
-            })
-            .collect();
-        let thanks_from_to_json = serde_json::Value::Object(thanks_from_to_json_map);
-        match render_json(&thanks_from_to_json, 200, vec![]).await {
+        let mut from_to_thanks: serde_json::Map<String, serde_json::Value> = serde_json::Map::new();
+        for ((thanker, thankee), count) in thanks_counts.iter() {
+            let to_thanks = from_to_thanks.entry(thanker.clone())
+                .or_insert_with(|| serde_json::json!({}))
+                .as_object_mut().unwrap();
+
+            let thanks_value = to_thanks.entry(thankee.clone())
+                .or_insert_with(|| serde_json::json!(0));
+
+            let current_value = thanks_value.as_i64().unwrap();
+            *thanks_value = serde_json::json!(current_value + *count);
+        }
+
+        let from_to_thanks_json = serde_json::Value::Object(from_to_thanks);
+        match render_json(&from_to_thanks_json, 200, vec![]).await {
             Some(r) => Ok(r),
             None => return_500(),
         }
     } else {
+        let user_names: Vec<String> = user_name_set.iter()
+            .map(|un| un.clone())
+            .collect();
+
+        // complete the values
+        for thanker in &user_names {
+            for thankee in &user_names {
+                thanks_counts.entry((thanker.clone(), thankee.clone()))
+                    .or_insert(0);
+            }
+        }
+
+        let mut total_given: HashMap<String, i64> = user_names.iter()
+            .enumerate()
+            .map(|(i, _name)| (i.to_string(), 0))
+            .collect();
+        let mut total_received: HashMap<String, i64> = total_given.clone();
+        let mut thanks_from_to: HashMap<String, HashMap<String, i64>> = HashMap::new();
+        let mut total_count = 0;
+
+        for (r, thanker) in user_names.iter().enumerate() {
+            let r_string = r.to_string();
+            let thanks_to = thanks_from_to.entry(r_string.clone())
+                .or_insert_with(|| HashMap::new());
+
+            for (e, thankee) in user_names.iter().enumerate() {
+                let e_string = e.to_string();
+
+                let pair_count = *thanks_counts.get(&(thanker.clone(), thankee.clone())).unwrap();
+
+                *total_given.get_mut(&r_string).unwrap() += pair_count;
+                *total_received.get_mut(&e_string).unwrap() += pair_count;
+                thanks_to.insert(e_string, pair_count);
+                total_count += pair_count;
+            }
+        }
+
+        let users: Vec<serde_json::Value> = user_names.iter()
+            .enumerate()
+            .map(|(i, name)| serde_json::json!({
+                "index": i.to_string(),
+                "name": name,
+            }))
+            .collect();
+
         let mut ctx = tera::Context::new();
         ctx.insert("users", &users);
         ctx.insert("thanks_from_to", &thanks_from_to);
