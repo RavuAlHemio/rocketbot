@@ -142,7 +142,7 @@ GROUP BY q.quote_id, q.timestamp, q.channel, q.author, q.message_type, q.body
             where_filter_values.push(&author_username);
         }
 
-        let mut body_substring_like = String::new();
+        let body_substring_like;
         if body_substring.is_some() {
             body_substring_like = substring_to_like(body_substring.unwrap(), '\\');
             where_filter_pieces.push(format!("q.body LIKE ${} ESCAPE '\\'", next_filter_index));

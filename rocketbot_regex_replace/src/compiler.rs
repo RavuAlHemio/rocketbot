@@ -192,7 +192,7 @@ fn process_named_group(group_name: &str, regex: &Regex, placeholders: &mut Vec<P
         let group_name = lookup_match.name("key").unwrap().as_str();
         let len: usize = match lookup_match.name("len").unwrap().as_str().parse() {
             Ok(u) => u,
-            Err(e) => return Err(CompilationError::ShortenTooLong),
+            Err(_e) => return Err(CompilationError::ShortenTooLong),
         };
 
         let any_such_named_capture = regex
