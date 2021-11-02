@@ -10,7 +10,7 @@ use chrono::{DateTime, Local};
 use log::error;
 use once_cell::sync::Lazy;
 use regex::Regex;
-use rocketbot_interface::{JsonValueExtensions, send_channel_message};
+use rocketbot_interface::{JsonValueExtensions, phrase_join, send_channel_message};
 use rocketbot_interface::commands::{CommandDefinitionBuilder, CommandInstance, CommandValueType};
 use rocketbot_interface::interfaces::{RocketBotInterface, RocketBotPlugin};
 use rocketbot_interface::model::ChannelMessage;
@@ -401,6 +401,142 @@ impl BimPlugin {
         ).await;
     }
 
+    async fn channel_command_topbims(&self, channel_message: &ChannelMessage, command: &CommandInstance) {
+        let interface = match self.interface.upgrade() {
+            None => return,
+            Some(i) => i,
+        };
+
+        let company = command.options.get("company")
+            .or_else(|| command.options.get("c"))
+            .map(|v| v.as_str().unwrap())
+            .unwrap_or(self.default_company.as_str());
+
+        if !self.company_to_bim_database_path.contains_key(company) {
+            send_channel_message!(
+                interface,
+                &channel_message.channel.name,
+                "Unknown company.",
+            ).await;
+            return;
+        }
+
+        let ride_conn = match self.connect_ride_db().await {
+            Ok(c) => c,
+            Err(_) => {
+                send_channel_message!(
+                    interface,
+                    &channel_message.channel.name,
+                    "Failed to open database connection. :disappointed:",
+                ).await;
+                return;
+            },
+        };
+
+        let rows_res = ride_conn.query(
+            "
+                WITH total_rides(vehicle_number, total_ride_count) AS (
+                    SELECT b.vehicle_number, CAST(SUM(b.ride_count) AS bigint) total_ride_count
+                    FROM bim.last_rides b
+                    WHERE b.company = $1
+                    GROUP BY b.vehicle_number
+                )
+                SELECT tr.vehicle_number, tr.total_ride_count
+                FROM total_rides tr
+                WHERE NOT EXISTS (
+                    SELECT 1 FROM total_rides tr2
+                    WHERE tr2.total_ride_count > tr.total_ride_count
+                )
+                ORDER BY tr.vehicle_number
+            ",
+            &[&company],
+        ).await;
+        let rows = match rows_res {
+            Ok(r) => r,
+            Err(e) => {
+                error!("failed to query most-ridden vehicles: {}", e);
+                send_channel_message!(
+                    interface,
+                    &channel_message.channel.name,
+                    "Failed to query database. :disappointed:",
+                ).await;
+                return;
+            },
+        };
+
+        let mut most_ridden_count_opt = None;
+        let mut vehicle_numbers = Vec::with_capacity(rows.len());
+        for row in &rows {
+            let vehicle_number: i64 = row.get(0);
+            let total_ride_count: i64 = row.get(1);
+
+            vehicle_numbers.push(vehicle_number);
+            most_ridden_count_opt = Some(total_ride_count);
+        }
+
+        let response_str = if vehicle_numbers.len() == 0 {
+            format!("No vehicles have been ridden yet!")
+        } else {
+            let most_ridden_count = most_ridden_count_opt.unwrap();
+            let times = if most_ridden_count == 1 {
+                "once".to_owned()
+            } else if most_ridden_count == 2 {
+                "twice".to_owned()
+            } else {
+                // "thrice" and above are already too poetic
+                format!("{} times", most_ridden_count)
+            };
+
+            if vehicle_numbers.len() == 1 {
+                format!("The most ridden vehicle is {}, which has been ridden {}.", vehicle_numbers[0], times)
+            } else {
+                let vehicle_number_strings: Vec<String> = vehicle_numbers.iter()
+                    .map(|vn| vn.to_string())
+                    .collect();
+                let vehicle_numbers_str = phrase_join(&vehicle_number_strings, ", ", " and ");
+                format!("The most ridden vehicles are {}, which have been ridden {}.", vehicle_numbers_str, times)
+            }
+        };
+
+        send_channel_message!(
+            interface,
+            &channel_message.channel.name,
+            &response_str,
+        ).await;
+    }
+
+    async fn channel_command_bimcompanies(&self, channel_message: &ChannelMessage, command: &CommandInstance) {
+        let interface = match self.interface.upgrade() {
+            None => return,
+            Some(i) => i,
+        };
+
+        let mut company_names: Vec<&String> = self.company_to_bim_database_path
+            .keys()
+            .collect();
+        if self.company_to_bim_database_path.len() == 0 {
+            send_channel_message!(
+                interface,
+                &channel_message.channel.name,
+                "There are no companies.",
+            ).await;
+            return;
+        }
+
+        company_names.sort_unstable();
+
+        let mut response_str = "The following companies exist:".to_owned();
+        for company_name in company_names {
+            write_expect!(&mut response_str, "\n* `{}`", company_name);
+        }
+
+        send_channel_message!(
+            interface,
+            &channel_message.channel.name,
+            &response_str,
+        ).await;
+    }
+
     fn english_ordinal(num: usize) -> &'static str {
         let by_hundred = num % 100;
         if by_hundred > 10 && by_hundred < 14 {
@@ -480,6 +616,26 @@ impl RocketBotPlugin for BimPlugin {
                 .add_option("c", CommandValueType::String)
                 .build()
         ).await;
+        my_interface.register_channel_command(
+            &CommandDefinitionBuilder::new(
+                "topbims".to_owned(),
+                "bim".to_owned(),
+                "{cpfx}topbims".to_owned(),
+                "Returns the most-ridden vehicle(s).".to_owned(),
+            )
+                .add_option("company", CommandValueType::String)
+                .add_option("c", CommandValueType::String)
+                .build()
+        ).await;
+        my_interface.register_channel_command(
+            &CommandDefinitionBuilder::new(
+                "bimcompanies".to_owned(),
+                "bim".to_owned(),
+                "{cpfx}bimcompanies".to_owned(),
+                "Returns known public-transport operators.".to_owned(),
+            )
+                .build()
+        ).await;
 
         Self {
             interface,
@@ -495,6 +651,10 @@ impl RocketBotPlugin for BimPlugin {
             self.channel_command_bim(channel_message, command).await
         } else if command.name == "bimride" {
             self.channel_command_bimride(channel_message, command).await
+        } else if command.name == "topbims" {
+            self.channel_command_topbims(channel_message, command).await
+        } else if command.name == "bimcompanies" {
+            self.channel_command_bimcompanies(channel_message, command).await
         }
     }
 
@@ -507,6 +667,10 @@ impl RocketBotPlugin for BimPlugin {
             Some(include_str!("../help/bim.md").to_owned())
         } else if command_name == "bimride" {
             Some(include_str!("../help/bimride.md").to_owned())
+        } else if command_name == "topbims" {
+            Some(include_str!("../help/topbims.md").to_owned())
+        } else if command_name == "bimcompanies" {
+            Some(include_str!("../help/bimcompanies.md").to_owned())
         } else {
             None
         }
