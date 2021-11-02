@@ -505,7 +505,7 @@ impl BimPlugin {
         ).await;
     }
 
-    async fn channel_command_bimcompanies(&self, channel_message: &ChannelMessage, command: &CommandInstance) {
+    async fn channel_command_bimcompanies(&self, channel_message: &ChannelMessage, _command: &CommandInstance) {
         let interface = match self.interface.upgrade() {
             None => return,
             Some(i) => i,
