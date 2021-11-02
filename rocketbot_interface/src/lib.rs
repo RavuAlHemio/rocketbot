@@ -123,3 +123,18 @@ pub fn rocketchat_timestamp_to_datetime(timestamp: i64) -> DateTime<Utc> {
     let timestamp_nsecs: u32 = ((timestamp % 1_000) * 1_000_000).try_into().unwrap();
     Utc.timestamp(timestamp / 1_000, timestamp_nsecs)
 }
+
+pub fn phrase_join<S: AsRef<str>>(items: &[S], general_glue: &str, final_glue: &str) -> String {
+    let mut ret = String::new();
+    for (i, item) in items.iter().enumerate() {
+        if i > 0 {
+            if i < items.len() - 1 {
+                ret.push_str(general_glue);
+            } else {
+                ret.push_str(final_glue);
+            }
+        }
+        ret.push_str(item.as_ref());
+    }
+    ret
+}

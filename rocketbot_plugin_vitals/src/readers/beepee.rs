@@ -3,6 +3,7 @@ use bytes::Buf;
 use chrono::{DateTime, Duration, Local, Utc};
 use log::error;
 use num_rational::Rational64;
+use rocketbot_interface::phrase_join;
 use serde::{Deserialize, Serialize};
 use serde::de::DeserializeOwned;
 
@@ -98,22 +99,6 @@ pub(crate) enum MeasurementResult<T> {
     FetchFailed,
     NoMeasurement,
     Measurement(T),
-}
-
-
-fn phrase_join<S: AsRef<str>>(items: &[S], general_glue: &str, final_glue: &str) -> String {
-    let mut ret = String::new();
-    for (i, item) in items.iter().enumerate() {
-        if i > 0 {
-            if i < items.len() - 1 {
-                ret.push_str(general_glue);
-            } else {
-                ret.push_str(final_glue);
-            }
-        }
-        ret.push_str(item.as_ref());
-    }
-    ret
 }
 
 
