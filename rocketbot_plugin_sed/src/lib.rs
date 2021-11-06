@@ -23,6 +23,7 @@ pub struct SedPlugin {
     remember_last_messages: usize,
     max_result_length: usize,
     result_too_long_message: String,
+    require_all_transformations_successful: bool,
 
     channel_name_to_last_messages: Mutex<HashMap<String, Vec<ChannelMessage>>>,
 }
@@ -74,11 +75,16 @@ impl SedPlugin {
             let last_raw_message = last_message.message.raw.unwrap();
             let mut replaced = last_raw_message.clone();
 
+            let mut all_transformations_successful = true;
             for transformation in &transformations {
-                replaced = transformation.transform(&replaced);
+                let this_replaced = transformation.transform(&replaced);
+                if this_replaced == replaced {
+                    all_transformations_successful = false;
+                }
+                replaced = this_replaced;
             }
 
-            if replaced != last_raw_message {
+            if replaced != last_raw_message && (!self.require_all_transformations_successful || all_transformations_successful) {
                 // success!
                 if self.max_result_length > 0 && replaced.len() > self.max_result_length {
                     replaced = self.result_too_long_message.clone();
@@ -125,6 +131,8 @@ impl RocketBotPlugin for SedPlugin {
         let max_result_length = config["max_result_length"].as_usize().unwrap_or(1024);
         let result_too_long_message = config["result_too_long_message"].as_str()
             .unwrap_or("(sorry, that's too long)").to_owned();
+        let require_all_transformations_successful = config["require_all_transformations_successful"]
+            .as_bool().unwrap_or(true);
 
         let channel_name_to_last_messages = Mutex::new(
             "SedPlugin::channel_name_to_last_message",
@@ -137,6 +145,7 @@ impl RocketBotPlugin for SedPlugin {
             remember_last_messages,
             max_result_length,
             result_too_long_message,
+            require_all_transformations_successful,
 
             channel_name_to_last_messages,
         }
