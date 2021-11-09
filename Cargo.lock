@@ -1731,6 +1731,7 @@ dependencies = [
  "rocketbot_plugin_sed",
  "rocketbot_plugin_serious_mode",
  "rocketbot_plugin_simultype",
+ "rocketbot_plugin_slogan",
  "rocketbot_plugin_sockpuppet",
  "rocketbot_plugin_text_commands",
  "rocketbot_plugin_thanks",
@@ -2193,6 +2194,21 @@ dependencies = [
  "rand",
  "rocketbot_interface",
  "serde_json",
+]
+
+[[package]]
+name = "rocketbot_plugin_slogan"
+version = "0.1.0"
+dependencies = [
+ "async-trait",
+ "form_urlencoded",
+ "log",
+ "regex",
+ "reqwest",
+ "rocketbot_interface",
+ "serde_json",
+ "sxd-document",
+ "sxd-xpath",
 ]
 
 [[package]]
