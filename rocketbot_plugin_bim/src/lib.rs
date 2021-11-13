@@ -224,7 +224,7 @@ impl BimPlugin {
 
             // query ride count
             let count_row_opt_res = ride_conn.query_opt(
-                "SELECT CAST(SUM(ride_count) AS bigint) total_ride_count FROM bim.last_rides WHERE company = $1 AND vehicle_number = $2",
+                "SELECT CAST(COALESCE(SUM(ride_count), 0) AS bigint) total_ride_count FROM bim.last_rides WHERE company = $1 AND vehicle_number = $2",
                 &[&company, &vehicle_number_i64],
             ).await;
             let count: i64 = match count_row_opt_res {
