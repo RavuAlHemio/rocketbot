@@ -207,6 +207,14 @@ impl BimPlugin {
             write!(response, "\n*{}*: {}", key, val).expect("failed to write");
         }
 
+        if vehicle.fixed_coupling.len() > 0 {
+            let fixed_coupling_strings: Vec<String> = vehicle.fixed_coupling.iter()
+                .map(|num| num.to_string())
+                .collect();
+            let fixed_coupling_string = fixed_coupling_strings.join("+");
+            write!(response, "\npart of fixed coupling: {}", fixed_coupling_string).expect("failed to write");
+        }
+
         send_channel_message!(
             interface,
             &channel_message.channel.name,
