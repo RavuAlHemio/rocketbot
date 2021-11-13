@@ -582,6 +582,79 @@ impl BimPlugin {
         ).await;
     }
 
+    async fn channel_command_topriders(&self, channel_message: &ChannelMessage, _command: &CommandInstance) {
+        let interface = match self.interface.upgrade() {
+            None => return,
+            Some(i) => i,
+        };
+
+        let ride_conn = match self.connect_ride_db().await {
+            Ok(c) => c,
+            Err(_) => {
+                send_channel_message!(
+                    interface,
+                    &channel_message.channel.name,
+                    "Failed to open database connection. :disappointed:",
+                ).await;
+                return;
+            },
+        };
+
+        let rows_res = ride_conn.query(
+            "
+                SELECT rider_username, CAST(SUM(ride_count) AS bigint) total_ride_count
+                FROM bim.last_rides
+                GROUP BY rider_username
+                ORDER BY SUM(ride_count) DESC
+                LIMIT 6
+            ",
+            &[]
+        ).await;
+        let rows = match rows_res {
+            Ok(r) => r,
+            Err(e) => {
+                error!("failed to query most active riders: {}", e);
+                send_channel_message!(
+                    interface,
+                    &channel_message.channel.name,
+                    "Failed to query database. :disappointed:",
+                ).await;
+                return;
+            },
+        };
+        let mut rider_strings: Vec<String> = rows.iter()
+            .map(|r| {
+                let rider_name: String = r.get(0);
+                let ride_count: i64 = r.get(1);
+
+                if ride_count == 1 {
+                    format!("{} (one ride)", rider_name)
+                } else {
+                    format!("{} ({} rides)", rider_name, ride_count)
+                }
+            })
+            .collect();
+        let prefix = if rows.len() < 6 {
+            "Top riders: "
+        } else {
+            rider_strings.drain(5..);
+            "Top 5 riders: "
+        };
+        let rider_string = rider_strings.join(", ");
+
+        let response_string = if rider_string.len() > 0 {
+            "No top riders.".to_owned()
+        } else {
+            format!("{}{}", prefix, rider_string)
+        };
+
+        send_channel_message!(
+            interface,
+            &channel_message.channel.name,
+            &response_string,
+        ).await;
+    }
+
     async fn channel_command_bimcompanies(&self, channel_message: &ChannelMessage, _command: &CommandInstance) {
         let interface = match self.interface.upgrade() {
             None => return,
@@ -706,6 +779,15 @@ impl RocketBotPlugin for BimPlugin {
         ).await;
         my_interface.register_channel_command(
             &CommandDefinitionBuilder::new(
+                "topriders".to_owned(),
+                "bim".to_owned(),
+                "{cpfx}topriders".to_owned(),
+                "Returns the most active rider(s).".to_owned(),
+            )
+                .build()
+        ).await;
+        my_interface.register_channel_command(
+            &CommandDefinitionBuilder::new(
                 "bimcompanies".to_owned(),
                 "bim".to_owned(),
                 "{cpfx}bimcompanies".to_owned(),
@@ -730,6 +812,8 @@ impl RocketBotPlugin for BimPlugin {
             self.channel_command_bimride(channel_message, command).await
         } else if command.name == "topbims" {
             self.channel_command_topbims(channel_message, command).await
+        } else if command.name == "topriders" {
+            self.channel_command_topriders(channel_message, command).await
         } else if command.name == "bimcompanies" {
             self.channel_command_bimcompanies(channel_message, command).await
         }
@@ -746,6 +830,8 @@ impl RocketBotPlugin for BimPlugin {
             Some(include_str!("../help/bimride.md").to_owned())
         } else if command_name == "topbims" {
             Some(include_str!("../help/topbims.md").to_owned())
+        } else if command_name == "topriders" {
+            Some(include_str!("../help/topriders.md").to_owned())
         } else if command_name == "bimcompanies" {
             Some(include_str!("../help/bimcompanies.md").to_owned())
         } else {
