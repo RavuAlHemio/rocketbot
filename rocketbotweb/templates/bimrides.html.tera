@@ -10,14 +10,14 @@
 <table class="bim-rides">
   <tr>
     <th class="company">Company</th>
-    <th class="vehicle-number">Vehicle number</th>
+    <th class="vehicle-numbers">Vehicle numbers</th>
     <th class="ride-count">Ride count</th>
     <th class="line">Example line</th>
   </tr>
   {% for ride in rides %}
   <tr>
     <td class="company">{{ ride[0]|escape }}</td>
-    <td class="vehicle-number">{{ ride[1] }}</td>
+    <td class="vehicle-numbers">{{ ride[1]|escape }}</td>
     <td class="ride-count">{{ ride[2] }}</td>
     <td class="line">{% set line = ride[3] %}{% if line is string %}{{ line|escape }}{% endif %}</td>
   </tr>
