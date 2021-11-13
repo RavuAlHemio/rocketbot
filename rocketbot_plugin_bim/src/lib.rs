@@ -1,4 +1,4 @@
-use std::collections::{BTreeSet, BTreeMap, HashMap};
+use std::collections::{BTreeMap, HashMap};
 use std::convert::TryInto;
 use std::fmt::{self, Write};
 use std::fs::File;
@@ -7,6 +7,7 @@ use std::sync::Weak;
 
 use async_trait::async_trait;
 use chrono::{DateTime, Local};
+use indexmap::IndexSet;
 use log::error;
 use once_cell::sync::Lazy;
 use regex::Regex;
@@ -39,7 +40,7 @@ pub struct VehicleInfo {
     pub out_of_service_since: Option<String>,
     pub manufacturer: Option<String>,
     pub other_data: BTreeMap<String, String>,
-    pub fixed_coupling_with: BTreeSet<u32>,
+    pub fixed_coupling: IndexSet<u32>,
 }
 impl VehicleInfo {
     pub fn new(number: u32, type_code: String) -> Self {
@@ -50,7 +51,7 @@ impl VehicleInfo {
             out_of_service_since: None,
             manufacturer: None,
             other_data: BTreeMap::new(),
-            fixed_coupling_with: BTreeSet::new(),
+            fixed_coupling: IndexSet::new(),
         }
     }
 }
@@ -818,7 +819,7 @@ pub async fn increment_rides_by_spec(ride_conn: &mut tokio_postgres::Client, bim
         };
         if let Some(bim_database) = bim_database_opt {
             if let Some(veh) = bim_database.get(&vehicle_num) {
-                if veh.fixed_coupling_with.len() > 0 && vehicle_num_strs.len() > 1 {
+                if veh.fixed_coupling.len() > 0 && vehicle_num_strs.len() > 1 {
                     // this vehicle is in a fixed coupling but we have more than one vehicle
                     // this is forbidden
                     return Err(IncrementBySpecError::FixedCouplingCombo(vehicle_num));
@@ -831,13 +832,18 @@ pub async fn increment_rides_by_spec(ride_conn: &mut tokio_postgres::Client, bim
     // also count vehicles ridden in a fixed coupling with the given vehicle
     let mut all_vehicle_nums: Vec<(u32, bool)> = Vec::new();
     for &vehicle_num in &vehicle_nums {
-        all_vehicle_nums.push((vehicle_num, false));
+        let mut added_fixed_coupling = false;
         if let Some(bim_database) = bim_database_opt {
             if let Some(veh) = bim_database.get(&vehicle_num) {
-                for &fcw in &veh.fixed_coupling_with {
-                    all_vehicle_nums.push((fcw, true));
+                for &fc in &veh.fixed_coupling {
+                    all_vehicle_nums.push((fc, vehicle_num != fc));
                 }
+                added_fixed_coupling = true;
             }
+        }
+
+        if !added_fixed_coupling {
+            all_vehicle_nums.push((vehicle_num, false));
         }
     }
 

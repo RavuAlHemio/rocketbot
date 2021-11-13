@@ -1,8 +1,8 @@
-use std::collections::BTreeSet;
 use std::io::Read;
 use std::fs::File;
 
 use form_urlencoded;
+use indexmap::IndexSet;
 use rocketbot_plugin_bim::VehicleInfo;
 use sxd_document;
 use sxd_document::dom::Element;
@@ -85,7 +85,7 @@ pub(crate) fn row_data_to_trams(type_code: &str, row_data: Vec<(String, String)>
         }
     }
 
-    let all_numbers: BTreeSet<u32> = numbers_types
+    let all_numbers: IndexSet<u32> = numbers_types
         .iter()
         .map(|(num, _tc)| *num)
         .collect();
@@ -94,14 +94,12 @@ pub(crate) fn row_data_to_trams(type_code: &str, row_data: Vec<(String, String)>
         vehicle.number = vehicle_number;
         vehicle.type_code = vehicle_type_code.to_owned();
 
-        if fixed_coupling {
+        vehicle.fixed_coupling = if fixed_coupling {
             // add related vehicles
-            let mut coupled_numbers = all_numbers.clone();
-            coupled_numbers.remove(&vehicle_number);
-            vehicle.fixed_coupling_with = coupled_numbers;
+            all_numbers.clone()
         } else {
-            vehicle.fixed_coupling_with = BTreeSet::new();
-        }
+            IndexSet::new()
+        };
 
         vehicles.push(vehicle.clone());
     }
