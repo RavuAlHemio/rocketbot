@@ -30,14 +30,17 @@ fn with_thou_sep(int_str: &mut String, group_size: usize, sep: char) {
     }
 }
 
-fn format_stat(dose_number: usize, value: &BigUint, delta: &BigUint, percentage: f64) -> String {
+fn format_stat(dose_number: usize, value: &BigUint, delta: &BigUint, percentage: f64, percent_points_delta: f64) -> String {
     let mut value_str = value.to_string();
     with_thou_sep(&mut value_str, 3, ',');
 
     let mut delta_str = delta.to_string();
     with_thou_sep(&mut delta_str, 3, ',');
 
-    format!("vaccine {}: {} ({:.2}%, +{})", dose_number, value_str, percentage, delta_str)
+    format!(
+        "vaccine {}: {} ({:.2}%, +{}, +{:.3}%pt)",
+        dose_number, value_str, percentage, delta_str, percent_points_delta,
+    )
 }
 
 
@@ -142,7 +145,7 @@ impl RocketBotPlugin for VaccinePlugin {
             };
         }
 
-        let (freshest_entries, freshest_date, delta, dose_to_percent, state_name) = {
+        let (freshest_entries, freshest_date, delta, dose_to_percent, dose_to_delta_percent_points, state_name) = {
             let db_guard = self.vaccine_database
                 .read().await;
             let state_id = match db_guard.lower_name_to_state_id.get(&name_lower) {
@@ -193,19 +196,8 @@ impl RocketBotPlugin for VaccinePlugin {
                 });
             }
 
-            let mut dose_to_percent = HashMap::new();
-            let ten_thousand = BigUint::from(10000u32);
-            for (dose_number, dose_count) in actual_entries[0].dose_to_count.iter() {
-                let percent: f64 = if pop == BigUint::from(0u32) {
-                    f64::INFINITY
-                } else {
-                    (dose_count * &ten_thousand / &pop).to_f64().expect("BigUint to f64") / 100.0
-                };
-                dose_to_percent.insert(*dose_number, percent);
-            }
-
-            let mut delta_dose_to_count = HashMap::new();
             let zero = BigUint::from(0u32);
+            let mut delta_dose_to_count = HashMap::new();
             for (dose_number, dose_count) in actual_entries[0].dose_to_count.iter() {
                 let prev_count = actual_entries[1].dose_to_count.get(dose_number)
                     .unwrap_or(&zero);
@@ -217,7 +209,26 @@ impl RocketBotPlugin for VaccinePlugin {
                 dose_to_count: delta_dose_to_count,
             };
 
-            (actual_entries, freshest_date, delta, dose_to_percent, state_name)
+            let mut dose_to_percent = HashMap::new();
+            let mut dose_to_delta_percent_points = HashMap::new();
+            let ten_thousand = BigUint::from(10000u32);
+            for (dose_number, dose_count) in actual_entries[0].dose_to_count.iter() {
+                let prev_dose_count = actual_entries[1].dose_to_count.get(dose_number)
+                    .unwrap_or(&zero);
+
+                let (percent, prev_percent): (f64, f64) = if pop == BigUint::from(0u32) {
+                    (f64::INFINITY, f64::INFINITY)
+                } else {
+                    (
+                        (dose_count * &ten_thousand / &pop).to_f64().expect("BigUint to f64") / 100.0,
+                        (prev_dose_count * &ten_thousand / &pop).to_f64().expect("BigUint to f64") / 100.0,
+                    )
+                };
+                dose_to_percent.insert(*dose_number, percent);
+                dose_to_delta_percent_points.insert(*dose_number, percent - prev_percent);
+            }
+
+            (actual_entries, freshest_date, delta, dose_to_percent, dose_to_delta_percent_points, state_name)
         };
 
         let mut response = String::new();
@@ -230,6 +241,7 @@ impl RocketBotPlugin for VaccinePlugin {
                 &freshest_entries[0].dose_to_count[&dose_number],
                 &delta.dose_to_count[&dose_number],
                 dose_to_percent[&dose_number],
+                dose_to_delta_percent_points[&dose_number],
             ))
             .collect();
         response.push_str(&dose_texts.join(", "));
