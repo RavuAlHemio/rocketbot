@@ -93,9 +93,13 @@ impl SloganPlugin {
             },
             sxd_xpath::Value::Nodeset(nodeset) => {
                 let mut total_text = String::new();
-                for node in nodeset {
+                for node in nodeset.document_order() {
                     if let Some(t) = node.text() {
                         total_text.push_str(t.text());
+                    } else if let Some(elem) = node.element() {
+                        if elem.name().local_part() == "br" {
+                            total_text.push_str(" ");
+                        }
                     }
                 }
                 total_text
