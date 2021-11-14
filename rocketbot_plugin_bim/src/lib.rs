@@ -642,7 +642,7 @@ impl BimPlugin {
         };
         let rider_string = rider_strings.join(", ");
 
-        let response_string = if rider_string.len() > 0 {
+        let response_string = if rider_string.len() == 0 {
             "No top riders.".to_owned()
         } else {
             format!("{}{}", prefix, rider_string)
