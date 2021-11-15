@@ -211,7 +211,7 @@ impl RocketBotPlugin for VaccinePlugin {
 
             let mut dose_to_percent = HashMap::new();
             let mut dose_to_delta_percent_points = HashMap::new();
-            let ten_thousand = BigUint::from(10000u32);
+            let hundred_thousand = BigUint::from(100_000u32);
             for (dose_number, dose_count) in actual_entries[0].dose_to_count.iter() {
                 let prev_dose_count = actual_entries[1].dose_to_count.get(dose_number)
                     .unwrap_or(&zero);
@@ -220,8 +220,8 @@ impl RocketBotPlugin for VaccinePlugin {
                     (f64::INFINITY, f64::INFINITY)
                 } else {
                     (
-                        (dose_count * &ten_thousand / &pop).to_f64().expect("BigUint to f64") / 100.0,
-                        (prev_dose_count * &ten_thousand / &pop).to_f64().expect("BigUint to f64") / 100.0,
+                        (dose_count * &hundred_thousand / &pop).to_f64().expect("BigUint to f64") / 1000.0,
+                        (prev_dose_count * &hundred_thousand / &pop).to_f64().expect("BigUint to f64") / 1000.0,
                     )
                 };
                 dose_to_percent.insert(*dose_number, percent);
