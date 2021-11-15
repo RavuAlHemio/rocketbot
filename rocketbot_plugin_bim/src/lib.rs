@@ -1024,8 +1024,8 @@ pub async fn increment_rides_by_spec(ride_conn: &mut tokio_postgres::Client, bim
             if let Some(veh) = bim_database.get(&vehicle_num) {
                 for &fc in &veh.fixed_coupling {
                     all_vehicle_nums.push((fc, vehicle_num != fc));
+                    added_fixed_coupling = true;
                 }
-                added_fixed_coupling = true;
             }
         }
 
