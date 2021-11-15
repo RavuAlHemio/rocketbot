@@ -232,7 +232,7 @@ impl RocketBotPlugin for VaccinePlugin {
         };
 
         let mut response = String::new();
-        response.push_str(&format!("@{} {} ({}): ", channel_message.message.sender.username, state_name, freshest_date.format("%Y-%m-%d")));
+        response.push_str(&format!("@{} {} ({}):", channel_message.message.sender.username, state_name, freshest_date.format("%Y-%m-%d")));
         let mut dose_numbers: Vec<usize> = dose_to_percent.keys().map(|k| *k).collect();
         dose_numbers.sort_unstable();
         let dose_texts: Vec<String> = dose_numbers.iter()
