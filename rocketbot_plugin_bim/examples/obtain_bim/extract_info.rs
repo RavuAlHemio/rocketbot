@@ -59,9 +59,13 @@ pub(crate) fn row_data_to_trams(type_code: &str, row_data: Vec<(String, String)>
         }
 
         if key == "Nummer" {
-            for number_str in val.split("+") {
+            for (number_index, number_str) in val.split("+").enumerate() {
                 if let Ok(number) = number_str.parse() {
                     numbers_types.push((number, type_code));
+                }
+                if number_index > 0 {
+                    // fixed coupling!
+                    fixed_coupling = true;
                 }
             }
         } else if key == "Motorwagen" || key == "Steuerwagen" {
