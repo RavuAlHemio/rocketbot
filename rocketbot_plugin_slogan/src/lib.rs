@@ -9,6 +9,7 @@ use rocketbot_interface::interfaces::{RocketBotInterface, RocketBotPlugin};
 use rocketbot_interface::model::{ChannelMessage, PrivateMessage};
 use serde_json;
 use sxd_document;
+use sxd_document::dom::Element;
 use sxd_xpath;
 
 
@@ -97,9 +98,8 @@ impl SloganPlugin {
                     if let Some(t) = node.text() {
                         total_text.push_str(t.text());
                     } else if let Some(elem) = node.element() {
-                        if elem.name().local_part() == "br" {
-                            total_text.push_str(" ");
-                        }
+                        let s = collect_element_strings(&elem);
+                        total_text.push_str(&s);
                     }
                 }
                 total_text
@@ -230,4 +230,21 @@ impl RocketBotPlugin for SloganPlugin {
             &response_string,
         ).await;
     }
+}
+
+fn collect_element_strings(element: &Element) -> String {
+    if element.name().local_part() == "br" {
+        return " ".to_owned();
+    }
+
+    let mut total_text = String::new();
+    for child in element.children() {
+        if let Some(t) = child.text() {
+            total_text.push_str(t.text());
+        } else if let Some(elem) = child.element() {
+            let s = collect_element_strings(&elem);
+            total_text.push_str(&s);
+        }
+    }
+    total_text
 }
