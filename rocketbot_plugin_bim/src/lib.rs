@@ -1,5 +1,5 @@
 use std::collections::{BTreeMap, HashMap};
-use std::convert::TryInto;
+use std::convert::{TryFrom, TryInto};
 use std::fmt::{self, Write};
 use std::fs::File;
 use std::num::ParseIntError;
@@ -601,13 +601,7 @@ impl BimPlugin {
         };
 
         let rows_res = ride_conn.query(
-            "
-                SELECT rider_username, CAST(SUM(ride_count) AS bigint) total_ride_count
-                FROM bim.last_rides
-                GROUP BY rider_username
-                ORDER BY SUM(ride_count) DESC
-                LIMIT 6
-            ",
+            "SELECT company, vehicle_number, rider_username, ride_count FROM bim.last_rides",
             &[]
         ).await;
         let rows = match rows_res {
@@ -622,19 +616,50 @@ impl BimPlugin {
                 return;
             },
         };
-        let mut rider_strings: Vec<String> = rows.iter()
-            .map(|r| {
-                let rider_name: String = r.get(0);
-                let ride_count: i64 = r.get(1);
 
-                if ride_count == 1 {
+        let mut company_to_bim_database_opt = HashMap::new();
+        let mut rider_to_ride_count = HashMap::new();
+        for row in rows {
+            let company: String = row.get(0);
+            let vehicle_number_i64: i64 = row.get(1);
+            let rider_username: String = row.get(2);
+            let ride_count: i64 = row.get(3);
+
+            if let Ok(vehicle_number_u32) = u32::try_from(vehicle_number_i64) {
+                let bim_database_opt = company_to_bim_database_opt
+                    .entry(company.clone())
+                    .or_insert_with(|| self.load_bim_database(&company));
+                if let Some(bim_database) = bim_database_opt {
+                    if let Some(vehicle) = bim_database.get(&vehicle_number_u32) {
+                        if vehicle.fixed_coupling.first().map(|&f| f != vehicle_number_u32).unwrap_or(false) {
+                            // only count the first vehicle in a fixed coupling
+                            continue;
+                        }
+                    }
+                }
+            }
+
+            let rider_ride_count = rider_to_ride_count
+                .entry(rider_username.clone())
+                .or_insert(0);
+            *rider_ride_count += ride_count;
+        }
+
+        let mut rider_and_ride_count: Vec<(String, i64)> = rider_to_ride_count
+            .iter()
+            .map(|(r, rc)| (r.clone(), *rc))
+            .collect();
+        rider_and_ride_count.sort_unstable_by_key(|(r, rc)| (*rc, r.clone()));
+        let mut rider_strings: Vec<String> = rider_and_ride_count.iter()
+            .map(|(rider_name, ride_count)| {
+                if *ride_count == 1 {
                     format!("{} (one ride)", rider_name)
                 } else {
                     format!("{} ({} rides)", rider_name, ride_count)
                 }
             })
             .collect();
-        let prefix = if rows.len() < 6 {
+        let prefix = if rider_strings.len() < 6 {
             "Top riders: "
         } else {
             rider_strings.drain(5..);
