@@ -244,7 +244,10 @@ impl RocketBotPlugin for VaccinePlugin {
                 dose_to_delta_percent_points[&dose_number],
             ))
             .collect();
-        response.push_str(&dose_texts.join(", "));
+        for dose_text in &dose_texts {
+            response.push('\n');
+            response.push_str(dose_text);
+        }
 
         send_channel_message!(
             interface,
