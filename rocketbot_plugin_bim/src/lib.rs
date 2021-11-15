@@ -649,7 +649,7 @@ impl BimPlugin {
             .iter()
             .map(|(r, rc)| (r.clone(), *rc))
             .collect();
-        rider_and_ride_count.sort_unstable_by_key(|(r, rc)| (*rc, r.clone()));
+        rider_and_ride_count.sort_unstable_by_key(|(r, rc)| (-*rc, r.clone()));
         let mut rider_strings: Vec<String> = rider_and_ride_count.iter()
             .map(|(rider_name, ride_count)| {
                 if *ride_count == 1 {
