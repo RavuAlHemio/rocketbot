@@ -2,7 +2,8 @@ use std::collections::{HashMap, HashSet};
 
 use log::{debug, warn};
 use rocketbot_interface::commands::{
-    CommandConfiguration, CommandDefinition, CommandInstance, CommandValue, CommandValueType,
+    CommandBehaviors, CommandConfiguration, CommandDefinition, CommandInstance, CommandValue,
+    CommandValueType,
 };
 
 use crate::string_utils::Token;
@@ -21,6 +22,23 @@ pub(crate) fn parse_command(
     pieces: &[Token],
     raw_message: &str,
 ) -> Option<CommandInstance> {
+    if command.behaviors.contains(CommandBehaviors::NO_ARGUMENT_PARSING) {
+        let rest_string = if pieces.len() > 1 {
+            raw_message[pieces[1].orig_range.start..].to_owned()
+        } else {
+            // nothing beyond the command itself
+            String::new()
+        };
+
+        return Some(CommandInstance::new(
+            command.name.clone(),
+            HashSet::new(),
+            HashMap::new(),
+            Vec::new(),
+            rest_string,
+        ));
+    }
+
     let mut i = 1;
     let mut set_flags = HashSet::new();
     let mut option_values = HashMap::new();

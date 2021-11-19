@@ -6,6 +6,7 @@ use bitflags::bitflags;
 bitflags! {
     pub struct CommandBehaviors: u64 {
         const ACCEPT_FROM_BOTS = 0b00000001;
+        const NO_ARGUMENT_PARSING = 0b00000010;
     }
 }
 
