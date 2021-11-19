@@ -400,7 +400,7 @@ impl AstNodeAtLocation {
                                 let mut i = BigInt::from(2);
                                 let one = BigInt::from(1);
                                 let mut val = one.clone();
-                                while i < *o {
+                                while i <= *o {
                                     val *= &i;
                                     i += &one;
                                     check_timeout(state)?;
@@ -500,5 +500,24 @@ mod tests {
         run_test("42", "0o52");
         run_test("42", "0o052");
         run_test("42", "0o00052");
+    }
+
+    #[test]
+    fn test_factorial() {
+        run_test("1", "0!");
+        run_test("1", "1!");
+        run_test("2", "2!");
+        run_test("6", "3!");
+        run_test("24", "4!");
+        run_test("120", "5!");
+        run_test("6402373705728000", "18!");
+        run_test("2432902008176640000", "20!");
+    }
+
+    #[test]
+    fn test_negative_number() {
+        run_test("-4", "-4");
+        run_test("-5", "-5");
+        run_test("-4", "1-5");
     }
 }
