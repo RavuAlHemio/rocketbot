@@ -16,10 +16,10 @@
   </tr>
   {% for ride in rides %}
   <tr>
-    <td class="company">{{ ride[0]|escape }}</td>
-    <td class="vehicle-numbers">{{ ride[1]|escape }}</td>
-    <td class="ride-count">{{ ride[2] }}</td>
-    <td class="line">{% set line = ride[3] %}{% if line is string %}{{ line|escape }}{% endif %}</td>
+    <td class="company">{{ ride.company|escape }}</td>
+    <td class="vehicle-numbers">{% for vn in ride.vehicle_numbers %}{% if not loop.first %}+{% endif %}{{ vn }}{% endfor %}</td>
+    <td class="ride-count">{{ ride.ride_count }}</td>
+    <td class="line">{% set line = ride.last_line %}{% if line is string %}{{ line|escape }}{% endif %}</td>
   </tr>
   {% endfor %}
 </table>
