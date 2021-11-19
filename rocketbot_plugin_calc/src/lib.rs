@@ -194,7 +194,7 @@ impl RocketBotPlugin for CalcPlugin {
             Some(HashSet::new()),
             HashMap::new(),
             0,
-            CommandBehaviors::empty(),
+            CommandBehaviors::NO_ARGUMENT_PARSING,
             "{cpfx}calc EXPRESSION".to_owned(),
             "Calculates the given mathematical expression and outputs the result.".to_owned(),
         )).await;
