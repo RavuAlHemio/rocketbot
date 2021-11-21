@@ -108,8 +108,9 @@ impl QuotesPlugin {
     async fn get_filtered_quotes(
         &self,
         requested_rating: QuoteRating,
-        author_username: Option<&str>,
-        body_substring: Option<&str>,
+        author_username_opt: Option<&str>,
+        body_substring_opt: Option<&str>,
+        case_fold: bool,
     ) -> Result<Vec<QuoteAndVoteSum>, tokio_postgres::Error> {
         let quote_query_format = "
 SELECT q.quote_id, q.timestamp, q.channel, q.author, q.message_type, q.body, COALESCE(SUM(qv.points), 0) vote_sum
@@ -136,16 +137,26 @@ GROUP BY q.quote_id, q.timestamp, q.channel, q.author, q.message_type, q.body
             having_filter_values.push(&self.vote_threshold);
         }
 
-        if author_username.is_some() {
-            where_filter_pieces.push(format!("q.author = ${}", next_filter_index));
+        let author_username;
+        if author_username_opt.is_some() {
+            if case_fold {
+                where_filter_pieces.push(format!("LOWER(q.author) = LOWER(${})", next_filter_index));
+            } else {
+                where_filter_pieces.push(format!("q.author = ${}", next_filter_index));
+            }
             next_filter_index += 1;
+            author_username = author_username_opt.unwrap();
             where_filter_values.push(&author_username);
         }
 
         let body_substring_like;
-        if body_substring.is_some() {
-            body_substring_like = substring_to_like(body_substring.unwrap(), '\\');
-            where_filter_pieces.push(format!("q.body LIKE ${} ESCAPE '\\'", next_filter_index));
+        if body_substring_opt.is_some() {
+            body_substring_like = substring_to_like(body_substring_opt.unwrap(), '\\');
+            if case_fold {
+                where_filter_pieces.push(format!("LOWER(q.body) LIKE LOWER(${}) ESCAPE '\\'", next_filter_index));
+            } else {
+                where_filter_pieces.push(format!("q.body LIKE ${} ESCAPE '\\'", next_filter_index));
+            }
             next_filter_index += 1;
             where_filter_values.push(&body_substring_like);
         }
@@ -494,11 +505,13 @@ RETURNING quote_id
             None => return,
         };
         let show_rating = command.flags.contains("r");
+        let case_sensitive = command.flags.contains("c");
 
         let relevant_quotes_res = self.get_filtered_quotes(
             quote_rating,
             author_username,
             substring,
+            !case_sensitive,
         ).await;
         let relevant_quotes = match relevant_quotes_res {
             Ok(rq) => rq,
@@ -530,6 +543,7 @@ RETURNING quote_id
             None => return,
         };
         let show_rating = command.flags.contains("r");
+        let case_sensitive = command.flags.contains("c");
 
         {
             let mut quotes_guard = self.quotes_state.lock().await;
@@ -576,6 +590,7 @@ RETURNING quote_id
                         quote_rating,
                         None,
                         None,
+                        !case_sensitive,
                     ).await;
                     let mut fresh_quotes = match fresh_quotes_res {
                         Ok(fq) => fq,
@@ -728,14 +743,17 @@ impl RocketBotPlugin for QuotesPlugin {
         quote_flags.insert("bad".to_owned());
         quote_flags.insert("r".to_owned());
 
+        let mut quote_case_flags = quote_flags.clone();
+        quote_case_flags.insert("c".to_owned());
+
         let quote_command = CommandDefinition::new(
             "quote".to_owned(),
             "quotes".to_owned(),
-            Some(quote_flags.clone()),
+            Some(quote_case_flags.clone()),
             HashMap::new(),
             0,
             CommandBehaviors::empty(),
-            "{cpfx}quote [{lopfx}any|{lopfx}bad] [{sopfx}r] [SUBSTRING]".to_owned(),
+            "{cpfx}quote [{lopfx}any|{lopfx}bad] [{sopfx}r] [{sopfx}c] [SUBSTRING]".to_owned(),
             "Outputs a random quote containing the given substring.".to_owned(),
         );
         my_interface.register_channel_command(&quote_command).await;
@@ -743,11 +761,11 @@ impl RocketBotPlugin for QuotesPlugin {
         let quoteuser_command = CommandDefinition::new(
             "quoteuser".to_owned(),
             "quotes".to_owned(),
-            Some(quote_flags.clone()),
+            Some(quote_case_flags.clone()),
             HashMap::new(),
             1,
             CommandBehaviors::empty(),
-            "{cpfx}quoteuser [{lopfx}any|{lopfx}bad] [{sopfx}r] USERNAME [SUBSTRING]".to_owned(),
+            "{cpfx}quoteuser [{lopfx}any|{lopfx}bad] [{sopfx}r] [{sopfx}c] USERNAME [SUBSTRING]".to_owned(),
             "Outputs a random quote from the given user containing the given substring.".to_owned(),
         );
         my_interface.register_channel_command(&quoteuser_command).await;
@@ -759,7 +777,7 @@ impl RocketBotPlugin for QuotesPlugin {
             HashMap::new(),
             0,
             CommandBehaviors::empty(),
-            "{cpfx}nextquote [{lopfx}any|{lopfx}bad]".to_owned(),
+            "{cpfx}nextquote [{lopfx}any|{lopfx}bad] [{sopfx}r]".to_owned(),
             "Displays the next quote from a pre-shuffled list of quotes.".to_owned(),
         );
         my_interface.register_channel_command(&nextquote_command).await;
