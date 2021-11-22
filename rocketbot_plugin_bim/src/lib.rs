@@ -162,61 +162,55 @@ impl BimPlugin {
             .map(|v| v.as_str().unwrap())
             .unwrap_or(self.default_company.as_str());
 
-        let database = match self.load_bim_database(company) {
-            Some(db) => db,
-            None => {
-                return;
+        let mut response = match self.load_bim_database(company) {
+            None => "No vehicle database exists for this company.".to_owned(),
+            Some(db) => {
+                match db.get(&number) {
+                    None => format!("Vehicle {} not found.", number),
+                    Some(vehicle) => {
+                        let mut db_response = format!(
+                            "*{}*: type *{}*",
+                            vehicle.number, vehicle.type_code,
+                        );
+                        match (&vehicle.in_service_since, &vehicle.out_of_service_since) {
+                            (Some(service_from), Some(service_to)) => {
+                                write!(db_response, ", in service from {} to {}", service_from, service_to).expect("failed to write");
+                            },
+                            (Some(service_from), None) => {
+                                write!(db_response, ", in service since {}", service_from).expect("failed to write");
+                            },
+                            (None, Some(service_to)) => {
+                                write!(db_response, ", in service until {}", service_to).expect("failed to write");
+                            },
+                            (None, None) => {},
+                        };
+
+                        if let Some(manuf) = &vehicle.manufacturer {
+                            let full_manuf = self.manufacturer_mapping.get(manuf).unwrap_or(manuf);
+                            write!(db_response, "\n*hergestellt von* {}", full_manuf).expect("failed to write");
+                        }
+
+                        let mut other_props: Vec<(&str, &str)> = vehicle.other_data.iter()
+                            .map(|(k, v)| (k.as_str(), v.as_str()))
+                            .collect();
+                        other_props.sort_unstable();
+                        for (key, val) in other_props {
+                            write!(db_response, "\n*{}*: {}", key, val).expect("failed to write");
+                        }
+
+                        if vehicle.fixed_coupling.len() > 0 {
+                            let fixed_coupling_strings: Vec<String> = vehicle.fixed_coupling.iter()
+                                .map(|num| num.to_string())
+                                .collect();
+                            let fixed_coupling_string = fixed_coupling_strings.join("+");
+                            write!(db_response, "\npart of fixed coupling: {}", fixed_coupling_string).expect("failed to write");
+                        }
+
+                        db_response
+                    }
+                }
             },
         };
-        let vehicle = match database.get(&number) {
-            Some(v) => v,
-            None => {
-                send_channel_message!(
-                    interface,
-                    &channel_message.channel.name,
-                    &format!("Vehicle {} not found.", number),
-                ).await;
-                return;
-            },
-        };
-
-        let mut response = format!(
-            "*{}*: type *{}*",
-            vehicle.number, vehicle.type_code,
-        );
-        match (&vehicle.in_service_since, &vehicle.out_of_service_since) {
-            (Some(service_from), Some(service_to)) => {
-                write!(response, ", in service from {} to {}", service_from, service_to).expect("failed to write");
-            },
-            (Some(service_from), None) => {
-                write!(response, ", in service since {}", service_from).expect("failed to write");
-            },
-            (None, Some(service_to)) => {
-                write!(response, ", in service until {}", service_to).expect("failed to write");
-            },
-            (None, None) => {},
-        };
-
-        if let Some(manuf) = &vehicle.manufacturer {
-            let full_manuf = self.manufacturer_mapping.get(manuf).unwrap_or(manuf);
-            write!(response, "\n*hergestellt von* {}", full_manuf).expect("failed to write");
-        }
-
-        let mut other_props: Vec<(&str, &str)> = vehicle.other_data.iter()
-            .map(|(k, v)| (k.as_str(), v.as_str()))
-            .collect();
-        other_props.sort_unstable();
-        for (key, val) in other_props {
-            write!(response, "\n*{}*: {}", key, val).expect("failed to write");
-        }
-
-        if vehicle.fixed_coupling.len() > 0 {
-            let fixed_coupling_strings: Vec<String> = vehicle.fixed_coupling.iter()
-                .map(|num| num.to_string())
-                .collect();
-            let fixed_coupling_string = fixed_coupling_strings.join("+");
-            write!(response, "\npart of fixed coupling: {}", fixed_coupling_string).expect("failed to write");
-        }
 
         async fn get_last_ride(me: &BimPlugin, company: &str, vehicle_number: VehicleNumber) -> Option<String> {
             let ride_conn = match me.connect_ride_db().await {
