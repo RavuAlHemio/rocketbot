@@ -20,6 +20,9 @@ use serde_json;
 use tokio_postgres::NoTls;
 
 
+pub type VehicleNumber = u32;
+
+
 pub static BIMRIDE_RE: Lazy<Regex> = Lazy::new(|| Regex::new(
     "^(?P<vehicles>[0-9]+(?:[+][0-9]+)*)(?:/(?P<line>[0-9A-Z]+|Sonderzug))?$"
 ).expect("failed to parse bimride regex"));
@@ -34,16 +37,16 @@ macro_rules! write_expect {
 
 #[derive(Clone, Debug, Deserialize, Eq, PartialEq, Serialize)]
 pub struct VehicleInfo {
-    pub number: u32,
+    pub number: VehicleNumber,
     pub type_code: String,
     pub in_service_since: Option<String>,
     pub out_of_service_since: Option<String>,
     pub manufacturer: Option<String>,
     pub other_data: BTreeMap<String, String>,
-    pub fixed_coupling: IndexSet<u32>,
+    pub fixed_coupling: IndexSet<VehicleNumber>,
 }
 impl VehicleInfo {
-    pub fn new(number: u32, type_code: String) -> Self {
+    pub fn new(number: VehicleNumber, type_code: String) -> Self {
         Self {
             number,
             type_code,
@@ -73,7 +76,7 @@ pub struct OtherRiderInfo {
 
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub struct VehicleRideInfo {
-    pub vehicle_number: u32,
+    pub vehicle_number: VehicleNumber,
     pub ridden_within_fixed_coupling: bool,
     pub last_ride: Option<LastRideInfo>,
     pub last_ride_other_rider: Option<OtherRiderInfo>,
@@ -93,7 +96,7 @@ pub struct BimPlugin {
     ride_db_conn_string: String,
 }
 impl BimPlugin {
-    fn load_bim_database(&self, company: &str) -> Option<HashMap<u32, VehicleInfo>> {
+    fn load_bim_database(&self, company: &str) -> Option<HashMap<VehicleNumber, VehicleInfo>> {
         let path_opt = match self.company_to_bim_database_path.get(company) {
             Some(p) => p,
             None => {
@@ -119,7 +122,7 @@ impl BimPlugin {
                 return None;
             },
         };
-        let vehicle_hash_map: HashMap<u32, VehicleInfo> = vehicles.drain(..)
+        let vehicle_hash_map: HashMap<VehicleNumber, VehicleInfo> = vehicles.drain(..)
             .map(|vi| (vi.number, vi))
             .collect();
         Some(vehicle_hash_map)
@@ -146,10 +149,10 @@ impl BimPlugin {
         };
 
         let number_str = command.rest.trim();
-        let number: u32 = match number_str.parse() {
+        let number: VehicleNumber = match number_str.parse() {
             Ok(n) => n,
             Err(e) => {
-                error!("failed to parse {:?} as u32: {}", number_str, e);
+                error!("failed to parse {:?} as VehicleNumber: {}", number_str, e);
                 return;
             },
         };
@@ -215,7 +218,7 @@ impl BimPlugin {
             write!(response, "\npart of fixed coupling: {}", fixed_coupling_string).expect("failed to write");
         }
 
-        async fn get_last_ride(me: &BimPlugin, company: &str, vehicle_number: u32) -> Option<String> {
+        async fn get_last_ride(me: &BimPlugin, company: &str, vehicle_number: VehicleNumber) -> Option<String> {
             let ride_conn = match me.connect_ride_db().await {
                 Ok(c) => c,
                 Err(_) => return None,
@@ -625,13 +628,13 @@ impl BimPlugin {
             let rider_username: String = row.get(2);
             let ride_count: i64 = row.get(3);
 
-            if let Ok(vehicle_number_u32) = u32::try_from(vehicle_number_i64) {
+            if let Ok(vehicle_number_vn) = VehicleNumber::try_from(vehicle_number_i64) {
                 let bim_database_opt = company_to_bim_database_opt
                     .entry(company.clone())
                     .or_insert_with(|| self.load_bim_database(&company));
                 if let Some(bim_database) = bim_database_opt {
-                    if let Some(vehicle) = bim_database.get(&vehicle_number_u32) {
-                        if vehicle.fixed_coupling.first().map(|&f| f != vehicle_number_u32).unwrap_or(false) {
+                    if let Some(vehicle) = bim_database.get(&vehicle_number_vn) {
+                        if vehicle.fixed_coupling.first().map(|&f| f != vehicle_number_vn).unwrap_or(false) {
                             // only count the first vehicle in a fixed coupling
                             continue;
                         }
@@ -866,7 +869,7 @@ impl RocketBotPlugin for BimPlugin {
 }
 
 
-pub async fn increment_last_ride(ride_conn: &tokio_postgres::Transaction<'_>, company: &str, vehicle_number: u32, rider_username: &str, timestamp: DateTime<Local>, line: Option<&str>) -> Result<(Option<LastRideInfo>, Option<OtherRiderInfo>), tokio_postgres::Error> {
+pub async fn increment_last_ride(ride_conn: &tokio_postgres::Transaction<'_>, company: &str, vehicle_number: VehicleNumber, rider_username: &str, timestamp: DateTime<Local>, line: Option<&str>) -> Result<(Option<LastRideInfo>, Option<OtherRiderInfo>), tokio_postgres::Error> {
     let vehicle_number_i64: i64 = vehicle_number.into();
 
     let row = ride_conn.query_one(
@@ -967,8 +970,8 @@ pub async fn increment_last_ride(ride_conn: &tokio_postgres::Transaction<'_>, co
 pub enum IncrementBySpecError {
     SpecParseFailure(String),
     VehicleNumberParseFailure(String, ParseIntError),
-    FixedCouplingCombo(u32),
-    DatabaseQuery(String, u32, Option<String>, tokio_postgres::Error),
+    FixedCouplingCombo(VehicleNumber),
+    DatabaseQuery(String, VehicleNumber, Option<String>, tokio_postgres::Error),
     DatabaseBeginTransaction(tokio_postgres::Error),
     DatabaseCommitTransaction(tokio_postgres::Error),
 }
@@ -987,7 +990,7 @@ impl fmt::Display for IncrementBySpecError {
 impl std::error::Error for IncrementBySpecError {
 }
 
-pub async fn increment_rides_by_spec(ride_conn: &mut tokio_postgres::Client, bim_database_opt: Option<&HashMap<u32, VehicleInfo>>, company: &str, rider_username: &str, timestamp: DateTime<Local>, rides_spec: &str) -> Result<RideInfo, IncrementBySpecError> {
+pub async fn increment_rides_by_spec(ride_conn: &mut tokio_postgres::Client, bim_database_opt: Option<&HashMap<VehicleNumber, VehicleInfo>>, company: &str, rider_username: &str, timestamp: DateTime<Local>, rides_spec: &str) -> Result<RideInfo, IncrementBySpecError> {
     let spec_no_spaces = rides_spec.replace(" ", "");
     let caps = match BIMRIDE_RE.captures(&spec_no_spaces) {
         Some(c) => c,
@@ -1000,7 +1003,7 @@ pub async fn increment_rides_by_spec(ride_conn: &mut tokio_postgres::Client, bim
     let vehicle_num_strs: Vec<&str> = vehicles_str.split("+").collect();
     let mut vehicle_nums = Vec::new();
     for &vehicle_num_str in &vehicle_num_strs {
-        let vehicle_num: u32 = match vehicle_num_str.parse() {
+        let vehicle_num: VehicleNumber = match vehicle_num_str.parse() {
             Ok(vn) => vn,
             Err(e) => return Err(IncrementBySpecError::VehicleNumberParseFailure(vehicle_num_str.to_owned(), e)),
         };
@@ -1017,7 +1020,7 @@ pub async fn increment_rides_by_spec(ride_conn: &mut tokio_postgres::Client, bim
     }
 
     // also count vehicles ridden in a fixed coupling with the given vehicle
-    let mut all_vehicle_nums: Vec<(u32, bool)> = Vec::new();
+    let mut all_vehicle_nums: Vec<(VehicleNumber, bool)> = Vec::new();
     for &vehicle_num in &vehicle_nums {
         let mut added_fixed_coupling = false;
         if let Some(bim_database) = bim_database_opt {

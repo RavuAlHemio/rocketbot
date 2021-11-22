@@ -3,11 +3,13 @@ use std::fs::File;
 
 use form_urlencoded;
 use indexmap::IndexSet;
-use rocketbot_plugin_bim::VehicleInfo;
+use regex::Regex;
+use rocketbot_plugin_bim::{VehicleInfo, VehicleNumber};
 use sxd_document;
 use sxd_document::dom::Element;
 use sxd_xpath::{self, XPath};
 
+use crate::{MatcherTransformerConfig, PageConfig};
 use crate::wiki_parsing::WikiParser;
 
 
@@ -46,64 +48,121 @@ fn compile_xpath(factory: &sxd_xpath::Factory, xpath_str: &str) -> XPath {
 }
 
 
-pub(crate) fn row_data_to_trams(type_code: &str, row_data: Vec<(String, String)>) -> Vec<VehicleInfo> {
-    let mut vehicles = Vec::new();
-    let mut vehicle = VehicleInfo::new(0, type_code.to_owned());
-    let type_code_parts: Vec<&str> = type_code.split("/").collect();
+fn value_match(matcher: &MatcherTransformerConfig, key: &str, value: &str) -> Option<String> {
+    if !matcher.column_name_regex.is_match(key) {
+        return None;
+    }
 
-    let mut numbers_types: Vec<(u32, &str)> = Vec::new();
-    let mut fixed_coupling = false;
+    let mut result = value.to_owned();
+    for replacer in &matcher.value_replacements {
+        result = replacer.subject_regex
+            .replace_all(&result, &replacer.replacement)
+            .into_owned();
+    }
+    Some(result)
+}
+
+
+fn parse_vehicle_numbers(text_value: &str, number_separator_regex: &Option<Regex>) -> Vec<VehicleNumber> {
+    let mut nums = Vec::new();
+    if let Some(nsr) = number_separator_regex {
+        for piece in nsr.split(text_value) {
+            if let Ok(vn) = piece.parse() {
+                nums.push(vn);
+            }
+            // skip invalid values
+        }
+    } else {
+        if let Ok(vn) = text_value.parse() {
+            nums.push(vn);
+        }
+        // skip the value if it is invalid
+    }
+    nums
+}
+
+
+pub(crate) fn row_data_to_trams(page_config: &PageConfig, row_data: Vec<(String, String)>) -> Vec<VehicleInfo> {
+    let mut vehicles = Vec::new();
+    let mut vehicle = VehicleInfo::new(0, page_config.type_code.clone());
+
+    let mut numbers_types: Vec<(VehicleNumber, String)> = Vec::new();
     for (key, val) in &row_data {
         if val.len() == 0 {
             continue;
         }
 
-        if key == "Nummer" {
-            for (number_index, number_str) in val.split("+").enumerate() {
-                if let Ok(number) = number_str.parse() {
-                    numbers_types.push((number, type_code));
-                }
-                if number_index > 0 {
-                    // fixed coupling!
-                    fixed_coupling = true;
-                }
-            }
-        } else if key == "Motorwagen" || key == "Steuerwagen" {
-            // special case for fixed-composition V/v (and probably X/x) trains
-            // V is the one with an engine, v is the one with the driver's cabin
-            let this_type_code = if key == "Motorwagen" { type_code_parts[0] } else { type_code_parts[1] };
-            if let Ok(number) = val.parse() {
-                numbers_types.push((number, this_type_code));
-            }
+        let mut is_matched = false;
 
-            // also, this creates a fixed coupling
-            fixed_coupling = true;
-        } else if key == "Instandnahme" || key == "Inbetriebnahme" || key == "Genehmigung" || key == "Erstzulassung" || key == "Ersteinsatz" {
-            vehicle.in_service_since = Some(val.clone());
-        } else if key == "Ausgemustert" || key == "Ausmusterung" {
-            vehicle.out_of_service_since = Some(val.clone());
-        } else if key == "Firma" {
-            vehicle.manufacturer = Some(val.clone());
-        } else {
+        for number_matcher in &page_config.type_specific_number_name_matchers {
+            if let Some(number_text) = value_match(&number_matcher.matcher, &key, &val) {
+                is_matched = true;
+                let vehicle_numbers = parse_vehicle_numbers(&number_text, &page_config.number_separator_regex);
+                for vehicle_number in vehicle_numbers {
+                    numbers_types.push((vehicle_number, number_matcher.type_code.clone()));
+                }
+                break;
+            }
+        }
+
+        if !is_matched {
+            if let Some(nm) = &page_config.number_matcher {
+                if let Some(number_text) = value_match(&nm, &key, &val) {
+                    is_matched = true;
+                    let vehicle_numbers = parse_vehicle_numbers(&number_text, &page_config.number_separator_regex);
+                    for vehicle_number in vehicle_numbers {
+                        numbers_types.push((vehicle_number, page_config.type_code.clone()));
+                    }
+                }
+            }
+        }
+
+        if !is_matched {
+            if let Some(issm) = &page_config.in_service_since_matcher {
+                if let Some(iss) = value_match(&issm, &key, &val) {
+                    is_matched = true;
+                    vehicle.in_service_since = Some(iss);
+                }
+            }
+        }
+
+        if !is_matched {
+            if let Some(oossm) = &page_config.out_of_service_since_matcher {
+                if let Some(ooss) = value_match(&oossm, &key, &val) {
+                    is_matched = true;
+                    vehicle.out_of_service_since = Some(ooss);
+                }
+            }
+        }
+
+        if !is_matched {
+            if let Some(mm) = &page_config.manufacturer_matcher {
+                if let Some(m) = value_match(&mm, &key, &val) {
+                    is_matched = true;
+                    vehicle.manufacturer = Some(m);
+                }
+            }
+        }
+
+        if !is_matched {
             vehicle.other_data.insert(key.clone(), val.clone());
         }
     }
 
-    let all_numbers: IndexSet<u32> = numbers_types
-        .iter()
-        .map(|(num, _tc)| *num)
-        .collect();
+    let fixed_coupling_partners: IndexSet<VehicleNumber> = if page_config.fixed_couplings {
+        numbers_types
+            .iter()
+            .map(|(num, _tc)| *num)
+            .collect()
+    } else {
+        IndexSet::new()
+    };
 
-    for &(vehicle_number, vehicle_type_code) in &numbers_types {
-        vehicle.number = vehicle_number;
-        vehicle.type_code = vehicle_type_code.to_owned();
+    for (vehicle_number, vehicle_type_code) in &numbers_types {
+        vehicle.number = *vehicle_number;
+        vehicle.type_code = vehicle_type_code.clone();
 
-        vehicle.fixed_coupling = if fixed_coupling {
-            // add related vehicles
-            all_numbers.clone()
-        } else {
-            IndexSet::new()
-        };
+        vehicle.fixed_coupling = fixed_coupling_partners.clone();
 
         vehicles.push(vehicle.clone());
     }
@@ -112,8 +171,8 @@ pub(crate) fn row_data_to_trams(type_code: &str, row_data: Vec<(String, String)>
 }
 
 
-pub(crate) fn process_table<F>(vehicles: &mut Vec<VehicleInfo>, table: Element, type_code: &str, mut row_data_to_vehicles: F)
-    where F: FnMut(&str, Vec<(String, String)>) -> Vec<VehicleInfo>
+pub(crate) fn process_table<F>(vehicles: &mut Vec<VehicleInfo>, table: Element, page_config: &PageConfig, mut row_data_to_vehicles: F)
+    where F: FnMut(&PageConfig, Vec<(String, String)>) -> Vec<VehicleInfo>
 {
     let xpath_factory = sxd_xpath::Factory::new();
     let table_head_xpath = compile_xpath(&xpath_factory, ".//th");
@@ -149,21 +208,19 @@ pub(crate) fn process_table<F>(vehicles: &mut Vec<VehicleInfo>, table: Element, 
                 }
             }
 
-            let mut these_vehicles = row_data_to_vehicles(type_code, row_data);
+            let mut these_vehicles = row_data_to_vehicles(&page_config, row_data);
             vehicles.append(&mut these_vehicles);
         }
     }
 }
 
 
-pub(crate) async fn process_page<P, S, F, G>(page_url_pattern: &str, page_title: &str, parser: &mut WikiParser, strip_prefixes: &[P], strip_suffixes: &[S], mut process_table: F, row_data_to_vehicles: G) -> Vec<VehicleInfo>
+pub(crate) async fn process_page<F, G>(page_url_pattern: &str, page_config: &PageConfig, parser: &mut WikiParser, mut process_table: F, row_data_to_vehicles: G) -> Vec<VehicleInfo>
     where
-        P : AsRef<str>,
-        S : AsRef<str>,
-        F : FnMut(&mut Vec<VehicleInfo>, Element, &str, G),
-        G : FnMut(&str, Vec<(String, String)>) -> Vec<VehicleInfo> + Copy,
+        F : FnMut(&mut Vec<VehicleInfo>, Element, &PageConfig, G),
+        G : FnMut(&PageConfig, Vec<(String, String)>) -> Vec<VehicleInfo> + Copy,
 {
-    let page_json = obtain_content(page_url_pattern, page_title).await;
+    let page_json = obtain_content(page_url_pattern, &page_config.title).await;
 
     // deserialize
     let page: serde_json::Value = serde_json::from_str(&page_json)
@@ -176,23 +233,6 @@ pub(crate) async fn process_page<P, S, F, G>(page_url_pattern: &str, page_title:
         .nth(0).expect("page dict empty");
     let actual_title = page_dict["title"].as_str().expect("page title not a string");
     let body_wikitext = page_dict["revisions"][0]["*"].as_str().expect("page body not a string");
-
-    let type_code = {
-        let mut tc = actual_title;
-        for prefix in strip_prefixes {
-            if let Some(no_prefix) = tc.strip_prefix(prefix.as_ref()) {
-                tc = no_prefix;
-                break;
-            }
-        }
-        for suffix in strip_suffixes {
-            if let Some(no_suffix) = tc.strip_suffix(suffix.as_ref()) {
-                tc = no_suffix;
-                break;
-            }
-        }
-        tc
-    };
 
     // parse wikitext
     let parsed = parser.parse_article(actual_title, body_wikitext)
@@ -216,7 +256,7 @@ pub(crate) async fn process_page<P, S, F, G>(page_url_pattern: &str, page_title:
     if let sxd_xpath::Value::Nodeset(table_nodes) = tables {
         for table_node in table_nodes {
             let table_elem = table_node.element().expect("table node is not an element");
-            process_table(&mut vehicles, table_elem, type_code, row_data_to_vehicles);
+            process_table(&mut vehicles, table_elem, &page_config, row_data_to_vehicles);
         }
     }
 
