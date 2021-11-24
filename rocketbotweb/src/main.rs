@@ -363,8 +363,8 @@ async fn handle_plaintext_aliases_for_nick(request: &Request<Body>) -> Result<Re
     let query_pairs = get_query_pairs(request);
 
     let nick_opt = query_pairs.get("nick");
-    let nick = match nick_opt {
-        Some(n) => n.clone().into_owned(),
+    let nick_lowercase = match nick_opt {
+        Some(n) => n.to_lowercase(),
         None => {
             return Response::builder()
                 .status(400)
@@ -383,8 +383,8 @@ async fn handle_plaintext_aliases_for_nick(request: &Request<Body>) -> Result<Re
         None => return return_500(),
     };
 
-    let mut base_to_aliases: HashMap<String, BTreeSet<String>> = HashMap::new();
-    let mut alias_to_base: HashMap<String, String> = HashMap::new();
+    let mut lower_base_to_aliases: HashMap<String, BTreeSet<String>> = HashMap::new();
+    let mut lower_alias_to_base: HashMap<String, String> = HashMap::new();
 
     if let Some(plugins) = bot_config["plugins"].as_array() {
         for plugin in plugins {
@@ -392,8 +392,8 @@ async fn handle_plaintext_aliases_for_nick(request: &Request<Body>) -> Result<Re
                 if let Some(latu) = plugin["config"]["lowercase_alias_to_username"].as_object() {
                     for (alias, base_nick_val) in latu {
                         if let Some(base_nick) = base_nick_val.as_str() {
-                            alias_to_base.insert(alias.clone(), base_nick.to_owned());
-                            base_to_aliases.entry(base_nick.to_owned())
+                            lower_alias_to_base.insert(alias.to_lowercase(), base_nick.to_owned());
+                            lower_base_to_aliases.entry(base_nick.to_lowercase())
                                 .or_insert_with(|| BTreeSet::new())
                                 .insert(alias.clone());
                         }
@@ -403,8 +403,9 @@ async fn handle_plaintext_aliases_for_nick(request: &Request<Body>) -> Result<Re
         }
     }
 
-    let base = alias_to_base.get(&nick).unwrap_or(&nick);
-    let body = match base_to_aliases.get(base) {
+    let base = lower_alias_to_base.get(&nick_lowercase).unwrap_or(&nick_lowercase);
+    let base_lowercase = base.to_lowercase();
+    let body = match lower_base_to_aliases.get(&base_lowercase) {
         Some(aliases) => {
             let mut lines = Vec::with_capacity(aliases.len() + 1);
             lines.push(base.clone());
