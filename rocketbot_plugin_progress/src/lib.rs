@@ -1,3 +1,4 @@
+use std::fmt::Write;
 use std::sync::Weak;
 
 use async_trait::async_trait;
@@ -153,25 +154,38 @@ fn regex_replacement_func(
         .as_str()
         .parse().expect("failed to parse number");
 
-    let start_str = caps
+    let start_chars: Vec<char> = caps
         .name("start")
         .map(|s| s.as_str())
-        .unwrap_or(default_start_bar);
-    let end_str = caps
+        .unwrap_or(default_start_bar)
+        .chars()
+        .collect();
+    let end_chars: Vec<char> = caps
         .name("end")
         .map(|s| s.as_str())
-        .unwrap_or(default_end_bar);
+        .unwrap_or(default_end_bar)
+        .chars()
+        .collect();
+
+    fn s2v(s: &str) -> Vec<char> {
+        s.chars().collect()
+    }
+
+    let foreground_chars = s2v(foreground_str);
+    let background_chars = s2v(background_str);
+    let start_box_chars = s2v(start_box);
+    let end_box_chars = s2v(end_box);
 
     let rendered_bar = progress_replace(
         bar_length,
         has_minus,
         number,
-        start_str,
-        end_str,
-        foreground_str,
-        background_str,
-        start_box,
-        end_box,
+        &start_chars,
+        &end_chars,
+        &foreground_chars,
+        &background_chars,
+        &start_box_chars,
+        &end_box_chars,
     );
     format!("`{}`", rendered_bar)
 }
@@ -180,12 +194,12 @@ fn progress_replace(
     bar_length: usize,
     has_minus: bool,
     number: usize,
-    start_str: &str,
-    end_str: &str,
-    foreground_str: &str,
-    background_str: &str,
-    start_box: &str,
-    end_box: &str,
+    start_str: &[char],
+    end_str: &[char],
+    foreground_str: &[char],
+    background_str: &[char],
+    start_box: &[char],
+    end_box: &[char],
 ) -> String {
     let full_foreground = repeat_string(foreground_str, 2*bar_length);
     let full_background = repeat_string(background_str, bar_length);
@@ -194,51 +208,60 @@ fn progress_replace(
     let segment_count = number * bar_length / 100;
 
     // assemble the segments
-    let mut segs = String::new();
+    let mut segs = Vec::new();
     if segment_count < start_str.len() + end_str.len() {
-        segs.push_str(&full_foreground[0..segment_count]);
+        segs.extend_from_slice(&full_foreground[0..segment_count]);
     } else {
-        segs.push_str(start_str);
-        segs.push_str(&full_foreground[0..segment_count-(start_str.len()+end_str.len())]);
-        segs.push_str(end_str);
+        segs.extend_from_slice(start_str);
+        segs.extend_from_slice(&full_foreground[0..segment_count-(start_str.len()+end_str.len())]);
+        segs.extend_from_slice(end_str);
     }
 
     if has_minus {
         // segments come before the box
-        format!(
-            "{}{}{}{} -{}%",
-            segs, start_box, full_background, end_box, number,
-        )
+        let mut ret = String::new();
+        ret.extend(segs);
+        ret.extend(start_box);
+        ret.extend(full_background);
+        ret.extend(end_box);
+        write!(&mut ret, " -{}%", number).expect("write failed");
+        ret
     } else {
         // segments are inside and sometimes outside the box
-        let seg_char_count = segs.chars().count();
-        let (segs_inside_box, segs_outside_box, bg_inside_box): (String, String, String) = if seg_char_count <= bar_length {
+        let seg_char_count = segs.len();
+        let (segs_inside_box, segs_outside_box, bg_inside_box): (Vec<char>, Vec<char>, Vec<char>) = if seg_char_count <= bar_length {
             // bar fits inside box
             (
-                segs.chars().collect(),
-                String::new(),
-                full_background.chars().skip(seg_char_count).collect(),
+                segs,
+                Vec::new(),
+                full_background.iter().skip(seg_char_count).map(|c| *c).collect(),
             )
         } else {
             // bar juts outside of box
             (
-                segs.chars().take(bar_length).collect(),
-                segs.chars().skip(bar_length).collect(),
-                String::new(),
+                segs.iter().take(bar_length).map(|c| *c).collect(),
+                segs.iter().skip(bar_length).map(|c| *c).collect(),
+                Vec::new(),
             )
         };
 
-        format!(
-            "{}{}{}{}{} {}%",
-            start_box, segs_inside_box, bg_inside_box, end_box, segs_outside_box, number,
-        )
+        let mut ret = String::new();
+        ret.extend(start_box);
+        ret.extend(segs_inside_box);
+        ret.extend(bg_inside_box);
+        ret.extend(end_box);
+        ret.extend(segs_outside_box);
+        write!(&mut ret, " {}%", number).expect("write failed");
+        ret
     }
 }
 
-fn repeat_string(string: &str, length: usize) -> String {
-    let mut ret = String::new();
+fn repeat_string(string: &[char], length: usize) -> Vec<char> {
+    let mut ret = Vec::new();
     while ret.len() < length {
-        ret.push_str(string);
+        for &c in string {
+            ret.push(c);
+        }
     }
     ret.truncate(length);
     ret
@@ -252,12 +275,12 @@ mod tests {
             20,
             has_minus,
             number,
-            "",
-            "",
-            "=",
-            " ",
-            "[",
-            "]",
+            &[],
+            &[],
+            &['='],
+            &[' '],
+            &['['],
+            &[']'],
         );
         assert_eq!(expected, obtained);
     }
@@ -267,12 +290,27 @@ mod tests {
             50,
             has_minus,
             number,
-            "Y",
-            "OLO",
-            "rofl",
-            "lol",
-            ">>>",
-            "<<<",
+            &['Y'],
+            &['O', 'L', 'O'],
+            &['r', 'o', 'f', 'l'],
+            &['l', 'o', 'l'],
+            &['>', '>', '>'],
+            &['<', '<', '<'],
+        );
+        assert_eq!(expected, obtained);
+    }
+
+    fn run_straightwave_test(expected: &str, has_minus: bool, number: usize) {
+        let obtained = super::progress_replace(
+            20,
+            has_minus,
+            number,
+            &[],
+            &[],
+            &['=', '\u{2248}'],
+            &[' '],
+            &['['],
+            &[']'],
         );
         assert_eq!(expected, obtained);
     }
@@ -491,6 +529,93 @@ mod tests {
         );
         run_yolo_test(
             "YroflroflroflroflroflroflroflroflroflroflroflroflroflroflroflroflroflroflroflroflroflroflroflroflOLO>>>lollollollollollollollollollollollollollollollollo<<< -200%",
+            true,
+            200,
+        );
+    }
+
+    #[test]
+    fn test_straightwave_within() {
+        run_straightwave_test(
+            "[                    ] 0%",
+            false,
+            0,
+        );
+        run_straightwave_test(
+            "[=                   ] 5%",
+            false,
+            5,
+        );
+        run_straightwave_test(
+            "[=\u{2248}=\u{2248}                ] 24%",
+            false,
+            24,
+        );
+        run_straightwave_test(
+            "[=\u{2248}=\u{2248}=               ] 25%",
+            false,
+            25,
+        );
+        run_straightwave_test(
+            "[=\u{2248}=\u{2248}=\u{2248}=\u{2248}=\u{2248}=\u{2248}=\u{2248}=\u{2248}=\u{2248}= ] 99%",
+            false,
+            99,
+        );
+        run_straightwave_test(
+            "[=\u{2248}=\u{2248}=\u{2248}=\u{2248}=\u{2248}=\u{2248}=\u{2248}=\u{2248}=\u{2248}=\u{2248}] 100%",
+            false,
+            100,
+        );
+    }
+
+    #[test]
+    fn test_straightwave_overshoot() {
+        run_straightwave_test(
+            "[=\u{2248}=\u{2248}=\u{2248}=\u{2248}=\u{2248}=\u{2248}=\u{2248}=\u{2248}=\u{2248}=\u{2248}] 104%",
+            false,
+            104,
+        );
+        run_straightwave_test(
+            "[=\u{2248}=\u{2248}=\u{2248}=\u{2248}=\u{2248}=\u{2248}=\u{2248}=\u{2248}=\u{2248}=\u{2248}]= 105%",
+            false,
+            105,
+        );
+        run_straightwave_test(
+            "[=\u{2248}=\u{2248}=\u{2248}=\u{2248}=\u{2248}=\u{2248}=\u{2248}=\u{2248}=\u{2248}=\u{2248}]=\u{2248}=\u{2248}=\u{2248}=\u{2248}=\u{2248} 150%",
+            false,
+            150,
+        );
+        run_straightwave_test(
+            "[=\u{2248}=\u{2248}=\u{2248}=\u{2248}=\u{2248}=\u{2248}=\u{2248}=\u{2248}=\u{2248}=\u{2248}]=\u{2248}=\u{2248}=\u{2248}=\u{2248}=\u{2248}=\u{2248}=\u{2248}=\u{2248}=\u{2248}=\u{2248} 200%",
+            false,
+            200,
+        );
+    }
+
+    #[test]
+    fn test_straightwave_negative() {
+        run_straightwave_test(
+            "=[                    ] -5%",
+            true,
+            5,
+        );
+        run_straightwave_test(
+            "=\u{2248}=\u{2248}=[                    ] -25%",
+            true,
+            25,
+        );
+        run_straightwave_test(
+            "=\u{2248}=\u{2248}=\u{2248}=\u{2248}=\u{2248}[                    ] -50%",
+            true,
+            50,
+        );
+        run_straightwave_test(
+            "=\u{2248}=\u{2248}=\u{2248}=\u{2248}=\u{2248}=\u{2248}=\u{2248}=\u{2248}=\u{2248}=\u{2248}[                    ] -100%",
+            true,
+            100,
+        );
+        run_straightwave_test(
+            "=\u{2248}=\u{2248}=\u{2248}=\u{2248}=\u{2248}=\u{2248}=\u{2248}=\u{2248}=\u{2248}=\u{2248}=\u{2248}=\u{2248}=\u{2248}=\u{2248}=\u{2248}=\u{2248}=\u{2248}=\u{2248}=\u{2248}=\u{2248}[                    ] -200%",
             true,
             200,
         );
