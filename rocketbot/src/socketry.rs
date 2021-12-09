@@ -14,7 +14,7 @@ use flate2::read::GzDecoder;
 use futures_util::{SinkExt, StreamExt};
 use hyper::StatusCode;
 use hyper::client::HttpConnector;
-use hyper_rustls::HttpsConnector;
+use hyper_rustls::{HttpsConnector, HttpsConnectorBuilder};
 use log::{debug, error, warn};
 use rand::{Rng, SeedableRng};
 use rand::distributions::{Distribution, Uniform};
@@ -854,8 +854,14 @@ pub(crate) async fn connect() -> Arc<ServerConnection> {
         "SharedConnectionState::private_message_commands",
         HashMap::new(),
     );
+    let https_connector = HttpsConnectorBuilder::new()
+        .with_native_roots()
+        .https_or_http()
+        .enable_http1()
+        .enable_http2()
+        .build();
     let http_client = hyper::Client::builder()
-        .build(HttpsConnector::with_native_roots());
+        .build(https_connector);
     let my_user_id: RwLock<Option<String>> = RwLock::new(
         "SharedConnectionState::my_user_id",
         None,
