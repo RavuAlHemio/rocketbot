@@ -249,7 +249,7 @@ impl WienerLinienPlugin {
             let mut ds = format!("Departures at *{}*", station.name);
             for line in &departures {
                 write!(&mut ds, "\n{} \u{2192} {}", line.line_name, line.target_station).unwrap();
-                for (i, departure) in line.departures.iter().enumerate() {
+                for departure in &line.departures {
                     if departure.accessible {
                         // italic
                         write!(&mut ds, " | _{}_", departure.countdown).unwrap();
