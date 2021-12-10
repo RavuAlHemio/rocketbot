@@ -101,6 +101,8 @@ pub(crate) async fn load_plugins(iface: Weak<dyn RocketBotInterface>) -> Vec<Box
                 Box::new(rocketbot_plugin_vitals::VitalsPlugin::new(iface_weak, inner_config).await)
             } else if plugin_config.name == "weather" {
                 Box::new(rocketbot_plugin_weather::WeatherPlugin::new(iface_weak, inner_config).await)
+            } else if plugin_config.name == "wienerlinien" {
+                Box::new(rocketbot_plugin_wienerlinien::WienerLinienPlugin::new(iface_weak, inner_config).await)
             } else {
                 panic!("unknown plugin {}", plugin_config.name);
             };
