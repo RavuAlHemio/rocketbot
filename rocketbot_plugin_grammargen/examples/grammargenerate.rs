@@ -3,14 +3,14 @@ use std::fs::File;
 use std::io::Read;
 use std::path::PathBuf;
 
-use clap::Clap;
+use clap::Parser;
 use rand::{Rng, SeedableRng};
 use rand::rngs::StdRng;
 use rocketbot_plugin_grammargen::grammar::{GeneratorState, Metacommand};
 use rocketbot_plugin_grammargen::parsing::parse_grammar;
 
 
-#[derive(Clap)]
+#[derive(Parser)]
 struct Opts {
     #[clap(short = 'n', long = "no-verify")]
     pub no_verify: bool,
@@ -29,7 +29,7 @@ impl Opts {
 
 
 fn main() {
-    let opts: Opts = Clap::parse();
+    let opts: Opts = Parser::parse();
     /*
     let opts: Opts = Opts {
         no_verify: false,
