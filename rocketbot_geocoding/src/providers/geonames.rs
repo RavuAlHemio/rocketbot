@@ -275,6 +275,22 @@ impl GeocodingProvider for GeonamesGeocodingProvider {
         serde_json::to_value(search_response)
             .map_err(|e| GeocodingError::JsonSerialization(e))
     }
+
+    async fn supports_timezones(&self) -> bool {
+        true
+    }
+
+    async fn reverse_geocode_timezone(&self, coordinates: GeoCoordinates) -> Result<String, GeocodingError> {
+        let mut url = Url::parse("http://api.geonames.org/timezoneJSON")
+            .expect("parsing URL failed");
+        url.query_pairs_mut()
+            .append_pair("lat", &coordinates.latitude_deg.to_string())
+            .append_pair("lng", &coordinates.longitude_deg.to_string())
+            .append_pair("username", &self.username);
+
+        let timezone_response: GeoTimeZoneResponse = self.get_and_populate_json(url).await?;
+        Ok(timezone_response.timezone_id)
+    }
 }
 
 mod serde_datetime {

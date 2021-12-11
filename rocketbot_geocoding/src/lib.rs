@@ -95,6 +95,17 @@ pub trait GeocodingProvider : Send + Sync {
     /// Attempts to convert a place's geographical coordinates to its name. Returns the coordinates
     /// as well as additional information in a provider-specific format.
     async fn reverse_geocode_advanced(&self, coordinates: GeoCoordinates) -> Result<serde_json::Value, GeocodingError>;
+
+    /// Returns whether this geocoding provider supports geocoding timezones.
+    async fn supports_timezones(&self) -> bool {
+        false
+    }
+
+    /// Attempts to convert a place name to its timezone. Returns the IANA timezone ID. If the
+    /// provider does not support timezones, returns `Err(GeocodingError::UnsupportedFeature)`.
+    async fn reverse_geocode_timezone(&self, _coordinates: GeoCoordinates) -> Result<String, GeocodingError> {
+        Err(GeocodingError::UnsupportedFeature)
+    }
 }
 
 
@@ -114,6 +125,7 @@ pub enum GeocodingError {
     CountryCodesNotList,
     ConstructingUrl(url::ParseError),
     MissingAddressInfo,
+    UnsupportedFeature,
 }
 impl fmt::Display for GeocodingError {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
@@ -146,6 +158,8 @@ impl fmt::Display for GeocodingError {
                 => write!(f, "error constructing URL: {}", e),
             GeocodingError::MissingAddressInfo
                 => write!(f, "address information is missing"),
+            GeocodingError::UnsupportedFeature
+                => write!(f, "feature not supported by this geocoding provider"),
         }
     }
 }
@@ -319,5 +333,25 @@ impl Geocoder {
             results.push(provider.reverse_geocode_advanced(location).await);
         }
         results
+    }
+
+    pub async fn supports_timezones(&self) -> bool {
+        for provider in &self.providers {
+            if provider.supports_timezones().await {
+                return true;
+            }
+        }
+        false
+    }
+
+    pub async fn reverse_geocode_timezone(&self, location: GeoCoordinates) -> Result<String, Vec<GeocodingError>> {
+        let mut errors = Vec::new();
+        for provider in &self.providers {
+            match provider.reverse_geocode_timezone(location).await {
+                Ok(res) => return Ok(res),
+                Err(e) => errors.push(e),
+            }
+        }
+        Err(errors)
     }
 }
