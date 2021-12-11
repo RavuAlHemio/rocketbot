@@ -50,6 +50,7 @@ rocketbot_plugin_sockpuppet = { path = "../rocketbot_plugin_sockpuppet" }
 rocketbot_plugin_text_commands = { path = "../rocketbot_plugin_text_commands" }
 rocketbot_plugin_topic_timer = { path = "../rocketbot_plugin_topic_timer" }
 rocketbot_plugin_thanks = { path = "../rocketbot_plugin_thanks" }
+rocketbot_plugin_time = { path = "../rocketbot_plugin_time" }
 rocketbot_plugin_vaccine = { path = "../rocketbot_plugin_vaccine" }
 rocketbot_plugin_version = { path = "../rocketbot_plugin_version" }
 rocketbot_plugin_vitals = { path = "../rocketbot_plugin_vitals" }

@@ -38,6 +38,7 @@ members = [
     "rocketbot_plugin_sockpuppet",
     "rocketbot_plugin_text_commands",
     "rocketbot_plugin_thanks",
+    "rocketbot_plugin_time",
     "rocketbot_plugin_topic_timer",
     "rocketbot_plugin_vaccine",
     "rocketbot_plugin_version",
