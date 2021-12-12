@@ -7,9 +7,10 @@ use log::debug;
 use rand::{Rng, SeedableRng};
 use rand::rngs::StdRng;
 use regex::Regex;
-use rocketbot_interface::{JsonValueExtensions, send_channel_message};
+use rocketbot_interface::{JsonValueExtensions, send_channel_message, send_private_message};
+use rocketbot_interface::commands::{CommandDefinitionBuilder, CommandInstance};
 use rocketbot_interface::interfaces::{RocketBotInterface, RocketBotPlugin};
-use rocketbot_interface::model::ChannelMessage;
+use rocketbot_interface::model::{ChannelMessage, PrivateMessage};
 use rocketbot_interface::sync::Mutex;
 use rocketbot_regex_replace::ReplacerRegex;
 use serde_json;
@@ -64,9 +65,43 @@ pub struct AllographPlugin {
     cooldown_increase_per_hit: usize,
     inner_state: Mutex<InnerState>,
 }
+impl AllographPlugin {
+    async fn private_command_allocool(&self, private_message: &PrivateMessage, command: &CommandInstance) {
+        let interface = match self.interface.upgrade() {
+            None => return,
+            Some(i) => i,
+        };
+
+        let state_guard = self.inner_state
+            .lock().await;
+
+        let cooldowns = match state_guard.cooldowns_per_channel.get(&command.rest) {
+            Some(cds) => cds,
+            None => {
+                send_private_message!(
+                    interface,
+                    &private_message.conversation.id,
+                    "No cooldowns for this channel.",
+                ).await;
+                return;
+            },
+        };
+
+        send_private_message!(
+            interface,
+            &private_message.conversation.id,
+            &format!("Cooldowns for this channel: {:?}", cooldowns),
+        ).await;
+    }
+}
 #[async_trait]
 impl RocketBotPlugin for AllographPlugin {
     async fn new(interface: Weak<dyn RocketBotInterface>, config: serde_json::Value) -> Self {
+        let my_interface = match interface.upgrade() {
+            None => panic!("interface is gone"),
+            Some(i) => i,
+        };
+
         let probability_percent = config["probability_percent"].as_u8()
             .expect("probability_percent missing or not representable as u8");
         let replacer_regexes: Vec<LocalReplacerRegex> = config["replacements"].members()
@@ -108,6 +143,16 @@ impl RocketBotPlugin for AllographPlugin {
         } else {
             0
         };
+
+        my_interface.register_private_message_command(
+            &CommandDefinitionBuilder::new(
+                "allocool".into(),
+                "allograph".to_owned(),
+                "{cpfx}allocool CHANNEL".to_owned(),
+                "Outputs current Allograph cooldowns in the given channel.".to_owned(),
+            )
+                .build()
+        ).await;
 
         let inner_state = Mutex::new(
             "AllographPlugin::inner_state",
@@ -221,6 +266,20 @@ impl RocketBotPlugin for AllographPlugin {
             ).await;
         } else {
             debug!("{} >= {}; not posting {:?}", main_prob, self.probability_percent, changing_body);
+        }
+    }
+
+    async fn private_command(&self, private_message: &PrivateMessage, command: &CommandInstance) {
+        if command.name == "allocool" {
+            self.private_command_allocool(private_message, command).await
+        }
+    }
+
+    async fn get_command_help(&self, command_name: &str) -> Option<String> {
+        if command_name == "allocool" {
+            Some(include_str!("../help/allocool.md").to_owned())
+        } else {
+            None
         }
     }
 }
