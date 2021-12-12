@@ -252,6 +252,7 @@ impl RocketBotPlugin for AllographPlugin {
         let behavior_flags = serde_json::Value::Object(interface.obtain_behavior_flags().await);
         if let Some(serious_mode_until) = behavior_flags["srs"][&channel_message.channel.id].as_i64() {
             if serious_mode_until > Local::now().timestamp() {
+                debug!("serious mode on; not posting {:?}", changing_body);
                 return;
             }
         }
