@@ -226,7 +226,7 @@ impl RocketBotPlugin for AllographPlugin {
                     } else {
                         self.cooldown_increase_per_hit
                     };
-                } else {
+                } else if channel_cooldowns[i] > 0 {
                     // cool it down
                     channel_cooldowns[i] -= 1;
                 }
