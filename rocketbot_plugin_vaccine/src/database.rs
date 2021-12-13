@@ -3,7 +3,7 @@ use std::fmt;
 use std::fs::File;
 use std::io::Read;
 
-use chrono::{DateTime, NaiveDate, Utc};
+use chrono::{DateTime, NaiveDate, TimeZone, Utc};
 use num_bigint::BigUint;
 use reqwest;
 
@@ -19,6 +19,7 @@ pub(crate) enum FetchingError {
     PopulationParsing(usize, String, num_bigint::ParseBigIntError),
     DoseNumberParsing(usize, String, std::num::ParseIntError),
     DoseCountParsing(usize, String, num_bigint::ParseBigIntError),
+    CertificateCountParsing(usize, String, num_bigint::ParseBigIntError),
 }
 impl fmt::Display for FetchingError {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
@@ -41,6 +42,8 @@ impl fmt::Display for FetchingError {
                 => write!(f, "entry {}: failed to parse dose number {:?}: {}", entry, s, e),
             FetchingError::DoseCountParsing(entry, s, e)
                 => write!(f, "entry {}: failed to parse dose count {:?}: {}", entry, s, e),
+            FetchingError::CertificateCountParsing(entry, s, e)
+                => write!(f, "entry {}: failed to parse certificate count {:?}: {}", entry, s, e),
         }
     }
 }
@@ -61,11 +64,33 @@ impl VaccinationStats {
 }
 
 
-#[derive(Debug)]
-pub(crate) struct VaccineDatabase {
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub(crate) struct VaccineCertificateDatabase {
     pub state_id_to_name: HashMap<u32, String>,
     pub lower_name_to_state_id: HashMap<String, u32>,
     pub state_id_to_pop: HashMap<u32, BigUint>,
+    pub state_id_and_date_to_cert_count: HashMap<(u32, NaiveDate), BigUint>,
+}
+impl VaccineCertificateDatabase {
+    pub fn new() -> Self {
+        let state_id_to_name = HashMap::new();
+        let lower_name_to_state_id = HashMap::new();
+        let state_id_to_pop = HashMap::new();
+        let state_id_and_date_to_cert_count = HashMap::new();
+        Self {
+            state_id_to_name,
+            lower_name_to_state_id,
+            state_id_to_pop,
+            state_id_and_date_to_cert_count,
+        }
+    }
+}
+
+
+#[derive(Debug)]
+pub(crate) struct VaccineDatabase {
+    pub cert_database: VaccineCertificateDatabase,
+    pub prev_cert_database: VaccineCertificateDatabase,
     pub state_id_and_date_to_fields: HashMap<(u32, NaiveDate), VaccinationStats>,
     pub corona_timestamp: DateTime<Utc>,
 }
@@ -116,18 +141,19 @@ impl VaccineDatabase {
         rows
     }
 
-    pub async fn new_from_urls(doses_timeline_url: &str, vax_certs_url: &str) -> Result<VaccineDatabase, FetchingError> {
-        let doses_timeline_string = Self::string_from_url(doses_timeline_url).await?;
-        let vax_certs_string = Self::string_from_url(vax_certs_url).await?;
+    fn parse_date(timestamp_str: &str) -> Result<NaiveDate, FetchingError> {
+        let timestamp_t_index = timestamp_str.find('T')
+            .ok_or_else(|| FetchingError::DateTimeSplit(timestamp_str.to_owned()))?;
+        let date_str = &timestamp_str[0..timestamp_t_index];
+        NaiveDate::parse_from_str(date_str, "%Y-%m-%d")
+            .map_err(|e| FetchingError::DateParsing(timestamp_str.to_owned(), e))
+    }
 
-        // parse as CSV
-        let doses_timeline_csv = Self::parse_csv(&doses_timeline_string);
+    async fn vax_certs_from_url(url: &str) -> Result<VaccineCertificateDatabase, FetchingError> {
+        let vax_certs_string = Self::string_from_url(url).await?;
         let vax_certs_csv = Self::parse_csv(&vax_certs_string);
 
-        let mut state_id_to_name = HashMap::new();
-        let mut lower_name_to_state_id = HashMap::new();
-        let mut state_id_to_pop = HashMap::new();
-        let mut state_id_and_date_to_fields = HashMap::new();
+        let mut vcdb = VaccineCertificateDatabase::new();
 
         // get the state names and populations from the certs file, as that only contains one day
         for (entry_num, entry) in vax_certs_csv.iter().enumerate() {
@@ -138,6 +164,10 @@ impl VaccineDatabase {
                 continue;
             }
 
+            let timestamp_str = entry.get("date")
+                .ok_or_else(|| FetchingError::MissingField(entry_num, "date".to_owned()))?;
+            let date = Self::parse_date(timestamp_str)?;
+
             let state_id_str = entry.get("state_id")
                 .ok_or_else(|| FetchingError::MissingField(entry_num, "state_id".to_owned()))?;
             let state_id: u32 = state_id_str
@@ -147,16 +177,64 @@ impl VaccineDatabase {
             let state_name = entry.get("state_name")
                 .ok_or_else(|| FetchingError::MissingField(entry_num, "state_name".to_owned()))?;
 
+            let cert_count_str = entry.get("valid_certificates")
+                .ok_or_else(|| FetchingError::MissingField(entry_num, "valid_certificates".to_owned()))?;
+            let cert_count: BigUint = cert_count_str
+                .parse()
+                .map_err(|e| FetchingError::CertificateCountParsing(entry_num, "valid_certificates".to_owned(), e))?;
+
             let pop_str = entry.get("population")
                 .ok_or_else(|| FetchingError::MissingField(entry_num, "population".to_owned()))?;
             let pop: BigUint = pop_str
                 .parse()
                 .map_err(|e| FetchingError::PopulationParsing(entry_num, "population".to_owned(), e))?;
 
-            state_id_to_name.insert(state_id, state_name.clone());
-            lower_name_to_state_id.insert(state_name.to_lowercase(), state_id);
-            state_id_to_pop.insert(state_id, pop);
+            vcdb.state_id_to_name.insert(state_id, state_name.clone());
+            vcdb.lower_name_to_state_id.insert(state_name.to_lowercase(), state_id);
+            vcdb.state_id_to_pop.insert(state_id, pop);
+            vcdb.state_id_and_date_to_cert_count.insert((state_id, date), cert_count);
         }
+
+        Ok(vcdb)
+    }
+
+    fn new() -> Self {
+        Self {
+            cert_database: VaccineCertificateDatabase::new(),
+            prev_cert_database: VaccineCertificateDatabase::new(),
+            state_id_and_date_to_fields: HashMap::new(),
+            corona_timestamp: Utc.timestamp(0, 0),
+        }
+    }
+
+    pub async fn new_from_urls(doses_timeline_url: &str, vax_certs_url: &str, prev_vax_certs_url_format: &str) -> Result<VaccineDatabase, FetchingError> {
+        // get state, population and vaccine cert stats
+        let vax_cert_stats = Self::vax_certs_from_url(vax_certs_url).await?;
+
+        // get vax cert stats date
+        let vcs_date_opt = vax_cert_stats.state_id_and_date_to_cert_count
+            .keys()
+            .map(|(_state_id, date)| *date)
+            .max();
+        let vcs_date = match vcs_date_opt {
+            Some(d) => d,
+            None => {
+                // no date found; return an empty database
+                return Ok(VaccineDatabase::new());
+            },
+        };
+
+        // get vax cert stats for the previous day (for deltas)
+        let prev_date = vcs_date.pred();
+        let prev_vax_certs_url = prev_vax_certs_url_format
+            .replace("{date}", &prev_date.format("%Y%m%d").to_string());
+        let prev_vax_cert_stats = Self::vax_certs_from_url(&prev_vax_certs_url).await?;
+
+        // obtain doses
+        let doses_timeline_string = Self::string_from_url(doses_timeline_url).await?;
+        let doses_timeline_csv = Self::parse_csv(&doses_timeline_string);
+
+        let mut state_id_and_date_to_fields = HashMap::new();
 
         // get the vaccine stats
         let mut cur_state_date = None;
@@ -164,11 +242,7 @@ impl VaccineDatabase {
         for (entry_num, entry) in doses_timeline_csv.iter().enumerate() {
             let timestamp_str = entry.get("date")
                 .ok_or_else(|| FetchingError::MissingField(entry_num, "date".to_owned()))?;
-            let timestamp_t_index = timestamp_str.find('T')
-                .ok_or_else(|| FetchingError::DateTimeSplit(timestamp_str.to_owned()))?;
-            let date_str = &timestamp_str[0..timestamp_t_index];
-            let date = NaiveDate::parse_from_str(date_str, "%Y-%m-%d")
-                .map_err(|e| FetchingError::DateParsing(timestamp_str.to_owned(), e))?;
+            let date = Self::parse_date(timestamp_str)?;
 
             let state_id_str = entry.get("state_id")
                 .ok_or_else(|| FetchingError::MissingField(entry_num, "state_id".to_owned()))?;
@@ -212,9 +286,8 @@ impl VaccineDatabase {
         let corona_timestamp = Utc::now();
 
         Ok(VaccineDatabase {
-            state_id_to_name,
-            lower_name_to_state_id,
-            state_id_to_pop,
+            cert_database: vax_cert_stats,
+            prev_cert_database: prev_vax_cert_stats,
             state_id_and_date_to_fields,
             corona_timestamp,
         })
