@@ -63,6 +63,7 @@ pub struct AllographPlugin {
     probability_percent: u8,
     replacer_regexes: Vec<LocalReplacerRegex>,
     cooldown_increase_per_hit: usize,
+    ignore_bot_messages: bool,
     inner_state: Mutex<InnerState>,
 }
 impl AllographPlugin {
@@ -143,6 +144,12 @@ impl RocketBotPlugin for AllographPlugin {
         } else {
             0
         };
+        let ignore_bot_messages = if config["ignore_bot_messages"].is_null() {
+            true
+        } else {
+            config["ignore_bot_messages"].as_bool()
+                .expect("ignore_bot_messages not representable as bool")
+        };
 
         my_interface.register_private_message_command(
             &CommandDefinitionBuilder::new(
@@ -167,6 +174,7 @@ impl RocketBotPlugin for AllographPlugin {
             probability_percent,
             replacer_regexes,
             cooldown_increase_per_hit,
+            ignore_bot_messages,
             inner_state,
         }
     }
@@ -180,6 +188,10 @@ impl RocketBotPlugin for AllographPlugin {
             None => return,
             Some(i) => i,
         };
+
+        if self.ignore_bot_messages && channel_message.message.is_by_bot {
+            return;
+        }
 
         let original_body = match &channel_message.message.raw {
             Some(s) => s,
