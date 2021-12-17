@@ -94,6 +94,7 @@ pub struct BimPlugin {
     default_company: String,
     manufacturer_mapping: HashMap<String, String>,
     ride_db_conn_string: String,
+    allow_fixed_coupling_combos: bool,
 }
 impl BimPlugin {
     fn load_bim_database(&self, company: &str) -> Option<HashMap<VehicleNumber, VehicleInfo>> {
@@ -327,6 +328,7 @@ impl BimPlugin {
             &channel_message.message.sender.username,
             channel_message.message.timestamp.with_timezone(&Local),
             &command.rest,
+            self.allow_fixed_coupling_combos,
         ).await;
         let mut last_ride_infos = match increment_res {
             Ok(lri) => lri,
@@ -766,6 +768,13 @@ impl RocketBotPlugin for BimPlugin {
             .as_str().expect("ride_db_conn_string is not a string")
             .to_owned();
 
+        let allow_fixed_coupling_combos = if config["allow_fixed_coupling_combos"].is_null() {
+            false
+        } else {
+            config["allow_fixed_coupling_combos"]
+                .as_bool().expect("allow_fixed_coupling_combos not a boolean")
+        };
+
         my_interface.register_channel_command(
             &CommandDefinitionBuilder::new(
                 "bim".to_owned(),
@@ -824,6 +833,7 @@ impl RocketBotPlugin for BimPlugin {
             default_company,
             manufacturer_mapping,
             ride_db_conn_string,
+            allow_fixed_coupling_combos,
         }
     }
 
@@ -984,7 +994,15 @@ impl fmt::Display for IncrementBySpecError {
 impl std::error::Error for IncrementBySpecError {
 }
 
-pub async fn increment_rides_by_spec(ride_conn: &mut tokio_postgres::Client, bim_database_opt: Option<&HashMap<VehicleNumber, VehicleInfo>>, company: &str, rider_username: &str, timestamp: DateTime<Local>, rides_spec: &str) -> Result<RideInfo, IncrementBySpecError> {
+pub async fn increment_rides_by_spec(
+    ride_conn: &mut tokio_postgres::Client,
+    bim_database_opt: Option<&HashMap<VehicleNumber, VehicleInfo>>,
+    company: &str,
+    rider_username: &str,
+    timestamp: DateTime<Local>,
+    rides_spec: &str,
+    allow_fixed_coupling_combos: bool,
+) -> Result<RideInfo, IncrementBySpecError> {
     let spec_no_spaces = rides_spec.replace(" ", "");
     let caps = match BIMRIDE_RE.captures(&spec_no_spaces) {
         Some(c) => c,
@@ -1001,12 +1019,14 @@ pub async fn increment_rides_by_spec(ride_conn: &mut tokio_postgres::Client, bim
             Ok(vn) => vn,
             Err(e) => return Err(IncrementBySpecError::VehicleNumberParseFailure(vehicle_num_str.to_owned(), e)),
         };
-        if let Some(bim_database) = bim_database_opt {
-            if let Some(veh) = bim_database.get(&vehicle_num) {
-                if veh.fixed_coupling.len() > 0 && vehicle_num_strs.len() > 1 {
-                    // this vehicle is in a fixed coupling but we have more than one vehicle
-                    // this is forbidden
-                    return Err(IncrementBySpecError::FixedCouplingCombo(vehicle_num));
+        if !allow_fixed_coupling_combos {
+            if let Some(bim_database) = bim_database_opt {
+                if let Some(veh) = bim_database.get(&vehicle_num) {
+                    if veh.fixed_coupling.len() > 0 && vehicle_num_strs.len() > 1 {
+                        // this vehicle is in a fixed coupling but we have more than one vehicle
+                        // this is forbidden
+                        return Err(IncrementBySpecError::FixedCouplingCombo(vehicle_num));
+                    }
                 }
             }
         }
