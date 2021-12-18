@@ -9,7 +9,7 @@ either = { version = "1.6" }
 log = { version = "0.4" }
 num-bigint = { version = "0.4", features = ["rand"] }
 num-traits = { version = "0.2" }
-once_cell = { version = "1.8" }
+once_cell = { version = "1.9" }
 pest = { version = "2.1" }
 pest_derive = { version = "2.1" }
 rand = { version = "0.8" }
@@ -18,5 +18,5 @@ rocketbot_interface = { path = "../rocketbot_interface" }
 serde_json = { version = "1.0" }
 
 [dev-dependencies]
-clap = { version = "3.0.0-rc.1", features = ["derive"] }
-tokio = { version = "1.7", features = ["macros", "rt-multi-thread"] }
+clap = { version = "3.0.0-rc.7", features = ["derive"] }
+tokio = { version = "1.15", features = ["macros", "rt-multi-thread"] }

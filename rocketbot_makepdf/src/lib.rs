@@ -6,13 +6,13 @@ use std::fmt;
 use std::io::Cursor;
 
 use printpdf::{
-    Cmyk, Color, Greyscale, Image, Mm, OP_PATH_CONST_4BEZIER, OP_PATH_CONST_CLOSE_SUBPATH,
-    OP_PATH_CONST_LINE_TO, OP_PATH_CONST_MOVE_TO, OP_PATH_PAINT_END, OP_PATH_PAINT_FILL_NZ,
-    OP_PATH_PAINT_FILL_STROKE_CLOSE_NZ, OP_PATH_PAINT_FILL_STROKE_NZ, OP_PATH_PAINT_STROKE,
-    OP_PATH_PAINT_STROKE_CLOSE, PdfDocument, PdfDocumentReference, Pt, Rgb,
+    Cmyk, Color, Greyscale, Image, ImageTransform, Mm, OP_PATH_CONST_4BEZIER,
+    OP_PATH_CONST_CLOSE_SUBPATH, OP_PATH_CONST_LINE_TO, OP_PATH_CONST_MOVE_TO, OP_PATH_PAINT_END,
+    OP_PATH_PAINT_FILL_NZ, OP_PATH_PAINT_FILL_STROKE_CLOSE_NZ, OP_PATH_PAINT_FILL_STROKE_NZ,
+    OP_PATH_PAINT_STROKE, OP_PATH_PAINT_STROKE_CLOSE, PdfDocument, PdfDocumentReference, Pt, Rgb,
 };
-use printpdf::image::jpeg::JpegDecoder;
-use printpdf::image::png::PngDecoder;
+use printpdf::image_crate::jpeg::JpegDecoder;
+use printpdf::image_crate::png::PngDecoder;
 use printpdf::lopdf::Object;
 use printpdf::lopdf::content::Operation;
 use rustybuzz::{Face, UnicodeBuffer};
@@ -29,7 +29,7 @@ pub enum PdfDefinitionError {
     UndefinedFont(String),
     AddingFont(String, printpdf::Error),
     LoadingFont(String),
-    AddingImage(String, printpdf::image::ImageError),
+    AddingImage(String, printpdf::image_crate::ImageError),
     UnsupportedImageType(String),
     SavingFailed(printpdf::Error),
 }
@@ -168,12 +168,16 @@ pub fn render_description(description: &PdfDescription) -> Result<PdfDocumentRef
                             ).expect("failed to convert PNG to image"),
                         other => return Err(PdfDefinitionError::UnsupportedImageType(other.to_owned())),
                     };
+                    let transform = ImageTransform {
+                        translate_x: Some(Mm(img.x)),
+                        translate_y: Some(Mm(img.y)),
+                        scale_x: Some(img.scale_x),
+                        scale_y: Some(img.scale_y),
+                        ..Default::default()
+                    };
                     image.add_to_layer(
                         this_layer,
-                        Some(Mm(img.x)), Some(Mm(img.y)),
-                        None,
-                        Some(img.scale_x), Some(img.scale_y),
-                        None,
+                        transform,
                     );
                 },
                 PdfElementDescription::Text(txt) => {

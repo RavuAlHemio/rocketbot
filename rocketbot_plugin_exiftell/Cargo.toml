@@ -9,7 +9,7 @@ hyper = { version = "0.14" }
 kamadak-exif = { version = "0.5" }
 log = { version = "0.4" }
 num-rational = { version = "0.4" }
-once_cell = { version = "1.8" }
+once_cell = { version = "1.9" }
 rocketbot_geocoding = { path = "../rocketbot_geocoding" }
 rocketbot_interface = { path = "../rocketbot_interface" }
 serde_json = { version = "1.0" }

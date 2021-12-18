@@ -9,10 +9,10 @@ confusion = ["rand", "unicode-normalization"]
 
 [dependencies]
 async-trait = { version = "0.1" }
-bytes = { version = "1.0" }
+bytes = { version = "1.1" }
 chrono = { version = "0.4" }
 log = { version = "0.4" }
-once_cell = { version = "1.8" }
+once_cell = { version = "1.9" }
 rand = { version = "0.8", optional = true }
 regex = { version = "1.5" }
 reqwest = { version = "0.11", features = ["rustls-tls"] }
@@ -20,8 +20,8 @@ rocketbot_interface = { path = "../rocketbot_interface" }
 serde = { version = "1.0", features = ["derive"] }
 serde_json = { version = "1.0" }
 unicode-normalization = { version = "0.1", optional = true }
-url = { version = "2.2 "}
+url = { version = "2.2" }
 
 [dev-dependencies]
 minidom = { version = "0.13" }
-tokio = { version = "1.7", features = ["macros"] }
+tokio = { version = "1.15", features = ["macros"] }

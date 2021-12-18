@@ -5,10 +5,10 @@ edition = "2018"
 
 [dependencies]
 async-trait = { version = "0.1" }
-bytes = { version = "1.0" }
+bytes = { version = "1.1" }
 chrono = { version = "0.4" }
 log = { version = "0.4" }
-once_cell = { version = "1.8" }
+once_cell = { version = "1.9" }
 regex = { version = "1.5" }
 reqwest = { version = "0.11", features = ["rustls-tls"] }
 rocketbot_geocoding = { path = "../rocketbot_geocoding" }
