@@ -1,7 +1,7 @@
 mod model;
 
 
-use std::collections::BTreeMap;
+use std::collections::{BTreeMap, BTreeSet};
 use std::fmt::Write;
 use std::sync::Weak;
 use std::time::{Duration, Instant};
@@ -33,6 +33,42 @@ impl Default for StationDatabase {
             stations: Vec::new(),
             instant: None,
         }
+    }
+}
+
+
+fn find_station<'a, 'b>(database: &'a StationDatabase, station_name_lower: &'b str, force_search: bool) -> Option<&'a StoppingPoint> {
+    if !force_search {
+        // try pinpointing the station using the number
+        if let Ok(station_number) = station_name_lower.parse::<u32>() {
+            for (_lower_name, station) in &database.stations {
+                if station.stop_id == station_number {
+                    return Some(station);
+                }
+            }
+        }
+    }
+
+    // find the station using Damerau-Levenshtein
+    let best_station_distance = {
+        let mut bsd: Option<(&StoppingPoint, usize)> = None;
+        for (lower_name, station) in &database.stations {
+            let distance = damerau_levenshtein(&station_name_lower, lower_name);
+            if let Some((_, best_distance)) = &bsd {
+                if distance < *best_distance {
+                    bsd = Some((&station, distance));
+                }
+            } else {
+                bsd = Some((&station, distance));
+            }
+        }
+        bsd
+    };
+
+    if let Some((best_station, _best_distance)) = best_station_distance {
+        Some(best_station)
+    } else {
+        None
     }
 }
 
@@ -195,35 +231,22 @@ impl WienerLinienPlugin {
             .or_else(|| command.options.get("l"))
             .map(|v| v.as_str().expect("line not a string").to_owned());
         let station_name_lower = command.rest.trim().to_lowercase();
+        let force_search = command.flags.contains("s") || command.flags.contains("search");
 
-        // find the station
-        let best_station_distance = {
-            let mut bsd: Option<(StoppingPoint, usize)> = None;
+        let station = {
             let db_guard = self.station_database
                 .read().await;
-            for (lower_name, station) in &db_guard.stations {
-                let distance = damerau_levenshtein(&station_name_lower, lower_name);
-                if let Some((_, best_distance)) = &bsd {
-                    if distance < *best_distance {
-                        bsd = Some((station.clone(), distance));
-                    }
-                } else {
-                    bsd = Some((station.clone(), distance));
-                }
+            match find_station(&*db_guard, &station_name_lower, force_search) {
+                Some(st) => st.clone(),
+                None => {
+                    send_channel_message!(
+                        interface,
+                        &channel_message.channel.name,
+                        "Station not found.",
+                    ).await;
+                    return;
+                },
             }
-            bsd
-        };
-
-        let station = match best_station_distance {
-            Some((st, _dist)) => st,
-            None => {
-                send_channel_message!(
-                    interface,
-                    &channel_message.channel.name,
-                    "Station not found.",
-                ).await;
-                return;
-            },
         };
 
         // obtain departure information
@@ -277,6 +300,68 @@ impl WienerLinienPlugin {
             &departures_string,
         ).await;
     }
+
+    async fn channel_command_stations(&self, channel_message: &ChannelMessage, command: &CommandInstance) {
+        let interface = match self.interface.upgrade() {
+            None => return,
+            Some(i) => i,
+        };
+
+        self.ensure_station_database_current().await;
+
+        let wanted_station_name_lower = command.rest.trim().to_lowercase();
+
+        {
+            let mut final_pieces = Vec::new();
+
+            let db_guard = self.station_database
+                .read().await;
+            let mut substring_stations: BTreeMap<String, BTreeSet<u32>> = BTreeMap::new();
+            for (station_name_lower, station) in &db_guard.stations {
+                if station_name_lower.contains(&wanted_station_name_lower) {
+                    let station_numbers = substring_stations
+                        .entry(station.name.clone())
+                        .or_insert_with(|| BTreeSet::new());
+                    station_numbers.insert(station.stop_id);
+                }
+            }
+            if substring_stations.len() > 0 {
+                let mut substring_piece = String::from("Substring matches:");
+                for (name, numbers) in &substring_stations {
+                    let number_strings: Vec<String> = numbers
+                        .iter()
+                        .map(|n| n.to_string())
+                        .collect();
+                    let number_string = number_strings.join(", ");
+                    write!(&mut substring_piece, "\n{}: {}", name, number_string).unwrap();
+                }
+                final_pieces.push(substring_piece);
+            }
+
+            let dl_station_opt = find_station(
+                &*db_guard,
+                &wanted_station_name_lower,
+                true,
+            );
+            if let Some(dl_station) = dl_station_opt {
+                final_pieces.push(format!(
+                    "Most similarly-named station: {} ({})",
+                    dl_station.name, dl_station.stop_id,
+                ));
+            }
+
+            if final_pieces.len() == 0 {
+                final_pieces.push("No stations found.".to_owned());
+            }
+
+            let response = final_pieces.join("\n");
+            send_channel_message!(
+                interface,
+                &channel_message.channel.name,
+                &response,
+            ).await;
+        }
+    }
 }
 #[async_trait]
 impl RocketBotPlugin for WienerLinienPlugin {
@@ -311,8 +396,19 @@ impl RocketBotPlugin for WienerLinienPlugin {
                 "{cpfx}dep [-l LINE] STATION".to_owned(),
                 "Shows public transport departures from a given station.".to_owned(),
             )
+                .add_flag("s")
+                .add_flag("search")
                 .add_option("l", CommandValueType::String)
                 .add_option("line", CommandValueType::String)
+                .build()
+        ).await;
+        my_interface.register_channel_command(
+            &CommandDefinitionBuilder::new(
+                "stations".to_owned(),
+                "wienerlinien".to_owned(),
+                "{cpfx}stations TEXT".to_owned(),
+                "Find station names containing or similar to the given name.".to_owned(),
+            )
                 .build()
         ).await;
 
@@ -333,12 +429,16 @@ impl RocketBotPlugin for WienerLinienPlugin {
     async fn channel_command(&self, channel_message: &ChannelMessage, command: &CommandInstance) {
         if command.name == "dep" {
             self.channel_command_dep(channel_message, command).await
+        } else if command.name == "stations" {
+            self.channel_command_stations(channel_message, command).await
         }
     }
 
     async fn get_command_help(&self, command_name: &str) -> Option<String> {
         if command_name == "dep" {
             Some(include_str!("../help/dep.md").to_owned())
+        } else if command_name == "stations" {
+            Some(include_str!("../help/stations.md").to_owned())
         } else {
             None
         }
