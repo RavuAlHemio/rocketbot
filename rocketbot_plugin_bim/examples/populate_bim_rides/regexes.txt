@@ -1,0 +1,11 @@
+OG format ("A1 69" and "E1+c4 4444+1111"):
+^\s*[a-z][0-9]*(?:[+][a-z][0-9]*)*\s+[0-9]+(?:[+][0-9]+)*\s*$
+
+format with line ("69/69"):
+^\s*[0-9]+(?:[+][0-9]+)*/[0-9a-z]+\s*$
+
+bimride format, default company ("!bimride 69/U1"):
+^!bimride\s+([0-9]+(?:[+][0-9]+)*)(?:/(.+))?\s*$
+
+bimride format with company ("!bimride -c oebb 4746522/S2"):
+^!bimride\s+(?:-c|--company)\s+(\S+)\s+([0-9]+(?:[+][0-9]+)*)(?:/(.+))?\s*$

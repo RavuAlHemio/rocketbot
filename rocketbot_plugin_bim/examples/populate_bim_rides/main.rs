@@ -1,9 +1,10 @@
+use std::collections::HashMap;
 use std::env;
 use std::ffi::OsString;
 use std::fs::File;
 
 use chrono::{Local, NaiveDateTime, TimeZone};
-use rocketbot_plugin_bim::increment_rides_by_spec;
+use rocketbot_plugin_bim::{increment_rides_by_spec, VehicleInfo, VehicleNumber};
 use serde::{Deserialize, Serialize};
 use serde_json;
 use tokio;
@@ -27,8 +28,8 @@ struct Log {
 async fn main() {
     // load messages
     let args: Vec<OsString> = env::args_os().collect();
-    if args.len() != 4 {
-        eprintln!("Usage: populate_bim_rides DBCONNSTRING COMPANY MESSAGES");
+    if args.len() < 4 || args.len() > 5 {
+        eprintln!("Usage: populate_bim_rides DBCONNSTRING COMPANY MESSAGES [BIMDATABASE]");
         std::process::exit(1);
     }
 
@@ -39,6 +40,19 @@ async fn main() {
             .expect("failed to load log")
     };
     log.messages.sort_unstable_by_key(|e| e.timestamp.clone());
+
+    let bim_database_opt = if let Some(bdfn) = args.get(4) {
+        let f = File::open(bdfn)
+            .expect("failed to open bim database");
+        let mut vehicles: Vec<VehicleInfo> = serde_json::from_reader(f)
+            .expect("failed to parse bim database");
+        let vehicle_hash_map: HashMap<VehicleNumber, VehicleInfo> = vehicles.drain(..)
+            .map(|vi| (vi.number, vi))
+            .collect();
+        Some(vehicle_hash_map)
+    } else {
+        None
+    };
 
     let company = args[2].to_str().expect("company name is not valid UTF-8");
 
@@ -57,7 +71,7 @@ async fn main() {
         println!("[{}] <{}> {}", timestamp, message.username, message.message);
         increment_rides_by_spec(
             &mut db_client,
-            None,
+            bim_database_opt.as_ref(),
             company,
             &message.username,
             timestamp,

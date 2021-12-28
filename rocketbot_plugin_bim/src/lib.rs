@@ -222,7 +222,7 @@ impl BimPlugin {
 
             // query ride count
             let count_row_opt_res = ride_conn.query_opt(
-                "SELECT CAST(COALESCE(SUM(ride_count), 0) AS bigint) total_ride_count FROM bim.last_rides WHERE company = $1 AND vehicle_number = $2",
+                "SELECT CAST(COALESCE(COUNT(*), 0) AS bigint) total_ride_count FROM bim.rides WHERE company = $1 AND vehicle_number = $2",
                 &[&company, &vehicle_number_i64],
             ).await;
             let count: i64 = match count_row_opt_res {
@@ -245,10 +245,10 @@ impl BimPlugin {
             // query last rider
             let ride_row_opt_res = ride_conn.query_opt(
                 "
-                    SELECT rider_username, last_ride, last_line
-                    FROM bim.last_rides
+                    SELECT rider_username, \"timestamp\", line
+                    FROM bim.rides
                     WHERE company = $1 AND vehicle_number = $2
-                    ORDER BY last_ride DESC
+                    ORDER BY \"timestamp\" DESC
                     LIMIT 1
                 ",
                 &[&company, &vehicle_number_i64],
@@ -512,8 +512,8 @@ impl BimPlugin {
         let rows_res = ride_conn.query(
             "
                 WITH total_rides(vehicle_number, total_ride_count) AS (
-                    SELECT b.vehicle_number, CAST(SUM(b.ride_count) AS bigint) total_ride_count
-                    FROM bim.last_rides b
+                    SELECT b.vehicle_number, CAST(COUNT(*) AS bigint) total_ride_count
+                    FROM bim.rides b
                     WHERE b.company = $1
                     GROUP BY b.vehicle_number
                 )
@@ -600,7 +600,11 @@ impl BimPlugin {
         };
 
         let rows_res = ride_conn.query(
-            "SELECT company, vehicle_number, rider_username, ride_count FROM bim.last_rides",
+            "
+                SELECT company, vehicle_number, rider_username, COUNT(*)
+                FROM bim.rides
+                GROUP BY company, vehicle_number, rider_username
+            ",
             &[]
         ).await;
         let rows = match rows_res {
@@ -876,92 +880,91 @@ impl RocketBotPlugin for BimPlugin {
 pub async fn increment_last_ride(ride_conn: &tokio_postgres::Transaction<'_>, company: &str, vehicle_number: VehicleNumber, rider_username: &str, timestamp: DateTime<Local>, line: Option<&str>) -> Result<(Option<LastRideInfo>, Option<OtherRiderInfo>), tokio_postgres::Error> {
     let vehicle_number_i64: i64 = vehicle_number.into();
 
-    let row = ride_conn.query_one(
+    let prev_my_count_row = ride_conn.query_one(
         "
-            INSERT INTO bim.last_rides AS blr
-                (company, vehicle_number, rider_username, ride_count, last_ride, last_line)
+            SELECT CAST(COUNT(*) AS bigint)
+            FROM bim.rides
+            WHERE
+                company = $1
+                AND vehicle_number = $2
+                AND rider_username = $3
+        ",
+        &[&company, &vehicle_number_i64, &rider_username],
+    ).await?;
+    let prev_my_count: i64 = prev_my_count_row.get(0);
+
+    let prev_my_row_opt = ride_conn.query_opt(
+        "
+            SELECT \"timestamp\", line
+            FROM bim.rides
+            WHERE
+                company = $1
+                AND vehicle_number = $2
+                AND rider_username = $3
+            ORDER BY \"timestamp\" DESC
+            LIMIT 1
+        ",
+        &[&company, &vehicle_number_i64, &rider_username],
+    ).await?;
+    let prev_my_timestamp: Option<DateTime<Local>> = prev_my_row_opt.as_ref().map(|r| r.get(0));
+    let prev_my_line: Option<String> = prev_my_row_opt.as_ref().map(|r| r.get(1)).flatten();
+
+    let prev_other_count_row = ride_conn.query_one(
+        "
+            SELECT CAST(COUNT(*) AS bigint)
+            FROM bim.rides
+            WHERE
+                company = $1
+                AND vehicle_number = $2
+                AND rider_username <> $3
+        ",
+        &[&company, &vehicle_number_i64, &rider_username],
+    ).await?;
+    let prev_other_count: i64 = prev_other_count_row.get(0);
+
+    let prev_other_row_opt = ride_conn.query_opt(
+        "
+            SELECT \"timestamp\", line, rider_username
+            FROM bim.rides
+            WHERE
+                company = $1
+                AND vehicle_number = $2
+                AND rider_username <> $3
+            ORDER BY \"timestamp\" DESC
+            LIMIT 1
+        ",
+        &[&company, &vehicle_number_i64, &rider_username],
+    ).await?;
+    let prev_other_timestamp: Option<DateTime<Local>> = prev_other_row_opt.as_ref().map(|r| r.get(0));
+    let prev_other_line: Option<String> = prev_other_row_opt.as_ref().map(|r| r.get(1)).flatten();
+    let prev_other_rider: Option<String> = prev_other_row_opt.as_ref().map(|r| r.get(2));
+
+    ride_conn.execute(
+        "
+            INSERT INTO bim.rides AS br
+                (id, company, vehicle_number, rider_username, \"timestamp\", line)
             VALUES
-                ($1, $2, $3, 1, $4, $5)
-            ON CONFLICT (company, vehicle_number, rider_username) DO UPDATE
-                SET
-                    ride_count = blr.ride_count + 1,
-                    last_ride = CASE WHEN blr.last_ride > $4 THEN blr.last_ride ELSE $4 END,
-                    last_line = CASE WHEN blr.last_ride > $4 THEN blr.last_line ELSE $5 END
-            RETURNING
-                (
-                    SELECT prev.ride_count
-                    FROM bim.last_rides prev
-                    WHERE prev.company = blr.company
-                    AND prev.vehicle_number = blr.vehicle_number
-                    AND prev.rider_username = blr.rider_username
-                ) ride_count,
-                (
-                    SELECT prev.last_ride
-                    FROM bim.last_rides prev
-                    WHERE prev.company = blr.company
-                    AND prev.vehicle_number = blr.vehicle_number
-                    AND prev.rider_username = blr.rider_username
-                ) last_ride,
-                (
-                    SELECT prev.last_line
-                    FROM bim.last_rides prev
-                    WHERE prev.company = blr.company
-                    AND prev.vehicle_number = blr.vehicle_number
-                    AND prev.rider_username = blr.rider_username
-                ) last_line,
-                (
-                    SELECT prev.rider_username
-                    FROM bim.last_rides prev
-                    WHERE prev.company = blr.company
-                    AND prev.vehicle_number = blr.vehicle_number
-                    AND prev.rider_username <> blr.rider_username
-                    ORDER BY prev.last_ride DESC
-                    LIMIT 1
-                ) other_rider,
-                (
-                    SELECT prev.last_ride
-                    FROM bim.last_rides prev
-                    WHERE prev.company = blr.company
-                    AND prev.vehicle_number = blr.vehicle_number
-                    AND prev.rider_username <> blr.rider_username
-                    ORDER BY prev.last_ride DESC
-                    LIMIT 1
-                ) other_last_ride,
-                (
-                    SELECT prev.last_line
-                    FROM bim.last_rides prev
-                    WHERE prev.company = blr.company
-                    AND prev.vehicle_number = blr.vehicle_number
-                    AND prev.rider_username <> blr.rider_username
-                    ORDER BY prev.last_ride DESC
-                    LIMIT 1
-                ) other_last_line
+                (DEFAULT, $1, $2, $3, $4, $5)
         ",
         &[&company, &vehicle_number_i64, &rider_username, &timestamp, &line],
     ).await?;
-    let prev_ride_count: Option<i64> = row.get(0);
-    let prev_last_ride: Option<DateTime<Local>> = row.get(1);
-    let prev_last_line: Option<String> = row.get(2);
-    let other_rider: Option<String> = row.get(3);
-    let other_ride: Option<DateTime<Local>> = row.get(4);
-    let other_line: Option<String> = row.get(5);
 
-    let last_info = if let Some(prc) = prev_ride_count {
-        let prc_usize: usize = prc.try_into().unwrap();
+    let last_info = if prev_my_count > 0 {
+        let pmc_usize: usize = prev_my_count.try_into().unwrap();
         Some(LastRideInfo {
-            ride_count: prc_usize,
-            last_ride: prev_last_ride.unwrap(),
-            last_line: prev_last_line,
+            ride_count: pmc_usize,
+            last_ride: prev_my_timestamp.unwrap(),
+            last_line: prev_my_line,
         })
     } else {
         None
     };
 
-    let other_info = if let Some(or) = other_rider {
+    let other_info = if prev_other_count > 0 {
         Some(OtherRiderInfo {
-            rider_username: or,
-            last_ride: other_ride.unwrap(),
-            last_line: other_line,
+            rider_username: prev_other_rider.unwrap(),
+            last_ride: prev_other_timestamp.unwrap(),
+            last_line: prev_other_line,
         })
     } else {
         None

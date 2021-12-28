@@ -174,10 +174,10 @@ pub(crate) async fn handle_bim_rides(request: &Request<Body>) -> Result<Response
         .await;
 
     let query_res = db_conn.query("
-        SELECT lr.company, lr.vehicle_number, CAST(SUM(lr.ride_count) AS bigint), MAX(lr.last_line)
-        FROM bim.last_rides lr
-        GROUP BY lr.company, lr.vehicle_number
-        ORDER BY lr.company, lr.vehicle_number
+        SELECT r.company, r.vehicle_number, CAST(COUNT(*) AS bigint), MAX(r.line)
+        FROM bim.rides r
+        GROUP BY r.company, r.vehicle_number
+        ORDER BY r.company, r.vehicle_number
     ", &[]).await;
     let rows = match query_res {
         Ok(r) => r,

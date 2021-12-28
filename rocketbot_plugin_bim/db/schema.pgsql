@@ -1,12 +1,14 @@
 CREATE SCHEMA bim;
 
-CREATE TABLE bim.last_rides
-( company character varying(256) NOT NULL
+CREATE SEQUENCE bim.rides__id AS bigint;
+
+CREATE TABLE bim.rides
+( id bigint NOT NULL DEFAULT nextval('bim.rides__id')
+, company character varying(256) NOT NULL
 , vehicle_number bigint NOT NULL
 , rider_username character varying(256) NOT NULL
-, ride_count bigint NOT NULL
-, last_ride timestamp with time zone NOT NULL
-, last_line character varying(32) NULL
-, CONSTRAINT pkey_last_rides PRIMARY KEY (company, vehicle_number, rider_username)
-, CONSTRAINT check_last_rides CHECK (vehicle_number >= 0)
+, "timestamp" timestamp with time zone NOT NULL
+, line character varying(32) NULL
+, CONSTRAINT pkey_rides PRIMARY KEY (id)
+, CONSTRAINT check_rides CHECK (vehicle_number >= 0)
 );
