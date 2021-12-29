@@ -930,6 +930,15 @@ impl RocketBotPlugin for BimPlugin {
             )
                 .build()
         ).await;
+        my_interface.register_channel_command(
+            &CommandDefinitionBuilder::new(
+                "favbims".to_owned(),
+                "bim".to_owned(),
+                "{cpfx}favbims".to_owned(),
+                "Returns each rider's most-ridden vehicle.".to_owned(),
+            )
+                .build()
+        ).await;
 
         Self {
             interface,
