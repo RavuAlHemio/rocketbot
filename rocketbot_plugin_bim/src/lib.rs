@@ -1,4 +1,4 @@
-use std::collections::{BTreeMap, HashMap};
+use std::collections::{BTreeMap, BTreeSet, HashMap};
 use std::convert::{TryFrom, TryInto};
 use std::fmt::{self, Write};
 use std::fs::File;
@@ -10,6 +10,7 @@ use chrono::{DateTime, Local};
 use indexmap::IndexSet;
 use log::error;
 use once_cell::sync::Lazy;
+use rand::{Rng, thread_rng};
 use regex::Regex;
 use rocketbot_interface::{JsonValueExtensions, phrase_join, send_channel_message};
 use rocketbot_interface::commands::{CommandDefinitionBuilder, CommandInstance, CommandValueType};
@@ -715,6 +716,103 @@ impl BimPlugin {
         ).await;
     }
 
+    async fn channel_command_favbims(&self, channel_message: &ChannelMessage, _command: &CommandInstance) {
+        let interface = match self.interface.upgrade() {
+            None => return,
+            Some(i) => i,
+        };
+
+        let ride_conn = match self.connect_ride_db().await {
+            Ok(c) => c,
+            Err(_) => {
+                send_channel_message!(
+                    interface,
+                    &channel_message.channel.name,
+                    "Failed to open database connection. :disappointed:",
+                ).await;
+                return;
+            },
+        };
+
+        let rows_res = ride_conn.query(
+            "
+                WITH
+                    rides_per_rider_vehicle(rider_username, company, vehicle_number, ride_count) AS (
+                        SELECT rider_username, company, vehicle_number, COUNT(*)
+                        FROM bim.rides
+                        GROUP BY rider_username, company, vehicle_number
+                    ),
+                    fav_vehicle(rider_username, company, vehicle_number, ride_count) AS (
+                        SELECT rider_username, company, vehicle_number, ride_count
+                        FROM rides_per_rider_vehicle rprv
+                        WHERE NOT EXISTS (
+                            SELECT 1
+                            FROM rides_per_rider_vehicle rprv2
+                            WHERE rprv2.rider_username = rprv.rider_username
+                            AND rprv2.ride_count > rprv.ride_count
+                        )
+                    )
+                SELECT rider_username, company, vehicle_number, CAST(ride_count AS bigint)
+                FROM fav_vehicle
+            ",
+            &[]
+        ).await;
+        let rows = match rows_res {
+            Ok(r) => r,
+            Err(e) => {
+                error!("failed to query most active riders: {}", e);
+                send_channel_message!(
+                    interface,
+                    &channel_message.channel.name,
+                    "Failed to query database. :disappointed:",
+                ).await;
+                return;
+            },
+        };
+
+        let rider_to_fav_vehicles: BTreeMap<String, BTreeSet<(String, u32, i64)>> = BTreeMap::new();
+        for row in rows {
+            let rider_username: String = row.get(1);
+            let company: String = row.get(2);
+            let vehicle_number_i64: i64 = row.get(3);
+            let vehicle_number_u32: u32 = match vehicle_number_i64.try_into() {
+                Ok(vn) => vn,
+                Err(_) => continue,
+            };
+            let ride_count: i64 = row.get(4);
+
+            rider_to_fav_vehicles
+                .entry(rider_username)
+                .or_insert_with(BTreeSet::new())
+                .insert((company, vehicle_number_i32, ride_count));
+        }
+
+        let rng = thread_rng();
+        let mut fav_vehicle_strings = Vec::new();
+        for (rider, fav_vehicles) in rider_to_fav_vehicles.iter() {
+            let fav_vehicles_count = fav_vehicles.len();
+            if fav_vehicles_count == 0 {
+                continue;
+            }
+            let index = rng.gen_range(0..fav_vehicles_count);
+            let (fav_comp, fav_vehicle, ride_count) = fav_vehicles.iter().nth(index).unwrap();
+            fav_vehicle_strings.push(format!(
+                "{}: {}/{} ({} rides)",
+                rider, fav_comp, fav_vehicle, ride_count,
+            ));
+        }
+
+        let response = fav_vehicle_strings.join("\n");
+        if response.len() == 0 {
+            return;
+        }
+        send_channel_message!(
+            interface,
+            &channel_message.channel.name,
+            response,
+        ).await;
+    }
+
     fn english_ordinal(num: usize) -> &'static str {
         let by_hundred = num % 100;
         if by_hundred > 10 && by_hundred < 14 {
@@ -852,6 +950,8 @@ impl RocketBotPlugin for BimPlugin {
             self.channel_command_topriders(channel_message, command).await
         } else if command.name == "bimcompanies" {
             self.channel_command_bimcompanies(channel_message, command).await
+        } else if command.name == "favbims" {
+            self.channel_command_favbims(channel_message, command).await
         }
     }
 
@@ -870,6 +970,8 @@ impl RocketBotPlugin for BimPlugin {
             Some(include_str!("../help/topriders.md").to_owned())
         } else if command_name == "bimcompanies" {
             Some(include_str!("../help/bimcompanies.md").to_owned())
+        } else if command.name == "favbims" {
+            Some(include_str!("../help/favbims.md").to_owned())
         } else {
             None
         }

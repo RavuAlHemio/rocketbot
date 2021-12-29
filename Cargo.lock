@@ -1912,6 +1912,7 @@ dependencies = [
  "indexmap",
  "log",
  "once_cell",
+ "rand",
  "regex",
  "reqwest",
  "rocketbot_interface",
