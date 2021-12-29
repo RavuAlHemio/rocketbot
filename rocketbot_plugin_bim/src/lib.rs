@@ -772,14 +772,14 @@ impl BimPlugin {
 
         let mut rider_to_fav_vehicles: BTreeMap<String, BTreeSet<(String, u32, i64)>> = BTreeMap::new();
         for row in rows {
-            let rider_username: String = row.get(1);
-            let company: String = row.get(2);
-            let vehicle_number_i64: i64 = row.get(3);
+            let rider_username: String = row.get(0);
+            let company: String = row.get(1);
+            let vehicle_number_i64: i64 = row.get(2);
             let vehicle_number_u32: u32 = match vehicle_number_i64.try_into() {
                 Ok(vn) => vn,
                 Err(_) => continue,
             };
-            let ride_count: i64 = row.get(4);
+            let ride_count: i64 = row.get(3);
 
             rider_to_fav_vehicles
                 .entry(rider_username)
