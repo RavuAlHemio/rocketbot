@@ -10,6 +10,9 @@
 <table class="bim-rides">
   <tr>
     <th class="company">Company</th>
+    {% if has_any_vehicle_type %}
+      <th class="vehicle-type">Vehicle type</th>
+    {% endif %}
     <th class="vehicle-numbers">Vehicle numbers</th>
     <th class="ride-count">Ride count</th>
     <th class="line">Example line</th>
@@ -17,6 +20,9 @@
   {% for ride in rides %}
   <tr>
     <td class="company">{{ ride.company|escape }}</td>
+    {% if has_any_vehicle_type %}
+      <td class="vehicle-type">{% if ride.vehicle_type_opt is string %}{{ ride.vehicle_type_opt|escape }}{% endif %}</td>
+    {% endif %}
     <td class="vehicle-numbers">{% for vn in ride.vehicle_numbers %}{% if not loop.first %}+{% endif %}{{ vn }}{% endfor %}</td>
     <td class="ride-count">{{ ride.ride_count }}</td>
     <td class="line">{% set line = ride.last_line %}{% if line is string %}{{ line|escape }}{% endif %}</td>

@@ -15,6 +15,7 @@ use crate::{
 #[derive(Clone, Debug, Deserialize, Eq, Hash, PartialEq, Serialize)]
 struct RideRow {
     company: String,
+    vehicle_type_opt: Option<String>,
     vehicle_numbers: Vec<u32>,
     ride_count: i64,
     last_line: Option<String>,
@@ -22,12 +23,14 @@ struct RideRow {
 impl RideRow {
     pub fn new(
         company: String,
+        vehicle_type_opt: Option<String>,
         vehicle_numbers: Vec<u32>,
         ride_count: i64,
         last_line: Option<String>,
     ) -> Self {
         Self {
             company,
+            vehicle_type_opt,
             vehicle_numbers,
             ride_count,
             last_line,
@@ -48,17 +51,44 @@ impl RideRow {
 }
 
 
-async fn assemble_fixed_couplings() -> HashMap<String, HashMap<u32, Vec<u32>>> {
-    let mut ret = HashMap::new();
+#[derive(Clone, Debug, Deserialize, Eq, PartialEq, Serialize)]
+struct VehicleDatabaseExtract {
+    pub company_to_vehicle_to_fixed_coupling: HashMap<String, HashMap<u32, Vec<u32>>>,
+    pub company_to_vehicle_to_type: HashMap<String, HashMap<u32, String>>,
+}
+impl VehicleDatabaseExtract {
+    pub fn new(
+        company_to_vehicle_to_fixed_coupling: HashMap<String, HashMap<u32, Vec<u32>>>,
+        company_to_vehicle_to_type: HashMap<String, HashMap<u32, String>>,
+    ) -> Self {
+        Self {
+            company_to_vehicle_to_fixed_coupling,
+            company_to_vehicle_to_type,
+        }
+    }
+}
+impl Default for VehicleDatabaseExtract {
+    fn default() -> Self {
+        Self {
+            company_to_vehicle_to_fixed_coupling: HashMap::new(),
+            company_to_vehicle_to_type: HashMap::new(),
+        }
+    }
+}
+
+
+async fn obtain_vehicle_extract() -> VehicleDatabaseExtract {
+    let mut company_to_vehicle_to_fixed_coupling = HashMap::new();
+    let mut company_to_vehicle_to_type = HashMap::new();
 
     let bot_config = match get_bot_config().await {
         Some(bc) => bc,
-        None => return ret,
+        None => return VehicleDatabaseExtract::default(),
     };
 
     let plugins = match bot_config["plugins"].as_array() {
         Some(ps) => ps,
-        None => return ret,
+        None => return VehicleDatabaseExtract::default(),
     };
     let bim_plugin_opt = plugins.iter()
         .filter(|p| p["enabled"].as_bool().unwrap_or(false))
@@ -66,16 +96,20 @@ async fn assemble_fixed_couplings() -> HashMap<String, HashMap<u32, Vec<u32>>> {
         .nth(0);
     let bim_plugin = match bim_plugin_opt {
         Some(bp) => bp,
-        None => return ret,
+        None => return VehicleDatabaseExtract::default(),
     };
 
     let company_to_bim_database_path = match bim_plugin["config"]["company_to_bim_database_path"].as_object() {
         Some(ctbdpo) => ctbdpo,
-        None => return ret,
+        None => return VehicleDatabaseExtract::default(),
     };
     for (company, bim_database_path_object) in company_to_bim_database_path.iter() {
         if bim_database_path_object.is_null() {
-            ret.insert(
+            company_to_vehicle_to_fixed_coupling.insert(
+                company.clone(),
+                HashMap::new(),
+            );
+            company_to_vehicle_to_type.insert(
                 company.clone(),
                 HashMap::new(),
             );
@@ -122,6 +156,12 @@ async fn assemble_fixed_couplings() -> HashMap<String, HashMap<u32, Vec<u32>>> {
                     continue;
                 },
             };
+            if let Some(type_code) = bim["type_code"].as_str() {
+                company_to_vehicle_to_type.entry(company.clone())
+                    .or_insert_with(|| HashMap::new())
+                    .insert(number_u32, type_code.to_owned());
+            };
+
             let fixed_coupling = match bim["fixed_coupling"].as_array() {
                 Some(fc) => fc,
                 None => {
@@ -148,14 +188,17 @@ async fn assemble_fixed_couplings() -> HashMap<String, HashMap<u32, Vec<u32>>> {
                 fixed_coupling_u32s.push(fc_u32);
             }
             if fixed_coupling_u32s.len() > 0 {
-                ret.entry(company.clone())
+                company_to_vehicle_to_fixed_coupling.entry(company.clone())
                     .or_insert_with(|| HashMap::new())
                     .insert(number_u32, fixed_coupling_u32s);
             }
         }
     }
 
-    ret
+    VehicleDatabaseExtract::new(
+        company_to_vehicle_to_fixed_coupling,
+        company_to_vehicle_to_type,
+    )
 }
 
 
@@ -170,7 +213,7 @@ pub(crate) async fn handle_bim_rides(request: &Request<Body>) -> Result<Response
         Some(c) => c,
         None => return return_500(),
     };
-    let company_to_vehicle_to_fixed_coupling = assemble_fixed_couplings()
+    let vehicle_extract = obtain_vehicle_extract()
         .await;
 
     let query_res = db_conn.query("
@@ -188,6 +231,7 @@ pub(crate) async fn handle_bim_rides(request: &Request<Body>) -> Result<Response
     };
     let mut company_to_known_fixed_couplings: HashMap<String, HashSet<Vec<u32>>> = HashMap::new();
     let mut rides: Vec<RideRow> = Vec::new();
+    let mut has_any_vehicle_type = false;
     for row in rows {
         let company: String = row.get(0);
         let vehicle_number_i64: i64 = row.get(1);
@@ -195,10 +239,20 @@ pub(crate) async fn handle_bim_rides(request: &Request<Body>) -> Result<Response
         let last_line: Option<String> = row.get(3);
 
         let vehicle_number_u32: u32 = vehicle_number_i64.try_into().unwrap();
-        let fixed_coupling_opt = company_to_vehicle_to_fixed_coupling
+
+        let vehicle_type_opt = vehicle_extract
+            .company_to_vehicle_to_type
             .get(&company)
-            .map(|v2fc| v2fc.get(&vehicle_number_u32))
-            .flatten();
+            .and_then(|v2t| v2t.get(&vehicle_number_u32))
+            .map(|t| t.clone());
+        if !has_any_vehicle_type && vehicle_type_opt.is_some() {
+            has_any_vehicle_type = true;
+        }
+
+        let fixed_coupling_opt = vehicle_extract
+            .company_to_vehicle_to_fixed_coupling
+            .get(&company)
+            .and_then(|v2fc| v2fc.get(&vehicle_number_u32));
         if let Some(fixed_coupling) = fixed_coupling_opt {
             let known_fixed_couplings = company_to_known_fixed_couplings
                 .entry(company.clone())
@@ -211,10 +265,10 @@ pub(crate) async fn handle_bim_rides(request: &Request<Body>) -> Result<Response
             // remember this coupling
             known_fixed_couplings.insert(fixed_coupling.clone());
 
-            rides.push(RideRow::new(company, fixed_coupling.clone(), ride_count, last_line));
+            rides.push(RideRow::new(company, vehicle_type_opt, fixed_coupling.clone(), ride_count, last_line));
         } else {
             // not a fixed coupling; output 1:1
-            rides.push(RideRow::new(company, vec![vehicle_number_u32], ride_count, last_line));
+            rides.push(RideRow::new(company, vehicle_type_opt, vec![vehicle_number_u32], ride_count, last_line));
         }
     }
 
@@ -229,6 +283,7 @@ pub(crate) async fn handle_bim_rides(request: &Request<Body>) -> Result<Response
         }
     } else {
         let mut ctx = tera::Context::new();
+        ctx.insert("has_any_vehicle_type", &has_any_vehicle_type);
         ctx.insert("rides", &rides);
         match render_template("bimrides.html.tera", &ctx, 200, vec![]).await {
             Some(r) => Ok(r),
