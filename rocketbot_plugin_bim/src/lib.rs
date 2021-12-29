@@ -770,7 +770,7 @@ impl BimPlugin {
             },
         };
 
-        let rider_to_fav_vehicles: BTreeMap<String, BTreeSet<(String, u32, i64)>> = BTreeMap::new();
+        let mut rider_to_fav_vehicles: BTreeMap<String, BTreeSet<(String, u32, i64)>> = BTreeMap::new();
         for row in rows {
             let rider_username: String = row.get(1);
             let company: String = row.get(2);
@@ -783,23 +783,25 @@ impl BimPlugin {
 
             rider_to_fav_vehicles
                 .entry(rider_username)
-                .or_insert_with(BTreeSet::new())
-                .insert((company, vehicle_number_i32, ride_count));
+                .or_insert_with(|| BTreeSet::new())
+                .insert((company, vehicle_number_u32, ride_count));
         }
 
-        let rng = thread_rng();
         let mut fav_vehicle_strings = Vec::new();
-        for (rider, fav_vehicles) in rider_to_fav_vehicles.iter() {
-            let fav_vehicles_count = fav_vehicles.len();
-            if fav_vehicles_count == 0 {
-                continue;
+        {
+            let mut rng = thread_rng();
+            for (rider, fav_vehicles) in rider_to_fav_vehicles.iter() {
+                let fav_vehicles_count = fav_vehicles.len();
+                if fav_vehicles_count == 0 {
+                    continue;
+                }
+                let index = rng.gen_range(0..fav_vehicles_count);
+                let (fav_comp, fav_vehicle, ride_count) = fav_vehicles.iter().nth(index).unwrap();
+                fav_vehicle_strings.push(format!(
+                    "{}: {}/{} ({} rides)",
+                    rider, fav_comp, fav_vehicle, ride_count,
+                ));
             }
-            let index = rng.gen_range(0..fav_vehicles_count);
-            let (fav_comp, fav_vehicle, ride_count) = fav_vehicles.iter().nth(index).unwrap();
-            fav_vehicle_strings.push(format!(
-                "{}: {}/{} ({} rides)",
-                rider, fav_comp, fav_vehicle, ride_count,
-            ));
         }
 
         let response = fav_vehicle_strings.join("\n");
@@ -809,7 +811,7 @@ impl BimPlugin {
         send_channel_message!(
             interface,
             &channel_message.channel.name,
-            response,
+            &response,
         ).await;
     }
 
@@ -970,7 +972,7 @@ impl RocketBotPlugin for BimPlugin {
             Some(include_str!("../help/topriders.md").to_owned())
         } else if command_name == "bimcompanies" {
             Some(include_str!("../help/bimcompanies.md").to_owned())
-        } else if command.name == "favbims" {
+        } else if command_name == "favbims" {
             Some(include_str!("../help/favbims.md").to_owned())
         } else {
             None
