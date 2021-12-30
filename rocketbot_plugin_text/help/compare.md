@@ -1,4 +1,4 @@
-*Usage:* `{cpfx}distance STRING1 STRING2`
+*Usage:* `{cpfx}compare STRING1 STRING2`
 
 Outputs information about how much `STRING1` and `STRING2` differ.
 

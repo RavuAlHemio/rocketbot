@@ -29,7 +29,7 @@ impl TextPlugin {
         }
     }
 
-    async fn channel_command_distance(&self, channel_message: &ChannelMessage, command: &CommandInstance) {
+    async fn channel_command_compare(&self, channel_message: &ChannelMessage, command: &CommandInstance) {
         let interface = match self.interface.upgrade() {
             None => return,
             Some(i) => i,
@@ -113,14 +113,14 @@ impl RocketBotPlugin for TextPlugin {
     }
 
     async fn channel_command(&self, channel_message: &ChannelMessage, command: &CommandInstance) {
-        if command.name == "distance" {
-            self.channel_command_distance(channel_message, command).await
+        if command.name == "compare" {
+            self.channel_command_compare(channel_message, command).await
         }
     }
 
     async fn get_command_help(&self, command_name: &str) -> Option<String> {
-        if command_name == "distance" {
-            Some(include_str!("../help/distance.md").to_owned())
+        if command_name == "compare" {
+            Some(include_str!("../help/compare.md").to_owned())
         } else {
             None
         }
