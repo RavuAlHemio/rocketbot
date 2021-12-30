@@ -22,7 +22,23 @@ pub(crate) struct MonitorData {
 
 #[derive(Clone, Debug, Deserialize, Eq, Hash, PartialEq, Serialize)]
 pub(crate) struct Monitor {
+    #[serde(rename = "locationStop")] pub location_stop: LocationStop,
     pub lines: Vec<Line>,
+}
+
+#[derive(Clone, Debug, Deserialize, Eq, Hash, PartialEq, Serialize)]
+pub(crate) struct LocationStop {
+    pub properties: StopProperties,
+}
+
+#[derive(Clone, Debug, Deserialize, Eq, Hash, PartialEq, Serialize)]
+pub(crate) struct StopProperties {
+    pub attributes: StopAttributes,
+}
+
+#[derive(Clone, Debug, Deserialize, Eq, Hash, PartialEq, Serialize)]
+pub(crate) struct StopAttributes {
+    pub rbl: Option<i64>,
 }
 
 #[derive(Clone, Debug, Deserialize, Eq, Hash, PartialEq, Serialize)]

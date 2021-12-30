@@ -1,7 +1,7 @@
 mod model;
 
 
-use std::collections::{BTreeMap, BTreeSet};
+use std::collections::{BTreeMap, BTreeSet, HashMap};
 use std::fmt::Write;
 use std::sync::Weak;
 use std::time::{Duration, Instant};
@@ -140,7 +140,7 @@ impl WienerLinienPlugin {
         database_guard.stations = stations;
     }
 
-    async fn get_departures(&self, station_id: u32, line_number: Option<&str>) -> Option<Vec<DepartureLine>> {
+    async fn get_departures(&self, station_id: u32, line_number: Option<&str>) -> Option<Vec<Vec<DepartureLine>>> {
         let url = self.monitor_url_format
             .replace("{stopId}", &station_id.to_string());
 
@@ -169,9 +169,13 @@ impl WienerLinienPlugin {
             },
         };
 
-        let mut dep_lines = BTreeMap::new();
-
+        let mut platform_to_deps: HashMap<Option<i64>, BTreeMap<(String, String), DepartureLine>> = HashMap::new();
         for monitor in &monitor_wrapper.data.monitors {
+            let platform_number = monitor.location_stop.properties.attributes.rbl;
+            let dep_lines = platform_to_deps
+                .entry(platform_number)
+                .or_insert_with(|| BTreeMap::new());
+
             for line in &monitor.lines {
                 if let Some(ln) = line_number {
                     if line.name != ln {
@@ -215,8 +219,17 @@ impl WienerLinienPlugin {
             }
         }
 
-        let dep_line_vec: Vec<DepartureLine> = dep_lines.into_values().collect();
-        Some(dep_line_vec)
+        let mut ret_monitors: Vec<Vec<DepartureLine>> = platform_to_deps.into_values()
+            .map(|deps| deps.into_values().collect())
+            .collect();
+        ret_monitors.sort_unstable_by_key(|rm: &Vec<DepartureLine>| {
+            let rm_vec: Vec<(String, String)> = rm.iter()
+                .map(|dl| (dl.line_name.clone(), dl.target_station.to_lowercase()))
+                .collect();
+            rm_vec
+        });
+
+        Some(ret_monitors)
     }
 
     async fn channel_command_dep(&self, channel_message: &ChannelMessage, command: &CommandInstance) {
@@ -270,24 +283,33 @@ impl WienerLinienPlugin {
             format!("No departures at *{}*", station.name)
         } else {
             let mut ds = format!("Departures at *{}*", station.name);
-            for line in &departures {
-                write!(&mut ds, "\n{} \u{2192} {}", line.line_name, line.target_station).unwrap();
-                for departure in &line.departures {
-                    if departure.accessible {
-                        // italic
-                        write!(&mut ds, " | _{}_", departure.countdown).unwrap();
-                    } else {
-                        // regular
-                        write!(&mut ds, " | {}", departure.countdown).unwrap();
-                    }
+            let mut first_platform = true;
+            for platform in &departures {
+                if first_platform {
+                    first_platform = false;
+                } else {
+                    ds.push_str("\n");
+                }
 
-                    if departure.traffic_jam {
-                        // jammed: police siren
-                        ds.push_str(" \u{1F6A8}");
-                    }
-                    if !departure.realtime {
-                        // not realtime: question mark
-                        ds.push_str(" \u{2753}");
+                for line in platform {
+                    write!(&mut ds, "\n{} \u{2192} {}", line.line_name, line.target_station).unwrap();
+                    for departure in &line.departures {
+                        if departure.accessible {
+                            // italic
+                            write!(&mut ds, " | _{}_", departure.countdown).unwrap();
+                        } else {
+                            // regular
+                            write!(&mut ds, " | {}", departure.countdown).unwrap();
+                        }
+
+                        if departure.traffic_jam {
+                            // jammed: police siren
+                            ds.push_str(" \u{1F6A8}");
+                        }
+                        if !departure.realtime {
+                            // not realtime: question mark
+                            ds.push_str(" \u{2753}");
+                        }
                     }
                 }
             }
