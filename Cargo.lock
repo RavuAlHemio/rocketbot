@@ -1786,6 +1786,7 @@ dependencies = [
  "rocketbot_plugin_simultype",
  "rocketbot_plugin_slogan",
  "rocketbot_plugin_sockpuppet",
+ "rocketbot_plugin_text",
  "rocketbot_plugin_text_commands",
  "rocketbot_plugin_thanks",
  "rocketbot_plugin_time",
@@ -2276,6 +2277,17 @@ dependencies = [
  "log",
  "rocketbot_interface",
  "serde_json",
+]
+
+[[package]]
+name = "rocketbot_plugin_text"
+version = "0.1.0"
+dependencies = [
+ "async-trait",
+ "log",
+ "rocketbot_interface",
+ "serde_json",
+ "strsim",
 ]
 
 [[package]]
