@@ -21,14 +21,6 @@ impl TextPlugin {
         a_set == b_set
     }
 
-    fn yes_no(b: bool) -> &'static str {
-        if b {
-            "yes"
-        } else {
-            "no"
-        }
-    }
-
     async fn channel_command_compare(&self, channel_message: &ChannelMessage, command: &CommandInstance) {
         let interface = match self.interface.upgrade() {
             None => return,
@@ -51,7 +43,7 @@ impl TextPlugin {
         let hamming = strsim::hamming(string1, string2);
         let hamming_string = match hamming {
             Ok(dist) => format!("H={}", dist),
-            Err(e) => "!H".to_owned(),
+            Err(_) => "!H".to_owned(),
         };
 
         let jaro = strsim::jaro(string1, string2);
