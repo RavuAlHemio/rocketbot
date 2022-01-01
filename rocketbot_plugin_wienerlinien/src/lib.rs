@@ -184,6 +184,11 @@ impl WienerLinienPlugin {
                 }
 
                 for departure in &line.departure_data.departures {
+                    let countdown = match departure.departure_time.countdown {
+                        Some(cd) => cd,
+                        None => continue,
+                    };
+
                     let (line_and_target, target_full, barrier_free, realtime, traffic_jam) = if let Some(vehicle) = &departure.vehicle {
                         (
                             (vehicle.name.clone(), vehicle.towards.to_lowercase()),
@@ -210,7 +215,7 @@ impl WienerLinienPlugin {
                             Vec::new(),
                         ));
                     dep_entry.departures.push(DepartureTimeEntry::new(
-                        departure.departure_time.countdown,
+                        countdown,
                         barrier_free,
                         realtime,
                         traffic_jam,

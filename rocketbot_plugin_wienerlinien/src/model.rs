@@ -64,9 +64,9 @@ pub(crate) struct Departure {
 
 #[derive(Clone, Debug, Deserialize, Eq, Hash, PartialEq, Serialize)]
 pub(crate) struct DepartureTime {
-    #[serde(rename = "timePlanned")] pub time_planned: String,
+    #[serde(rename = "timePlanned")] pub time_planned: Option<String>,
     #[serde(rename = "timeReal")] pub time_real: Option<String>,
-    #[serde(rename = "countdown")] pub countdown: u64,
+    #[serde(rename = "countdown")] pub countdown: Option<u64>,
 }
 
 #[derive(Clone, Debug, Deserialize, Eq, Hash, PartialEq, Serialize)]
