@@ -4,6 +4,7 @@ pub mod interfaces;
 pub mod macros;
 pub mod message;
 pub mod model;
+pub mod serde;
 pub mod sync;
 
 

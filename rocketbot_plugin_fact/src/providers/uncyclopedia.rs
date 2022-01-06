@@ -4,6 +4,7 @@ use async_trait::async_trait;
 use bytes::Buf;
 use rand::{RngCore, Rng};
 use regex::Regex;
+use rocketbot_interface::serde::serde_regex;
 use rocketbot_interface::sync::Mutex;
 use percent_encoding::{AsciiSet, NON_ALPHANUMERIC, percent_encode};
 use serde::{Deserialize, Serialize};
@@ -44,20 +45,6 @@ mod serde_url {
     pub fn deserialize<'de, D: Deserializer<'de>>(deserializer: D) -> Result<Url, D::Error> {
         let string = String::deserialize(deserializer)?;
         Url::parse(&string)
-            .map_err(|e| serde::de::Error::custom(e))
-    }
-}
-mod serde_regex {
-    use regex::Regex;
-    use serde::{Deserialize, Deserializer, Serializer};
-
-    pub fn serialize<S: Serializer>(re: &Regex, serializer: S) -> Result<S::Ok, S::Error> {
-        serializer.serialize_str(re.as_str())
-    }
-
-    pub fn deserialize<'de, D: Deserializer<'de>>(deserializer: D) -> Result<Regex, D::Error> {
-        let ser = String::deserialize(deserializer)?;
-        Regex::new(&ser)
             .map_err(|e| serde::de::Error::custom(e))
     }
 }

@@ -1,6 +1,5 @@
 mod droppable_child;
 mod extract_info;
-mod serde_impls;
 mod wiki_parsing;
 
 
@@ -9,11 +8,11 @@ use std::fs::File;
 use std::path::PathBuf;
 
 use regex::Regex;
+use rocketbot_interface::serde::{serde_opt_regex, serde_regex};
 use serde::{Deserialize, Serialize};
 use serde_json;
 
 use crate::extract_info::{process_page, process_table, row_data_to_trams};
-use crate::serde_impls::{serde_opt_regex, serde_regex};
 use crate::wiki_parsing::WikiParser;
 
 
