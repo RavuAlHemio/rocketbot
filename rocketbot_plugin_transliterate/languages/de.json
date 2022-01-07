@@ -39,26 +39,21 @@
       ]
     },
     {
-      "matcher": "ei",
+      "matcher": "aj",
       "replacements": [
         {
-          "replacement": "aj"
+          "replacement": "ei"
         }
       ]
     },
     {
-      "matcher": "eu",
+      "matcher": "oj",
       "replacements": [
         {
-          "replacement": "oj"
-        }
-      ]
-    },
-    {
-      "matcher": "äu",
-      "replacements": [
+          "replacement": "eu"
+        },
         {
-          "replacement": "oj"
+          "replacement": "äu"
         }
       ]
     },
@@ -308,21 +303,26 @@
       ]
     },
     {
-      "matcher": "aj",
+      "matcher": "ei",
       "replacements": [
         {
-          "replacement": "ei"
+          "replacement": "aj"
         }
       ]
     },
     {
-      "matcher": "oj",
+      "matcher": "eu",
       "replacements": [
         {
-          "replacement": "eu"
-        },
+          "replacement": "oj"
+        }
+      ]
+    },
+    {
+      "matcher": "äu",
+      "replacements": [
         {
-          "replacement": "äu"
+          "replacement": "oj"
         }
       ]
     },
