@@ -1,0 +1,435 @@
+{
+  "abbrev": "de",
+  "name": "German",
+  "to_lang": [
+    {
+      "matcher": "ks",
+      "replacements": [
+        {
+          "replacement": "x"
+        }
+      ]
+    },
+    {
+      "matcher": "šp",
+      "replacements": [
+        {
+          "replacement": "sp"
+        }
+      ]
+    },
+    {
+      "matcher": "št",
+      "replacements": [
+        {
+          "replacement": "st"
+        }
+      ]
+    },
+    {
+      "matcher": "kv",
+      "replacements": [
+        {
+          "replacement": "qu",
+          "weight": 10
+        },
+        {
+          "replacement": "q"
+        }
+      ]
+    },
+    {
+      "matcher": "ei",
+      "replacements": [
+        {
+          "replacement": "aj"
+        }
+      ]
+    },
+    {
+      "matcher": "eu",
+      "replacements": [
+        {
+          "replacement": "oj"
+        }
+      ]
+    },
+    {
+      "matcher": "äu",
+      "replacements": [
+        {
+          "replacement": "oj"
+        }
+      ]
+    },
+    {
+      "matcher": "č",
+      "replacements": [
+        {
+          "replacement": "tsch"
+        }
+      ]
+    },
+    {
+      "matcher": "š",
+      "replacements": [
+        {
+          "replacement": "sch"
+        }
+      ]
+    },
+    {
+      "matcher": "s",
+      "replacements": [
+        {
+          "replacement": "ß",
+          "weight": 5
+        },
+        {
+          "replacement": "ss",
+          "weight": 5
+        },
+        {
+          "replacement": "s"
+        }
+      ]
+    },
+    {
+      "matcher": "x",
+      "replacements": [
+        {
+          "replacement": "ch"
+        }
+      ]
+    },
+    {
+      "matcher": "f",
+      "replacements": [
+        {
+          "replacement": "ph"
+        },
+        {
+          "replacement": "f"
+        },
+        {
+          "replacement": "v"
+        }
+      ]
+    },
+    {
+      "matcher": "i",
+      "replacements": [
+        {
+          "replacement": "i"
+        },
+        {
+          "replacement": "ie"
+        },
+        {
+          "replacement": "ih"
+        }
+      ]
+    },
+    {
+      "matcher": "([aeouy])",
+      "replacements": [
+        {
+          "replacement": "${1}"
+        },
+        {
+          "replacement": "${1}h"
+        }
+      ]
+    },
+    {
+      "matcher": "k",
+      "replacements": [
+        {
+          "replacement": "k",
+          "weight": 10
+        },
+        {
+          "replacement": "c",
+          "weight": 5
+        }
+      ]
+    },
+    {
+      "matcher": "z",
+      "replacements": [
+        {
+          "replacement": "s"
+        }
+      ]
+    },
+    {
+      "matcher": "t",
+      "replacements": [
+        {
+          "replacement": "t"
+        },
+        {
+          "replacement": "th"
+        }
+      ]
+    },
+    {
+      "matcher": "v",
+      "replacements": [
+        {
+          "replacement": "w"
+        }
+      ]
+    },
+    {
+      "matcher": "w",
+      "replacements": [
+        {
+          "replacement": "v"
+        }
+      ]
+    },
+    {
+      "matcher": "ž",
+      "replacements": [
+        {
+          "replacement": "j"
+        }
+      ]
+    },
+    {
+      "matcher": "ə",
+      "replacements": [
+        {
+          "replacement": "a"
+        },
+        {
+          "replacement": "e"
+        }
+      ]
+    },
+    {
+      "matcher": "c",
+      "replacements": [
+        {
+          "replacement": "z",
+          "weight": 10
+        },
+        {
+          "replacement": "tz",
+          "weight": 10
+        },
+        {
+          "replacement": "c"
+        }
+      ]
+    }
+  ],
+  "from_lang": [
+    {
+      "matcher": "tsch",
+      "replacements": [
+        {
+          "replacement": "č"
+        }
+      ]
+    },
+    {
+      "matcher": "sch",
+      "replacements": [
+        {
+          "replacement": "š"
+        }
+      ]
+    },
+    {
+      "matcher": "s([tp])",
+      "replacements": [
+        {
+          "replacement": "š${1}",
+          "weight": 10
+        },
+        {
+          "replacement": "s${1}",
+          "weight": 1
+        }
+      ]
+    },
+    {
+      "matcher": "ss",
+      "replacements": [
+        {
+          "replacement": "s"
+        }
+      ]
+    },
+    {
+      "matcher": "ch",
+      "replacements": [
+        {
+          "replacement": "x"
+        }
+      ]
+    },
+    {
+      "matcher": "ph",
+      "replacements": [
+        {
+          "replacement": "f"
+        }
+      ]
+    },
+    {
+      "matcher": "([aeiouy])h",
+      "replacements": [
+        {
+          "replacement": "${1}"
+        }
+      ]
+    },
+    {
+      "matcher": "ie",
+      "replacements": [
+        {
+          "replacement": "i",
+          "weight": 10
+        },
+        {
+          "replacement": "ie"
+        }
+      ]
+    },
+    {
+      "matcher": "qu",
+      "replacements": [
+        {
+          "replacement": "kv"
+        }
+      ]
+    },
+    {
+      "matcher": "aj",
+      "replacements": [
+        {
+          "replacement": "ei"
+        }
+      ]
+    },
+    {
+      "matcher": "oj",
+      "replacements": [
+        {
+          "replacement": "eu"
+        },
+        {
+          "replacement": "äu"
+        }
+      ]
+    },
+    {
+      "matcher": "tz",
+      "replacements": [
+        {
+          "replacement": "c"
+        }
+      ]
+    },
+    {
+      "matcher": "h",
+      "replacements": [
+        {
+          "replacement": ""
+        }
+      ]
+    },
+    {
+      "matcher": "x",
+      "replacements": [
+        {
+          "replacement": "ks"
+        }
+      ]
+    },
+    {
+      "matcher": "c",
+      "replacements": [
+        {
+          "replacement": "k",
+          "weight": 10
+        },
+        {
+          "replacement": "c",
+          "weight": 5
+        }
+      ]
+    },
+    {
+      "matcher": "z",
+      "replacements": [
+        {
+          "replacement": "c",
+          "weight": 10
+        },
+        {
+          "replacement": "z",
+          "weight": 1
+        }
+      ]
+    },
+    {
+      "matcher": "s",
+      "replacements": [
+        {
+          "replacement": "z",
+          "weight": 10
+        },
+        {
+          "replacement": "s",
+          "weight": 1
+        }
+      ]
+    },
+    {
+      "matcher": "v",
+      "replacements": [
+        {
+          "replacement": "f",
+          "weight": 10
+        },
+        {
+          "replacement": "v",
+          "weight": 1
+        }
+      ]
+    },
+    {
+      "matcher": "w",
+      "replacements": [
+        {
+          "replacement": "v"
+        }
+      ]
+    },
+    {
+      "matcher": "j",
+      "replacements": [
+        {
+          "replacement": "j",
+          "weight": 10
+        },
+        {
+          "replacement": "ž",
+          "weight": 1
+        }
+      ]
+    },
+    {
+      "matcher": "ß",
+      "replacements": [
+        {
+          "replacement": "s"
+        }
+      ]
+    }
+  ]
+}

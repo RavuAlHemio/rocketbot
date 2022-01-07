@@ -1,0 +1,333 @@
+{
+  "abbrev": "ro",
+  "name": "Romanian",
+  "to_lang": [
+    {
+      "matcher": "dž([aou])",
+      "replacements": [
+        {
+          "replacement": "gi${1}"
+        }
+      ]
+    },
+    {
+      "matcher": "dž([ei])",
+      "replacements": [
+        {
+          "replacement": "g${1}"
+        }
+      ]
+    },
+    {
+      "matcher": "k([aou])",
+      "replacements": [
+        {
+          "replacement": "c${1}"
+        },
+        {
+          "replacement": "q${1}"
+        }
+      ]
+    },
+    {
+      "matcher": "k([ei])",
+      "replacements": [
+        {
+          "replacement": "ch${1}"
+        },
+        {
+          "replacement": "q${1}"
+        }
+      ]
+    },
+    {
+      "matcher": "kv",
+      "replacements": [
+        {
+          "replacement": "qu"
+        }
+      ]
+    },
+    {
+      "matcher": "ks",
+      "replacements": [
+        {
+          "replacement": "x"
+        }
+      ]
+    },
+    {
+      "matcher": "č([aou])",
+      "replacements": [
+        {
+          "replacement": "ci${1}"
+        }
+      ]
+    },
+    {
+      "matcher": "č([ei])",
+      "replacements": [
+        {
+          "replacement": "c${1}"
+        }
+      ]
+    },
+    {
+      "matcher": "ž([aou])",
+      "replacements": [
+        {
+          "replacement": "ji${1}"
+        }
+      ]
+    },
+    {
+      "matcher": "ž([ei])",
+      "replacements": [
+        {
+          "replacement": "j${1}"
+        }
+      ]
+    },
+    {
+      "matcher": "g([ei])",
+      "replacements": [
+        {
+          "replacement": "gh${1}"
+        }
+      ]
+    },
+    {
+      "matcher": "ə",
+      "replacements": [
+        {
+          "replacement": "ă"
+        },
+        {
+          "replacement": "â"
+        },
+        {
+          "replacement": "î"
+        }
+      ]
+    },
+    {
+      "matcher": "c",
+      "replacements": [
+        {
+          "replacement": "ț"
+        }
+      ]
+    },
+    {
+      "matcher": "x",
+      "replacements": [
+        {
+          "replacement": "h"
+        }
+      ]
+    },
+    {
+      "matcher": "j",
+      "replacements": [
+        {
+          "replacement": "i"
+        }
+      ]
+    },
+    {
+      "matcher": "š",
+      "replacements": [
+        {
+          "replacement": "ș"
+        }
+      ]
+    },
+    {
+      "matcher": "w",
+      "replacements": [
+        {
+          "replacement": "v"
+        }
+      ]
+    },
+    {
+      "matcher": "[äö]",
+      "replacements": [
+        {
+          "replacement": "e"
+        }
+      ]
+    },
+    {
+      "matcher": "ü",
+      "replacements": [
+        {
+          "replacement": "i"
+        },
+        {
+          "replacement": "u"
+        }
+      ]
+    }
+  ],
+  "from_lang": [
+    {
+      "matcher": "gi([aou])",
+      "replacements": [
+        {
+          "replacement": "dž${1}"
+        }
+      ]
+    },
+    {
+      "matcher": "g([ei])",
+      "replacements": [
+        {
+          "replacement": "dž${1}"
+        }
+      ]
+    },
+    {
+      "matcher": "[cq]([aou])",
+      "replacements": [
+        {
+          "replacement": "k${1}"
+        }
+      ]
+    },
+    {
+      "matcher": "(ch|q)([ei])",
+      "replacements": [
+        {
+          "replacement": "k${2}"
+        }
+      ]
+    },
+    {
+      "matcher": "qu",
+      "replacements": [
+        {
+          "replacement": "kv"
+        }
+      ]
+    },
+    {
+      "matcher": "x",
+      "replacements": [
+        {
+          "replacement": "ks"
+        }
+      ]
+    },
+    {
+      "matcher": "ci([aou])",
+      "replacements": [
+        {
+          "replacement": "č${1}"
+        }
+      ]
+    },
+    {
+      "matcher": "c([ei])",
+      "replacements": [
+        {
+          "replacement": "č${1}"
+        }
+      ]
+    },
+    {
+      "matcher": "ji([aou])",
+      "replacements": [
+        {
+          "replacement": "ž${1}"
+        }
+      ]
+    },
+    {
+      "matcher": "j([ei])",
+      "replacements": [
+        {
+          "replacement": "ž${1}"
+        }
+      ]
+    },
+    {
+      "matcher": "gh([ei])",
+      "replacements": [
+        {
+          "replacement": "g${1}"
+        }
+      ]
+    },
+    {
+      "matcher": "ă",
+      "replacements": [
+        {
+          "replacement": "ə"
+        }
+      ]
+    },
+    {
+      "matcher": "â",
+      "replacements": [
+        {
+          "replacement": "ə"
+        }
+      ]
+    },
+    {
+      "matcher": "î",
+      "replacements": [
+        {
+          "replacement": "ə"
+        }
+      ]
+    },
+    {
+      "matcher": "ț",
+      "replacements": [
+        {
+          "replacement": "c"
+        }
+      ]
+    },
+    {
+      "matcher": "h",
+      "replacements": [
+        {
+          "replacement": "x"
+        }
+      ]
+    },
+    {
+      "matcher": "i",
+      "replacements": [
+        {
+          "replacement": "i"
+        },
+        {
+          "replacement": "j"
+        }
+      ]
+    },
+    {
+      "matcher": "ș",
+      "replacements": [
+        {
+          "replacement": "š"
+        }
+      ]
+    },
+    {
+      "matcher": "v",
+      "replacements": [
+        {
+          "replacement": "v"
+        },
+        {
+          "replacement": "w"
+        }
+      ]
+    }
+  ]
+}

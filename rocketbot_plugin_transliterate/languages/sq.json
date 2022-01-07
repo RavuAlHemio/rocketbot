@@ -1,0 +1,185 @@
+{
+  "abbrev": "sq",
+  "name": "Albanian",
+  "to_lang": [
+    {
+      "matcher": "dz",
+      "replacements": [
+        {
+          "replacement": "x"
+        }
+      ]
+    },
+    {
+      "matcher": "dž",
+      "replacements": [
+        {
+          "replacement": "xh"
+        }
+      ]
+    },
+    {
+      "matcher": "ñ",
+      "replacements": [
+        {
+          "replacement": "nj"
+        }
+      ]
+    },
+    {
+      "matcher": "č",
+      "replacements": [
+        {
+          "replacement": "ç"
+        },
+        {
+          "replacement": "q"
+        }
+      ]
+    },
+    {
+      "matcher": "ð",
+      "replacements": [
+        {
+          "replacement": "dh"
+        }
+      ]
+    },
+    {
+      "matcher": "ə",
+      "replacements": [
+        {
+          "replacement": "ë"
+        }
+      ]
+    },
+    {
+      "matcher": "j",
+      "replacements": [
+        {
+          "replacement": "j"
+        },
+        {
+          "replacement": "gj"
+        }
+      ]
+    },
+    {
+      "matcher": "l",
+      "replacements": [
+        {
+          "replacement": "l"
+        },
+        {
+          "replacement": "ll"
+        }
+      ]
+    },
+    {
+      "matcher": "š",
+      "replacements": [
+        {
+          "replacement": "sh"
+        }
+      ]
+    },
+    {
+      "matcher": "ž",
+      "replacements": [
+        {
+          "replacement": "zh"
+        }
+      ]
+    }
+  ],
+  "from_lang": [
+    {
+      "matcher": "dh",
+      "replacements": [
+        {
+          "replacement": "ð"
+        }
+      ]
+    },
+    {
+      "matcher": "gj",
+      "replacements": [
+        {
+          "replacement": "j"
+        }
+      ]
+    },
+    {
+      "matcher": "ll",
+      "replacements": [
+        {
+          "replacement": "l"
+        }
+      ]
+    },
+    {
+      "matcher": "nj",
+      "replacements": [
+        {
+          "replacement": "ñ"
+        }
+      ]
+    },
+    {
+      "matcher": "sh",
+      "replacements": [
+        {
+          "replacement": "š"
+        }
+      ]
+    },
+    {
+      "matcher": "xh",
+      "replacements": [
+        {
+          "replacement": "dž"
+        }
+      ]
+    },
+    {
+      "matcher": "zh",
+      "replacements": [
+        {
+          "replacement": "ž"
+        }
+      ]
+    },
+    {
+      "matcher": "ç",
+      "replacements": [
+        {
+          "replacement": "č"
+        }
+      ]
+    },
+    {
+      "matcher": "ë",
+      "replacements": [
+        {
+          "replacement": "ə"
+        }
+      ]
+    },
+    {
+      "matcher": "q",
+      "replacements": [
+        {
+          "replacement": "č"
+        }
+      ]
+    },
+    {
+      "matcher": "x",
+      "replacements": [
+        {
+          "replacement": "dz"
+        }
+      ]
+    }
+  ]
+}

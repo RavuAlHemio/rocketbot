@@ -1,0 +1,229 @@
+{
+  "abbrev": "cs",
+  "name": "Czech",
+  "to_lang": [
+    {
+      "matcher": "([bpv])je",
+      "replacements": [
+        {
+          "replacement": "${1}ě"
+        }
+      ]
+    },
+    {
+      "matcher": "mñe",
+      "replacements": [
+        {
+          "replacement": "mě"
+        }
+      ]
+    },
+    {
+      "matcher": "xi",
+      "replacements": [
+        {
+          "replacement": "chy"
+        }
+      ]
+    },
+    {
+      "matcher": "ďe",
+      "replacements": [
+        {
+          "replacement": "dě"
+        }
+      ]
+    },
+    {
+      "matcher": "ťe",
+      "replacements": [
+        {
+          "replacement": "tě"
+        }
+      ]
+    },
+    {
+      "matcher": "ñe",
+      "replacements": [
+        {
+          "replacement": "ně"
+        }
+      ]
+    },
+    {
+      "matcher": "ks",
+      "replacements": [
+        {
+          "replacement": "x"
+        }
+      ]
+    },
+    {
+      "matcher": "x",
+      "replacements": [
+        {
+          "replacement": "ch"
+        }
+      ]
+    },
+    {
+      "matcher": "ä",
+      "replacements": [
+        {
+          "replacement": "e"
+        }
+      ]
+    },
+    {
+      "matcher": "ö",
+      "replacements": [
+        {
+          "replacement": "e"
+        }
+      ]
+    },
+    {
+      "matcher": "ü",
+      "replacements": [
+        {
+          "replacement": "y"
+        }
+      ]
+    },
+    {
+      "matcher": "([hkrdtn])i",
+      "replacements": [
+        {
+          "replacement": "${1}y"
+        }
+      ]
+    },
+    {
+      "matcher": "([bflmpsvz])i",
+      "replacements": [
+        {
+          "remark": "fuck the Czech education system",
+          "replacement": "i"
+        },
+        {
+          "remark": "spelling reform *now*",
+          "replacement": "y"
+        }
+      ]
+    }
+  ],
+  "from_lang": [
+    {
+      "matcher": "x",
+      "replacements": [
+        {
+          "replacement": "ks"
+        }
+      ]
+    },
+    {
+      "matcher": "ch",
+      "replacements": [
+        {
+          "replacement": "x"
+        }
+      ]
+    },
+    {
+      "matcher": "([bpv])ě",
+      "replacements": [
+        {
+          "replacement": "${1}je"
+        }
+      ]
+    },
+    {
+      "matcher": "mě",
+      "replacements": [
+        {
+          "replacement": "mñe"
+        }
+      ]
+    },
+    {
+      "matcher": "dě",
+      "replacements": [
+        {
+          "replacement": "ďe"
+        }
+      ]
+    },
+    {
+      "matcher": "tě",
+      "replacements": [
+        {
+          "replacement": "ťe"
+        }
+      ]
+    },
+    {
+      "matcher": "ně",
+      "replacements": [
+        {
+          "replacement": "ñe"
+        }
+      ]
+    },
+    {
+      "matcher": "á",
+      "replacements": [
+        {
+          "replacement": "a"
+        }
+      ]
+    },
+    {
+      "matcher": "é",
+      "replacements": [
+        {
+          "replacement": "e"
+        }
+      ]
+    },
+    {
+      "matcher": "[íý]",
+      "replacements": [
+        {
+          "replacement": "i"
+        }
+      ]
+    },
+    {
+      "matcher": "ó",
+      "replacements": [
+        {
+          "replacement": "o"
+        }
+      ]
+    },
+    {
+      "matcher": "[úů]",
+      "replacements": [
+        {
+          "replacement": "u"
+        }
+      ]
+    },
+    {
+      "matcher": "[úů]",
+      "replacements": [
+        {
+          "replacement": "u"
+        }
+      ]
+    },
+    {
+      "matcher": "y",
+      "replacements": [
+        {
+          "replacement": "i"
+        }
+      ]
+    }
+  ]
+}

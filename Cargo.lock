@@ -1791,6 +1791,7 @@ dependencies = [
  "rocketbot_plugin_thanks",
  "rocketbot_plugin_time",
  "rocketbot_plugin_topic_timer",
+ "rocketbot_plugin_transliterate",
  "rocketbot_plugin_vaccine",
  "rocketbot_plugin_version",
  "rocketbot_plugin_vitals",
@@ -2338,6 +2339,20 @@ dependencies = [
  "log",
  "regex",
  "rocketbot_interface",
+ "serde_json",
+]
+
+[[package]]
+name = "rocketbot_plugin_transliterate"
+version = "0.1.0"
+dependencies = [
+ "async-trait",
+ "log",
+ "rand",
+ "regex",
+ "rocketbot_interface",
+ "rocketbot_regex_replace",
+ "serde",
  "serde_json",
 ]
 
