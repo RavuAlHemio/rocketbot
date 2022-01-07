@@ -4,99 +4,51 @@
   "to_lang": [
     {
       "matcher": "([bpv])je",
-      "replacements": [
-        {
-          "replacement": "${1}ě"
-        }
-      ]
+      "replacements": [{ "replacement": "${1}ě" }]
     },
     {
       "matcher": "mñe",
-      "replacements": [
-        {
-          "replacement": "mě"
-        }
-      ]
+      "replacements": [{ "replacement": "mě" }]
     },
     {
       "matcher": "xi",
-      "replacements": [
-        {
-          "replacement": "chy"
-        }
-      ]
+      "replacements": [{ "replacement": "chy" }]
     },
     {
       "matcher": "ďe",
-      "replacements": [
-        {
-          "replacement": "dě"
-        }
-      ]
+      "replacements": [{ "replacement": "dě" }]
     },
     {
       "matcher": "ťe",
-      "replacements": [
-        {
-          "replacement": "tě"
-        }
-      ]
+      "replacements": [{ "replacement": "tě" }]
     },
     {
       "matcher": "ñe",
-      "replacements": [
-        {
-          "replacement": "ně"
-        }
-      ]
+      "replacements": [{ "replacement": "ně" }]
     },
     {
       "matcher": "ks",
-      "replacements": [
-        {
-          "replacement": "x"
-        }
-      ]
+      "replacements": [{ "replacement": "x" }]
     },
     {
       "matcher": "x",
-      "replacements": [
-        {
-          "replacement": "ch"
-        }
-      ]
+      "replacements": [{ "replacement": "ch" }]
     },
     {
       "matcher": "ä",
-      "replacements": [
-        {
-          "replacement": "e"
-        }
-      ]
+      "replacements": [{ "replacement": "e" }]
     },
     {
       "matcher": "ö",
-      "replacements": [
-        {
-          "replacement": "e"
-        }
-      ]
+      "replacements": [{ "replacement": "e" }]
     },
     {
       "matcher": "ü",
-      "replacements": [
-        {
-          "replacement": "y"
-        }
-      ]
+      "replacements": [{ "replacement": "y" }]
     },
     {
       "matcher": "([hkrdtn])i",
-      "replacements": [
-        {
-          "replacement": "${1}y"
-        }
-      ]
+      "replacements": [{ "replacement": "${1}y" }]
     },
     {
       "matcher": "([bflmpsvz])i",
@@ -115,115 +67,59 @@
   "from_lang": [
     {
       "matcher": "x",
-      "replacements": [
-        {
-          "replacement": "ks"
-        }
-      ]
+      "replacements": [{ "replacement": "ks" }]
     },
     {
       "matcher": "ch",
-      "replacements": [
-        {
-          "replacement": "x"
-        }
-      ]
+      "replacements": [{ "replacement": "x" }]
     },
     {
       "matcher": "([bpv])ě",
-      "replacements": [
-        {
-          "replacement": "${1}je"
-        }
-      ]
+      "replacements": [{ "replacement": "${1}je" }]
     },
     {
       "matcher": "mě",
-      "replacements": [
-        {
-          "replacement": "mñe"
-        }
-      ]
+      "replacements": [{ "replacement": "mñe" }]
     },
     {
       "matcher": "dě",
-      "replacements": [
-        {
-          "replacement": "ďe"
-        }
-      ]
+      "replacements": [{ "replacement": "ďe" }]
     },
     {
       "matcher": "tě",
-      "replacements": [
-        {
-          "replacement": "ťe"
-        }
-      ]
+      "replacements": [{ "replacement": "ťe" }]
     },
     {
       "matcher": "ně",
-      "replacements": [
-        {
-          "replacement": "ñe"
-        }
-      ]
+      "replacements": [{ "replacement": "ñe" }]
     },
     {
       "matcher": "á",
-      "replacements": [
-        {
-          "replacement": "a"
-        }
-      ]
+      "replacements": [{ "replacement": "a" }]
     },
     {
       "matcher": "é",
-      "replacements": [
-        {
-          "replacement": "e"
-        }
-      ]
+      "replacements": [{ "replacement": "e" }]
     },
     {
       "matcher": "[íý]",
-      "replacements": [
-        {
-          "replacement": "i"
-        }
-      ]
+      "replacements": [{ "replacement": "i" }]
     },
     {
       "matcher": "ó",
-      "replacements": [
-        {
-          "replacement": "o"
-        }
-      ]
+      "replacements": [{ "replacement": "o" }]
     },
     {
       "matcher": "[úů]",
-      "replacements": [
-        {
-          "replacement": "u"
-        }
-      ]
+      "replacements": [{ "replacement": "u" }]
     },
     {
       "matcher": "[úů]",
-      "replacements": [
-        {
-          "replacement": "u"
-        }
-      ]
+      "replacements": [{ "replacement": "u" }]
     },
     {
       "matcher": "y",
-      "replacements": [
-        {
-          "replacement": "i"
-        }
-      ]
+      "replacements": [{ "replacement": "i" }]
     }
   ]
 }
