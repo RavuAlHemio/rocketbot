@@ -38,6 +38,18 @@
       ]
     },
     {
+      "matcher": "əl",
+      "replacements": [
+        { "replacement": "el" }
+      ]
+    },
+    {
+      "matcher": "dž",
+      "replacements": [
+        { "replacement": "dsch" }
+      ]
+    },
+    {
       "matcher": "č",
       "replacements": [{ "replacement": "tsch" }]
     },
@@ -134,7 +146,8 @@
       "matcher": "ə",
       "replacements": [
         { "replacement": "a" },
-        { "replacement": "e" }
+        { "replacement": "e" },
+        { "replacement": "er" }
       ]
     },
     {
@@ -168,6 +181,10 @@
     {
       "matcher": "tsch",
       "replacements": [{ "replacement": "č" }]
+    },
+    {
+      "matcher": "dsch",
+      "replacements": [{ "replacement": "dž" }]
     },
     {
       "matcher": "sch",
@@ -289,6 +306,20 @@
     {
       "matcher": "zz",
       "replacements": [{ "replacement": "z" }]
+    },
+    {
+      "matcher": "er",
+      "replacements": [
+        { "replacement": "er" },
+        { "replacement": "ə" }
+      ]
+    },
+    {
+      "matcher": "el",
+      "replacements": [
+        { "replacement": "əl" },
+        { "replacement": "el" }
+      ]
     },
     {
       "matcher": "h",
