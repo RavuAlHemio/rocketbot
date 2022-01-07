@@ -143,6 +143,14 @@
       ]
     },
     {
+      "matcher": "č",
+      "replacements": [
+        {
+          "replacement": "ci"
+        }
+      ]
+    },
+    {
       "matcher": "w",
       "replacements": [
         {
