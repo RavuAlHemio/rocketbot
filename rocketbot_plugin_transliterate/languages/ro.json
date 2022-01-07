@@ -13,23 +13,15 @@
     {
       "matcher": "k([aou])",
       "replacements": [
-        {
-          "replacement": "c${1}"
-        },
-        {
-          "replacement": "q${1}"
-        }
+        { "replacement": "c${1}" },
+        { "replacement": "q${1}" }
       ]
     },
     {
       "matcher": "k([ei])",
       "replacements": [
-        {
-          "replacement": "ch${1}"
-        },
-        {
-          "replacement": "q${1}"
-        }
+        { "replacement": "ch${1}" },
+        { "replacement": "q${1}" }
       ]
     },
     {
@@ -63,15 +55,9 @@
     {
       "matcher": "ə",
       "replacements": [
-        {
-          "replacement": "ă"
-        },
-        {
-          "replacement": "â"
-        },
-        {
-          "replacement": "î"
-        }
+        { "replacement": "ă" },
+        { "replacement": "â" },
+        { "replacement": "î" }
       ]
     },
     {
@@ -105,12 +91,8 @@
     {
       "matcher": "ü",
       "replacements": [
-        {
-          "replacement": "i"
-        },
-        {
-          "replacement": "u"
-        }
+        { "replacement": "i" },
+        { "replacement": "u" }
       ]
     }
   ],
@@ -182,12 +164,8 @@
     {
       "matcher": "i",
       "replacements": [
-        {
-          "replacement": "i"
-        },
-        {
-          "replacement": "j"
-        }
+        { "replacement": "i" },
+        { "replacement": "j" }
       ]
     },
     {
@@ -197,12 +175,8 @@
     {
       "matcher": "v",
       "replacements": [
-        {
-          "replacement": "v"
-        },
-        {
-          "replacement": "w"
-        }
+        { "replacement": "v" },
+        { "replacement": "w" }
       ]
     }
   ]

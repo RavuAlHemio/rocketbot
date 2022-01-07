@@ -33,12 +33,8 @@
     {
       "matcher": "oj",
       "replacements": [
-        {
-          "replacement": "eu"
-        },
-        {
-          "replacement": "äu"
-        }
+        { "replacement": "eu" },
+        { "replacement": "äu" }
       ]
     },
     {
@@ -72,43 +68,25 @@
     {
       "matcher": "f",
       "replacements": [
-        {
-          "replacement": "ph"
-        },
-        {
-          "replacement": "f"
-        },
-        {
-          "replacement": "ff"
-        },
-        {
-          "replacement": "v"
-        }
+        { "replacement": "ph" },
+        { "replacement": "f" },
+        { "replacement": "ff" },
+        { "replacement": "v" }
       ]
     },
     {
       "matcher": "i",
       "replacements": [
-        {
-          "replacement": "i"
-        },
-        {
-          "replacement": "ie"
-        },
-        {
-          "replacement": "ih"
-        }
+        { "replacement": "i" },
+        { "replacement": "ie" },
+        { "replacement": "ih" }
       ]
     },
     {
       "matcher": "([aeouy])",
       "replacements": [
-        {
-          "replacement": "${1}"
-        },
-        {
-          "replacement": "${1}h"
-        }
+        { "replacement": "${1}" },
+        { "replacement": "${1}h" }
       ]
     },
     {
@@ -135,15 +113,9 @@
     {
       "matcher": "t",
       "replacements": [
-        {
-          "replacement": "t"
-        },
-        {
-          "replacement": "tt"
-        },
-        {
-          "replacement": "th"
-        }
+        { "replacement": "t" },
+        { "replacement": "tt" },
+        { "replacement": "th" }
       ]
     },
     {
@@ -161,12 +133,8 @@
     {
       "matcher": "ə",
       "replacements": [
-        {
-          "replacement": "a"
-        },
-        {
-          "replacement": "e"
-        }
+        { "replacement": "a" },
+        { "replacement": "e" }
       ]
     },
     {
@@ -191,12 +159,8 @@
     {
       "matcher": "([bdglmnprst])",
       "replacements": [
-        {
-          "replacement": "${1}"
-        },
-        {
-          "replacement": "${1}${1}"
-        }
+        { "replacement": "${1}" },
+        { "replacement": "${1}${1}" }
       ]
     }
   ],

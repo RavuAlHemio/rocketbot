@@ -17,12 +17,8 @@
     {
       "matcher": "č",
       "replacements": [
-        {
-          "replacement": "ç"
-        },
-        {
-          "replacement": "q"
-        }
+        { "replacement": "ç" },
+        { "replacement": "q" }
       ]
     },
     {
@@ -36,23 +32,15 @@
     {
       "matcher": "j",
       "replacements": [
-        {
-          "replacement": "j"
-        },
-        {
-          "replacement": "gj"
-        }
+        { "replacement": "j" },
+        { "replacement": "gj" }
       ]
     },
     {
       "matcher": "l",
       "replacements": [
-        {
-          "replacement": "l"
-        },
-        {
-          "replacement": "ll"
-        }
+        { "replacement": "l" },
+        { "replacement": "ll" }
       ]
     },
     {
