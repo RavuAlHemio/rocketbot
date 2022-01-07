@@ -79,6 +79,9 @@
           "replacement": "f"
         },
         {
+          "replacement": "ff"
+        },
+        {
           "replacement": "v"
         }
       ]
@@ -116,6 +119,10 @@
           "weight": 10
         },
         {
+          "replacement": "ck",
+          "weight": 10
+        },
+        {
           "replacement": "c",
           "weight": 5
         }
@@ -130,6 +137,9 @@
       "replacements": [
         {
           "replacement": "t"
+        },
+        {
+          "replacement": "tt"
         },
         {
           "replacement": "th"
@@ -172,6 +182,20 @@
         },
         {
           "replacement": "c"
+        },
+        {
+          "replacement": "zz"
+        }
+      ]
+    },
+    {
+      "matcher": "([bdglmnprst])",
+      "replacements": [
+        {
+          "replacement": "${1}"
+        },
+        {
+          "replacement": "${1}${1}"
         }
       ]
     }
@@ -245,6 +269,62 @@
     {
       "matcher": "tz",
       "replacements": [{ "replacement": "c" }]
+    },
+    {
+      "matcher": "ck",
+      "replacements": [{ "replacement": "k" }]
+    },
+    {
+      "matcher": "bb",
+      "replacements": [{ "replacement": "b" }]
+    },
+    {
+      "matcher": "dd",
+      "replacements": [{ "replacement": "d" }]
+    },
+    {
+      "matcher": "ff",
+      "replacements": [{ "replacement": "f" }]
+    },
+    {
+      "matcher": "gg",
+      "replacements": [{ "replacement": "g" }]
+    },
+    {
+      "matcher": "kk",
+      "replacements": [{ "replacement": "k" }]
+    },
+    {
+      "matcher": "ll",
+      "replacements": [{ "replacement": "l" }]
+    },
+    {
+      "matcher": "mm",
+      "replacements": [{ "replacement": "m" }]
+    },
+    {
+      "matcher": "nn",
+      "replacements": [{ "replacement": "n" }]
+    },
+    {
+      "matcher": "pp",
+      "replacements": [{ "replacement": "p" }]
+    },
+    {
+      "matcher": "rr",
+      "replacements": [{ "replacement": "r" }]
+    },
+    {
+      "matcher": "ss",
+      "replacements": [{ "replacement": "s" }]
+    },
+    {
+      "matcher": "tt",
+      "replacements": [{ "replacement": "t" }]
+    },
+    {
+      "matcher": "zz",
+      "replacements": [{ "replacement": "z" }]
     },
     {
       "matcher": "h",
