@@ -324,7 +324,7 @@ impl RocketBotPlugin for TransliteratePlugin {
                         &CommandDefinitionBuilder::new(
                             dest_lang.abbrev.clone(),
                             "transliterate".to_owned(),
-                            "PHRASE".to_owned(),
+                            "{cpfx}{cmd} PHRASE".to_owned(),
                             format!(
                                 "Transliterates text from {} to {}.",
                                 source_lang.name, dest_lang.name,
