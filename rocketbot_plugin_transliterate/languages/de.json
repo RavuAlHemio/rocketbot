@@ -360,6 +360,10 @@
       ]
     },
     {
+      "matcher": "s\\b",
+      "replacements": [{ "replacement": "s" }]
+    },
+    {
       "matcher": "s",
       "replacements": [
         {
