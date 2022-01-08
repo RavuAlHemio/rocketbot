@@ -9,24 +9,20 @@ use async_trait::async_trait;
 use chrono::{DateTime, Local};
 use indexmap::IndexSet;
 use log::error;
-use once_cell::sync::Lazy;
+use once_cell::sync::OnceCell;
 use rand::{Rng, thread_rng};
 use regex::Regex;
 use rocketbot_interface::{JsonValueExtensions, phrase_join, send_channel_message};
 use rocketbot_interface::commands::{CommandDefinitionBuilder, CommandInstance, CommandValueType};
 use rocketbot_interface::interfaces::{RocketBotInterface, RocketBotPlugin};
 use rocketbot_interface::model::ChannelMessage;
+use rocketbot_interface::serde::serde_opt_regex;
 use serde::{Deserialize, Serialize};
 use serde_json;
 use tokio_postgres::NoTls;
 
 
 pub type VehicleNumber = u32;
-
-
-pub static BIMRIDE_RE: Lazy<Regex> = Lazy::new(|| Regex::new(
-    "^(?P<vehicles>[0-9]+(?:[+][0-9]+)*)(?:/(?P<line>[0-9A-Z]+|Sonderzug))?$"
-).expect("failed to parse bimride regex"));
 
 
 macro_rules! write_expect {
@@ -89,9 +85,56 @@ pub struct RideInfo {
 }
 
 
+#[derive(Clone, Debug, Deserialize, Serialize)]
+pub struct CompanyDefinition {
+    pub name: String,
+    pub bim_database_path: Option<String>,
+    #[serde(with = "serde_opt_regex")] pub vehicle_number_regex: Option<Regex>,
+    #[serde(with = "serde_opt_regex")] pub line_number_regex: Option<Regex>,
+    #[serde(skip)] vehicle_and_line_regex: OnceCell<Regex>,
+}
+impl CompanyDefinition {
+    pub fn vehicle_and_line_regex(&self) -> &Regex {
+        if let Some(valr) = self.vehicle_and_line_regex.get() {
+            return valr;
+        }
+
+        let vehicle_number_rstr = self.vehicle_number_regex
+            .as_ref()
+            .map(|r| r.as_str())
+            .unwrap_or(".+");
+        let line_number_rstr = self.line_number_regex
+            .as_ref()
+            .map(|r| r.as_str())
+            .unwrap_or(".+");
+
+        let valr_string = format!(
+            "^(?P<vehicles>{}(?:[+]{})*)(?:[/](?P<line>{}))?$",
+            vehicle_number_rstr, vehicle_number_rstr, line_number_rstr,
+        );
+        let valr = Regex::new(&valr_string)
+            .expect("failed to assemble vehicle-and-line regex");
+        self.vehicle_and_line_regex.set(valr)
+            .expect("failed to set vehicle-and-line regex");
+        self.vehicle_and_line_regex.get()
+            .expect("failed to get freshly-set vehicle-and-line regex")
+    }
+
+    pub fn placeholder() -> Self {
+        Self {
+            name: "Placeholder".to_owned(),
+            bim_database_path: None,
+            vehicle_number_regex: None,
+            line_number_regex: None,
+            vehicle_and_line_regex: OnceCell::new(),
+        }
+    }
+}
+
+
 pub struct BimPlugin {
     interface: Weak<dyn RocketBotInterface>,
-    company_to_bim_database_path: HashMap<String, Option<String>>,
+    company_to_definition: HashMap<String, CompanyDefinition>,
     default_company: String,
     manufacturer_mapping: HashMap<String, String>,
     ride_db_conn_string: String,
@@ -99,8 +142,8 @@ pub struct BimPlugin {
 }
 impl BimPlugin {
     fn load_bim_database(&self, company: &str) -> Option<HashMap<VehicleNumber, VehicleInfo>> {
-        let path_opt = match self.company_to_bim_database_path.get(company) {
-            Some(p) => p,
+        let path_opt = match self.company_to_definition.get(company) {
+            Some(p) => p.bim_database_path.as_ref(),
             None => {
                 error!("unknown company {:?}", company);
                 return None;
@@ -300,14 +343,17 @@ impl BimPlugin {
             .map(|v| v.as_str().unwrap())
             .unwrap_or(self.default_company.as_str());
 
-        if !self.company_to_bim_database_path.contains_key(company) {
-            send_channel_message!(
-                interface,
-                &channel_message.channel.name,
-                "Unknown company.",
-            ).await;
-            return;
-        }
+        let company_def = match self.company_to_definition.get(company) {
+            Some(cd) => cd,
+            None => {
+                send_channel_message!(
+                    interface,
+                    &channel_message.channel.name,
+                    "Unknown company.",
+                ).await;
+                return;
+            }
+        };
 
         let bim_database_opt = self.load_bim_database(company);
         let mut ride_conn = match self.connect_ride_db().await {
@@ -322,15 +368,18 @@ impl BimPlugin {
             },
         };
 
-        let increment_res = increment_rides_by_spec(
-            &mut ride_conn,
-            bim_database_opt.as_ref(),
-            company,
-            &channel_message.message.sender.username,
-            channel_message.message.timestamp.with_timezone(&Local),
-            &command.rest,
-            self.allow_fixed_coupling_combos,
-        ).await;
+        let increment_res = {
+            increment_rides_by_spec(
+                &mut ride_conn,
+                bim_database_opt.as_ref(),
+                company,
+                company_def,
+                &channel_message.message.sender.username,
+                channel_message.message.timestamp.with_timezone(&Local),
+                &command.rest,
+                self.allow_fixed_coupling_combos,
+            ).await
+        };
         let mut last_ride_infos = match increment_res {
             Ok(lri) => lri,
             Err(IncrementBySpecError::SpecParseFailure(spec)) => {
@@ -489,7 +538,7 @@ impl BimPlugin {
             .map(|v| v.as_str().unwrap())
             .unwrap_or(self.default_company.as_str());
 
-        if !self.company_to_bim_database_path.contains_key(company) {
+        if !self.company_to_definition.contains_key(company) {
             send_channel_message!(
                 interface,
                 &channel_message.channel.name,
@@ -690,10 +739,7 @@ impl BimPlugin {
             Some(i) => i,
         };
 
-        let mut company_names: Vec<&String> = self.company_to_bim_database_path
-            .keys()
-            .collect();
-        if self.company_to_bim_database_path.len() == 0 {
+        if self.company_to_definition.len() == 0 {
             send_channel_message!(
                 interface,
                 &channel_message.channel.name,
@@ -702,11 +748,15 @@ impl BimPlugin {
             return;
         }
 
+        let mut company_names: Vec<(&String, &String)> = self.company_to_definition
+            .iter()
+            .map(|(abbr, cd)| (abbr, &cd.name))
+            .collect();
         company_names.sort_unstable();
 
         let mut response_str = "The following companies exist:".to_owned();
-        for company_name in company_names {
-            write_expect!(&mut response_str, "\n* `{}`", company_name);
+        for (abbr, company_name) in company_names {
+            write_expect!(&mut response_str, "\n* `{}` ({})", abbr, company_name);
         }
 
         send_channel_message!(
@@ -842,17 +892,8 @@ impl RocketBotPlugin for BimPlugin {
             Some(i) => i,
         };
 
-        let mut company_to_bim_database_path = HashMap::new();
-        let c2db_map = config["company_to_bim_database_path"].as_object().expect("company_to_bim_database_path not an object");
-        for (company, db_path_value) in c2db_map {
-            let db_path = if db_path_value.is_null() {
-                None
-            } else {
-                Some(db_path_value.as_str().expect("company_to_bim_database_path value not a string").to_owned())
-            };
-            company_to_bim_database_path.insert(company.to_owned(), db_path);
-        }
-
+        let company_to_definition: HashMap<String, CompanyDefinition> = serde_json::from_value(config["company_to_definition"].clone())
+            .expect("failed to decode company definitions");
         let default_company = config["default_company"]
             .as_str().expect("default_company not a string")
             .to_owned();
@@ -942,7 +983,7 @@ impl RocketBotPlugin for BimPlugin {
 
         Self {
             interface,
-            company_to_bim_database_path,
+            company_to_definition,
             default_company,
             manufacturer_mapping,
             ride_db_conn_string,
@@ -1114,13 +1155,14 @@ pub async fn increment_rides_by_spec(
     ride_conn: &mut tokio_postgres::Client,
     bim_database_opt: Option<&HashMap<VehicleNumber, VehicleInfo>>,
     company: &str,
+    company_def: &CompanyDefinition,
     rider_username: &str,
     timestamp: DateTime<Local>,
     rides_spec: &str,
     allow_fixed_coupling_combos: bool,
 ) -> Result<RideInfo, IncrementBySpecError> {
     let spec_no_spaces = rides_spec.replace(" ", "");
-    let caps = match BIMRIDE_RE.captures(&spec_no_spaces) {
+    let caps = match company_def.vehicle_and_line_regex().captures(&spec_no_spaces) {
         Some(c) => c,
         None => return Err(IncrementBySpecError::SpecParseFailure(spec_no_spaces)),
     };

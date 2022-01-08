@@ -4,7 +4,7 @@ use std::ffi::OsString;
 use std::fs::File;
 
 use chrono::{Local, NaiveDateTime, TimeZone};
-use rocketbot_plugin_bim::{increment_rides_by_spec, VehicleInfo, VehicleNumber};
+use rocketbot_plugin_bim::{CompanyDefinition, increment_rides_by_spec, VehicleInfo, VehicleNumber};
 use serde::{Deserialize, Serialize};
 use serde_json;
 use tokio;
@@ -64,6 +64,7 @@ async fn main() {
             eprintln!("database connection error: {}", e);
         }
     });
+    let placeholder_company = CompanyDefinition::placeholder();
     for message in &log.messages {
         let naive_utc_timestamp = NaiveDateTime::parse_from_str(&message.timestamp, "%Y-%m-%dT%H:%M:%S%.3fZ")
             .expect("failed to parse timestamp");
@@ -73,6 +74,7 @@ async fn main() {
             &mut db_client,
             bim_database_opt.as_ref(),
             company,
+            &placeholder_company,
             &message.username,
             timestamp,
             &message.message,
