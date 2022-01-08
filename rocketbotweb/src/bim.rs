@@ -99,11 +99,12 @@ async fn obtain_vehicle_extract() -> VehicleDatabaseExtract {
         None => return VehicleDatabaseExtract::default(),
     };
 
-    let company_to_bim_database_path = match bim_plugin["config"]["company_to_bim_database_path"].as_object() {
+    let company_to_definition = match bim_plugin["config"]["company_to_definition"].as_object() {
         Some(ctbdpo) => ctbdpo,
         None => return VehicleDatabaseExtract::default(),
     };
-    for (company, bim_database_path_object) in company_to_bim_database_path.iter() {
+    for (company, definition) in company_to_definition.iter() {
+        let bim_database_path_object = &definition["bim_database_path"];
         if bim_database_path_object.is_null() {
             company_to_vehicle_to_fixed_coupling.insert(
                 company.clone(),
