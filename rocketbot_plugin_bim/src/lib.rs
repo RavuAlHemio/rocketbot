@@ -109,7 +109,23 @@ impl CompanyDefinition {
             .unwrap_or(".+");
 
         let valr_string = format!(
-            "^(?P<vehicles>{}(?:[+]{})*)(?:[/](?P<line>{}))?$",
+            concat!(
+                "^",
+                "(?P<vehicles>",
+                    "(?:{})",
+                    "(?:",
+                        "[+]",
+                        "(?:{})",
+                    ")*",
+                ")",
+                "(?:",
+                    "[/]",
+                    "(?P<line>",
+                        "(?:{})",
+                    ")",
+                ")?",
+                "$"
+            ),
             vehicle_number_rstr, vehicle_number_rstr, line_number_rstr,
         );
         let valr = Regex::new(&valr_string)
