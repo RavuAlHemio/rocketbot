@@ -107,6 +107,8 @@ impl RocketBotPlugin for PicRespondPlugin {
                 "image/png"
             } else if file_bytes.len() >= 3 && &file_bytes[0..3] == &[0xff, 0xd8, 0xff] {
                 "image/jpeg"
+            } else if file_bytes.len() >= 12 && &file_bytes[4..12] == b"ftypM4A " {
+                "audio/mp4"
             } else {
                 "application/octet-stream"
             };
