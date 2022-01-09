@@ -6,7 +6,7 @@ use std::sync::{Arc, Weak};
 use async_trait::async_trait;
 use chrono::Local;
 use log::debug;
-use rand::{RngCore, SeedableRng};
+use rand::{Rng, RngCore, SeedableRng};
 use rand::rngs::StdRng;
 use rand::seq::SliceRandom;
 use regex::Regex;
@@ -19,6 +19,7 @@ use rocketbot_interface::sync::Mutex;
 struct Response {
     pub regex: Regex,
     pub response_paths: Vec<String>,
+    pub percentage: f64,
 }
 
 
@@ -37,11 +38,16 @@ impl RocketBotPlugin for PicRespondPlugin {
         ));
 
         let mut responses = Vec::new();
-        for (key, pics) in config["responses"].as_object().expect("responses not an object") {
+        for (key, values) in config["responses"].as_object().expect("responses not an object") {
             let regex = Regex::new(key).expect("failed to parse regex");
-            let response_paths: Vec<String> = pics.as_array().expect("responses value not an array")
+            let percentage = if values["percentage"].is_null() {
+                100.0
+            } else {
+                values["percentage"].as_f64().expect("percentage not a float")
+            };
+            let response_paths: Vec<String> = values["paths"].as_array().expect("paths not an array")
                 .iter()
-                .map(|path_val| path_val.as_str().expect("responses value entry not a string").to_owned())
+                .map(|path_val| path_val.as_str().expect("paths entry not a string").to_owned())
                 .collect();
             if response_paths.len() == 0 {
                 panic!("responses value for key {:?} has no entries", key);
@@ -49,6 +55,7 @@ impl RocketBotPlugin for PicRespondPlugin {
             responses.push(Response {
                 regex,
                 response_paths,
+                percentage,
             });
         }
 
@@ -87,9 +94,17 @@ impl RocketBotPlugin for PicRespondPlugin {
                 continue;
             }
 
-            // pick a response at random
             let resp_path = {
                 let mut rng_guard = self.rng.lock().await;
+
+                // do we want to respond at all?
+                let my_ratio: f64 = rng_guard.gen();
+                if my_ratio * 100.0 >= response.percentage {
+                    // no
+                    return;
+                }
+
+                // pick a response at random
                 response.response_paths
                     .choose(rng_guard.deref_mut()).expect("at least one response path is available")
             };
