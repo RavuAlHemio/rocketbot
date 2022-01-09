@@ -37,19 +37,73 @@ impl Default for StationDatabase {
 }
 
 
-fn find_station<'a, 'b>(database: &'a StationDatabase, station_name_lower: &'b str, force_search: bool) -> Option<&'a StoppingPoint> {
-    if !force_search {
-        // try pinpointing the station using the number
-        if let Ok(station_number) = station_name_lower.parse::<u32>() {
-            for (_lower_name, station) in &database.stations {
-                if station.stop_id == station_number {
-                    return Some(station);
-                }
+#[derive(Clone, Debug, PartialEq)]
+struct BestStations<'a> {
+    pub number: Option<&'a StoppingPoint>,
+    pub prefix: Vec<&'a StoppingPoint>,
+    pub substring: Vec<&'a StoppingPoint>,
+    pub similar: Option<&'a StoppingPoint>,
+}
+impl<'a> BestStations<'a> {
+    pub fn best(&self, allow_by_number: bool) -> Option<&StoppingPoint> {
+        if allow_by_number {
+            if let Some(number) = self.number {
+                return Some(number);
             }
         }
-    }
 
-    // find the station using Damerau-Levenshtein
+        if self.prefix.len() > 0 {
+            Some(self.prefix[0])
+        } else if self.substring.len() > 0 {
+            Some(self.substring[0])
+        } else if let Some(similar) = self.similar {
+            Some(similar)
+        } else {
+            None
+        }
+    }
+}
+
+
+fn find_station<'a, 'b>(database: &'a StationDatabase, station_name_lower: &'b str) -> BestStations<'a> {
+    let number_station = if let Ok(station_number) = station_name_lower.parse::<u32>() {
+        // try pinpointing the station using the number
+        let mut num_st = None;
+        for (_lower_name, station) in &database.stations {
+            if station.stop_id == station_number {
+                num_st = Some(station);
+                break;
+            }
+        }
+        num_st
+    } else {
+        None
+    };
+
+    // try finding the station using prefix and substring search
+    // prefer stations with shorter names
+    let mut prefix_stations: Vec<(&StoppingPoint, &str)> = Vec::new();
+    let mut substring_stations: Vec<(&StoppingPoint, &str)> = Vec::new();
+    for (lower_name, station) in &database.stations {
+        if lower_name.starts_with(station_name_lower) {
+            prefix_stations.push((station, lower_name));
+        } else if lower_name.contains(station_name_lower) {
+            substring_stations.push((station, lower_name));
+        }
+    }
+    prefix_stations.sort_unstable_by_key(|(_sp, nm)| nm.len());
+    substring_stations.sort_unstable_by_key(|(_sp, nm)| nm.len());
+
+    let prefix_stations_final = prefix_stations
+        .drain(..)
+        .map(|(st, _nm)| st)
+        .collect();
+    let substring_stations_final = substring_stations
+        .drain(..)
+        .map(|(st, _nm)| st)
+        .collect();
+
+    // find the best station using Damerau-Levenshtein
     let best_station_distance = {
         let mut bsd: Option<(&StoppingPoint, usize)> = None;
         for (lower_name, station) in &database.stations {
@@ -64,11 +118,14 @@ fn find_station<'a, 'b>(database: &'a StationDatabase, station_name_lower: &'b s
         }
         bsd
     };
+    let similar_station = best_station_distance
+        .map(|(st, _dist)| st);
 
-    if let Some((best_station, _best_distance)) = best_station_distance {
-        Some(best_station)
-    } else {
-        None
+    BestStations {
+        number: number_station,
+        prefix: prefix_stations_final,
+        substring: substring_stations_final,
+        similar: similar_station,
     }
 }
 
@@ -254,8 +311,8 @@ impl WienerLinienPlugin {
         let station = {
             let db_guard = self.station_database
                 .read().await;
-            match find_station(&*db_guard, &station_name_lower, force_search) {
-                Some(st) => st.clone(),
+            match find_station(&*db_guard, &station_name_lower).best(!force_search) {
+                Some(bs) => bs.clone(),
                 None => {
                     send_channel_message!(
                         interface,
@@ -343,38 +400,47 @@ impl WienerLinienPlugin {
 
             let db_guard = self.station_database
                 .read().await;
-            let mut substring_stations: BTreeMap<String, BTreeSet<u32>> = BTreeMap::new();
-            for (station_name_lower, station) in &db_guard.stations {
-                if station_name_lower.contains(&wanted_station_name_lower) {
-                    let station_numbers = substring_stations
-                        .entry(station.name.clone())
-                        .or_insert_with(|| BTreeSet::new());
-                    station_numbers.insert(station.stop_id);
-                }
+            let best_stations = find_station(
+                &*db_guard,
+                &wanted_station_name_lower,
+            );
+
+            // by number
+            if let Some(number) = best_stations.number {
+                final_pieces.push(format!("Found station by number: {}", number.name));
             }
-            if substring_stations.len() > 0 {
-                let mut substring_piece = String::from("Substring matches:");
-                for (name, numbers) in &substring_stations {
-                    let number_strings: Vec<String> = numbers
+
+            // by prefix and substring
+            for (category, stations) in &[("Prefix", best_stations.prefix), ("Substring", best_stations.substring)] {
+                if stations.len() == 0 {
+                    continue;
+                }
+
+                let mut name_to_numbers: HashMap<String, BTreeSet<u32>> = HashMap::new();
+                for station in stations {
+                    name_to_numbers.entry(station.name.clone())
+                        .or_insert_with(|| BTreeSet::new())
+                        .insert(station.stop_id);
+                }
+
+                let mut name_and_numbers: Vec<(String, BTreeSet<u32>)> = name_to_numbers
+                    .drain()
+                    .collect();
+                name_and_numbers.sort_unstable_by_key(|(name, _nums)| (name.len(), name.clone()));
+
+                final_pieces.push(format!("{} matches:", category));
+                for (name, numbers) in name_and_numbers {
+                    let numbers_strings: Vec<String> = numbers
                         .iter()
                         .map(|n| n.to_string())
                         .collect();
-                    let number_string = number_strings.join(", ");
-                    write!(&mut substring_piece, "\n{}: {}", name, number_string).unwrap();
+                    final_pieces.push(format!("* {} ({})", name, numbers_strings.join(", ")));
                 }
-                final_pieces.push(substring_piece);
             }
 
-            let dl_station_opt = find_station(
-                &*db_guard,
-                &wanted_station_name_lower,
-                true,
-            );
-            if let Some(dl_station) = dl_station_opt {
-                final_pieces.push(format!(
-                    "Most similarly-named station: {} ({})",
-                    dl_station.name, dl_station.stop_id,
-                ));
+            // by similarity
+            if let Some(similar) = best_stations.similar {
+                final_pieces.push(format!("Most similarly-named station: {} ({})", similar.name, similar.stop_id));
             }
 
             if final_pieces.len() == 0 {
