@@ -468,7 +468,19 @@ impl BimPlugin {
                 if let Some(ln) = &lr.last_line {
                     write_expect!(&mut resp, " on line {}", ln);
                 }
-                write_expect!(&mut resp, ").");
+                write_expect!(&mut resp, ")");
+                if let Some(or) = &vehicle_ride.last_ride_other_rider {
+                    write_expect!(
+                        &mut resp,
+                        " and {} has also ridden it {}",
+                        or.rider_username,
+                        or.last_ride.format("on %Y-%m-%d at %H:%M"),
+                    );
+                    if let Some(ln) = &or.last_line {
+                        write_expect!(&mut resp, " on line {}", ln);
+                    }
+                }
+                write_expect!(&mut resp, ".");
             } else {
                 write_expect!(&mut resp, "This is their first ride in this vehicle");
                 if let Some(or) = &vehicle_ride.last_ride_other_rider {
