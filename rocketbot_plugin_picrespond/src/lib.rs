@@ -18,6 +18,7 @@ use rocketbot_interface::sync::Mutex;
 #[derive(Debug)]
 struct Response {
     pub regex: Regex,
+    pub file_name: String,
     pub response_paths: Vec<String>,
     pub percentage: f64,
 }
@@ -40,6 +41,9 @@ impl RocketBotPlugin for PicRespondPlugin {
         let mut responses = Vec::new();
         for (key, values) in config["responses"].as_object().expect("responses not an object") {
             let regex = Regex::new(key).expect("failed to parse regex");
+            let file_name = values["file_name"]
+                .as_str().unwrap_or("picture")
+                .to_owned();
             let percentage = if values["percentage"].is_null() {
                 100.0
             } else {
@@ -54,6 +58,7 @@ impl RocketBotPlugin for PicRespondPlugin {
             }
             responses.push(Response {
                 regex,
+                file_name,
                 response_paths,
                 percentage,
             });
@@ -131,7 +136,7 @@ impl RocketBotPlugin for PicRespondPlugin {
             // send it, attached
             let mess = OutgoingMessageWithAttachmentBuilder::new(Attachment::new(
                 file_bytes,
-                "picture".to_owned(),
+                response.file_name.clone(),
                 mime_type.to_owned(),
                 None,
             ))
