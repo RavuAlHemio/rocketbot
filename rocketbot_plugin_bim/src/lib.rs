@@ -235,20 +235,20 @@ impl BimPlugin {
                         );
                         match (&vehicle.in_service_since, &vehicle.out_of_service_since) {
                             (Some(service_from), Some(service_to)) => {
-                                write!(db_response, ", in service from {} to {}", service_from, service_to).expect("failed to write");
+                                write_expect!(db_response, ", in service from {} to {}", service_from, service_to);
                             },
                             (Some(service_from), None) => {
-                                write!(db_response, ", in service since {}", service_from).expect("failed to write");
+                                write_expect!(db_response, ", in service since {}", service_from);
                             },
                             (None, Some(service_to)) => {
-                                write!(db_response, ", in service until {}", service_to).expect("failed to write");
+                                write_expect!(db_response, ", in service until {}", service_to);
                             },
                             (None, None) => {},
                         };
 
                         if let Some(manuf) = &vehicle.manufacturer {
                             let full_manuf = self.manufacturer_mapping.get(manuf).unwrap_or(manuf);
-                            write!(db_response, "\n*hergestellt von* {}", full_manuf).expect("failed to write");
+                            write_expect!(db_response, "\n*hergestellt von* {}", full_manuf);
                         }
 
                         let mut other_props: Vec<(&str, &str)> = vehicle.other_data.iter()
@@ -256,7 +256,7 @@ impl BimPlugin {
                             .collect();
                         other_props.sort_unstable();
                         for (key, val) in other_props {
-                            write!(db_response, "\n*{}*: {}", key, val).expect("failed to write");
+                            write_expect!(db_response, "\n*{}*: {}", key, val);
                         }
 
                         if vehicle.fixed_coupling.len() > 0 {
@@ -264,7 +264,7 @@ impl BimPlugin {
                                 .map(|num| num.to_string())
                                 .collect();
                             let fixed_coupling_string = fixed_coupling_strings.join("+");
-                            write!(db_response, "\npart of fixed coupling: {}", fixed_coupling_string).expect("failed to write");
+                            write_expect!(db_response, "\npart of fixed coupling: {}", fixed_coupling_string);
                         }
 
                         db_response
@@ -343,7 +343,7 @@ impl BimPlugin {
             Some(ret)
         }
         if let Some(last_ride) = get_last_ride(&self, &channel_message.message.sender.username, &company, number).await {
-            write!(response, "\n{}", last_ride).expect("failed to write");
+            write_expect!(response, "\n{}", last_ride);
         }
 
         send_channel_message!(
