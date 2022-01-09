@@ -9,6 +9,9 @@ pacman -Syu --noconfirm
 # install required packages
 pacman -S --needed --noconfirm cargo git python-toml
 
+# clean up pacman cache
+pacman -Sc --noconfirm
+
 # check out the repository
 git clone https://github.com/RavuAlHemio/rocketbot.git /rocketbot
 cd /rocketbot
