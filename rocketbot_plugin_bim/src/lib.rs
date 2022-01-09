@@ -273,7 +273,7 @@ impl BimPlugin {
             },
         };
 
-        async fn get_last_ride(me: &BimPlugin, company: &str, vehicle_number: VehicleNumber) -> Option<String> {
+        async fn get_last_ride(me: &BimPlugin, username: &str, company: &str, vehicle_number: VehicleNumber) -> Option<String> {
             let ride_conn = match me.connect_ride_db().await {
                 Ok(c) => c,
                 Err(_) => return None,
@@ -302,42 +302,47 @@ impl BimPlugin {
                 format!("This vehicle has been ridden {} times.", count)
             };
 
-            // query last rider
-            let ride_row_opt_res = ride_conn.query_opt(
-                "
-                    SELECT rider_username, \"timestamp\", line
-                    FROM bim.rides
-                    WHERE company = $1 AND vehicle_number = $2
-                    ORDER BY \"timestamp\" DESC
-                    LIMIT 1
-                ",
-                &[&company, &vehicle_number_i64],
-            ).await;
-            match ride_row_opt_res {
-                Ok(Some(lrr)) => {
-                    let last_rider_username: String = lrr.get(0);
-                    let last_ride: DateTime<Local> = lrr.get(1);
-                    let last_line: Option<String> = lrr.get(2);
+            for (is_you, operator) in &[(true, "="), (false, "<>")] {
+                let ride_row_opt_res = ride_conn.query_opt(
+                    &format!(
+                        "
+                            SELECT rider_username, \"timestamp\", line
+                            FROM bim.rides
+                            WHERE company = $1 AND vehicle_number = $2 AND rider_username {} $3
+                            ORDER BY \"timestamp\" DESC
+                            LIMIT 1
+                        ",
+                        operator,
+                    ),
+                    &[&company, &vehicle_number_i64, &username],
+                ).await;
+                match ride_row_opt_res {
+                    Ok(Some(lrr)) => {
+                        let last_rider_username: String = lrr.get(0);
+                        let last_ride: DateTime<Local> = lrr.get(1);
+                        let last_line: Option<String> = lrr.get(2);
 
-                    write!(ret,
-                        " Last rider: {} {}",
-                        last_rider_username, last_ride.format("on %Y-%m-%d at %H:%M:%S"),
-                    ).expect("failed to write");
-                    if let Some(ll) = last_line {
-                        write!(ret, " on line {}", ll).expect("failed to write");
-                    }
-                    ret.push('.');
-                },
-                Ok(None) => {},
-                Err(e) => {
-                    error!("failed to obtain last rider: {}", e);
-                    return None;
-                },
-            };
+                        write_expect!(ret,
+                            " {} last rode it {}",
+                            if *is_you { "You" } else { last_rider_username.as_str() },
+                            last_ride.format("on %Y-%m-%d at %H:%M:%S"),
+                        );
+                        if let Some(ll) = last_line {
+                            write_expect!(ret, " on line {}", ll);
+                        }
+                        ret.push('.');
+                    },
+                    Ok(None) => {},
+                    Err(e) => {
+                        error!("failed to obtain last rider (is_you={:?}): {}", is_you, e);
+                        return None;
+                    },
+                };
+            }
 
             Some(ret)
         }
-        if let Some(last_ride) = get_last_ride(&self, &company, number).await {
+        if let Some(last_ride) = get_last_ride(&self, &channel_message.message.sender.username, &company, number).await {
             write!(response, "\n{}", last_ride).expect("failed to write");
         }
 
