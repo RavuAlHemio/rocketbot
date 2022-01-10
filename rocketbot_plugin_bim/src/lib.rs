@@ -704,7 +704,7 @@ impl BimPlugin {
         };
 
         let mut company_to_bim_database_opt = HashMap::new();
-        let mut rider_to_ride_count = HashMap::new();
+        let mut rider_to_ride_and_vehicle_count = HashMap::new();
         for row in rows {
             let company: String = row.get(0);
             let vehicle_number_i64: i64 = row.get(1);
@@ -725,24 +725,32 @@ impl BimPlugin {
                 }
             }
 
-            let rider_ride_count = rider_to_ride_count
+            let rider_ride_and_vehicle_count = rider_to_ride_and_vehicle_count
                 .entry(rider_username.clone())
-                .or_insert(0);
-            *rider_ride_count += ride_count;
+                .or_insert((0i64, 0i64));
+            rider_ride_and_vehicle_count.0 += ride_count;
+            rider_ride_and_vehicle_count.1 += 1;
         }
 
-        let mut rider_and_ride_count: Vec<(String, i64)> = rider_to_ride_count
+        let mut rider_and_ride_and_vehicle_count: Vec<(String, i64, i64)> = rider_to_ride_and_vehicle_count
             .iter()
-            .map(|(r, rc)| (r.clone(), *rc))
+            .map(|(r, (rc, vc))| (r.clone(), *rc, *vc))
             .collect();
-        rider_and_ride_count.sort_unstable_by_key(|(r, rc)| (-*rc, r.clone()));
-        let mut rider_strings: Vec<String> = rider_and_ride_count.iter()
-            .map(|(rider_name, ride_count)| {
-                if *ride_count == 1 {
-                    format!("{} (one ride)", rider_name)
+        rider_and_ride_and_vehicle_count.sort_unstable_by_key(|(r, rc, _vc)| (-*rc, r.clone()));
+        let mut rider_strings: Vec<String> = rider_and_ride_and_vehicle_count.iter()
+            .map(|(rider_name, ride_count, vehicle_count)| {
+                let ride_text = if *ride_count == 1 {
+                    "one ride".to_owned()
                 } else {
-                    format!("{} ({} rides)", rider_name, ride_count)
-                }
+                    format!("{} rides", ride_count)
+                };
+                let vehicle_text = if *vehicle_count == 1 {
+                    "one vehicle".to_owned()
+                } else {
+                    format!("{} vehicles", vehicle_count)
+                };
+
+                format!("{} ({}/{})", rider_name, ride_text, vehicle_text)
             })
             .collect();
         let prefix = if rider_strings.len() < 6 {
@@ -751,12 +759,12 @@ impl BimPlugin {
             rider_strings.drain(5..);
             "Top 5 riders: "
         };
-        let rider_string = rider_strings.join(", ");
+        let riders_string = rider_strings.join(", ");
 
-        let response_string = if rider_string.len() == 0 {
+        let response_string = if riders_string.len() == 0 {
             "No top riders.".to_owned()
         } else {
-            format!("{}{}", prefix, rider_string)
+            format!("{}{}", prefix, riders_string)
         };
 
         send_channel_message!(
