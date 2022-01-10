@@ -107,8 +107,8 @@ pub(crate) fn encode_vax(vax_info: &VaxInfo) -> String {
         payload_cbor
             .map(4).unwrap()
                 // Issued and Expires are Unix timestamps
-                .u8(4).unwrap().u64(vax_info.issued.timestamp().try_into().unwrap()).unwrap()
-                .u8(6).unwrap().u64(vax_info.expires.timestamp().try_into().unwrap()).unwrap()
+                .u8(4).unwrap().i64(vax_info.issued.timestamp().try_into().unwrap()).unwrap()
+                .u8(6).unwrap().i64(vax_info.expires.timestamp().try_into().unwrap()).unwrap()
                 .u8(1).unwrap().str(&vax_info.country_code).unwrap()
                 .i16(-260).unwrap().map(1).unwrap()
                     .u8(1).unwrap().map(4).unwrap()
