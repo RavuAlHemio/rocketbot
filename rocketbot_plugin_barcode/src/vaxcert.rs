@@ -114,7 +114,7 @@ pub(crate) fn encode_vax(vax_info: &VaxInfo) -> String {
                     .u8(1).unwrap().map(4).unwrap()
                         .str("v").unwrap().array(1).unwrap()
                             .map(10).unwrap()
-                                .str("dn").unwrap().u8(vax_info.dose_number.try_into().unwrap()).unwrap()
+                                .str("dn").unwrap().u64(vax_info.dose_number.try_into().unwrap()).unwrap()
                                 .str("ma").unwrap().str("ORG-100030215").unwrap() // marketing authorization holder = Biontech
                                 .str("vp").unwrap().str("J07BX03").unwrap() // vaccine prophylaxis = covid-19 vaccine
                                 .str("dt").unwrap().str(&vax_info.issued.format("%Y-%m-%d").to_string()).unwrap()
@@ -122,7 +122,7 @@ pub(crate) fn encode_vax(vax_info: &VaxInfo) -> String {
                                 .str("ci").unwrap().str(&vax_info.cert_id).unwrap()
                                 .str("mp").unwrap().str("EU/1/20/1528").unwrap() // medicinal product = Comirnaty
                                 .str("is").unwrap().str(&vax_info.issuer).unwrap()
-                                .str("sd").unwrap().u8(vax_info.total_doses.try_into().unwrap()).unwrap()
+                                .str("sd").unwrap().u64(vax_info.total_doses.try_into().unwrap()).unwrap()
                                 .str("tg").unwrap().str("840539006").unwrap() // target disease or agent = COVID-19
                         .str("nam").unwrap().map(4).unwrap()
                             .str("fnt").unwrap().str(&vax_info.surname_normalized).unwrap()
