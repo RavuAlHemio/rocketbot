@@ -749,8 +749,9 @@ impl BimPlugin {
                 } else {
                     format!("{} vehicles", vehicle_count)
                 };
+                let uniqueness_percentage = (*vehicle_count as f64) * 100.0 / (*ride_count as f64);
 
-                format!("{} ({}/{})", rider_name, ride_text, vehicle_text)
+                format!("{} ({} in {}; {:.2}% unique)", rider_name, ride_text, vehicle_text, uniqueness_percentage)
             })
             .collect();
         let prefix = if rider_strings.len() < 6 {
