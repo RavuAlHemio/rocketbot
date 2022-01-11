@@ -15,6 +15,7 @@ use serde_json;
 pub struct TimePlugin {
     interface: Weak<dyn RocketBotInterface>,
     geocoder: Geocoder,
+    default_location: Option<String>,
 }
 impl TimePlugin {
     async fn channel_command_time(&self, channel_message: &ChannelMessage, command: &CommandInstance) {
@@ -23,9 +24,13 @@ impl TimePlugin {
             Some(i) => i,
         };
 
-        let location = command.rest.trim();
+        let mut location = command.rest.trim();
         if location.len() == 0 {
-            return;
+            if let Some(dl) = &self.default_location {
+                location = dl.as_str();
+            } else {
+                return;
+            }
         }
 
         // geocode the location
@@ -84,6 +89,12 @@ impl RocketBotPlugin for TimePlugin {
             Some(i) => i,
         };
 
+        let default_location = if config["default_location"].is_null() {
+            None
+        } else {
+            Some(config["default_location"].as_str().expect("default_location not a string").to_owned())
+        };
+
         let geocoder = Geocoder::new(&config["geocoding"]).await;
         if !geocoder.supports_timezones().await {
             panic!("the configured geocoding provider does not support timezones");
@@ -102,6 +113,7 @@ impl RocketBotPlugin for TimePlugin {
         Self {
             interface,
             geocoder,
+            default_location,
         }
     }
 
