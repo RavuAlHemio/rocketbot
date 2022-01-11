@@ -55,6 +55,8 @@ pub(crate) fn get_canonical_functions() -> HashMap<String, BuiltInFunction> {
 
     prepared.insert("coerce", Box::new(coerce));
     prepared.insert("setunit", Box::new(set_unit));
+    prepared.insert("c2f", f64_f64("c2f", |f| f * 9.0/5.0 + 32.0));
+    prepared.insert("f2c", f64_f64("f2c", |f| (f - 32.0) * 5.0/9.0));
 
     prepared.drain()
         .map(|(k, v)| (k.to_owned(), v))
