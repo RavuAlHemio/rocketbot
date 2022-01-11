@@ -1,7 +1,7 @@
 use std::sync::Weak;
 
 use async_trait::async_trait;
-use chrono::Utc;
+use chrono::{Datelike, Timelike, Utc};
 use chrono_tz::TZ_VARIANTS;
 use log::error;
 use rocketbot_geocoding::Geocoder;
@@ -66,12 +66,38 @@ impl TimePlugin {
             },
         };
 
+        let night_owl_time =
+            command.flags.contains("n") || command.flags.contains("not");
+
         // calculate the time
         let time = Utc::now().with_timezone(timezone);
+        let (y, m, d, h, min, s) = if night_owl_time && time.hour() < 4 {
+            // previous day, later hour
+            let prev_day = time.date().pred();
+
+            (
+                prev_day.year(),
+                prev_day.month(),
+                prev_day.day(),
+                time.hour() + 24,
+                time.minute(),
+                time.second(),
+            )
+        } else {
+            (time.year(), time.month(), time.day(), time.hour(), time.minute(), time.second())
+        };
+
+        // custom handling of negative years to ensure we always have four digits
+        // (otherwise {:04} prints a minus and three digits)
+        let (minus, abs_y) = if y < 0 {
+            ("-", -y)
+        } else {
+            ("", y)
+        };
         let response = format!(
-            "The time in {} is {}.",
+            "The time in {} is {}{:04}-{:02}-{:02} {:02}:{:02}:{:02}.",
             loc.place,
-            time.format("%Y-%m-%d %H:%M:%S"),
+            minus, abs_y, m, d, h, min, s,
         );
 
         send_channel_message!(
@@ -104,9 +130,11 @@ impl RocketBotPlugin for TimePlugin {
             &CommandDefinitionBuilder::new(
                 "time".to_owned(),
                 "time".to_owned(),
-                "{cpfx}time LOCATION".to_owned(),
+                "{cpfx}time [-r] LOCATION".to_owned(),
                 "Shows the current time at the given location.".to_owned(),
             )
+                .add_flag("not")
+                .add_flag("n")
                 .build()
         ).await;
 
