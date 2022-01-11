@@ -8,7 +8,7 @@ The following bitwise binary operators are supported: `a&b` (and), `a|b` (or), `
 
 The following unary operators are supported: `-a` (negate) and `a!` (factorial).
 
-The library also contains a selection of common mathematical functions (especially trigonometry) and constants (mainly `pi` and `e`).
+The library also contains a selection of common mathematical functions (especially trigonometry) and constants (mainly `pi` and `e`). They can be listed using `{cpfx}calcconst` and `{cpfx}calcfunc`.
 
 Calculation with units is supported as well. A unit can be attached to a number using `#`, the abbreviation of the unit and the optional exponent (which is otherwise assumed to be 1). A product of multiple units can be expressed by attaching multiple units in sequence, e.g. `1#kg#m#s-2` for \(1\frac{\text{kg}\cdot\text{m}}{\text{s}^2}\).
 

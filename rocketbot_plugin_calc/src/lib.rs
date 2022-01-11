@@ -17,7 +17,9 @@ use async_trait::async_trait;
 use chrono::{DateTime, TimeZone, Utc};
 use log::error;
 use rocketbot_interface::{JsonValueExtensions, send_channel_message};
-use rocketbot_interface::commands::{CommandBehaviors, CommandDefinition, CommandInstance};
+use rocketbot_interface::commands::{
+    CommandBehaviors, CommandDefinition, CommandDefinitionBuilder, CommandInstance,
+};
 use rocketbot_interface::interfaces::{RocketBotInterface, RocketBotPlugin};
 use rocketbot_interface::model::ChannelMessage;
 use rocketbot_interface::sync::{Mutex, RwLock};
@@ -145,6 +147,42 @@ impl CalcPlugin {
             },
         };
     }
+
+    async fn handle_calcconst(&self, channel_message: &ChannelMessage, _command: &CommandInstance) {
+        let interface = match self.interface.upgrade() {
+            None => return,
+            Some(i) => i,
+        };
+
+        let mut const_names: Vec<String> = get_canonical_constants().drain()
+            .map(|(cn, _cdef)| format!("`{}`", cn))
+            .collect();
+        const_names.sort_unstable();
+        let consts_str = const_names.join(", ");
+        send_channel_message!(
+            interface,
+            &channel_message.channel.name,
+            &format!("The following constants are available: {}", consts_str),
+        ).await;
+    }
+
+    async fn handle_calcfunc(&self, channel_message: &ChannelMessage, _command: &CommandInstance) {
+        let interface = match self.interface.upgrade() {
+            None => return,
+            Some(i) => i,
+        };
+
+        let mut func_names: Vec<String> = get_canonical_functions().drain()
+            .map(|(fname, _fdef)| format!("`{}`", fname))
+            .collect();
+        func_names.sort_unstable();
+        let funcs_str = func_names.join(", ");
+        send_channel_message!(
+            interface,
+            &channel_message.channel.name,
+            &format!("The following functions are available: {}", funcs_str),
+        ).await;
+    }
 }
 #[async_trait]
 impl RocketBotPlugin for CalcPlugin {
@@ -198,6 +236,24 @@ impl RocketBotPlugin for CalcPlugin {
             "{cpfx}calc EXPRESSION".to_owned(),
             "Calculates the given mathematical expression and outputs the result.".to_owned(),
         )).await;
+        my_interface.register_channel_command(
+            &CommandDefinitionBuilder::new(
+                "calcconst".to_owned(),
+                "calc".to_owned(),
+                "{cpfx}calcconst".to_owned(),
+                "Lists available calculator constants.".to_owned(),
+            )
+                .build()
+        ).await;
+        my_interface.register_channel_command(
+            &CommandDefinitionBuilder::new(
+                "calcfunc".to_owned(),
+                "calc".to_owned(),
+                "{cpfx}calcfunc".to_owned(),
+                "Lists available calculator functions.".to_owned(),
+            )
+                .build()
+        ).await;
 
         CalcPlugin {
             interface,
@@ -216,12 +272,20 @@ impl RocketBotPlugin for CalcPlugin {
     async fn channel_command(&self, channel_message: &ChannelMessage, command: &CommandInstance) {
         if command.name == "calc" {
             self.handle_calc(channel_message, command).await
+        } else if command.name == "calcconst" {
+            self.handle_calcconst(channel_message, command).await
+        } else if command.name == "calcfunc" {
+            self.handle_calcfunc(channel_message, command).await
         }
     }
 
     async fn get_command_help(&self, command_name: &str) -> Option<String> {
         if command_name == "calc" {
             Some(include_str!("../help/calc.md").to_owned())
+        } else if command_name == "calcconst" {
+            Some(include_str!("../help/calcconst.md").to_owned())
+        } else if command_name == "calcfunc" {
+            Some(include_str!("../help/calcfunc.md").to_owned())
         } else {
             None
         }
