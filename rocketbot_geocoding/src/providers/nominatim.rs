@@ -219,9 +219,13 @@ impl GeocodingProvider for NominatimGeocodingProvider {
                 .append_pair("q", place);
         }
 
-        let place_obj: NominatimPlace = self.get_and_populate_json(url).await?;
-        debug!("nominatim geocode({:?}) -> {:?}", place, place_obj);
-        if let Some(addr) = place_obj.address.and_then(|a| a.name_and_country_name()) {
+        let places: Vec<NominatimPlace> = self.get_and_populate_json(url).await?;
+        debug!("nominatim geocode({:?}) -> {:?}", place, places);
+        if places.len() == 0 {
+            return Err(GeocodingError::NoResult);
+        }
+        let place_obj = &places[0];
+        if let Some(addr) = place_obj.address.as_ref().and_then(|a| a.name_and_country_name()) {
             Ok(GeoLocation::new(
                 GeoCoordinates::new(place_obj.lat, place_obj.lon),
                 addr,
@@ -240,9 +244,9 @@ impl GeocodingProvider for NominatimGeocodingProvider {
                 .append_pair("q", place);
         }
 
-        let place_obj: NominatimPlace = self.get_and_populate_json(url).await?;
-        debug!("nominatim geocode_advanced({:?}) -> {:?}", place, place_obj);
-        serde_json::to_value(place_obj)
+        let places: Vec<NominatimPlace> = self.get_and_populate_json(url).await?;
+        debug!("nominatim geocode_advanced({:?}) -> {:?}", place, places);
+        serde_json::to_value(places)
             .map_err(|e| GeocodingError::JsonSerialization(e))
     }
 
