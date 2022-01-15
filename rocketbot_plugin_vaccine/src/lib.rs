@@ -62,6 +62,7 @@ struct ExtractedVaccineStats {
     pub vax_cert_delta: BigInt,
     pub vax_cert_percent: f64,
     pub vax_cert_delta_percent_points: f64,
+    pub population: BigUint,
     pub state_name: String,
 }
 
@@ -282,16 +283,21 @@ impl RocketBotPlugin for VaccinePlugin {
                 vax_cert_delta,
                 vax_cert_percent,
                 vax_cert_delta_percent_points,
+                population: pop,
                 state_name,
             }
         };
 
+        let mut pop_string = evs.population.to_string();
+        with_thou_sep(&mut pop_string, 3, ',');
+
         let mut response = String::new();
         response.push_str(&format!(
-            "@{} {} ({}):",
+            "@{} {} ({}), population {}:",
             channel_message.message.sender.username,
             evs.state_name,
             evs.freshest_date.format("%Y-%m-%d"),
+            pop_string,
         ));
         let mut dose_numbers: Vec<usize> = evs.dose_to_percent.keys().map(|k| *k).collect();
         dose_numbers.sort_unstable();
