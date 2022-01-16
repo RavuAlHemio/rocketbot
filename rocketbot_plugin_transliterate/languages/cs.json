@@ -55,11 +55,11 @@
       "replacements": [
         {
           "remark": "fuck the Czech education system",
-          "replacement": "i"
+          "replacement": "${1}i"
         },
         {
           "remark": "spelling reform *now*",
-          "replacement": "y"
+          "replacement": "${1}y"
         }
       ]
     }
