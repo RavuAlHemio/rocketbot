@@ -49,6 +49,9 @@ struct BodyMassEntry {
 
     #[serde(with = "serde_opt_rational")]
     pub bmi: Option<Rational64>,
+
+    #[serde(with = "serde_opt_rational")]
+    pub waist_circum_cm: Option<Rational64>,
 }
 impl BeepeeMeasurement for BodyMassEntry {
     fn id(&self) -> i64 { self.id }
@@ -187,10 +190,16 @@ impl BeepeeReader {
         } else {
             String::new()
         };
+        let circum_piece = if let Some(wcc) = newest.waist_circum_cm {
+            let wcc_f64 = (*wcc.numer() as f64) / (*wcc.denom() as f64);
+            format!("; {:.01} cm waist circumference", wcc_f64)
+        } else {
+            String::new()
+        };
         let kg: f64 = (*newest.mass_kg.numer() as f64) / (*newest.mass_kg.denom() as f64);
         MeasurementResult::Measurement(format!(
-            "{:.01} kg{} at {}",
-            kg, bmi_piece, newest.timestamp.format("%Y-%m-%d %H:%M:%S"),
+            "{:.01} kg{}{} at {}",
+            kg, bmi_piece, circum_piece, newest.timestamp.format("%Y-%m-%d %H:%M:%S"),
         ))
     }
 
