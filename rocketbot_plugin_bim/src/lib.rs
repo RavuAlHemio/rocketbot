@@ -1135,7 +1135,7 @@ impl BimPlugin {
             .map(|((comp, tp), count)| (comp.as_str(), tp.as_str(), *count))
             .collect();
         if sort_by_number {
-            type_and_count.sort_unstable_by_key(|(_comp, _tp, count)| -*count);
+            type_and_count.sort_unstable_by_key(|(comp, tp, count)| (-*count, *comp, *tp));
         }
         let types_counts: Vec<String> = type_and_count.iter()
             .map(|(comp, tp, count)|
@@ -1252,7 +1252,7 @@ impl BimPlugin {
             .map(|((comp, ln), count)| (comp.as_str(), ln.as_str(), *count))
             .collect();
         if sort_by_number {
-            line_and_count.sort_unstable_by_key(|(_comp, _ln, count)| -*count);
+            line_and_count.sort_unstable_by_key(|(comp, ln, count)| (-*count, *comp, *ln));
         }
         let lines_counts: Vec<String> = line_and_count.iter()
             .map(|(comp, tp, count)|
