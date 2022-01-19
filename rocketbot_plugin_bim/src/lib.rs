@@ -1193,6 +1193,7 @@ impl BimPlugin {
                 SELECT
                     r.rider_username,
                     r.company,
+                    r.vehicle_number,
                     r.line,
                     CAST(COUNT(*) AS bigint) ride_count
                 FROM bim.rides r
@@ -1201,6 +1202,7 @@ impl BimPlugin {
                 GROUP BY
                     r.rider_username,
                     r.company,
+                    r.vehicle_number,
                     r.line
             ",
             &[]
@@ -1218,12 +1220,24 @@ impl BimPlugin {
             },
         };
 
+        let mut company_to_bim_database_opt = HashMap::new();
         let mut rider_to_line_to_count: BTreeMap<String, BTreeMap<(String, String), i64>> = BTreeMap::new();
         for row in rows {
             let rider: String = row.get(0);
             let company: String = row.get(1);
-            let line: String = row.get(2);
-            let ride_count: i64 = row.get(3);
+            let vehicle_number_i64: i64 = row.get(2);
+            let vehicle_number_u32: u32 = match vehicle_number_i64.try_into() {
+                Ok(vn) => vn,
+                Err(_) => continue,
+            };
+            let line: String = row.get(3);
+            let ride_count: i64 = row.get(4);
+
+            // only count the first vehicle in a fixed coupling
+            // assume vehicles are uncoupled if no data is available
+            if !self.is_first_or_uncoupled(&company, vehicle_number_u32, &mut company_to_bim_database_opt, true, true) {
+                continue;
+            }
 
             let line_ride_count = rider_to_line_to_count
                 .entry(rider)
