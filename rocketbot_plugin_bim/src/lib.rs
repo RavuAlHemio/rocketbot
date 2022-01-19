@@ -189,6 +189,23 @@ impl BimPlugin {
         Some(vehicle_hash_map)
     }
 
+    fn is_first_or_uncoupled(&self, vehicle_number: VehicleNumber, company_to_bim_database_opt: &mut HashMap<String, Option<HashMap<u32, VehicleInfo>>>) -> bool {
+        let bim_database_opt = company_to_bim_database_opt
+            .entry(company.clone())
+            .or_insert_with(|| self.load_bim_database(&company));
+        if let Some(bim_database) = bim_database_opt {
+            if let Some(vehicle) = bim_database.get(&vehicle_number_vn) {
+                if vehicle.fixed_coupling.first().map(|&f| f != vehicle_number_vn).unwrap_or(false) {
+                    // no fixed coupling or not the first vehicle in a fixed coupling
+                    return false;
+                }
+            }
+        }
+
+        // assume it's uncoupled if there's no database
+        true
+    }
+
     async fn connect_ride_db(&self) -> Result<tokio_postgres::Client, tokio_postgres::Error> {
         let (client, connection) = match tokio_postgres::connect(&self.ride_db_conn_string, NoTls).await {
             Ok(cc) => cc,
@@ -712,16 +729,9 @@ impl BimPlugin {
             let ride_count: i64 = row.get(3);
 
             if let Ok(vehicle_number_vn) = VehicleNumber::try_from(vehicle_number_i64) {
-                let bim_database_opt = company_to_bim_database_opt
-                    .entry(company.clone())
-                    .or_insert_with(|| self.load_bim_database(&company));
-                if let Some(bim_database) = bim_database_opt {
-                    if let Some(vehicle) = bim_database.get(&vehicle_number_vn) {
-                        if vehicle.fixed_coupling.first().map(|&f| f != vehicle_number_vn).unwrap_or(false) {
-                            // only count the first vehicle in a fixed coupling
-                            continue;
-                        }
-                    }
+                // only count the first vehicle in a fixed coupling
+                if !self.is_first_or_uncoupled(vehicle_number_vn, &mut company_to_bim_database_opt) {
+                    continue;
                 }
             }
 
@@ -907,6 +917,120 @@ impl BimPlugin {
         ).await;
     }
 
+    async fn channel_command_topbimdays(&self, channel_message: &ChannelMessage, _command: &CommandInstance) {
+        let interface = match self.interface.upgrade() {
+            None => return,
+            Some(i) => i,
+        };
+
+        let ride_conn = match self.connect_ride_db().await {
+            Ok(c) => c,
+            Err(_) => {
+                send_channel_message!(
+                    interface,
+                    &channel_message.channel.name,
+                    "Failed to open database connection. :disappointed:",
+                ).await;
+                return;
+            },
+        };
+
+        let rows_res = ride_conn.query(
+            "
+                WITH
+                rides_dates(ride_id, company, vehicle_number, ride_date) AS (
+                    SELECT
+                        r.id,
+                        r.company,
+                        r.vehicle_number,
+                        -- count rides before 04:00 to previous day
+                        CAST(
+                            CASE WHEN EXTRACT(HOUR FROM r.\"timestamp\") < 4
+                            THEN r.\"timestamp\" - CAST('P1D' AS interval)
+                            ELSE r.\"timestamp\"
+                            END
+                        AS date)
+                    FROM
+                        bim.rides r
+                ),
+                ride_date_count(ride_year, ride_month, ride_day, company, vehicle_number, ride_count) AS (
+                    SELECT
+                        CAST(EXTRACT(YEAR FROM ride_date) AS bigint),
+                        CAST(EXTRACT(MONTH FROM ride_date) AS bigint),
+                        CAST(EXTRACT(DAY FROM ride_date) AS bigint),
+                        company,
+                        vehicle_number,
+                        COUNT(*)
+                    FROM rides_dates
+                    GROUP BY ride_date, company, vehicle_number
+                )
+                SELECT ride_year, ride_month, ride_day, company, vehicle_number, CAST(ride_count AS bigint) ride_count
+                FROM ride_date_count
+            ",
+            &[]
+        ).await;
+        let rows = match rows_res {
+            Ok(r) => r,
+            Err(e) => {
+                error!("failed to query days with most rides: {}", e);
+                send_channel_message!(
+                    interface,
+                    &channel_message.channel.name,
+                    "Failed to query database. :disappointed:",
+                ).await;
+                return;
+            },
+        };
+
+        let mut company_to_bim_database_opt = HashMap::new();
+        let mut date_to_ride_count: BTreeMap<(i64, i64, i64), i64> = BTreeMap::new();
+        for row in rows {
+            let year: i64 = row.get(0);
+            let month: i64 = row.get(1);
+            let day: i64 = row.get(2);
+            let company: String = row.get(3);
+            let vehicle_number_i64: i64 = row.get(4);
+            let vehicle_number_u32: u32 = match vehicle_number_i64.try_into() {
+                Ok(vn) => vn,
+                Err(_) => continue,
+            };
+            let ride_count: i64 = row.get(5);
+
+            if let Ok(vehicle_number_vn) = VehicleNumber::try_from(vehicle_number_i64) {
+                // only count the first vehicle in a fixed coupling
+                if !self.is_first_or_uncoupled(vehicle_number_vn, &mut company_to_bim_database_opt) {
+                    continue;
+                }
+            }
+
+            let ride_count = date_to_rides
+                .entry((year, month, day))
+                .or_insert(0);
+            *ride_count += 1;
+        }
+
+        let mut date_and_ride_count: Vec<((i64, i64, i64), i64)> = date_to_ride_count
+            .iter()
+            .collect();
+        date_and_ride_count.sort_unstable_by_key(|(_date, rides)| -*rides);
+        let mut top_text = if date_and_ride_count.len() >= 6 {
+            date_and_ride_count.drain(5..);
+            "Top 5 days:"
+        } else {
+            "Top days:"
+        }.to_owned();
+
+        for ((y, m, d), ride_count) in &date_and_ride_count {
+            top_text.push_str(&format!("{}-{}-{}: {} rides", y, m, d, ride_count));
+        }
+
+        send_channel_message!(
+            interface,
+            &channel_message.channel.name,
+            &top_text,
+        ).await;
+    }
+
     fn english_ordinal(num: usize) -> &'static str {
         let by_hundred = num % 100;
         if by_hundred > 10 && by_hundred < 14 {
@@ -1022,6 +1146,15 @@ impl RocketBotPlugin for BimPlugin {
             )
                 .build()
         ).await;
+        my_interface.register_channel_command(
+            &CommandDefinitionBuilder::new(
+                "topbimdays".to_owned(),
+                "bim".to_owned(),
+                "{cpfx}topbimdays".to_owned(),
+                "Returns the days with the most vehicle rides.".to_owned(),
+            )
+                .build()
+        ).await;
 
         Self {
             interface,
@@ -1046,6 +1179,8 @@ impl RocketBotPlugin for BimPlugin {
             self.channel_command_bimcompanies(channel_message, command).await
         } else if command.name == "favbims" {
             self.channel_command_favbims(channel_message, command).await
+        } else if command.name == "topbimdays" {
+            self.channel_command_topbimdays(channel_message, command).await
         }
     }
 
@@ -1066,6 +1201,8 @@ impl RocketBotPlugin for BimPlugin {
             Some(include_str!("../help/bimcompanies.md").to_owned())
         } else if command_name == "favbims" {
             Some(include_str!("../help/favbims.md").to_owned())
+        } else if command_name == "topbimdays" {
+            Some(include_str!("../help/topbimdays.md").to_owned())
         } else {
             None
         }
