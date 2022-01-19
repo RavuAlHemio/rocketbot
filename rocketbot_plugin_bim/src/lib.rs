@@ -1028,7 +1028,7 @@ impl BimPlugin {
         }.to_owned();
 
         for ((y, m, d), ride_count) in &date_and_ride_count {
-            top_text.push_str(&format!("{}-{}-{}: {} rides", y, m, d, ride_count));
+            top_text.push_str(&format!("\n{}-{}-{}: {} rides", y, m, d, ride_count));
         }
 
         send_channel_message!(
