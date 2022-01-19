@@ -189,21 +189,29 @@ impl BimPlugin {
         Some(vehicle_hash_map)
     }
 
-    fn is_first_or_uncoupled(&self, vehicle_number: VehicleNumber, company_to_bim_database_opt: &mut HashMap<String, Option<HashMap<u32, VehicleInfo>>>) -> bool {
+    fn is_first_or_uncoupled(
+        &self,
+        company: &str,
+        vehicle_number: VehicleNumber,
+        company_to_bim_database_opt: &mut HashMap<String, Option<HashMap<u32, VehicleInfo>>>,
+        value_if_database_missing: bool,
+        value_if_vehicle_missing: bool
+    ) -> bool {
         let bim_database_opt = company_to_bim_database_opt
-            .entry(company.clone())
+            .entry(company.to_owned())
             .or_insert_with(|| self.load_bim_database(&company));
         if let Some(bim_database) = bim_database_opt {
-            if let Some(vehicle) = bim_database.get(&vehicle_number_vn) {
-                if vehicle.fixed_coupling.first().map(|&f| f != vehicle_number_vn).unwrap_or(false) {
-                    // no fixed coupling or not the first vehicle in a fixed coupling
-                    return false;
-                }
+            if let Some(vehicle) = bim_database.get(&vehicle_number) {
+                // false if no fixed coupling or not the first vehicle in a fixed coupling
+                vehicle.fixed_coupling.first()
+                    .map(|&f| f == vehicle_number)
+                    .unwrap_or(false)
+            } else {
+                value_if_vehicle_missing
             }
+        } else {
+            value_if_database_missing
         }
-
-        // assume it's uncoupled if there's no database
-        true
     }
 
     async fn connect_ride_db(&self) -> Result<tokio_postgres::Client, tokio_postgres::Error> {
@@ -730,7 +738,7 @@ impl BimPlugin {
 
             if let Ok(vehicle_number_vn) = VehicleNumber::try_from(vehicle_number_i64) {
                 // only count the first vehicle in a fixed coupling
-                if !self.is_first_or_uncoupled(vehicle_number_vn, &mut company_to_bim_database_opt) {
+                if !self.is_first_or_uncoupled(&company, vehicle_number_vn, &mut company_to_bim_database_opt, true, true) {
                     continue;
                 }
             }
@@ -996,14 +1004,12 @@ impl BimPlugin {
             };
             let ride_count: i64 = row.get(5);
 
-            if let Ok(vehicle_number_vn) = VehicleNumber::try_from(vehicle_number_i64) {
-                // only count the first vehicle in a fixed coupling
-                if !self.is_first_or_uncoupled(vehicle_number_vn, &mut company_to_bim_database_opt) {
-                    continue;
-                }
+            // only count the first vehicle in a fixed coupling
+            if !self.is_first_or_uncoupled(&company, vehicle_number_u32, &mut company_to_bim_database_opt, true, true) {
+                continue;
             }
 
-            let ride_count = date_to_rides
+            let ride_count = date_to_ride_count
                 .entry((year, month, day))
                 .or_insert(0);
             *ride_count += 1;
@@ -1011,6 +1017,7 @@ impl BimPlugin {
 
         let mut date_and_ride_count: Vec<((i64, i64, i64), i64)> = date_to_ride_count
             .iter()
+            .map(|(d, rc)| (*d, *rc))
             .collect();
         date_and_ride_count.sort_unstable_by_key(|(_date, rides)| -*rides);
         let mut top_text = if date_and_ride_count.len() >= 6 {
@@ -1028,6 +1035,133 @@ impl BimPlugin {
             interface,
             &channel_message.channel.name,
             &top_text,
+        ).await;
+    }
+
+    async fn channel_command_bimridertypes(&self, channel_message: &ChannelMessage, command: &CommandInstance) {
+        let interface = match self.interface.upgrade() {
+            None => return,
+            Some(i) => i,
+        };
+
+        let sort_by_number =
+            command.flags.contains("n")
+            || command.flags.contains("sort-by-number")
+        ;
+
+        let ride_conn = match self.connect_ride_db().await {
+            Ok(c) => c,
+            Err(_) => {
+                send_channel_message!(
+                    interface,
+                    &channel_message.channel.name,
+                    "Failed to open database connection. :disappointed:",
+                ).await;
+                return;
+            },
+        };
+
+        let rows_res = ride_conn.query(
+            "
+                SELECT
+                    r.rider_username,
+                    r.company,
+                    r.vehicle_number,
+                    CAST(COUNT(*) AS bigint) ride_count
+                FROM bim.rides r
+                GROUP BY
+                    r.rider_username,
+                    r.company,
+                    r.vehicle_number
+            ",
+            &[]
+        ).await;
+        let rows = match rows_res {
+            Ok(r) => r,
+            Err(e) => {
+                error!("failed to query bim rider types: {}", e);
+                send_channel_message!(
+                    interface,
+                    &channel_message.channel.name,
+                    "Failed to query database. :disappointed:",
+                ).await;
+                return;
+            },
+        };
+
+        let mut company_to_bim_database_opt = HashMap::new();
+        let mut rider_to_type_to_count: BTreeMap<String, BTreeMap<(String, String), i64>> = BTreeMap::new();
+        for row in rows {
+            let rider: String = row.get(0);
+            let company: String = row.get(1);
+            let vehicle_number_i64: i64 = row.get(2);
+            let vehicle_number_u32: u32 = match vehicle_number_i64.try_into() {
+                Ok(vn) => vn,
+                Err(_) => continue,
+            };
+            let ride_count: i64 = row.get(3);
+
+            // only count the first vehicle in a fixed coupling
+            // skip entries where we don't know the vehicle's type
+            if !self.is_first_or_uncoupled(&company, vehicle_number_u32, &mut company_to_bim_database_opt, false, false) {
+                continue;
+            }
+
+            // at this point, the vehicle database should be loaded
+            let vehicle_type = company_to_bim_database_opt
+                .get(&company)
+                .expect("vehicle database not loaded but is_first_or_uncoupled returned true")
+                .as_ref()
+                .expect("vehicle database does not exist but is_first_or_uncoupled returned true")
+                .get(&vehicle_number_u32)
+                .expect("vehicle does not exist in database but is_first_or_uncoupled returned true")
+                .type_code
+                .clone();
+
+            let type_ride_count = rider_to_type_to_count
+                .entry(rider)
+                .or_insert_with(|| BTreeMap::new())
+                .entry((company, vehicle_type))
+                .or_insert(0);
+            *type_ride_count += ride_count;
+        }
+
+        let mut rider_lines = Vec::new();
+        for (rider, type_to_count) in &rider_to_type_to_count {
+            let mut type_and_count: Vec<(&str, &str, i64)> = type_to_count
+                .iter()
+                .map(|((comp, tp), count)| (comp.as_str(), tp.as_str(), *count))
+                .collect();
+            if sort_by_number {
+                type_and_count.sort_unstable_by_key(|(_comp, _tp, count)| -*count);
+            }
+            let types_counts: Vec<String> = type_and_count.iter()
+                .map(|(comp, tp, count)|
+                    if *comp == self.default_company.as_str() {
+                        format!("{}\u{D7}{}", count, tp)
+                    } else {
+                        format!("{}\u{D7}{}/{}", count, comp, tp)
+                    }
+                )
+                .collect();
+            if types_counts.len() == 0 {
+                continue;
+            }
+
+            let types_counts_string = types_counts.join(", ");
+            rider_lines.push(format!("{}: {}", rider, types_counts_string));
+        }
+        let response = if rider_lines.len() == 0 {
+            "No rides with known vehicle types!".to_owned()
+        } else {
+            let rider_lines_string = rider_lines.join("\n");
+            format!("Riders and their vehicle types:\n{}", rider_lines_string)
+        };
+
+        send_channel_message!(
+            interface,
+            &channel_message.channel.name,
+            &response,
         ).await;
     }
 
@@ -1155,6 +1289,17 @@ impl RocketBotPlugin for BimPlugin {
             )
                 .build()
         ).await;
+        my_interface.register_channel_command(
+            &CommandDefinitionBuilder::new(
+                "bimridertypes".to_owned(),
+                "bim".to_owned(),
+                "{cpfx}bimridertypes [-n]".to_owned(),
+                "Returns the types of vehicles ridden by each rider.".to_owned(),
+            )
+                .add_flag("n")
+                .add_flag("sort-by-number")
+                .build()
+        ).await;
 
         Self {
             interface,
@@ -1181,6 +1326,8 @@ impl RocketBotPlugin for BimPlugin {
             self.channel_command_favbims(channel_message, command).await
         } else if command.name == "topbimdays" {
             self.channel_command_topbimdays(channel_message, command).await
+        } else if command.name == "bimridertypes" {
+            self.channel_command_bimridertypes(channel_message, command).await
         }
     }
 
@@ -1203,6 +1350,8 @@ impl RocketBotPlugin for BimPlugin {
             Some(include_str!("../help/favbims.md").to_owned())
         } else if command_name == "topbimdays" {
             Some(include_str!("../help/topbimdays.md").to_owned())
+        } else if command_name == "bimridertypes" {
+            Some(include_str!("../help/bimridertypes.md").to_owned())
         } else {
             None
         }
