@@ -1009,10 +1009,10 @@ impl BimPlugin {
                 continue;
             }
 
-            let ride_count = date_to_ride_count
+            let date_ride_count = date_to_ride_count
                 .entry((year, month, day))
                 .or_insert(0);
-            *ride_count += 1;
+            *date_ride_count += ride_count;
         }
 
         let mut date_and_ride_count: Vec<((i64, i64, i64), i64)> = date_to_ride_count
