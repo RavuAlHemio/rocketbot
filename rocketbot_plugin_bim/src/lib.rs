@@ -1018,7 +1018,7 @@ impl BimPlugin {
             let year: i64 = row.get(0);
             let month: i64 = row.get(1);
             let day: i64 = row.get(2);
-            let ride_count: i64 = row.get(5);
+            let ride_count: i64 = row.get(3);
 
             let date_ride_count = date_to_ride_count
                 .entry((year, month, day))
