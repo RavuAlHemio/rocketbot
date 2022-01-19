@@ -1048,6 +1048,10 @@ impl BimPlugin {
             command.flags.contains("n")
             || command.flags.contains("sort-by-number")
         ;
+        let rider_username = command.rest.trim();
+        if rider_username.len() == 0 {
+            return;
+        }
 
         let ride_conn = match self.connect_ride_db().await {
             Ok(c) => c,
@@ -1064,17 +1068,16 @@ impl BimPlugin {
         let rows_res = ride_conn.query(
             "
                 SELECT
-                    r.rider_username,
                     r.company,
                     r.vehicle_number,
                     CAST(COUNT(*) AS bigint) ride_count
                 FROM bim.rides r
+                WHERE LOWER(r.rider_username) = LOWER($1)
                 GROUP BY
-                    r.rider_username,
                     r.company,
                     r.vehicle_number
             ",
-            &[]
+            &[&rider_username]
         ).await;
         let rows = match rows_res {
             Ok(r) => r,
@@ -1090,16 +1093,15 @@ impl BimPlugin {
         };
 
         let mut company_to_bim_database_opt = HashMap::new();
-        let mut rider_to_type_to_count: BTreeMap<String, BTreeMap<(String, String), i64>> = BTreeMap::new();
+        let mut type_to_count: BTreeMap<(String, String), i64> = BTreeMap::new();
         for row in rows {
-            let rider: String = row.get(0);
-            let company: String = row.get(1);
-            let vehicle_number_i64: i64 = row.get(2);
+            let company: String = row.get(0);
+            let vehicle_number_i64: i64 = row.get(1);
             let vehicle_number_u32: u32 = match vehicle_number_i64.try_into() {
                 Ok(vn) => vn,
                 Err(_) => continue,
             };
-            let ride_count: i64 = row.get(3);
+            let ride_count: i64 = row.get(2);
 
             // only count the first vehicle in a fixed coupling
             // skip entries where we don't know the vehicle's type
@@ -1118,44 +1120,34 @@ impl BimPlugin {
                 .type_code
                 .clone();
 
-            let type_ride_count = rider_to_type_to_count
-                .entry(rider)
-                .or_insert_with(|| BTreeMap::new())
+            let type_ride_count = type_to_count
                 .entry((company, vehicle_type))
                 .or_insert(0);
             *type_ride_count += ride_count;
         }
 
-        let mut rider_lines = Vec::new();
-        for (rider, type_to_count) in &rider_to_type_to_count {
-            let mut type_and_count: Vec<(&str, &str, i64)> = type_to_count
-                .iter()
-                .map(|((comp, tp), count)| (comp.as_str(), tp.as_str(), *count))
-                .collect();
-            if sort_by_number {
-                type_and_count.sort_unstable_by_key(|(_comp, _tp, count)| -*count);
-            }
-            let types_counts: Vec<String> = type_and_count.iter()
-                .map(|(comp, tp, count)|
-                    if *comp == self.default_company.as_str() {
-                        format!("{}\u{D7}{}", count, tp)
-                    } else {
-                        format!("{}\u{D7}{}/{}", count, comp, tp)
-                    }
-                )
-                .collect();
-            if types_counts.len() == 0 {
-                continue;
-            }
-
-            let types_counts_string = types_counts.join(", ");
-            rider_lines.push(format!("{}: {}", rider, types_counts_string));
+        let mut type_and_count: Vec<(&str, &str, i64)> = type_to_count
+            .iter()
+            .map(|((comp, tp), count)| (comp.as_str(), tp.as_str(), *count))
+            .collect();
+        if sort_by_number {
+            type_and_count.sort_unstable_by_key(|(_comp, _tp, count)| -*count);
         }
-        let response = if rider_lines.len() == 0 {
-            "No rides with known vehicle types!".to_owned()
+        let types_counts: Vec<String> = type_and_count.iter()
+            .map(|(comp, tp, count)|
+                if *comp == self.default_company.as_str() {
+                    format!("{}: {}", tp, count)
+                } else {
+                    format!("{}/{}: {}", comp, tp, count)
+                }
+            )
+            .collect();
+
+        let response = if types_counts.len() == 0 {
+            format!("{} has not ridden any known vehicle types!", rider_username)
         } else {
-            let rider_lines_string = rider_lines.join("\n");
-            format!("Riders and their vehicle types:\n{}", rider_lines_string)
+            let rider_lines_string = types_counts.join("\n");
+            format!("{} has ridden these vehicle types:\n{}", rider_username, rider_lines_string)
         };
 
         send_channel_message!(
@@ -1175,6 +1167,10 @@ impl BimPlugin {
             command.flags.contains("n")
             || command.flags.contains("sort-by-number")
         ;
+        let rider_username = command.rest.trim();
+        if rider_username.len() == 0 {
+            return;
+        }
 
         let ride_conn = match self.connect_ride_db().await {
             Ok(c) => c,
@@ -1191,21 +1187,20 @@ impl BimPlugin {
         let rows_res = ride_conn.query(
             "
                 SELECT
-                    r.rider_username,
                     r.company,
                     r.vehicle_number,
                     r.line,
                     CAST(COUNT(*) AS bigint) ride_count
                 FROM bim.rides r
                 WHERE
+                    LOWER(r.rider_username) = LOWER($1),
                     r.line IS NOT NULL
                 GROUP BY
-                    r.rider_username,
                     r.company,
                     r.vehicle_number,
                     r.line
             ",
-            &[]
+            &[&rider_username]
         ).await;
         let rows = match rows_res {
             Ok(r) => r,
@@ -1221,17 +1216,16 @@ impl BimPlugin {
         };
 
         let mut company_to_bim_database_opt = HashMap::new();
-        let mut rider_to_line_to_count: BTreeMap<String, BTreeMap<(String, String), i64>> = BTreeMap::new();
+        let mut line_to_count: BTreeMap<(String, String), i64> = BTreeMap::new();
         for row in rows {
-            let rider: String = row.get(0);
-            let company: String = row.get(1);
-            let vehicle_number_i64: i64 = row.get(2);
+            let company: String = row.get(0);
+            let vehicle_number_i64: i64 = row.get(1);
             let vehicle_number_u32: u32 = match vehicle_number_i64.try_into() {
                 Ok(vn) => vn,
                 Err(_) => continue,
             };
-            let line: String = row.get(3);
-            let ride_count: i64 = row.get(4);
+            let line: String = row.get(2);
+            let ride_count: i64 = row.get(3);
 
             // only count the first vehicle in a fixed coupling
             // assume vehicles are uncoupled if no data is available
@@ -1239,44 +1233,33 @@ impl BimPlugin {
                 continue;
             }
 
-            let line_ride_count = rider_to_line_to_count
-                .entry(rider)
-                .or_insert_with(|| BTreeMap::new())
+            let line_ride_count = line_to_count
                 .entry((company, line))
                 .or_insert(0);
             *line_ride_count += ride_count;
         }
 
-        let mut rider_lines = Vec::new();
-        for (rider, line_to_count) in &rider_to_line_to_count {
-            let mut line_and_count: Vec<(&str, &str, i64)> = line_to_count
-                .iter()
-                .map(|((comp, ln), count)| (comp.as_str(), ln.as_str(), *count))
-                .collect();
-            if sort_by_number {
-                line_and_count.sort_unstable_by_key(|(_comp, _ln, count)| -*count);
-            }
-            let lines_counts: Vec<String> = line_and_count.iter()
-                .map(|(comp, tp, count)|
-                    if *comp == self.default_company.as_str() {
-                        format!("{}\u{D7}{}", count, tp)
-                    } else {
-                        format!("{}\u{D7}{}/{}", count, comp, tp)
-                    }
-                )
-                .collect();
-            if lines_counts.len() == 0 {
-                continue;
-            }
-
-            let lines_counts_string = lines_counts.join(", ");
-            rider_lines.push(format!("{}: {}", rider, lines_counts_string));
+        let mut line_and_count: Vec<(&str, &str, i64)> = line_to_count
+            .iter()
+            .map(|((comp, ln), count)| (comp.as_str(), ln.as_str(), *count))
+            .collect();
+        if sort_by_number {
+            line_and_count.sort_unstable_by_key(|(_comp, _ln, count)| -*count);
         }
-        let response = if rider_lines.len() == 0 {
-            "No rides with known line numbers!".to_owned()
+        let lines_counts: Vec<String> = line_and_count.iter()
+            .map(|(comp, tp, count)|
+                if *comp == self.default_company.as_str() {
+                    format!("{}: {}", tp, count)
+                } else {
+                    format!("{}/{}: {}", comp, tp, count)
+                }
+            )
+            .collect();
+        let response = if lines_counts.len() == 0 {
+            format!("{} has not ridden any known lines!", rider_username)
         } else {
-            let rider_lines_string = rider_lines.join("\n");
-            format!("Riders and their line numbers:\n{}", rider_lines_string)
+            let rider_lines_string = lines_counts.join("\n");
+            format!("{} has ridden these lines:\n{}", rider_username, rider_lines_string)
         };
 
         send_channel_message!(
@@ -1414,8 +1397,8 @@ impl RocketBotPlugin for BimPlugin {
             &CommandDefinitionBuilder::new(
                 "bimridertypes".to_owned(),
                 "bim".to_owned(),
-                "{cpfx}bimridertypes [-n]".to_owned(),
-                "Returns the types of vehicles ridden by each rider.".to_owned(),
+                "{cpfx}bimridertypes [-n] USERNAME".to_owned(),
+                "Returns the types of vehicles ridden by a rider.".to_owned(),
             )
                 .add_flag("n")
                 .add_flag("sort-by-number")
@@ -1425,8 +1408,8 @@ impl RocketBotPlugin for BimPlugin {
             &CommandDefinitionBuilder::new(
                 "bimriderlines".to_owned(),
                 "bim".to_owned(),
-                "{cpfx}bimriderlines [-n]".to_owned(),
-                "Returns the lines ridden by each rider.".to_owned(),
+                "{cpfx}bimriderlines [-n] USERNAME".to_owned(),
+                "Returns the lines ridden by a rider.".to_owned(),
             )
                 .add_flag("n")
                 .add_flag("sort-by-number")
