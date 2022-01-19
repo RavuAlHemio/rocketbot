@@ -1193,8 +1193,8 @@ impl BimPlugin {
                     CAST(COUNT(*) AS bigint) ride_count
                 FROM bim.rides r
                 WHERE
-                    LOWER(r.rider_username) = LOWER($1),
-                    r.line IS NOT NULL
+                    LOWER(r.rider_username) = LOWER($1)
+                    AND r.line IS NOT NULL
                 GROUP BY
                     r.company,
                     r.vehicle_number,
