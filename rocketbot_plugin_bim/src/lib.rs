@@ -202,10 +202,10 @@ impl BimPlugin {
             .or_insert_with(|| self.load_bim_database(&company));
         if let Some(bim_database) = bim_database_opt {
             if let Some(vehicle) = bim_database.get(&vehicle_number) {
-                // false if no fixed coupling or not the first vehicle in a fixed coupling
+                // true if no fixed coupling or the first vehicle in a fixed coupling
                 vehicle.fixed_coupling.first()
                     .map(|&f| f == vehicle_number)
-                    .unwrap_or(false)
+                    .unwrap_or(true)
             } else {
                 value_if_vehicle_missing
             }
