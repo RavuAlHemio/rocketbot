@@ -1,5 +1,5 @@
 use std::collections::{BTreeMap, BTreeSet, HashMap};
-use std::convert::{TryFrom, TryInto};
+use std::convert::TryInto;
 use std::fmt::{self, Write};
 use std::fs::File;
 use std::num::ParseIntError;
@@ -189,31 +189,6 @@ impl BimPlugin {
         Some(vehicle_hash_map)
     }
 
-    fn is_first_or_uncoupled(
-        &self,
-        company: &str,
-        vehicle_number: VehicleNumber,
-        company_to_bim_database_opt: &mut HashMap<String, Option<HashMap<u32, VehicleInfo>>>,
-        value_if_database_missing: bool,
-        value_if_vehicle_missing: bool
-    ) -> bool {
-        let bim_database_opt = company_to_bim_database_opt
-            .entry(company.to_owned())
-            .or_insert_with(|| self.load_bim_database(&company));
-        if let Some(bim_database) = bim_database_opt {
-            if let Some(vehicle) = bim_database.get(&vehicle_number) {
-                // true if no fixed coupling or the first vehicle in a fixed coupling
-                vehicle.fixed_coupling.first()
-                    .map(|&f| f == vehicle_number)
-                    .unwrap_or(true)
-            } else {
-                value_if_vehicle_missing
-            }
-        } else {
-            value_if_database_missing
-        }
-    }
-
     async fn connect_ride_db(&self) -> Result<tokio_postgres::Client, tokio_postgres::Error> {
         let (client, connection) = match tokio_postgres::connect(&self.ride_db_conn_string, NoTls).await {
             Ok(cc) => cc,
@@ -307,7 +282,17 @@ impl BimPlugin {
 
             // query ride count
             let count_row_opt_res = ride_conn.query_opt(
-                "SELECT CAST(COALESCE(COUNT(*), 0) AS bigint) total_ride_count FROM bim.rides WHERE company = $1 AND vehicle_number = $2",
+                "
+                    SELECT
+                        CAST(COALESCE(COUNT(*), 0) AS bigint) total_ride_count
+                    FROM
+                        bim.rides r
+                        INNER JOIN bim.ride_vehicles rv
+                            ON rv.ride_id = r.id
+                    WHERE
+                        r.company = $1
+                        AND rv.vehicle_number = $2
+                ",
                 &[&company, &vehicle_number_i64],
             ).await;
             let count: i64 = match count_row_opt_res {
@@ -331,10 +316,20 @@ impl BimPlugin {
                 let ride_row_opt_res = ride_conn.query_opt(
                     &format!(
                         "
-                            SELECT rider_username, \"timestamp\", line
-                            FROM bim.rides
-                            WHERE company = $1 AND vehicle_number = $2 AND rider_username {} $3
-                            ORDER BY \"timestamp\" DESC
+                            SELECT
+                                r.rider_username,
+                                r.\"timestamp\",
+                                r.line
+                            FROM
+                                bim.rides r
+                                INNER JOIN bim.ride_vehicles rv
+                                    ON rv.ride_id = r.id
+                            WHERE
+                                r.company = $1
+                                AND rv.vehicle_number = $2
+                                AND r.rider_username {} $3
+                            ORDER BY
+                                r.\"timestamp\" DESC
                             LIMIT 1
                         ",
                         operator,
@@ -620,10 +615,17 @@ impl BimPlugin {
         let rows_res = ride_conn.query(
             "
                 WITH total_rides(vehicle_number, total_ride_count) AS (
-                    SELECT b.vehicle_number, CAST(COUNT(*) AS bigint) total_ride_count
-                    FROM bim.rides b
-                    WHERE b.company = $1
-                    GROUP BY b.vehicle_number
+                    SELECT
+                        rv.vehicle_number,
+                        CAST(COUNT(*) AS bigint) total_ride_count
+                    FROM
+                        bim.rides r
+                        INNER JOIN bim.ride_vehicles rv
+                            ON rv.ride_id = r.id
+                    WHERE
+                        r.company = $1
+                    GROUP BY
+                        rv.vehicle_number
                 )
                 SELECT tr.vehicle_number, tr.total_ride_count
                 FROM total_rides tr
@@ -707,15 +709,15 @@ impl BimPlugin {
             },
         };
 
-        let rows_res = ride_conn.query(
+        let ride_rows_res = ride_conn.query(
             "
-                SELECT company, vehicle_number, rider_username, COUNT(*)
-                FROM bim.rides
-                GROUP BY company, vehicle_number, rider_username
+                SELECT r.rider_username, CAST(COUNT(*) AS bigint) ride_count
+                FROM bim.rides r
+                GROUP BY r.rider_username
             ",
             &[]
         ).await;
-        let rows = match rows_res {
+        let ride_rows = match ride_rows_res {
             Ok(r) => r,
             Err(e) => {
                 error!("failed to query most active riders: {}", e);
@@ -728,26 +730,51 @@ impl BimPlugin {
             },
         };
 
-        let mut company_to_bim_database_opt = HashMap::new();
         let mut rider_to_ride_and_vehicle_count = HashMap::new();
-        for row in rows {
-            let company: String = row.get(0);
-            let vehicle_number_i64: i64 = row.get(1);
-            let rider_username: String = row.get(2);
-            let ride_count: i64 = row.get(3);
-
-            if let Ok(vehicle_number_vn) = VehicleNumber::try_from(vehicle_number_i64) {
-                // only count the first vehicle in a fixed coupling
-                if !self.is_first_or_uncoupled(&company, vehicle_number_vn, &mut company_to_bim_database_opt, true, true) {
-                    continue;
-                }
-            }
+        for row in ride_rows {
+            let rider_username: String = row.get(0);
+            let ride_count: i64 = row.get(1);
 
             let rider_ride_and_vehicle_count = rider_to_ride_and_vehicle_count
                 .entry(rider_username.clone())
                 .or_insert((0i64, 0i64));
             rider_ride_and_vehicle_count.0 += ride_count;
-            rider_ride_and_vehicle_count.1 += 1;
+        }
+
+        let vehicle_rows_res = ride_conn.query(
+            "
+                SELECT i.rider_username, CAST(COUNT(*) AS bigint) vehicle_count
+                FROM (
+                    SELECT DISTINCT r.rider_username, r.company, rv.vehicle_number
+                    FROM bim.rides r
+                    INNER JOIN bim.ride_vehicles rv ON rv.ride_id = r.id
+                    WHERE rv.as_part_of_fixed_coupling = FALSE
+                ) i
+                GROUP BY i.rider_username
+            ",
+            &[]
+        ).await;
+        let vehicle_rows = match vehicle_rows_res {
+            Ok(r) => r,
+            Err(e) => {
+                error!("failed to query most active riders with vehicles: {}", e);
+                send_channel_message!(
+                    interface,
+                    &channel_message.channel.name,
+                    "Failed to query database. :disappointed:",
+                ).await;
+                return;
+            },
+        };
+
+        for row in vehicle_rows {
+            let rider_username: String = row.get(0);
+            let vehicle_count: i64 = row.get(1);
+
+            let rider_ride_and_vehicle_count = rider_to_ride_and_vehicle_count
+                .entry(rider_username.clone())
+                .or_insert((0i64, 0i64));
+            rider_ride_and_vehicle_count.1 += vehicle_count;
         }
 
         let mut rider_and_ride_and_vehicle_count: Vec<(String, i64, i64)> = rider_to_ride_and_vehicle_count
@@ -848,12 +875,13 @@ impl BimPlugin {
             "
                 WITH
                     rides_per_rider_vehicle(rider_username, company, vehicle_number, ride_count) AS (
-                        SELECT rider_username, company, vehicle_number, COUNT(*)
-                        FROM bim.rides
-                        GROUP BY rider_username, company, vehicle_number
+                        SELECT r.rider_username, r.company, rv.vehicle_number, COUNT(*)
+                        FROM bim.rides r
+                        INNER JOIN bim.ride_vehicles rv ON rv.ride_id = r.id
+                        GROUP BY r.rider_username, r.company, rv.vehicle_number
                     ),
                     fav_vehicle(rider_username, company, vehicle_number, ride_count) AS (
-                        SELECT rider_username, company, vehicle_number, ride_count
+                        SELECT rprv.rider_username, rprv.company, rprv.vehicle_number, rprv.ride_count
                         FROM rides_per_rider_vehicle rprv
                         WHERE NOT EXISTS (
                             SELECT 1
@@ -946,11 +974,8 @@ impl BimPlugin {
         let rows_res = ride_conn.query(
             "
                 WITH
-                rides_dates(ride_id, company, vehicle_number, ride_date) AS (
+                rides_dates(ride_date) AS (
                     SELECT
-                        r.id,
-                        r.company,
-                        r.vehicle_number,
                         -- count rides before 04:00 to previous day
                         CAST(
                             CASE WHEN EXTRACT(HOUR FROM r.\"timestamp\") < 4
@@ -961,18 +986,16 @@ impl BimPlugin {
                     FROM
                         bim.rides r
                 ),
-                ride_date_count(ride_year, ride_month, ride_day, company, vehicle_number, ride_count) AS (
+                ride_date_count(ride_year, ride_month, ride_day, ride_count) AS (
                     SELECT
                         CAST(EXTRACT(YEAR FROM ride_date) AS bigint),
                         CAST(EXTRACT(MONTH FROM ride_date) AS bigint),
                         CAST(EXTRACT(DAY FROM ride_date) AS bigint),
-                        company,
-                        vehicle_number,
                         COUNT(*)
                     FROM rides_dates
-                    GROUP BY ride_date, company, vehicle_number
+                    GROUP BY ride_date
                 )
-                SELECT ride_year, ride_month, ride_day, company, vehicle_number, CAST(ride_count AS bigint) ride_count
+                SELECT ride_year, ride_month, ride_day, CAST(ride_count AS bigint) ride_count
                 FROM ride_date_count
             ",
             &[]
@@ -990,24 +1013,12 @@ impl BimPlugin {
             },
         };
 
-        let mut company_to_bim_database_opt = HashMap::new();
         let mut date_to_ride_count: BTreeMap<(i64, i64, i64), i64> = BTreeMap::new();
         for row in rows {
             let year: i64 = row.get(0);
             let month: i64 = row.get(1);
             let day: i64 = row.get(2);
-            let company: String = row.get(3);
-            let vehicle_number_i64: i64 = row.get(4);
-            let vehicle_number_u32: u32 = match vehicle_number_i64.try_into() {
-                Ok(vn) => vn,
-                Err(_) => continue,
-            };
             let ride_count: i64 = row.get(5);
-
-            // only count the first vehicle in a fixed coupling
-            if !self.is_first_or_uncoupled(&company, vehicle_number_u32, &mut company_to_bim_database_opt, true, true) {
-                continue;
-            }
 
             let date_ride_count = date_to_ride_count
                 .entry((year, month, day))
@@ -1073,13 +1084,16 @@ impl BimPlugin {
             "
                 SELECT
                     r.company,
-                    r.vehicle_number,
+                    rv.vehicle_number,
                     CAST(COUNT(*) AS bigint) ride_count
                 FROM bim.rides r
-                WHERE LOWER(r.rider_username) = LOWER($1)
+                INNER JOIN bim.ride_vehicles rv ON rv.ride_id = r.id
+                WHERE
+                    LOWER(r.rider_username) = LOWER($1)
+                    AND rv.as_part_of_fixed_coupling = FALSE
                 GROUP BY
                     r.company,
-                    r.vehicle_number
+                    rv.vehicle_number
             ",
             &[&rider_username]
         ).await;
@@ -1107,22 +1121,20 @@ impl BimPlugin {
             };
             let ride_count: i64 = row.get(2);
 
-            // only count the first vehicle in a fixed coupling
-            // skip entries where we don't know the vehicle's type
-            if !self.is_first_or_uncoupled(&company, vehicle_number_u32, &mut company_to_bim_database_opt, false, false) {
-                continue;
-            }
-
-            // at this point, the vehicle database should be loaded
-            let vehicle_type = company_to_bim_database_opt
-                .get(&company)
-                .expect("vehicle database not loaded but is_first_or_uncoupled returned true")
+            let bim_database_opt = company_to_bim_database_opt
+                .entry(company.clone())
+                .or_insert_with(|| self.load_bim_database(&company));
+            let vehicle_type_opt = bim_database_opt
                 .as_ref()
-                .expect("vehicle database does not exist but is_first_or_uncoupled returned true")
-                .get(&vehicle_number_u32)
-                .expect("vehicle does not exist in database but is_first_or_uncoupled returned true")
-                .type_code
-                .clone();
+                .map(|bd| bd
+                    .get(&vehicle_number_u32)
+                    .map(|vi| vi.type_code.clone())
+                )
+                .flatten();
+            let vehicle_type = match vehicle_type_opt {
+                Some(vt) => vt,
+                None => continue,
+            };
 
             let type_ride_count = type_to_count
                 .entry((company, vehicle_type))
@@ -1196,7 +1208,6 @@ impl BimPlugin {
             "
                 SELECT
                     r.company,
-                    r.vehicle_number,
                     r.line,
                     CAST(COUNT(*) AS bigint) ride_count
                 FROM bim.rides r
@@ -1205,7 +1216,6 @@ impl BimPlugin {
                     AND r.line IS NOT NULL
                 GROUP BY
                     r.company,
-                    r.vehicle_number,
                     r.line
             ",
             &[&rider_username]
@@ -1223,23 +1233,11 @@ impl BimPlugin {
             },
         };
 
-        let mut company_to_bim_database_opt = HashMap::new();
         let mut line_to_count: BTreeMap<(String, String), i64> = BTreeMap::new();
         for row in rows {
             let company: String = row.get(0);
-            let vehicle_number_i64: i64 = row.get(1);
-            let vehicle_number_u32: u32 = match vehicle_number_i64.try_into() {
-                Ok(vn) => vn,
-                Err(_) => continue,
-            };
-            let line: String = row.get(2);
-            let ride_count: i64 = row.get(3);
-
-            // only count the first vehicle in a fixed coupling
-            // assume vehicles are uncoupled if no data is available
-            if !self.is_first_or_uncoupled(&company, vehicle_number_u32, &mut company_to_bim_database_opt, true, true) {
-                continue;
-            }
+            let line: String = row.get(1);
+            let ride_count: i64 = row.get(2);
 
             let line_ride_count = line_to_count
                 .entry((company, line))
@@ -1486,100 +1484,148 @@ impl RocketBotPlugin for BimPlugin {
 }
 
 
-pub async fn increment_last_ride(ride_conn: &tokio_postgres::Transaction<'_>, company: &str, vehicle_number: VehicleNumber, rider_username: &str, timestamp: DateTime<Local>, line: Option<&str>) -> Result<(Option<LastRideInfo>, Option<OtherRiderInfo>), tokio_postgres::Error> {
-    let vehicle_number_i64: i64 = vehicle_number.into();
-
-    let prev_my_count_row = ride_conn.query_one(
+pub async fn add_ride(
+    ride_conn: &tokio_postgres::Transaction<'_>,
+    company: &str,
+    vehicle_numbers_and_fixed_coupling: &[(VehicleNumber, bool)],
+    rider_username: &str,
+    timestamp: DateTime<Local>,
+    line: Option<&str>,
+) -> Result<Vec<(Option<LastRideInfo>, Option<OtherRiderInfo>)>, tokio_postgres::Error> {
+    let prev_my_count_stmt = ride_conn.prepare(
         "
             SELECT CAST(COUNT(*) AS bigint)
-            FROM bim.rides
+            FROM bim.rides r
+            INNER JOIN bim.ride_vehicles rv ON rv.ride_id = r.id
             WHERE
-                company = $1
-                AND vehicle_number = $2
-                AND rider_username = $3
+                r.company = $1
+                AND rv.vehicle_number = $2
+                AND r.rider_username = $3
         ",
-        &[&company, &vehicle_number_i64, &rider_username],
     ).await?;
-    let prev_my_count: i64 = prev_my_count_row.get(0);
-
-    let prev_my_row_opt = ride_conn.query_opt(
+    let prev_my_row_stmt = ride_conn.prepare(
         "
-            SELECT \"timestamp\", line
-            FROM bim.rides
+            SELECT r.\"timestamp\", r.line
+            FROM bim.rides r
+            INNER JOIN bim.ride_vehicles rv ON rv.ride_id = r.id
             WHERE
-                company = $1
-                AND vehicle_number = $2
-                AND rider_username = $3
-            ORDER BY \"timestamp\" DESC
+                r.company = $1
+                AND rv.vehicle_number = $2
+                AND r.rider_username = $3
+            ORDER BY r.\"timestamp\" DESC
             LIMIT 1
         ",
-        &[&company, &vehicle_number_i64, &rider_username],
     ).await?;
-    let prev_my_timestamp: Option<DateTime<Local>> = prev_my_row_opt.as_ref().map(|r| r.get(0));
-    let prev_my_line: Option<String> = prev_my_row_opt.as_ref().map(|r| r.get(1)).flatten();
-
-    let prev_other_count_row = ride_conn.query_one(
+    let prev_other_count_stmt = ride_conn.prepare(
         "
             SELECT CAST(COUNT(*) AS bigint)
-            FROM bim.rides
+            FROM bim.rides r
+            INNER JOIN bim.ride_vehicles rv ON rv.ride_id = r.id
             WHERE
-                company = $1
-                AND vehicle_number = $2
-                AND rider_username <> $3
+                r.company = $1
+                AND rv.vehicle_number = $2
+                AND r.rider_username <> $3
         ",
-        &[&company, &vehicle_number_i64, &rider_username],
     ).await?;
-    let prev_other_count: i64 = prev_other_count_row.get(0);
-
-    let prev_other_row_opt = ride_conn.query_opt(
+    let prev_other_row_stmt = ride_conn.prepare(
         "
-            SELECT \"timestamp\", line, rider_username
-            FROM bim.rides
+            SELECT r.\"timestamp\", r.line, r.rider_username
+            FROM bim.rides r
+            INNER JOIN bim.ride_vehicles rv ON rv.ride_id = r.id
             WHERE
-                company = $1
-                AND vehicle_number = $2
-                AND rider_username <> $3
-            ORDER BY \"timestamp\" DESC
+                r.company = $1
+                AND rv.vehicle_number = $2
+                AND r.rider_username <> $3
+            ORDER BY r.\"timestamp\" DESC
             LIMIT 1
         ",
-        &[&company, &vehicle_number_i64, &rider_username],
     ).await?;
-    let prev_other_timestamp: Option<DateTime<Local>> = prev_other_row_opt.as_ref().map(|r| r.get(0));
-    let prev_other_line: Option<String> = prev_other_row_opt.as_ref().map(|r| r.get(1)).flatten();
-    let prev_other_rider: Option<String> = prev_other_row_opt.as_ref().map(|r| r.get(2));
 
-    ride_conn.execute(
+    let mut vehicle_results = Vec::new();
+    for &(vehicle_number, _fixed_coupling) in vehicle_numbers_and_fixed_coupling {
+        let vehicle_number_i64: i64 = vehicle_number.into();
+
+        let prev_my_count_row = ride_conn.query_one(
+            &prev_my_count_stmt,
+            &[&company, &vehicle_number_i64, &rider_username],
+        ).await?;
+        let prev_my_count: i64 = prev_my_count_row.get(0);
+
+        let prev_my_row_opt = ride_conn.query_opt(
+            &prev_my_row_stmt,
+            &[&company, &vehicle_number_i64, &rider_username],
+        ).await?;
+        let prev_my_timestamp: Option<DateTime<Local>> = prev_my_row_opt.as_ref().map(|r| r.get(0));
+        let prev_my_line: Option<String> = prev_my_row_opt.as_ref().map(|r| r.get(1)).flatten();
+
+        let prev_other_count_row = ride_conn.query_one(
+            &prev_other_count_stmt,
+            &[&company, &vehicle_number_i64, &rider_username],
+        ).await?;
+        let prev_other_count: i64 = prev_other_count_row.get(0);
+    
+        let prev_other_row_opt = ride_conn.query_opt(
+            &prev_other_row_stmt,
+            &[&company, &vehicle_number_i64, &rider_username],
+        ).await?;
+        let prev_other_timestamp: Option<DateTime<Local>> = prev_other_row_opt.as_ref().map(|r| r.get(0));
+        let prev_other_line: Option<String> = prev_other_row_opt.as_ref().map(|r| r.get(1)).flatten();
+        let prev_other_rider: Option<String> = prev_other_row_opt.as_ref().map(|r| r.get(2));
+
+        let last_info = if prev_my_count > 0 {
+            let pmc_usize: usize = prev_my_count.try_into().unwrap();
+            Some(LastRideInfo {
+                ride_count: pmc_usize,
+                last_ride: prev_my_timestamp.unwrap(),
+                last_line: prev_my_line,
+            })
+        } else {
+            None
+        };
+    
+        let other_info = if prev_other_count > 0 {
+            Some(OtherRiderInfo {
+                rider_username: prev_other_rider.unwrap(),
+                last_ride: prev_other_timestamp.unwrap(),
+                last_line: prev_other_line,
+            })
+        } else {
+            None
+        };
+
+        vehicle_results.push((last_info, other_info));
+    }
+
+    let id_row = ride_conn.query_one(
         "
-            INSERT INTO bim.rides AS br
-                (id, company, vehicle_number, rider_username, \"timestamp\", line)
+            INSERT INTO bim.rides
+                (id, company, rider_username, \"timestamp\", line)
             VALUES
-                (DEFAULT, $1, $2, $3, $4, $5)
+                (DEFAULT, $1, $2, $3, $4)
+            RETURNING id
         ",
-        &[&company, &vehicle_number_i64, &rider_username, &timestamp, &line],
+        &[&company, &rider_username, &timestamp, &line],
+    ).await?;
+    let ride_id: i64 = id_row.get(0);
+
+    let insert_vehicle_stmt = ride_conn.prepare(
+        "
+            INSERT INTO bim.ride_vehicles
+                (ride_id, vehicle_number, as_part_of_fixed_coupling)
+            VALUES
+                ($1, $2, $3)
+        ",
     ).await?;
 
-    let last_info = if prev_my_count > 0 {
-        let pmc_usize: usize = prev_my_count.try_into().unwrap();
-        Some(LastRideInfo {
-            ride_count: pmc_usize,
-            last_ride: prev_my_timestamp.unwrap(),
-            last_line: prev_my_line,
-        })
-    } else {
-        None
-    };
+    for &(vehicle_number, as_part_of_fixed_coupling) in vehicle_numbers_and_fixed_coupling {
+        let vehicle_number_i64: i64 = vehicle_number.into();
+        ride_conn.execute(
+            &insert_vehicle_stmt,
+            &[&ride_id, &vehicle_number_i64, &as_part_of_fixed_coupling],
+        ).await?;
+    }
 
-    let other_info = if prev_other_count > 0 {
-        Some(OtherRiderInfo {
-            rider_username: prev_other_rider.unwrap(),
-            last_ride: prev_other_timestamp.unwrap(),
-            last_line: prev_other_line,
-        })
-    } else {
-        None
-    };
-
-    Ok((last_info, other_info))
+    Ok(vehicle_results)
 }
 
 #[derive(Debug)]
@@ -1587,7 +1633,7 @@ pub enum IncrementBySpecError {
     SpecParseFailure(String),
     VehicleNumberParseFailure(String, ParseIntError),
     FixedCouplingCombo(VehicleNumber),
-    DatabaseQuery(String, VehicleNumber, Option<String>, tokio_postgres::Error),
+    DatabaseQuery(String, Vec<(VehicleNumber, bool)>, Option<String>, tokio_postgres::Error),
     DatabaseBeginTransaction(tokio_postgres::Error),
     DatabaseCommitTransaction(tokio_postgres::Error),
 }
@@ -1597,7 +1643,7 @@ impl fmt::Display for IncrementBySpecError {
             Self::SpecParseFailure(spec) => write!(f, "failed to parse spec {:?}", spec),
             Self::VehicleNumberParseFailure(num_str, e) => write!(f, "failed to parse vehicle number {:?}: {}", num_str, e),
             Self::FixedCouplingCombo(coupled_number) => write!(f, "vehicle number {} is part of a fixed coupling and cannot be ridden in combination with other vehicles", coupled_number),
-            Self::DatabaseQuery(rider, vehicle_num, line_opt, e) => write!(f, "database query error registering {} riding on vehicle {} on line {:?}: {}", rider, vehicle_num, line_opt, e),
+            Self::DatabaseQuery(rider, vehicle_nums, line_opt, e) => write!(f, "database query error registering {} riding on vehicles {:?} on line {:?}: {}", rider, vehicle_nums, line_opt, e),
             Self::DatabaseBeginTransaction(e) => write!(f, "database error beginning transaction: {}", e),
             Self::DatabaseCommitTransaction(e) => write!(f, "database error committing transaction: {}", e),
         }
@@ -1668,10 +1714,20 @@ pub async fn increment_rides_by_spec(
         let xact = ride_conn.transaction().await
             .map_err(|e| IncrementBySpecError::DatabaseBeginTransaction(e))?;
 
+        let mut ride_info_vec = add_ride(
+            &xact,
+            company,
+            &all_vehicle_nums,
+            rider_username,
+            timestamp,
+            line_str_opt,
+        )
+            .await.map_err(|e|
+                IncrementBySpecError::DatabaseQuery(rider_username.to_owned(), all_vehicle_nums.clone(), line_str_opt.map(|l| l.to_owned()), e)
+            )?;
+
         let mut vehicle_ride_infos = Vec::new();
-        for &(vehicle_num, is_fixed_coupling) in &all_vehicle_nums {
-            let (lri_opt, ori_opt) = increment_last_ride(&xact, company, vehicle_num, rider_username, timestamp, line_str_opt).await
-                .map_err(|e| IncrementBySpecError::DatabaseQuery(rider_username.to_owned(), vehicle_num, line_str_opt.map(|l| l.to_owned()), e))?;
+        for (&(vehicle_num, is_fixed_coupling), (lri_opt, ori_opt)) in all_vehicle_nums.iter().zip(ride_info_vec.drain(..)) {
             vehicle_ride_infos.push(VehicleRideInfo {
                 vehicle_number: vehicle_num,
                 ridden_within_fixed_coupling: is_fixed_coupling,
