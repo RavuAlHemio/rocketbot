@@ -1165,6 +1165,113 @@ impl BimPlugin {
         ).await;
     }
 
+    async fn channel_command_bimriderlines(&self, channel_message: &ChannelMessage, command: &CommandInstance) {
+        let interface = match self.interface.upgrade() {
+            None => return,
+            Some(i) => i,
+        };
+
+        let sort_by_number =
+            command.flags.contains("n")
+            || command.flags.contains("sort-by-number")
+        ;
+
+        let ride_conn = match self.connect_ride_db().await {
+            Ok(c) => c,
+            Err(_) => {
+                send_channel_message!(
+                    interface,
+                    &channel_message.channel.name,
+                    "Failed to open database connection. :disappointed:",
+                ).await;
+                return;
+            },
+        };
+
+        let rows_res = ride_conn.query(
+            "
+                SELECT
+                    r.rider_username,
+                    r.company,
+                    r.line,
+                    CAST(COUNT(*) AS bigint) ride_count
+                FROM bim.rides r
+                WHERE
+                    r.line IS NOT NULL
+                GROUP BY
+                    r.rider_username,
+                    r.company,
+                    r.line
+            ",
+            &[]
+        ).await;
+        let rows = match rows_res {
+            Ok(r) => r,
+            Err(e) => {
+                error!("failed to query bim rider types: {}", e);
+                send_channel_message!(
+                    interface,
+                    &channel_message.channel.name,
+                    "Failed to query database. :disappointed:",
+                ).await;
+                return;
+            },
+        };
+
+        let mut rider_to_line_to_count: BTreeMap<String, BTreeMap<(String, String), i64>> = BTreeMap::new();
+        for row in rows {
+            let rider: String = row.get(0);
+            let company: String = row.get(1);
+            let line: String = row.get(2);
+            let ride_count: i64 = row.get(3);
+
+            let line_ride_count = rider_to_line_to_count
+                .entry(rider)
+                .or_insert_with(|| BTreeMap::new())
+                .entry((company, line))
+                .or_insert(0);
+            *line_ride_count += ride_count;
+        }
+
+        let mut rider_lines = Vec::new();
+        for (rider, line_to_count) in &rider_to_line_to_count {
+            let mut line_and_count: Vec<(&str, &str, i64)> = line_to_count
+                .iter()
+                .map(|((comp, ln), count)| (comp.as_str(), ln.as_str(), *count))
+                .collect();
+            if sort_by_number {
+                line_and_count.sort_unstable_by_key(|(_comp, _ln, count)| -*count);
+            }
+            let lines_counts: Vec<String> = line_and_count.iter()
+                .map(|(comp, tp, count)|
+                    if *comp == self.default_company.as_str() {
+                        format!("{}\u{D7}{}", count, tp)
+                    } else {
+                        format!("{}\u{D7}{}/{}", count, comp, tp)
+                    }
+                )
+                .collect();
+            if lines_counts.len() == 0 {
+                continue;
+            }
+
+            let lines_counts_string = lines_counts.join(", ");
+            rider_lines.push(format!("{}: {}", rider, lines_counts_string));
+        }
+        let response = if rider_lines.len() == 0 {
+            "No rides with known line numbers!".to_owned()
+        } else {
+            let rider_lines_string = rider_lines.join("\n");
+            format!("Riders and their line numbers:\n{}", rider_lines_string)
+        };
+
+        send_channel_message!(
+            interface,
+            &channel_message.channel.name,
+            &response,
+        ).await;
+    }
+
     fn english_ordinal(num: usize) -> &'static str {
         let by_hundred = num % 100;
         if by_hundred > 10 && by_hundred < 14 {
@@ -1300,6 +1407,17 @@ impl RocketBotPlugin for BimPlugin {
                 .add_flag("sort-by-number")
                 .build()
         ).await;
+        my_interface.register_channel_command(
+            &CommandDefinitionBuilder::new(
+                "bimriderlines".to_owned(),
+                "bim".to_owned(),
+                "{cpfx}bimriderlines [-n]".to_owned(),
+                "Returns the lines ridden by each rider.".to_owned(),
+            )
+                .add_flag("n")
+                .add_flag("sort-by-number")
+                .build()
+        ).await;
 
         Self {
             interface,
@@ -1328,6 +1446,8 @@ impl RocketBotPlugin for BimPlugin {
             self.channel_command_topbimdays(channel_message, command).await
         } else if command.name == "bimridertypes" {
             self.channel_command_bimridertypes(channel_message, command).await
+        } else if command.name == "bimriderlines" {
+            self.channel_command_bimriderlines(channel_message, command).await
         }
     }
 
@@ -1352,6 +1472,8 @@ impl RocketBotPlugin for BimPlugin {
             Some(include_str!("../help/topbimdays.md").to_owned())
         } else if command_name == "bimridertypes" {
             Some(include_str!("../help/bimridertypes.md").to_owned())
+        } else if command_name == "bimriderlines" {
+            Some(include_str!("../help/bimriderlines.md").to_owned())
         } else {
             None
         }
