@@ -1,4 +1,4 @@
-use std::collections::{BTreeMap, BTreeSet, HashMap};
+use std::collections::{BTreeMap, BTreeSet, HashMap, HashSet};
 use std::convert::TryInto;
 use std::fmt::{self, Write};
 use std::fs::File;
@@ -1773,6 +1773,10 @@ pub async fn increment_rides_by_spec(
 
     // also count vehicles ridden in a fixed coupling with the given vehicle
     let mut all_vehicles: Vec<NewVehicleEntry> = Vec::new();
+    let explicit_vehicle_num_set: HashSet<VehicleNumber> = vehicle_nums.iter()
+        .map(|vn| *vn)
+        .collect();
+    let mut seen_vehicles: HashSet<VehicleNumber> = HashSet::new();
     for (spec_pos, &vehicle_num) in vehicle_nums.iter().enumerate() {
         let mut added_fixed_coupling = false;
         let mut type_code = None;
@@ -1781,13 +1785,18 @@ pub async fn increment_rides_by_spec(
                 type_code = Some(veh.type_code.clone());
 
                 for (fc_pos, &fc) in veh.fixed_coupling.iter().enumerate() {
+                    if !seen_vehicles.insert(fc) {
+                        // we've seen this vehicle before
+                        continue;
+                    }
+
                     let fc_type_code = bim_database.get(&fc)
                         .map(|veh| veh.type_code.clone());
                     let vehicle = NewVehicleEntry {
                         number: fc,
                         type_code: fc_type_code,
                         spec_position: spec_pos.try_into().unwrap(),
-                        as_part_of_fixed_coupling: vehicle_num != fc,
+                        as_part_of_fixed_coupling: !explicit_vehicle_num_set.contains(&fc),
                         fixed_coupling_position: fc_pos.try_into().unwrap(),
                     };
                     all_vehicles.push(vehicle);
@@ -1797,11 +1806,16 @@ pub async fn increment_rides_by_spec(
         }
 
         if !added_fixed_coupling {
+            if !seen_vehicles.insert(vehicle_num) {
+                // we've seen this vehicle before
+                continue;
+            }
+
             let vehicle = NewVehicleEntry {
                 number: vehicle_num,
                 type_code,
                 spec_position: spec_pos.try_into().unwrap(),
-                as_part_of_fixed_coupling: false,
+                as_part_of_fixed_coupling: !explicit_vehicle_num_set.contains(&vehicle_num),
                 fixed_coupling_position: 0,
             };
             all_vehicles.push(vehicle);
