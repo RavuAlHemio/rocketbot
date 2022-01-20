@@ -758,7 +758,8 @@ impl BimPlugin {
                     SELECT DISTINCT r.rider_username, r.company, rv.vehicle_number
                     FROM bim.rides r
                     INNER JOIN bim.ride_vehicles rv ON rv.ride_id = r.id
-                    WHERE rv.as_part_of_fixed_coupling = FALSE
+                    WHERE rv.spec_position = 0
+                    AND rv.fixed_coupling_position = 0
                 ) i
                 GROUP BY i.rider_username
             ",
