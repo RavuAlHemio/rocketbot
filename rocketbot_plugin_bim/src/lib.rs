@@ -1278,6 +1278,59 @@ impl BimPlugin {
         ).await;
     }
 
+    async fn channel_command_bimranges(&self, channel_message: &ChannelMessage, command: &CommandInstance) {
+        let interface = match self.interface.upgrade() {
+            None => return,
+            Some(i) => i,
+        };
+
+        let company = command.options.get("company")
+            .or_else(|| command.options.get("c"))
+            .map(|v| v.as_str().unwrap())
+            .unwrap_or(self.default_company.as_str());
+        if company.len() == 0 {
+            return;
+        }
+
+        let database = match self.load_bim_database(company) {
+            Some(db) => db,
+            None => {
+                send_channel_message!(
+                    interface,
+                    &channel_message.channel.name,
+                    "No vehicle database exists for this company.",
+                ).await;
+                return;
+            },
+        };
+
+        let mut type_to_range: BTreeMap<String, (VehicleNumber, VehicleNumber)> = BTreeMap::new();
+        for (&veh_id, veh_info) in database.iter() {
+            type_to_range
+                .entry(veh_info.type_code.clone())
+                .and_modify(|(old_low, old_high)| {
+                    if *old_low > veh_id {
+                        *old_low = veh_id;
+                    }
+                    if *old_high < veh_id {
+                        *old_high = veh_id;
+                    }
+                })
+                .or_insert((veh_id, veh_id));
+        }
+
+        let lines: Vec<String> = type_to_range.iter()
+            .map(|(tp, (low, high))| format!("{}: {}-{}", tp, low, high))
+            .collect();
+        let response = lines.join("\n");
+
+        send_channel_message!(
+            interface,
+            &channel_message.channel.name,
+            &response,
+        ).await;
+    }
+
     fn english_ordinal(num: usize) -> &'static str {
         let by_hundred = num % 100;
         if by_hundred > 10 && by_hundred < 14 {
@@ -1424,6 +1477,17 @@ impl RocketBotPlugin for BimPlugin {
                 .add_flag("sort-by-number")
                 .build()
         ).await;
+        my_interface.register_channel_command(
+            &CommandDefinitionBuilder::new(
+                "bimranges".to_owned(),
+                "bim".to_owned(),
+                "{cpfx}bimranges [-c COMPANY]".to_owned(),
+                "Returns the number ranges of each vehicle type.".to_owned(),
+            )
+                .add_option("company", CommandValueType::String)
+                .add_option("c", CommandValueType::String)
+                .build()
+        ).await;
 
         Self {
             interface,
@@ -1454,6 +1518,8 @@ impl RocketBotPlugin for BimPlugin {
             self.channel_command_bimridertypes(channel_message, command).await
         } else if command.name == "bimriderlines" {
             self.channel_command_bimriderlines(channel_message, command).await
+        } else if command.name == "bimranges" {
+            self.channel_command_bimranges(channel_message, command).await
         }
     }
 
@@ -1480,6 +1546,8 @@ impl RocketBotPlugin for BimPlugin {
             Some(include_str!("../help/bimridertypes.md").to_owned())
         } else if command_name == "bimriderlines" {
             Some(include_str!("../help/bimriderlines.md").to_owned())
+        } else if command_name == "bimranges" {
+            Some(include_str!("../help/bimranges.md").to_owned())
         } else {
             None
         }
