@@ -1781,9 +1781,11 @@ pub async fn increment_rides_by_spec(
                 type_code = Some(veh.type_code.clone());
 
                 for (fc_pos, &fc) in veh.fixed_coupling.iter().enumerate() {
+                    let fc_type_code = bim_database.get(&fc)
+                        .map(|veh| veh.type_code.clone());
                     let vehicle = NewVehicleEntry {
-                        number: vehicle_num,
-                        type_code: type_code.clone(),
+                        number: fc,
+                        type_code: fc_type_code,
                         spec_position: spec_pos.try_into().unwrap(),
                         as_part_of_fixed_coupling: vehicle_num != fc,
                         fixed_coupling_position: fc_pos.try_into().unwrap(),
