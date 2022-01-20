@@ -997,6 +997,8 @@ impl BimPlugin {
                 )
                 SELECT ride_year, ride_month, ride_day, CAST(ride_count AS bigint) ride_count
                 FROM ride_date_count
+                ORDER BY ride_count DESC, ride_year DESC, ride_month DESC, ride_day DESC
+                LIMIT 6
             ",
             &[]
         ).await;
@@ -1013,24 +1015,16 @@ impl BimPlugin {
             },
         };
 
-        let mut date_to_ride_count: BTreeMap<(i64, i64, i64), i64> = BTreeMap::new();
+        let mut date_and_ride_count: Vec<((i64, i64, i64), i64)> = Vec::new();
         for row in rows {
             let year: i64 = row.get(0);
             let month: i64 = row.get(1);
             let day: i64 = row.get(2);
             let ride_count: i64 = row.get(3);
 
-            let date_ride_count = date_to_ride_count
-                .entry((year, month, day))
-                .or_insert(0);
-            *date_ride_count += ride_count;
+            date_and_ride_count.push((year, month, day), ride_count);
         }
 
-        let mut date_and_ride_count: Vec<((i64, i64, i64), i64)> = date_to_ride_count
-            .iter()
-            .map(|(d, rc)| (*d, *rc))
-            .collect();
-        date_and_ride_count.sort_unstable_by_key(|(_date, rides)| -*rides);
         let mut top_text = if date_and_ride_count.len() >= 6 {
             date_and_ride_count.drain(5..);
             "Top 5 days:"
