@@ -57,21 +57,21 @@ impl VehicleInfo {
 }
 
 
-#[derive(Clone, Debug, Eq, PartialEq)]
+#[derive(Clone, Debug, Hash, Eq, PartialEq)]
 pub struct LastRideInfo {
     pub ride_count: usize,
     pub last_ride: DateTime<Local>,
     pub last_line: Option<String>,
 }
 
-#[derive(Clone, Debug, Eq, PartialEq)]
+#[derive(Clone, Debug, Hash, Eq, PartialEq)]
 pub struct OtherRiderInfo {
     pub rider_username: String,
     pub last_ride: DateTime<Local>,
     pub last_line: Option<String>,
 }
 
-#[derive(Clone, Debug, Eq, PartialEq)]
+#[derive(Clone, Debug, Hash, Eq, PartialEq)]
 pub struct VehicleRideInfo {
     pub vehicle_number: VehicleNumber,
     pub ridden_within_fixed_coupling: bool,
@@ -82,6 +82,15 @@ pub struct VehicleRideInfo {
 pub struct RideInfo {
     pub line: Option<String>,
     pub vehicles: Vec<VehicleRideInfo>,
+}
+
+
+#[derive(Clone, Copy, Debug, Hash, Eq, PartialEq)]
+pub struct NewVehicleEntry {
+    pub number: VehicleNumber,
+    pub spec_position: i64,
+    pub as_part_of_fixed_coupling: bool,
+    pub fixed_coupling_position: i64,
 }
 
 
@@ -1022,7 +1031,7 @@ impl BimPlugin {
             let day: i64 = row.get(2);
             let ride_count: i64 = row.get(3);
 
-            date_and_ride_count.push((year, month, day), ride_count);
+            date_and_ride_count.push(((year, month, day), ride_count));
         }
 
         let mut top_text = if date_and_ride_count.len() >= 6 {
@@ -1481,7 +1490,7 @@ impl RocketBotPlugin for BimPlugin {
 pub async fn add_ride(
     ride_conn: &tokio_postgres::Transaction<'_>,
     company: &str,
-    vehicle_numbers_and_fixed_coupling: &[(VehicleNumber, bool)],
+    vehicles: &[NewVehicleEntry],
     rider_username: &str,
     timestamp: DateTime<Local>,
     line: Option<&str>,
@@ -1536,8 +1545,8 @@ pub async fn add_ride(
     ).await?;
 
     let mut vehicle_results = Vec::new();
-    for &(vehicle_number, _fixed_coupling) in vehicle_numbers_and_fixed_coupling {
-        let vehicle_number_i64: i64 = vehicle_number.into();
+    for vehicle in vehicles {
+        let vehicle_number_i64: i64 = vehicle.number.into();
 
         let prev_my_count_row = ride_conn.query_one(
             &prev_my_count_stmt,
@@ -1605,17 +1614,23 @@ pub async fn add_ride(
     let insert_vehicle_stmt = ride_conn.prepare(
         "
             INSERT INTO bim.ride_vehicles
-                (ride_id, vehicle_number, as_part_of_fixed_coupling)
+                (ride_id, vehicle_number, spec_position, as_part_of_fixed_coupling, fixed_coupling_position)
             VALUES
-                ($1, $2, $3)
+                ($1, $2, $3, $4, $5)
         ",
     ).await?;
 
-    for &(vehicle_number, as_part_of_fixed_coupling) in vehicle_numbers_and_fixed_coupling {
-        let vehicle_number_i64: i64 = vehicle_number.into();
+    for vehicle in vehicles {
+        let vehicle_number_i64: i64 = vehicle.number.into();
         ride_conn.execute(
             &insert_vehicle_stmt,
-            &[&ride_id, &vehicle_number_i64, &as_part_of_fixed_coupling],
+            &[
+                &ride_id,
+                &vehicle_number_i64,
+                &vehicle.spec_position,
+                &vehicle.as_part_of_fixed_coupling,
+                &vehicle.fixed_coupling_position,
+            ],
         ).await?;
     }
 
@@ -1627,7 +1642,7 @@ pub enum IncrementBySpecError {
     SpecParseFailure(String),
     VehicleNumberParseFailure(String, ParseIntError),
     FixedCouplingCombo(VehicleNumber),
-    DatabaseQuery(String, Vec<(VehicleNumber, bool)>, Option<String>, tokio_postgres::Error),
+    DatabaseQuery(String, Vec<NewVehicleEntry>, Option<String>, tokio_postgres::Error),
     DatabaseBeginTransaction(tokio_postgres::Error),
     DatabaseCommitTransaction(tokio_postgres::Error),
 }
@@ -1687,20 +1702,32 @@ pub async fn increment_rides_by_spec(
     }
 
     // also count vehicles ridden in a fixed coupling with the given vehicle
-    let mut all_vehicle_nums: Vec<(VehicleNumber, bool)> = Vec::new();
-    for &vehicle_num in &vehicle_nums {
+    let mut all_vehicles: Vec<NewVehicleEntry> = Vec::new();
+    for (spec_pos, &vehicle_num) in vehicle_nums.iter().enumerate() {
         let mut added_fixed_coupling = false;
         if let Some(bim_database) = bim_database_opt {
             if let Some(veh) = bim_database.get(&vehicle_num) {
-                for &fc in &veh.fixed_coupling {
-                    all_vehicle_nums.push((fc, vehicle_num != fc));
+                for (fc_pos, &fc) in veh.fixed_coupling.iter().enumerate() {
+                    let vehicle = NewVehicleEntry {
+                        number: vehicle_num,
+                        spec_position: spec_pos.try_into().unwrap(),
+                        as_part_of_fixed_coupling: vehicle_num != fc,
+                        fixed_coupling_position: fc_pos.try_into().unwrap(),
+                    };
+                    all_vehicles.push(vehicle);
                     added_fixed_coupling = true;
                 }
             }
         }
 
         if !added_fixed_coupling {
-            all_vehicle_nums.push((vehicle_num, false));
+            let vehicle = NewVehicleEntry {
+                number: vehicle_num,
+                spec_position: spec_pos.try_into().unwrap(),
+                as_part_of_fixed_coupling: false,
+                fixed_coupling_position: 0,
+            };
+            all_vehicles.push(vehicle);
         }
     }
 
@@ -1711,20 +1738,20 @@ pub async fn increment_rides_by_spec(
         let mut ride_info_vec = add_ride(
             &xact,
             company,
-            &all_vehicle_nums,
+            &all_vehicles,
             rider_username,
             timestamp,
             line_str_opt,
         )
             .await.map_err(|e|
-                IncrementBySpecError::DatabaseQuery(rider_username.to_owned(), all_vehicle_nums.clone(), line_str_opt.map(|l| l.to_owned()), e)
+                IncrementBySpecError::DatabaseQuery(rider_username.to_owned(), all_vehicles.clone(), line_str_opt.map(|l| l.to_owned()), e)
             )?;
 
         let mut vehicle_ride_infos = Vec::new();
-        for (&(vehicle_num, is_fixed_coupling), (lri_opt, ori_opt)) in all_vehicle_nums.iter().zip(ride_info_vec.drain(..)) {
+        for (new_vehicle, (lri_opt, ori_opt)) in all_vehicles.iter().zip(ride_info_vec.drain(..)) {
             vehicle_ride_infos.push(VehicleRideInfo {
-                vehicle_number: vehicle_num,
-                ridden_within_fixed_coupling: is_fixed_coupling,
+                vehicle_number: new_vehicle.number,
+                ridden_within_fixed_coupling: new_vehicle.as_part_of_fixed_coupling,
                 last_ride: lri_opt,
                 last_ride_other_rider: ori_opt,
             });
