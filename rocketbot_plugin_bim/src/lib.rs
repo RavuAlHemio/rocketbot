@@ -85,9 +85,10 @@ pub struct RideInfo {
 }
 
 
-#[derive(Clone, Copy, Debug, Hash, Eq, PartialEq)]
+#[derive(Clone, Debug, Hash, Eq, PartialEq)]
 pub struct NewVehicleEntry {
     pub number: VehicleNumber,
+    pub type_code: Option<String>,
     pub spec_position: i64,
     pub as_part_of_fixed_coupling: bool,
     pub fixed_coupling_position: i64,
@@ -1682,9 +1683,9 @@ pub async fn add_ride(
     let insert_vehicle_stmt = ride_conn.prepare(
         "
             INSERT INTO bim.ride_vehicles
-                (ride_id, vehicle_number, spec_position, as_part_of_fixed_coupling, fixed_coupling_position)
+                (ride_id, vehicle_number, vehicle_type, spec_position, as_part_of_fixed_coupling, fixed_coupling_position)
             VALUES
-                ($1, $2, $3, $4, $5)
+                ($1, $2, $3, $4, $5, $6)
         ",
     ).await?;
 
@@ -1695,6 +1696,7 @@ pub async fn add_ride(
             &[
                 &ride_id,
                 &vehicle_number_i64,
+                &vehicle.type_code,
                 &vehicle.spec_position,
                 &vehicle.as_part_of_fixed_coupling,
                 &vehicle.fixed_coupling_position,
@@ -1773,11 +1775,15 @@ pub async fn increment_rides_by_spec(
     let mut all_vehicles: Vec<NewVehicleEntry> = Vec::new();
     for (spec_pos, &vehicle_num) in vehicle_nums.iter().enumerate() {
         let mut added_fixed_coupling = false;
+        let mut type_code = None;
         if let Some(bim_database) = bim_database_opt {
             if let Some(veh) = bim_database.get(&vehicle_num) {
+                type_code = Some(veh.type_code.clone());
+
                 for (fc_pos, &fc) in veh.fixed_coupling.iter().enumerate() {
                     let vehicle = NewVehicleEntry {
                         number: vehicle_num,
+                        type_code: type_code.clone(),
                         spec_position: spec_pos.try_into().unwrap(),
                         as_part_of_fixed_coupling: vehicle_num != fc,
                         fixed_coupling_position: fc_pos.try_into().unwrap(),
@@ -1791,6 +1797,7 @@ pub async fn increment_rides_by_spec(
         if !added_fixed_coupling {
             let vehicle = NewVehicleEntry {
                 number: vehicle_num,
+                type_code,
                 spec_position: spec_pos.try_into().unwrap(),
                 as_part_of_fixed_coupling: false,
                 fixed_coupling_position: 0,
