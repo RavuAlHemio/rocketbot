@@ -6,7 +6,7 @@ use regex::{Captures, Regex};
 #[derive(Debug)]
 pub(crate) struct ReplacementState<'a> {
     input_string: &'a str,
-    regex: &'a Regex,
+    #[allow(unused)] regex: &'a Regex,
     regex_match: &'a Captures<'a>,
     lookups: &'a HashMap<String, String>,
 }
@@ -30,14 +30,14 @@ impl<'a> ReplacementState<'a> {
 #[derive(Clone, Debug, Eq, Hash, PartialEq)]
 pub(crate) enum Placeholder {
     ConstantString(String),
-    EntireInputString,
-    EntireMatch,
-    TextBeforeMatch,
-    TextAfterMatch,
+    #[allow(unused)] EntireInputString,
+    #[allow(unused)] EntireMatch,
+    #[allow(unused)] TextBeforeMatch,
+    #[allow(unused)] TextAfterMatch,
     Lookup(String),
     NamedMatchGroup(String),
     NumberedMatchGroup(usize),
-    LastMatchGroup,
+    #[allow(unused)] LastMatchGroup,
     CasingNamedMatchGroup(String, String),
     CasingNumberedMatchGroup(String, usize),
     Shorten(String, usize),
@@ -83,7 +83,7 @@ fn case_string_numbered(string_to_case: &str, case_template_group: usize, state:
     case_string(string_to_case, case_template, state)
 }
 
-fn case_string(string_to_case: &str, case_template: &str, state: &ReplacementState) -> String {
+fn case_string(string_to_case: &str, case_template: &str, _state: &ReplacementState) -> String {
     let chars_to_case: Vec<char> = string_to_case.chars().collect();
     let case_template_chars: Vec<char> = case_template.chars().collect();
 

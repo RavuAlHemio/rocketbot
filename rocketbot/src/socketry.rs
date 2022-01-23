@@ -145,26 +145,31 @@ impl ChannelDatabase {
         self.users_by_channel_id.insert(channel_id.to_owned(), new_users);
     }
 
+    #[allow(unused)]
     fn user_added_to_channel(&mut self, channel_id: &str, user: &User) {
         self.users_by_channel_id.entry(channel_id.to_owned())
             .or_insert_with(|| HashSet::new())
             .insert(user.clone());
     }
 
+    #[allow(unused)]
     fn user_removed_from_channel(&mut self, channel_id: &str, user_id: &str) {
         self.users_by_channel_id.entry(channel_id.to_owned())
             .or_insert_with(|| HashSet::new())
             .retain(|u| u.id != user_id);
     }
 
+    #[allow(unused)]
     fn channel_by_id(&self) -> &HashMap<String, Channel> {
         &self.channel_by_id
     }
 
+    #[allow(unused)]
     fn channel_by_name(&self) -> &HashMap<String, Channel> {
         &self.channel_by_name
     }
 
+    #[allow(unused)]
     fn users_by_channel_id(&self) -> &HashMap<String, HashSet<User>> {
         &self.users_by_channel_id
     }
@@ -283,11 +288,13 @@ impl ServerConnection {
         }
     }
 
+    #[allow(unused)]
     pub fn send(&self, message: serde_json::Value) {
         self.shared_state.outgoing_sender.send(message)
             .expect("failed to enqueue message");
     }
 
+    #[allow(unused)]
     pub fn disconnect(&self) {
         self.shared_state.exit_notify.notify_one();
     }

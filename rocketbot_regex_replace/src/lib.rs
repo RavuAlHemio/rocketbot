@@ -13,7 +13,7 @@ use crate::placeholders::{Placeholder, ReplacementState};
 #[derive(Debug)]
 pub struct ReplacerRegex {
     regex: Regex,
-    replacement_string: String,
+    #[allow(unused)] replacement_string: String,
     placeholders: Vec<Placeholder>,
 }
 impl ReplacerRegex {

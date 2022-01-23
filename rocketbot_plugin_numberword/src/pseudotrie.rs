@@ -25,6 +25,7 @@ struct Node<K: Eq + Hash, V> {
 }
 
 impl<K: Eq + Hash, V> Pseudotrie<K, V> {
+    #[allow(unused)]
     pub fn new() -> Self {
         Default::default()
     }
@@ -42,6 +43,7 @@ impl<K: Eq + Hash, V> Pseudotrie<K, V> {
         std::mem::replace(&mut cur_node.leaf_value, Some(value))
     }
 
+    #[allow(unused)]
     pub fn remove(&mut self, key: &[K]) -> Option<V> {
         let mut cur_node = &mut self.root_node;
         for k in key {
@@ -106,6 +108,7 @@ impl<K: Eq + Hash, V> Pseudotrie<K, V> {
         true
     }
 
+    #[allow(unused)]
     pub fn len(&self) -> usize {
         let mut node_stack = Vec::new();
         node_stack.push(&self.root_node);
@@ -124,6 +127,7 @@ impl<K: Eq + Hash, V> Pseudotrie<K, V> {
         count
     }
 
+    #[allow(unused)]
     pub fn to_vec(&self) -> Vec<(Vec<&K>, &V)> {
         let mut values = Vec::new();
 
@@ -160,6 +164,7 @@ impl<V> StringPseudotrie<V> {
         self.pseudotrie.insert(key_chars, value)
     }
 
+    #[allow(unused)]
     pub fn remove(&mut self, key: &str) -> Option<V> {
         let key_chars: Vec<char> = key.chars().collect();
         self.pseudotrie.remove(&key_chars)
@@ -175,10 +180,12 @@ impl<V> StringPseudotrie<V> {
         self.pseudotrie.contains_entries_with_prefix(&prefix_chars)
     }
 
+    #[allow(unused)]
     pub fn len(&self) -> usize {
         self.pseudotrie.len()
     }
 
+    #[allow(unused)]
     pub fn to_vec(&self) -> Vec<(String, &V)> {
         self.pseudotrie.to_vec()
             .iter()

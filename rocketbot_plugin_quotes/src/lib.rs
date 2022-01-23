@@ -105,6 +105,9 @@ impl QuotesPlugin {
         Ok(client)
     }
 
+    // "#[allow(unused_assignments)]" silences the complaint about "next_filter_index += 1;"
+    // the line is there so that nobody forgets to add it if a new filter criterion is implemented
+    #[allow(unused_assignments)]
     async fn get_filtered_quotes(
         &self,
         requested_rating: QuoteRating,
