@@ -624,26 +624,31 @@ impl BimPlugin {
 
         let rows_res = ride_conn.query(
             "
-                WITH total_rides(vehicle_number, total_ride_count) AS (
-                    SELECT
-                        rv.vehicle_number,
-                        CAST(COUNT(*) AS bigint) total_ride_count
-                    FROM
-                        bim.rides r
-                        INNER JOIN bim.ride_vehicles rv
-                            ON rv.ride_id = r.id
-                    WHERE
-                        r.company = $1
-                    GROUP BY
-                        rv.vehicle_number
-                )
+                WITH
+                    total_rides(vehicle_number, total_ride_count) AS (
+                        SELECT
+                            rv.vehicle_number,
+                            CAST(COUNT(*) AS bigint) total_ride_count
+                        FROM
+                            bim.rides r
+                            INNER JOIN bim.ride_vehicles rv
+                                ON rv.ride_id = r.id
+                        WHERE
+                            r.company = $1
+                            AND rv.fixed_coupling_position = 0
+                        GROUP BY
+                            rv.vehicle_number
+                    ),
+                    top_five_counts(total_ride_count) AS (
+                        SELECT DISTINCT total_ride_count
+                        FROM total_rides
+                        ORDER BY total_ride_count DESC
+                        LIMIT 5
+                    )
                 SELECT tr.vehicle_number, tr.total_ride_count
                 FROM total_rides tr
-                WHERE NOT EXISTS (
-                    SELECT 1 FROM total_rides tr2
-                    WHERE tr2.total_ride_count > tr.total_ride_count
-                )
-                ORDER BY tr.vehicle_number
+                WHERE tr.total_ride_count IN (SELECT total_ride_count FROM top_five_counts)
+                ORDER BY tr.total_ride_count DESC, tr.vehicle_number
             ",
             &[&company],
         ).await;
@@ -660,38 +665,36 @@ impl BimPlugin {
             },
         };
 
-        let mut most_ridden_count_opt = None;
-        let mut vehicle_numbers = Vec::with_capacity(rows.len());
+        let mut count_to_vehicles: BTreeMap<i64, Vec<i64>> = BTreeMap::new();
         for row in &rows {
             let vehicle_number: i64 = row.get(0);
             let total_ride_count: i64 = row.get(1);
 
-            vehicle_numbers.push(vehicle_number);
-            most_ridden_count_opt = Some(total_ride_count);
+            count_to_vehicles
+                .entry(total_ride_count)
+                .or_insert_with(|| Vec::new())
+                .push(vehicle_number);
         }
 
-        let response_str = if vehicle_numbers.len() == 0 {
+        let response_str = if count_to_vehicles.len() == 0 {
             format!("No vehicles have been ridden yet!")
         } else {
-            let most_ridden_count = most_ridden_count_opt.unwrap();
-            let times = if most_ridden_count == 1 {
-                "once".to_owned()
-            } else if most_ridden_count == 2 {
-                "twice".to_owned()
-            } else {
-                // "thrice" and above are already too poetic
-                format!("{} times", most_ridden_count)
-            };
+            let mut output = format!("The most ridden vehicles are:");
+            for (&count, vehicle_numbers) in count_to_vehicles.iter().rev() {
+                let times = match count {
+                    1 => "once".to_owned(),
+                    2 => "twice".to_owned(),
+                    // "thrice" and above are already too poetic
+                    other => format!("{} times", other),
+                };
 
-            if vehicle_numbers.len() == 1 {
-                format!("The most ridden vehicle is {}, which has been ridden {}.", vehicle_numbers[0], times)
-            } else {
                 let vehicle_number_strings: Vec<String> = vehicle_numbers.iter()
                     .map(|vn| vn.to_string())
                     .collect();
                 let vehicle_numbers_str = phrase_join(&vehicle_number_strings, ", ", " and ");
-                format!("The most ridden vehicles are {}, which have been ridden {}.", vehicle_numbers_str, times)
+                output.push_str(&format!("\n{}: {}", times, vehicle_numbers_str));
             }
+            output
         };
 
         send_channel_message!(
