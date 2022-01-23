@@ -21,20 +21,17 @@ struct LocalReplacerRegex {
     pub replacer_regex: ReplacerRegex,
     pub additional_probability_percent: u8,
     pub custom_cooldown_increase_per_hit: Option<usize>,
-    pub replace_full_message: bool,
 }
 impl LocalReplacerRegex {
     pub fn new(
         replacer_regex: ReplacerRegex,
         additional_probability_percent: u8,
         custom_cooldown_increase_per_hit: Option<usize>,
-        replace_full_message: bool,
     ) -> LocalReplacerRegex {
         LocalReplacerRegex {
             replacer_regex,
             additional_probability_percent,
             custom_cooldown_increase_per_hit,
-            replace_full_message,
         }
     }
 }
@@ -129,12 +126,6 @@ impl RocketBotPlugin for AllographPlugin {
                     )
                 } else {
                     None
-                },
-                if repl.has_key("replace_full_message") {
-                    repl["replace_full_message"].as_bool()
-                        .expect("replace_full_message not representable as bool")
-                } else {
-                    false
                 },
             ))
             .collect();
