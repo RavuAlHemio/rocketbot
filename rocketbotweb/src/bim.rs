@@ -221,7 +221,7 @@ pub(crate) async fn handle_bim_rides(request: &Request<Body>) -> Result<Response
         SELECT r.company, rv.vehicle_number, CAST(COUNT(*) AS bigint), MAX(r.line)
         FROM bim.rides r
         INNER JOIN bim.ride_vehicles rv ON rv.ride_id = r.id
-        WHERE rv.as_part_of_fixed_coupling = FALSE
+        WHERE rv.fixed_coupling_position = 0
         GROUP BY r.company, rv.vehicle_number
         ORDER BY r.company, rv.vehicle_number
     ", &[]).await;
