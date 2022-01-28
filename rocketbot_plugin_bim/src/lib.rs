@@ -1012,6 +1012,15 @@ impl BimPlugin {
                 return;
             },
         };
+        let rider_username_input = command.rest.trim();
+        let rider_username_opt = if rider_username_input.len() == 0 {
+            None
+        } else {
+            match interface.resolve_username(rider_username_input).await {
+                Some(ru) => Some(ru),
+                None => Some(rider_username_input.to_owned()),
+            }
+        };
 
         let ride_conn = match self.connect_ride_db().await {
             Ok(c) => c,
@@ -1033,23 +1042,32 @@ impl BimPlugin {
                         SELECT r.rider_username, r.company, rv.vehicle_number, COUNT(*)
                         FROM bim.rides r
                         INNER JOIN bim.ride_vehicles rv ON rv.ride_id = r.id
+                        WHERE rv.fixed_coupling_position = 0
                         {LOOKBACK_TIMESTAMP}
                         GROUP BY r.rider_username, r.company, rv.vehicle_number
                     ),
-                    fav_vehicle(rider_username, company, vehicle_number, ride_count) AS (
+                    rider_top_ride_counts(rider_username, ride_count) AS (
+                        SELECT rider_username, ride_count, ride_count_rank
+                        FROM (
+                            SELECT rider_username, ride_count, rank() OVER (PARTITION BY rider_username ORDER BY ride_count DESC) ride_count_rank
+                            FROM rides_per_rider_vehicle
+                            ORDER BY ride_count DESC
+                        ) ride_count_subq
+                        WHERE ride_count_rank < 6
+                    ),
+                    fav_vehicles(rider_username, company, vehicle_number, ride_count) AS (
                         SELECT rprv.rider_username, rprv.company, rprv.vehicle_number, rprv.ride_count
                         FROM rides_per_rider_vehicle rprv
-                        WHERE NOT EXISTS (
-                            SELECT 1
-                            FROM rides_per_rider_vehicle rprv2
-                            WHERE rprv2.rider_username = rprv.rider_username
-                            AND rprv2.ride_count > rprv.ride_count
+                        WHERE ride_count IN (
+                            SELECT rtrc.ride_count
+                            FROM rider_top_ride_counts rtrc
+                            WHERE rtrc.rider_username = rprv.rider_username
                         )
                     )
                 SELECT rider_username, company, vehicle_number, CAST(ride_count AS bigint)
-                FROM fav_vehicle
+                FROM fav_vehicles
             ",
-            "WHERE r.\"timestamp\" >= $1",
+            "AND r.\"timestamp\" >= $1",
             "",
             lookback_range,
             &[],
@@ -1078,6 +1096,12 @@ impl BimPlugin {
             };
             let ride_count: i64 = row.get(3);
 
+            if let Some(ru) = rider_username_opt.as_ref() {
+                if &rider_username != ru {
+                    continue;
+                }
+            }
+
             rider_to_fav_vehicles
                 .entry(rider_username)
                 .or_insert_with(|| BTreeSet::new())
@@ -1085,7 +1109,53 @@ impl BimPlugin {
         }
 
         let mut fav_vehicle_strings = Vec::new();
-        {
+        if rider_username_opt.is_some() {
+            // output all
+            let mut db_rider_username = None;
+            let mut ride_count_to_vehicles: BTreeMap<i64, BTreeSet<(String, u32)>> = BTreeMap::new();
+            for (rider, fav_vehicles) in rider_to_fav_vehicles.iter() {
+                if db_rider_username.is_none() {
+                    db_rider_username = Some(rider.clone());
+                }
+                for (comp, veh_no, ride_ct) in fav_vehicles {
+                    ride_count_to_vehicles
+                        .entry(*ride_ct)
+                        .or_insert_with(|| BTreeSet::new())
+                        .insert((comp.clone(), *veh_no));
+                }
+            }
+
+            if let Some(dbru) = db_rider_username {
+                fav_vehicle_strings.push(format!("{}'s favorite vehicles:", dbru));
+            } else {
+                fav_vehicle_strings.push(format!("This rider has no favorite vehicles!"));
+            }
+
+            for (ride_count, vehicles) in ride_count_to_vehicles.iter().rev() {
+                let vehicle_strs: Vec<String> = vehicles
+                    .iter()
+                    .map(|(comp, vnr)|
+                        if comp == &self.default_company {
+                            format!("{}", vnr)
+                        } else {
+                            format!("{}/{}", comp, vnr)
+                        }
+                    )
+                    .collect();
+                let vehicles_str = vehicle_strs.join(", ");
+                fav_vehicle_strings.push(format!("{}: {}", ride_count, vehicles_str));
+            }
+        } else {
+            // only consider those that match the absolute maximum ride count
+            for (_rider, fav_vehicles) in rider_to_fav_vehicles.iter_mut() {
+                let max_ride_count = fav_vehicles
+                    .iter()
+                    .map(|(_comp, _veh_no, ride_count)| *ride_count)
+                    .max()
+                    .unwrap();
+                fav_vehicles.retain(|(_comp, _veh_no, rc)| *rc == max_ride_count);
+            }
+
             let mut rng = thread_rng();
             for (rider, fav_vehicles) in rider_to_fav_vehicles.iter() {
                 let fav_vehicles_count = fav_vehicles.len();
@@ -1095,8 +1165,15 @@ impl BimPlugin {
                 let index = rng.gen_range(0..fav_vehicles_count);
                 let (fav_comp, fav_vehicle, ride_count) = fav_vehicles.iter().nth(index).unwrap();
                 fav_vehicle_strings.push(format!(
-                    "{}: {}/{} ({} {})",
-                    rider, fav_comp, fav_vehicle, ride_count, if *ride_count == 1 { "ride" } else { "rides" },
+                    "{}: {} ({} {})",
+                    rider,
+                    if fav_comp == &self.default_company {
+                        format!("{}", fav_vehicle)
+                    } else {
+                        format!("{}/{}", fav_comp, fav_vehicle)
+                    },
+                    ride_count,
+                    if *ride_count == 1 { "ride" } else { "rides" },
                 ));
             }
         }
