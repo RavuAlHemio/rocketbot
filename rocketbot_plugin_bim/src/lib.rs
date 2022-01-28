@@ -1382,9 +1382,6 @@ impl BimPlugin {
             },
         };
         let rider_username_input = command.rest.trim();
-        if rider_username_input.len() == 0 {
-            return;
-        }
         let rider_username = if rider_username_input.len() == 0 {
             channel_message.message.sender.username.clone()
         } else {
