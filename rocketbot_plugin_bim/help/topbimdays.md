@@ -1,4 +1,4 @@
-*Usage:* `{cpfx}topbimdays [-m|--last-month|-y|--last-year|-w|--last-week]`
+*Usage:* `{cpfx}topbimdays [-y|--last-year|-m|--last-month|-w|--last-week]`
 
 Returns the days with the most vehicles ridden.
 

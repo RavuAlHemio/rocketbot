@@ -1,4 +1,4 @@
-*Usage:* `{cpfx}bimriderlines [-n|--sort-by-number] [-m|--last-month|-y|--last-year|-w|--last-week] USERNAME`
+*Usage:* `{cpfx}bimriderlines [-n|--sort-by-number] [-y|--last-year|-m|--last-month|-w|--last-week] USERNAME`
 
 Returns the lines ridden by the rider with the given `USERNAME`.
 

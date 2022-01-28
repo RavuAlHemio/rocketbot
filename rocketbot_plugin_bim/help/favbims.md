@@ -1,4 +1,4 @@
-*Usage:* `{cpfx}favbims [-m|--last-month|-y|--last-year|-w|--last-week]`
+*Usage:* `{cpfx}favbims [-y|--last-year|-m|--last-month|-w|--last-week]`
 
 Outputs each rider's favorite (most-ridden) vehicle. In case of a draw, outputs one of those vehicles at random.
 

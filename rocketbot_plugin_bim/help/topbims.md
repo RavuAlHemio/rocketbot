@@ -1,4 +1,4 @@
-*Usage:* `{cpfx}topbims [--company COMPANY] [-m|--last-month|-y|--last-year|-w|--last-week]`
+*Usage:* `{cpfx}topbims [--company COMPANY] [-y|--last-year|-m|--last-month|-w|--last-week]`
 
 Returns the most-ridden vehicle(s).
 
