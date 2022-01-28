@@ -1241,12 +1241,13 @@ impl BimPlugin {
             || command.flags.contains("sort-by-number")
         ;
         let rider_username_input = command.rest.trim();
-        if rider_username_input.len() == 0 {
-            return;
-        }
-        let rider_username = match interface.resolve_username(rider_username_input).await {
-            Some(ru) => ru,
-            None => rider_username_input.to_owned(),
+        let rider_username = if rider_username_input.len() == 0 {
+            channel_message.message.sender.username.clone()
+        } else {
+            match interface.resolve_username(rider_username_input).await {
+                Some(ru) => ru,
+                None => rider_username_input.to_owned(),
+            }
         };
 
         let ride_conn = match self.connect_ride_db().await {
@@ -1384,9 +1385,13 @@ impl BimPlugin {
         if rider_username_input.len() == 0 {
             return;
         }
-        let rider_username = match interface.resolve_username(rider_username_input).await {
-            Some(ru) => ru,
-            None => rider_username_input.to_owned(),
+        let rider_username = if rider_username_input.len() == 0 {
+            channel_message.message.sender.username.clone()
+        } else {
+            match interface.resolve_username(rider_username_input).await {
+                Some(ru) => ru,
+                None => rider_username_input.to_owned(),
+            }
         };
 
         let ride_conn = match self.connect_ride_db().await {
