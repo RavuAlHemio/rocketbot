@@ -1095,8 +1095,8 @@ impl BimPlugin {
                 let index = rng.gen_range(0..fav_vehicles_count);
                 let (fav_comp, fav_vehicle, ride_count) = fav_vehicles.iter().nth(index).unwrap();
                 fav_vehicle_strings.push(format!(
-                    "{}: {}/{} ({} rides)",
-                    rider, fav_comp, fav_vehicle, ride_count,
+                    "{}: {}/{} ({} {})",
+                    rider, fav_comp, fav_vehicle, ride_count, if *ride_count == 1 { "ride" } else { "rides" },
                 ));
             }
         }
