@@ -6,7 +6,7 @@ use std::num::ParseIntError;
 use std::sync::Weak;
 
 use async_trait::async_trait;
-use chrono::{DateTime, Local};
+use chrono::{DateTime, Duration, Local};
 use indexmap::IndexSet;
 use log::error;
 use once_cell::sync::OnceCell;
@@ -20,6 +20,50 @@ use rocketbot_interface::serde::serde_opt_regex;
 use serde::{Deserialize, Serialize};
 use serde_json;
 use tokio_postgres::NoTls;
+use tokio_postgres::types::ToSql;
+
+
+#[derive(Clone, Copy, Debug, Eq, Hash, Ord, PartialEq, PartialOrd)]
+enum LookbackRange {
+    SinceBeginning,
+    LastYear,
+    LastMonth,
+    LastWeek,
+}
+impl LookbackRange {
+    pub fn days(&self) -> Option<i64> {
+        match self {
+            Self::SinceBeginning => None,
+            Self::LastYear => Some(366),
+            Self::LastMonth => Some(31), // yeah, I know
+            Self::LastWeek => Some(7),
+        }
+    }
+
+    pub fn start_timestamp(&self) -> Option<DateTime<Local>> {
+        self.days()
+            .map(|d| Local::now() - Duration::days(d))
+    }
+}
+impl Default for LookbackRange {
+    fn default() -> Self { Self::SinceBeginning }
+}
+
+
+trait AddLookbackFlags {
+    fn add_lookback_flags(self) -> Self;
+}
+impl AddLookbackFlags for CommandDefinitionBuilder {
+    fn add_lookback_flags(self) -> Self {
+        self
+            .add_flag("m")
+            .add_flag("last-month")
+            .add_flag("y")
+            .add_flag("last-year")
+            .add_flag("w")
+            .add_flag("last-week")
+    }
+}
 
 
 pub type VehicleNumber = u32;
@@ -211,6 +255,52 @@ impl BimPlugin {
             connection.await
         });
         Ok(client)
+    }
+
+    fn lookback_range_from_command(command: &CommandInstance) -> Option<LookbackRange> {
+        let last_month =
+            command.flags.contains("m")
+            || command.flags.contains("last-month")
+        ;
+        let last_year =
+            command.flags.contains("y")
+            || command.flags.contains("last-year")
+        ;
+        let last_week =
+            command.flags.contains("w")
+            || command.flags.contains("last-week")
+        ;
+
+        match (last_year, last_month, last_week) {
+            (true, false, false) => Some(LookbackRange::LastYear),
+            (false, true, false) => Some(LookbackRange::LastMonth),
+            (false, false, true) => Some(LookbackRange::LastWeek),
+            (false, false, false) => Some(LookbackRange::SinceBeginning),
+            _ => None,
+        }
+    }
+
+    async fn timestamp_query(
+        conn: &tokio_postgres::Client,
+        query_template: &str,
+        timestamp_block: &str,
+        no_timestamp_block: &str,
+        lookback_range: LookbackRange,
+        other_params: &[&(dyn ToSql + Sync)],
+    ) -> Result<Vec<tokio_postgres::Row>, tokio_postgres::Error> {
+        let lookback_timestamp_opt = lookback_range.start_timestamp();
+
+        let mut new_params: Vec<&(dyn ToSql + Sync)> = Vec::with_capacity(other_params.len() + 1);
+        new_params.extend(other_params);
+
+        if let Some(lt) = lookback_timestamp_opt {
+            new_params.push(&lt);
+            let query = query_template.replace("{LOOKBACK_TIMESTAMP}", timestamp_block);
+            conn.query(&query, &new_params).await
+        } else {
+            let query = query_template.replace("{LOOKBACK_TIMESTAMP}", no_timestamp_block);
+            conn.query(&query, &new_params).await
+        }
     }
 
     async fn channel_command_bim(&self, channel_message: &ChannelMessage, command: &CommandInstance) {
@@ -600,6 +690,17 @@ impl BimPlugin {
             .or_else(|| command.options.get("c"))
             .map(|v| v.as_str().unwrap())
             .unwrap_or(self.default_company.as_str());
+        let lookback_range = match Self::lookback_range_from_command(command) {
+            Some(lr) => lr,
+            None => {
+                send_channel_message!(
+                    interface,
+                    &channel_message.channel.name,
+                    "Hey, no mixing options that mean different time ranges!",
+                ).await;
+                return;
+            },
+        };
 
         if !self.company_to_definition.contains_key(company) {
             send_channel_message!(
@@ -622,7 +723,8 @@ impl BimPlugin {
             },
         };
 
-        let rows_res = ride_conn.query(
+        let rows_res = Self::timestamp_query(
+            &ride_conn,
             "
                 WITH
                     total_rides(vehicle_number, total_ride_count) AS (
@@ -636,6 +738,7 @@ impl BimPlugin {
                         WHERE
                             r.company = $1
                             AND rv.fixed_coupling_position = 0
+                            {LOOKBACK_TIMESTAMP}
                         GROUP BY
                             rv.vehicle_number
                     ),
@@ -650,6 +753,9 @@ impl BimPlugin {
                 WHERE tr.total_ride_count IN (SELECT total_ride_count FROM top_five_counts)
                 ORDER BY tr.total_ride_count DESC, tr.vehicle_number
             ",
+            "AND r.\"timestamp\" >= $2",
+            "",
+            lookback_range,
             &[&company],
         ).await;
         let rows = match rows_res {
@@ -704,10 +810,22 @@ impl BimPlugin {
         ).await;
     }
 
-    async fn channel_command_topriders(&self, channel_message: &ChannelMessage, _command: &CommandInstance) {
+    async fn channel_command_topriders(&self, channel_message: &ChannelMessage, command: &CommandInstance) {
         let interface = match self.interface.upgrade() {
             None => return,
             Some(i) => i,
+        };
+
+        let lookback_range = match Self::lookback_range_from_command(command) {
+            Some(lr) => lr,
+            None => {
+                send_channel_message!(
+                    interface,
+                    &channel_message.channel.name,
+                    "Hey, no mixing options that mean different time ranges!",
+                ).await;
+                return;
+            },
         };
 
         let ride_conn = match self.connect_ride_db().await {
@@ -722,13 +840,18 @@ impl BimPlugin {
             },
         };
 
-        let ride_rows_res = ride_conn.query(
+        let ride_rows_res = Self::timestamp_query(
+            &ride_conn,
             "
                 SELECT r.rider_username, CAST(COUNT(*) AS bigint) ride_count
                 FROM bim.rides r
+                {LOOKBACK_TIMESTAMP}
                 GROUP BY r.rider_username
             ",
-            &[]
+            "WHERE r.\"timestamp\" >= $1",
+            "",
+            lookback_range,
+            &[],
         ).await;
         let ride_rows = match ride_rows_res {
             Ok(r) => r,
@@ -754,7 +877,8 @@ impl BimPlugin {
             rider_ride_and_vehicle_count.0 += ride_count;
         }
 
-        let vehicle_rows_res = ride_conn.query(
+        let vehicle_rows_res = Self::timestamp_query(
+            &ride_conn,
             "
                 SELECT i.rider_username, CAST(COUNT(*) AS bigint) vehicle_count
                 FROM (
@@ -763,10 +887,14 @@ impl BimPlugin {
                     INNER JOIN bim.ride_vehicles rv ON rv.ride_id = r.id
                     WHERE rv.spec_position = 0
                     AND rv.fixed_coupling_position = 0
+                    {LOOKBACK_TIMESTAMP}
                 ) i
                 GROUP BY i.rider_username
             ",
-            &[]
+            "AND r.\"timestamp\" >= $1",
+            "",
+            lookback_range,
+            &[],
         ).await;
         let vehicle_rows = match vehicle_rows_res {
             Ok(r) => r,
@@ -867,10 +995,22 @@ impl BimPlugin {
         ).await;
     }
 
-    async fn channel_command_favbims(&self, channel_message: &ChannelMessage, _command: &CommandInstance) {
+    async fn channel_command_favbims(&self, channel_message: &ChannelMessage, command: &CommandInstance) {
         let interface = match self.interface.upgrade() {
             None => return,
             Some(i) => i,
+        };
+
+        let lookback_range = match Self::lookback_range_from_command(command) {
+            Some(lr) => lr,
+            None => {
+                send_channel_message!(
+                    interface,
+                    &channel_message.channel.name,
+                    "Hey, no mixing options that mean different time ranges!",
+                ).await;
+                return;
+            },
         };
 
         let ride_conn = match self.connect_ride_db().await {
@@ -885,13 +1025,15 @@ impl BimPlugin {
             },
         };
 
-        let rows_res = ride_conn.query(
+        let rows_res = Self::timestamp_query(
+            &ride_conn,
             "
                 WITH
                     rides_per_rider_vehicle(rider_username, company, vehicle_number, ride_count) AS (
                         SELECT r.rider_username, r.company, rv.vehicle_number, COUNT(*)
                         FROM bim.rides r
                         INNER JOIN bim.ride_vehicles rv ON rv.ride_id = r.id
+                        {LOOKBACK_TIMESTAMP}
                         GROUP BY r.rider_username, r.company, rv.vehicle_number
                     ),
                     fav_vehicle(rider_username, company, vehicle_number, ride_count) AS (
@@ -907,7 +1049,10 @@ impl BimPlugin {
                 SELECT rider_username, company, vehicle_number, CAST(ride_count AS bigint)
                 FROM fav_vehicle
             ",
-            &[]
+            "WHERE r.\"timestamp\" >= $1",
+            "",
+            lookback_range,
+            &[],
         ).await;
         let rows = match rows_res {
             Ok(r) => r,
@@ -967,10 +1112,22 @@ impl BimPlugin {
         ).await;
     }
 
-    async fn channel_command_topbimdays(&self, channel_message: &ChannelMessage, _command: &CommandInstance) {
+    async fn channel_command_topbimdays(&self, channel_message: &ChannelMessage, command: &CommandInstance) {
         let interface = match self.interface.upgrade() {
             None => return,
             Some(i) => i,
+        };
+
+        let lookback_range = match Self::lookback_range_from_command(command) {
+            Some(lr) => lr,
+            None => {
+                send_channel_message!(
+                    interface,
+                    &channel_message.channel.name,
+                    "Hey, no mixing options that mean different time ranges!",
+                ).await;
+                return;
+            },
         };
 
         let ride_conn = match self.connect_ride_db().await {
@@ -985,7 +1142,8 @@ impl BimPlugin {
             },
         };
 
-        let rows_res = ride_conn.query(
+        let rows_res = Self::timestamp_query(
+            &ride_conn,
             "
                 WITH
                 rides_dates(ride_date) AS (
@@ -999,6 +1157,7 @@ impl BimPlugin {
                         AS date)
                     FROM
                         bim.rides r
+                    {LOOKBACK_TIMESTAMP}
                 ),
                 ride_date_count(ride_year, ride_month, ride_day, ride_count) AS (
                     SELECT
@@ -1014,7 +1173,10 @@ impl BimPlugin {
                 ORDER BY ride_count DESC, ride_year DESC, ride_month DESC, ride_day DESC
                 LIMIT 6
             ",
-            &[]
+            "WHERE r.\"timestamp\" >= $1",
+            "",
+            lookback_range,
+            &[],
         ).await;
         let rows = match rows_res {
             Ok(r) => r,
@@ -1063,6 +1225,17 @@ impl BimPlugin {
             Some(i) => i,
         };
 
+        let lookback_range = match Self::lookback_range_from_command(command) {
+            Some(lr) => lr,
+            None => {
+                send_channel_message!(
+                    interface,
+                    &channel_message.channel.name,
+                    "Hey, no mixing options that mean different time ranges!",
+                ).await;
+                return;
+            },
+        };
         let sort_by_number =
             command.flags.contains("n")
             || command.flags.contains("sort-by-number")
@@ -1088,7 +1261,8 @@ impl BimPlugin {
             },
         };
 
-        let rows_res = ride_conn.query(
+        let rows_res = Self::timestamp_query(
+            &ride_conn,
             "
                 SELECT
                     r.company,
@@ -1099,11 +1273,15 @@ impl BimPlugin {
                 WHERE
                     LOWER(r.rider_username) = LOWER($1)
                     AND rv.as_part_of_fixed_coupling = FALSE
+                    {LOOKBACK_TIMESTAMP}
                 GROUP BY
                     r.company,
                     rv.vehicle_number
             ",
-            &[&rider_username]
+            "AND r.\"timestamp\" >= $2",
+            "",
+            lookback_range,
+            &[&rider_username],
         ).await;
         let rows = match rows_res {
             Ok(r) => r,
@@ -1191,6 +1369,17 @@ impl BimPlugin {
             command.flags.contains("n")
             || command.flags.contains("sort-by-number")
         ;
+        let lookback_range = match Self::lookback_range_from_command(command) {
+            Some(lr) => lr,
+            None => {
+                send_channel_message!(
+                    interface,
+                    &channel_message.channel.name,
+                    "Hey, no mixing options that mean different time ranges!",
+                ).await;
+                return;
+            },
+        };
         let rider_username_input = command.rest.trim();
         if rider_username_input.len() == 0 {
             return;
@@ -1212,7 +1401,8 @@ impl BimPlugin {
             },
         };
 
-        let rows_res = ride_conn.query(
+        let rows_res = Self::timestamp_query(
+            &ride_conn,
             "
                 SELECT
                     r.company,
@@ -1222,11 +1412,15 @@ impl BimPlugin {
                 WHERE
                     LOWER(r.rider_username) = LOWER($1)
                     AND r.line IS NOT NULL
+                    {LOOKBACK_TIMESTAMP}
                 GROUP BY
                     r.company,
                     r.line
             ",
-            &[&rider_username]
+            "AND r.\"timestamp\" >= $2",
+            "",
+            lookback_range,
+            &[&rider_username],
         ).await;
         let rows = match rows_res {
             Ok(r) => r,
@@ -1422,6 +1616,7 @@ impl RocketBotPlugin for BimPlugin {
             )
                 .add_option("company", CommandValueType::String)
                 .add_option("c", CommandValueType::String)
+                .add_lookback_flags()
                 .build()
         ).await;
         my_interface.register_channel_command(
@@ -1431,6 +1626,7 @@ impl RocketBotPlugin for BimPlugin {
                 "{cpfx}topriders".to_owned(),
                 "Returns the most active rider(s).".to_owned(),
             )
+                .add_lookback_flags()
                 .build()
         ).await;
         my_interface.register_channel_command(
@@ -1449,6 +1645,7 @@ impl RocketBotPlugin for BimPlugin {
                 "{cpfx}favbims".to_owned(),
                 "Returns each rider's most-ridden vehicle.".to_owned(),
             )
+                .add_lookback_flags()
                 .build()
         ).await;
         my_interface.register_channel_command(
@@ -1458,6 +1655,7 @@ impl RocketBotPlugin for BimPlugin {
                 "{cpfx}topbimdays".to_owned(),
                 "Returns the days with the most vehicle rides.".to_owned(),
             )
+                .add_lookback_flags()
                 .build()
         ).await;
         my_interface.register_channel_command(
@@ -1469,6 +1667,7 @@ impl RocketBotPlugin for BimPlugin {
             )
                 .add_flag("n")
                 .add_flag("sort-by-number")
+                .add_lookback_flags()
                 .build()
         ).await;
         my_interface.register_channel_command(
@@ -1480,6 +1679,7 @@ impl RocketBotPlugin for BimPlugin {
             )
                 .add_flag("n")
                 .add_flag("sort-by-number")
+                .add_lookback_flags()
                 .build()
         ).await;
         my_interface.register_channel_command(
