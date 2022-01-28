@@ -942,12 +942,12 @@ impl BimPlugin {
             })
             .collect();
         let prefix = if rider_strings.len() < 6 {
-            "Top riders: "
+            "Top riders:\n"
         } else {
             rider_strings.drain(5..);
-            "Top 5 riders: "
+            "Top 5 riders:\n"
         };
-        let riders_string = rider_strings.join(", ");
+        let riders_string = rider_strings.join("\n");
 
         let response_string = if riders_string.len() == 0 {
             "No top riders.".to_owned()
