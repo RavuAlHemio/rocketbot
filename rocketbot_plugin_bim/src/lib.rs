@@ -1047,13 +1047,15 @@ impl BimPlugin {
                         GROUP BY r.rider_username, r.company, rv.vehicle_number
                     ),
                     rider_top_ride_counts(rider_username, ride_count) AS (
-                        SELECT rider_username, ride_count, ride_count_rank
+                        SELECT rcsq.rider_username, rcsq.ride_count
                         FROM (
-                            SELECT rider_username, ride_count, rank() OVER (PARTITION BY rider_username ORDER BY ride_count DESC) ride_count_rank
-                            FROM rides_per_rider_vehicle
-                            ORDER BY ride_count DESC
-                        ) ride_count_subq
-                        WHERE ride_count_rank < 6
+                            SELECT rprvuq.rider_username, rprvuq.ride_count, rank() OVER (PARTITION BY rprvuq.rider_username ORDER BY rprvuq.ride_count DESC) ride_count_rank
+                            FROM (
+                                SELECT DISTINCT rprv2.rider_username, rprv2.ride_count
+                                FROM rides_per_rider_vehicle rprv2
+                            ) rprvuq
+                        ) rcsq
+                        WHERE rcsq.ride_count_rank < 6
                     ),
                     fav_vehicles(rider_username, company, vehicle_number, ride_count) AS (
                         SELECT rprv.rider_username, rprv.company, rprv.vehicle_number, rprv.ride_count
