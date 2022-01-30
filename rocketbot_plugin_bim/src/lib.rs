@@ -1689,6 +1689,27 @@ impl BimPlugin {
         if company.len() == 0 {
             return;
         }
+        let company_name = match self.company_to_definition.get(company) {
+            Some(cd) => cd.name.as_str(),
+            None => {
+                send_channel_message!(
+                    interface,
+                    &channel_message.channel.name,
+                    "Unknown company.",
+                ).await;
+                return;
+            },
+        };
+
+        let rider_username_input = command.rest.trim();
+        let rider_username_opt = if rider_username_input.len() == 0 {
+            None
+        } else {
+            match interface.resolve_username(rider_username_input).await {
+                Some(ru) => Some(ru),
+                None => Some(rider_username_input.to_owned()),
+            }
+        };
 
         let database = match self.load_bim_database(company) {
             Some(db) => db,
@@ -1707,18 +1728,33 @@ impl BimPlugin {
             },
         };
 
-        let rows_res = ride_conn.query(
-            "
-                SELECT DISTINCT
-                    rv.vehicle_number
-                FROM bim.rides r
-                INNER JOIN bim.ride_vehicles rv
-                    ON rv.ride_id = r.id
-                WHERE
-                    r.company = $1
-            ",
-            &[&company],
-        ).await;
+        let query_template = "
+            SELECT DISTINCT
+                rv.vehicle_number
+            FROM bim.rides r
+            INNER JOIN bim.ride_vehicles rv
+                ON rv.ride_id = r.id
+            WHERE
+                r.company = $1
+                {AND_RIDER_USERNAME}
+        ";
+        let (mut response, rows_res) = if let Some(ru) = rider_username_opt {
+            (
+                format!("Statistics for vehicles of {} ridden by {}:", company_name, ru),
+                ride_conn.query(
+                    &query_template.replace("{AND_RIDER_USERNAME}", "AND r.rider_username = $2"),
+                    &[&company, &ru],
+                ).await
+            )
+        } else {
+            (
+                format!("General statistics for vehicles of {}:", company_name),
+                ride_conn.query(
+                    &query_template.replace("{AND_RIDER_USERNAME}", ""),
+                    &[&company],
+                ).await
+            )
+        };
         let rows = match rows_res {
             Ok(r) => r,
             Err(e) => {
@@ -1757,25 +1793,21 @@ impl BimPlugin {
         }
 
         // collate information
-        let mut response = String::new();
         if type_to_stats.len() == 0 {
-            write_expect!(&mut response, "No vehicle database.");
+            write_expect!(&mut response, "\nNo vehicle database.");
         } else {
             for (tp, stats) in &type_to_stats {
-                if response.len() > 0 {
-                    write_expect!(&mut response, "\n");
-                }
                 if stats.active_vehicles == 0 {
                     write_expect!(
                         &mut response,
-                        "{}: {} vehicles, none active, {} ridden ({:.2}%)",
+                        "\n{}: {} vehicles, none active, {} ridden ({:.2}%)",
                         tp, stats.known_vehicles,
                         stats.ridden_vehicles, stats.ridden_known() * 100.0,
                     );
                 } else {
                     write_expect!(
                         &mut response,
-                        "{}: {} vehicles, {} active ({:.2}%), {} ridden ({:.2}% of total, {:.2}% of active)",
+                        "\n{}: {} vehicles, {} active ({:.2}%), {} ridden ({:.2}% of total, {:.2}% of active)",
                         tp, stats.known_vehicles,
                         stats.active_vehicles, stats.active_known() * 100.0,
                         stats.ridden_vehicles, stats.ridden_known() * 100.0, stats.ridden_active() * 100.0,
@@ -1786,10 +1818,7 @@ impl BimPlugin {
         // we have been emptying ridden_vehicles while collecting stats
         // what remains are the unknown types
         if ridden_vehicles.len() > 0 {
-            if response.len() > 0 {
-                write_expect!(&mut response, "\n");
-            }
-            write_expect!(&mut response, "{} vehicles of unknown type ridden", ridden_vehicles.len());
+            write_expect!(&mut response, "\n{} vehicles of unknown type ridden", ridden_vehicles.len());
         }
 
         send_channel_message!(
@@ -1968,7 +1997,7 @@ impl RocketBotPlugin for BimPlugin {
             &CommandDefinitionBuilder::new(
                 "bimtypes".to_owned(),
                 "bim".to_owned(),
-                "{cpfx}bimtypes [-c COMPANY]".to_owned(),
+                "{cpfx}bimtypes [-c COMPANY] [USERNAME]".to_owned(),
                 "Returns statistics about vehicle types.".to_owned(),
             )
                 .add_option("company", CommandValueType::String)
