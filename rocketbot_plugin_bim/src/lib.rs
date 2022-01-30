@@ -143,6 +143,34 @@ pub struct NewVehicleEntry {
     pub fixed_coupling_position: i64,
 }
 
+#[derive(Clone, Copy, Debug, Hash, Eq, PartialEq)]
+struct BimTypeStats {
+    pub known_vehicles: usize,
+    pub active_vehicles: usize,
+    pub ridden_vehicles: usize,
+}
+impl BimTypeStats {
+    pub fn new() -> Self {
+        Self {
+            known_vehicles: 0,
+            active_vehicles: 0,
+            ridden_vehicles: 0,
+        }
+    }
+
+    pub fn active_known(&self) -> f64 {
+        self.active_vehicles as f64 / self.known_vehicles as f64
+    }
+
+    pub fn ridden_known(&self) -> f64 {
+        self.ridden_vehicles as f64 / self.known_vehicles as f64
+    }
+
+    pub fn ridden_active(&self) -> f64 {
+        self.active_vehicles as f64 / self.known_vehicles as f64
+    }
+}
+
 
 #[derive(Clone, Debug, Deserialize, Serialize)]
 pub struct CompanyDefinition {
@@ -1648,6 +1676,120 @@ impl BimPlugin {
         ).await;
     }
 
+    async fn channel_command_bimtypes(&self, channel_message: &ChannelMessage, command: &CommandInstance) {
+        let interface = match self.interface.upgrade() {
+            None => return,
+            Some(i) => i,
+        };
+
+        let company = command.options.get("company")
+            .or_else(|| command.options.get("c"))
+            .map(|v| v.as_str().unwrap())
+            .unwrap_or(self.default_company.as_str());
+        if company.len() == 0 {
+            return;
+        }
+
+        let database = match self.load_bim_database(company) {
+            Some(db) => db,
+            None => HashMap::new(), // work with an empty database
+        };
+
+        let ride_conn = match self.connect_ride_db().await {
+            Ok(c) => c,
+            Err(_) => {
+                send_channel_message!(
+                    interface,
+                    &channel_message.channel.name,
+                    "Failed to open database connection. :disappointed:",
+                ).await;
+                return;
+            },
+        };
+
+        let rows_res = ride_conn.query(
+            "
+                SELECT DISTINCT
+                    rv.vehicle_number
+                FROM bim.rides r
+                INNER JOIN bim.ride_vehicles rv
+                    ON rv.ride_id = r.id
+                WHERE
+                    r.company = $1
+            ",
+            &[&company],
+        ).await;
+        let rows = match rows_res {
+            Ok(r) => r,
+            Err(e) => {
+                error!("failed to query bim types: {}", e);
+                send_channel_message!(
+                    interface,
+                    &channel_message.channel.name,
+                    "Failed to query database. :disappointed:",
+                ).await;
+                return;
+            },
+        };
+        let mut ridden_vehicles: HashSet<VehicleNumber> = HashSet::new();
+        for row in rows {
+            let vehicle_number_i64: i64 = row.get(0);
+            let vehicle_number: VehicleNumber = match vehicle_number_i64.try_into() {
+                Ok(vn) => vn,
+                Err(_) => continue,
+            };
+            ridden_vehicles.insert(vehicle_number);
+        }
+
+        // run through database
+        let mut type_to_stats: BTreeMap<String, BimTypeStats> = BTreeMap::new();
+        for vehicle in database.values() {
+            let type_stats = type_to_stats
+                .entry(vehicle.type_code.clone())
+                .or_insert_with(|| BimTypeStats::new());
+            type_stats.known_vehicles += 1;
+            if vehicle.out_of_service_since.is_none() {
+                type_stats.active_vehicles += 1;
+            }
+            if ridden_vehicles.remove(&vehicle.number) {
+                type_stats.ridden_vehicles += 1;
+            }
+        }
+
+        // collate information
+        let mut response = String::new();
+        if type_to_stats.len() == 0 {
+            write_expect!(&mut response, "No vehicle database.");
+        } else {
+            for (tp, stats) in &type_to_stats {
+                if response.len() > 0 {
+                    write_expect!(&mut response, "\n");
+                }
+                write_expect!(
+                    &mut response,
+                    "{}: {} vehicles, {} active ({:.2}%), {} ridden ({:.2}% of total, {:.2}% of active)",
+                    tp, stats.known_vehicles,
+                    stats.active_vehicles, stats.active_known() * 100.0,
+                    stats.ridden_vehicles, stats.ridden_known() * 100.0, stats.ridden_active() * 100.0,
+                );
+            }
+        }
+        // we have been emptying ridden_vehicles while collecting stats
+        // what remains are the unknown types
+        if ridden_vehicles.len() > 0 {
+            if response.len() > 0 {
+                write_expect!(&mut response, "\n");
+            }
+            write_expect!(&mut response, "{} vehicles of unknown type ridden", ridden_vehicles.len());
+        }
+
+        send_channel_message!(
+            interface,
+            &channel_message.channel.name,
+            &response,
+        ).await;
+    }
+
     fn english_ordinal(num: usize) -> &'static str {
         let by_hundred = num % 100;
         if by_hundred > 10 && by_hundred < 14 {
@@ -1845,6 +1987,8 @@ impl RocketBotPlugin for BimPlugin {
             self.channel_command_bimriderlines(channel_message, command).await
         } else if command.name == "bimranges" {
             self.channel_command_bimranges(channel_message, command).await
+        } else if command.name == "bimtypes" {
+            self.channel_command_bimtypes(channel_message, command).await
         }
     }
 
@@ -1873,6 +2017,8 @@ impl RocketBotPlugin for BimPlugin {
             Some(include_str!("../help/bimriderlines.md").to_owned())
         } else if command_name == "bimranges" {
             Some(include_str!("../help/bimranges.md").to_owned())
+        } else if command_name == "bimtypes" {
+            Some(include_str!("../help/bimtypes.md").to_owned())
         } else {
             None
         }
