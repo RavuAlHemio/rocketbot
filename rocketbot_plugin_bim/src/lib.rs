@@ -1765,13 +1765,22 @@ impl BimPlugin {
                 if response.len() > 0 {
                     write_expect!(&mut response, "\n");
                 }
-                write_expect!(
-                    &mut response,
-                    "{}: {} vehicles, {} active ({:.2}%), {} ridden ({:.2}% of total, {:.2}% of active)",
-                    tp, stats.known_vehicles,
-                    stats.active_vehicles, stats.active_known() * 100.0,
-                    stats.ridden_vehicles, stats.ridden_known() * 100.0, stats.ridden_active() * 100.0,
-                );
+                if stats.active_vehicles == 0 {
+                    write_expect!(
+                        &mut response,
+                        "{}: {} vehicles, none active, {} ridden ({:.2}%)",
+                        tp, stats.known_vehicles,
+                        stats.ridden_vehicles, stats.ridden_known() * 100.0,
+                    );
+                } else {
+                    write_expect!(
+                        &mut response,
+                        "{}: {} vehicles, {} active ({:.2}%), {} ridden ({:.2}% of total, {:.2}% of active)",
+                        tp, stats.known_vehicles,
+                        stats.active_vehicles, stats.active_known() * 100.0,
+                        stats.ridden_vehicles, stats.ridden_known() * 100.0, stats.ridden_active() * 100.0,
+                    );
+                }
             }
         }
         // we have been emptying ridden_vehicles while collecting stats
