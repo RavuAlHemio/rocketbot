@@ -1,3 +1,6 @@
+mod range_set;
+
+
 use std::collections::{BTreeMap, BTreeSet, HashMap, HashSet};
 use std::convert::TryInto;
 use std::fmt::{self, Write};
@@ -21,6 +24,8 @@ use serde::{Deserialize, Serialize};
 use serde_json;
 use tokio_postgres::NoTls;
 use tokio_postgres::types::ToSql;
+
+use crate::range_set::RangeSet;
 
 
 #[derive(Clone, Copy, Debug, Eq, Hash, Ord, PartialEq, PartialOrd)]
@@ -1572,6 +1577,11 @@ impl BimPlugin {
             return;
         }
 
+        let wants_precise =
+            command.flags.contains("precise")
+            || command.flags.contains("p")
+        ;
+
         let database = match self.load_bim_database(company) {
             Some(db) => db,
             None => {
@@ -1584,24 +1594,51 @@ impl BimPlugin {
             },
         };
 
-        let mut type_to_range: BTreeMap<String, (VehicleNumber, VehicleNumber)> = BTreeMap::new();
-        for (&veh_id, veh_info) in database.iter() {
-            type_to_range
-                .entry(veh_info.type_code.clone())
-                .and_modify(|(old_low, old_high)| {
-                    if *old_low > veh_id {
-                        *old_low = veh_id;
-                    }
-                    if *old_high < veh_id {
-                        *old_high = veh_id;
-                    }
-                })
-                .or_insert((veh_id, veh_id));
-        }
+        let lines: Vec<String> = if wants_precise {
+            let mut type_to_ranges: BTreeMap<String, RangeSet<VehicleNumber>> = BTreeMap::new();
+            for (&veh_id, veh_info) in database.iter() {
+                type_to_ranges
+                    .entry(veh_info.type_code.clone())
+                    .or_insert_with(|| RangeSet::new())
+                    .insert(veh_id);
+            }
 
-        let lines: Vec<String> = type_to_range.iter()
-            .map(|(tp, (low, high))| format!("{}: {}-{}", tp, low, high))
-            .collect();
+            type_to_ranges.iter()
+                .map(|(tp, ranges)| {
+                    let range_strings: Vec<String> = ranges.ranges()
+                        .map(|r|
+                            if r.range.start == r.range.end - 1 {
+                                // single number
+                                format!("{}", r.range.start)
+                            } else {
+                                format!("{}-{}", r.range.start, r.range.end - 1)
+                            }
+                        )
+                        .collect();
+                    let ranges_string = range_strings.join(", ");
+                    format!("{}: {}", tp, ranges_string)
+                })
+                .collect()
+        } else {
+            let mut type_to_range: BTreeMap<String, (VehicleNumber, VehicleNumber)> = BTreeMap::new();
+            for (&veh_id, veh_info) in database.iter() {
+                type_to_range
+                    .entry(veh_info.type_code.clone())
+                    .and_modify(|(old_low, old_high)| {
+                        if *old_low > veh_id {
+                            *old_low = veh_id;
+                        }
+                        if *old_high < veh_id {
+                            *old_high = veh_id;
+                        }
+                    })
+                    .or_insert((veh_id, veh_id));
+            }
+
+            type_to_range.iter()
+                .map(|(tp, (low, high))| format!("{}: {}-{}", tp, low, high))
+                .collect()
+        };
         let response = lines.join("\n");
 
         send_channel_message!(
@@ -1767,9 +1804,11 @@ impl RocketBotPlugin for BimPlugin {
             &CommandDefinitionBuilder::new(
                 "bimranges".to_owned(),
                 "bim".to_owned(),
-                "{cpfx}bimranges [-c COMPANY]".to_owned(),
+                "{cpfx}bimranges [-p] [-c COMPANY]".to_owned(),
                 "Returns the number ranges of each vehicle type.".to_owned(),
             )
+                .add_flag("precise")
+                .add_flag("p")
                 .add_option("company", CommandValueType::String)
                 .add_option("c", CommandValueType::String)
                 .build()
