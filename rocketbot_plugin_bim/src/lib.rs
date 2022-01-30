@@ -167,7 +167,7 @@ impl BimTypeStats {
     }
 
     pub fn ridden_active(&self) -> f64 {
-        self.active_vehicles as f64 / self.known_vehicles as f64
+        self.ridden_vehicles as f64 / self.active_vehicles as f64
     }
 }
 
