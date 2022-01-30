@@ -1748,7 +1748,7 @@ impl BimPlugin {
                 .entry(vehicle.type_code.clone())
                 .or_insert_with(|| BimTypeStats::new());
             type_stats.known_vehicles += 1;
-            if vehicle.out_of_service_since.is_none() {
+            if vehicle.in_service_since.is_some() && vehicle.out_of_service_since.is_none() {
                 type_stats.active_vehicles += 1;
             }
             if ridden_vehicles.remove(&vehicle.number) {
