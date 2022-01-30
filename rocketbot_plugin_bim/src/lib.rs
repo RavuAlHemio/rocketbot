@@ -1955,6 +1955,17 @@ impl RocketBotPlugin for BimPlugin {
                 .add_option("c", CommandValueType::String)
                 .build()
         ).await;
+        my_interface.register_channel_command(
+            &CommandDefinitionBuilder::new(
+                "bimtypes".to_owned(),
+                "bim".to_owned(),
+                "{cpfx}bimtypes [-c COMPANY]".to_owned(),
+                "Returns statistics about vehicle types.".to_owned(),
+            )
+                .add_option("company", CommandValueType::String)
+                .add_option("c", CommandValueType::String)
+                .build()
+        ).await;
 
         Self {
             interface,
