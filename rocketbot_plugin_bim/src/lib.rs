@@ -1742,7 +1742,7 @@ impl BimPlugin {
             (
                 format!("Statistics for vehicles of {} ridden by {}:", company_name, ru),
                 ride_conn.query(
-                    &query_template.replace("{AND_RIDER_USERNAME}", "AND r.rider_username = $2"),
+                    &query_template.replace("{AND_RIDER_USERNAME}", "AND LOWER(r.rider_username) = LOWER($2)"),
                     &[&company, &ru],
                 ).await
             )
