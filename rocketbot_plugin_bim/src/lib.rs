@@ -1241,6 +1241,15 @@ impl BimPlugin {
                 return;
             },
         };
+        let rider_username_input = command.rest.trim();
+        let rider_username_opt = if rider_username_input.len() == 0 {
+            None
+        } else {
+            match interface.resolve_username(rider_username_input).await {
+                Some(ru) => Some(ru),
+                None => Some(rider_username_input.to_owned()),
+            }
+        };
 
         let ride_conn = match self.connect_ride_db().await {
             Ok(c) => c,
@@ -1254,42 +1263,57 @@ impl BimPlugin {
             },
         };
 
-        let rows_res = Self::timestamp_query(
-            &ride_conn,
-            "
-                WITH
-                rides_dates(ride_date) AS (
-                    SELECT
-                        -- count rides before 04:00 to previous day
-                        CAST(
-                            CASE WHEN EXTRACT(HOUR FROM r.\"timestamp\") < 4
-                            THEN r.\"timestamp\" - CAST('P1D' AS interval)
-                            ELSE r.\"timestamp\"
-                            END
-                        AS date)
-                    FROM
-                        bim.rides r
-                    {LOOKBACK_TIMESTAMP}
-                ),
-                ride_date_count(ride_year, ride_month, ride_day, ride_count) AS (
-                    SELECT
-                        CAST(EXTRACT(YEAR FROM ride_date) AS bigint),
-                        CAST(EXTRACT(MONTH FROM ride_date) AS bigint),
-                        CAST(EXTRACT(DAY FROM ride_date) AS bigint),
-                        COUNT(*)
-                    FROM rides_dates
-                    GROUP BY ride_date
-                )
-                SELECT ride_year, ride_month, ride_day, CAST(ride_count AS bigint) ride_count
-                FROM ride_date_count
-                ORDER BY ride_count DESC, ride_year DESC, ride_month DESC, ride_day DESC
-                LIMIT 6
-            ",
-            "WHERE r.\"timestamp\" >= $1",
-            "",
-            lookback_range,
-            &[],
-        ).await;
+        let query_template = "
+            WITH
+            rides_dates(ride_date) AS (
+                SELECT
+                    -- count rides before 04:00 to previous day
+                    CAST(
+                        CASE WHEN EXTRACT(HOUR FROM r.\"timestamp\") < 4
+                        THEN r.\"timestamp\" - CAST('P1D' AS interval)
+                        ELSE r.\"timestamp\"
+                        END
+                    AS date)
+                FROM
+                    bim.rides r
+                {USERNAME_CRITERION}
+                {LOOKBACK_TIMESTAMP}
+            ),
+            ride_date_count(ride_year, ride_month, ride_day, ride_count) AS (
+                SELECT
+                    CAST(EXTRACT(YEAR FROM ride_date) AS bigint),
+                    CAST(EXTRACT(MONTH FROM ride_date) AS bigint),
+                    CAST(EXTRACT(DAY FROM ride_date) AS bigint),
+                    COUNT(*)
+                FROM rides_dates
+                GROUP BY ride_date
+            )
+            SELECT ride_year, ride_month, ride_day, CAST(ride_count AS bigint) ride_count
+            FROM ride_date_count
+            ORDER BY ride_count DESC, ride_year DESC, ride_month DESC, ride_day DESC
+            LIMIT 6
+        ";
+        let rows_res = if let Some(ru) = &rider_username_opt {
+            let query = query_template.replace("{USERNAME_CRITERION}", "WHERE LOWER(r.rider_username) = LOWER($1)");
+            Self::timestamp_query(
+                &ride_conn,
+                &query,
+                "AND r.\"timestamp\" >= $2",
+                "",
+                lookback_range,
+                &[&ru],
+            ).await
+        } else {
+            let query = query_template.replace("{USERNAME_CRITERION}", "");
+            Self::timestamp_query(
+                &ride_conn,
+                &query,
+                "WHERE r.\"timestamp\" >= $1",
+                "",
+                lookback_range,
+                &[],
+            ).await
+        };
         let rows = match rows_res {
             Ok(r) => r,
             Err(e) => {
