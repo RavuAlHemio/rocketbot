@@ -9,7 +9,7 @@ use std::num::ParseIntError;
 use std::sync::Weak;
 
 use async_trait::async_trait;
-use chrono::{DateTime, Duration, Local};
+use chrono::{Datelike, DateTime, Duration, Local, NaiveDate, TimeZone, Weekday};
 use indexmap::IndexSet;
 use log::error;
 use once_cell::sync::OnceCell;
@@ -478,7 +478,7 @@ impl BimPlugin {
                         write_expect!(ret,
                             " {} last rode it {}",
                             if *is_you { "You" } else { last_rider_username.as_str() },
-                            last_ride.format("on %Y-%m-%d at %H:%M:%S"),
+                            BimPlugin::canonical_date_format(&last_ride, true, true),
                         );
                         if let Some(ll) = last_line {
                             write_expect!(ret, " on line {}", ll);
@@ -621,7 +621,7 @@ impl BimPlugin {
                     "This is their {}{} ride in this vehicle (previously {}",
                     lr.ride_count + 1,
                     Self::english_ordinal(lr.ride_count + 1),
-                    lr.last_ride.format("on %Y-%m-%d at %H:%M"),
+                    BimPlugin::canonical_date_format(&lr.last_ride, true, false),
                 );
                 if let Some(ln) = &lr.last_line {
                     write_expect!(&mut resp, " on line {}", ln);
@@ -632,7 +632,7 @@ impl BimPlugin {
                         &mut resp,
                         " and {} has also ridden it {}",
                         or.rider_username,
-                        or.last_ride.format("on %Y-%m-%d at %H:%M"),
+                        BimPlugin::canonical_date_format(&lr.last_ride, true, false),
                     );
                     if let Some(ln) = &or.last_line {
                         write_expect!(&mut resp, " on line {}", ln);
@@ -646,7 +646,7 @@ impl BimPlugin {
                         &mut resp,
                         ", but {} has previously ridden it {}",
                         or.rider_username,
-                        or.last_ride.format("on %Y-%m-%d at %H:%M"),
+                        BimPlugin::canonical_date_format(&or.last_ride, true, false),
                     );
                     if let Some(ln) = &or.last_line {
                         write_expect!(&mut resp, " on line {}", ln);
@@ -678,7 +678,7 @@ impl BimPlugin {
                         "{}{} time, previously {}",
                         lr.ride_count + 1,
                         Self::english_ordinal(lr.ride_count + 1),
-                        lr.last_ride.format("on %Y-%m-%d at %H:%M"),
+                        BimPlugin::canonical_date_format(&lr.last_ride, false, false),
                     );
                     if let Some(ln) = &lr.last_line {
                         write_expect!(&mut resp, " on line {}", ln);
@@ -690,7 +690,7 @@ impl BimPlugin {
                             &mut resp,
                             " since {} {}",
                             or.rider_username,
-                            or.last_ride.format("on %Y-%m-%d at %H:%M"),
+                            BimPlugin::canonical_date_format(&or.last_ride, false, false),
                         );
                         if let Some(ln) = &or.last_line {
                             write_expect!(&mut resp, " on line {}", ln);
@@ -1303,14 +1303,20 @@ impl BimPlugin {
             },
         };
 
-        let mut date_and_ride_count: Vec<((i64, i64, i64), i64)> = Vec::new();
+        let mut date_and_ride_count: Vec<(NaiveDate, i64)> = Vec::new();
         for row in rows {
             let year: i64 = row.get(0);
             let month: i64 = row.get(1);
             let day: i64 = row.get(2);
             let ride_count: i64 = row.get(3);
 
-            date_and_ride_count.push(((year, month, day), ride_count));
+            let date = NaiveDate::from_ymd(
+                year.try_into().expect("invalid year"),
+                month.try_into().expect("invalid month"),
+                day.try_into().expect("invalid day"),
+            );
+
+            date_and_ride_count.push((date, ride_count));
         }
 
         let mut top_text = if date_and_ride_count.len() >= 6 {
@@ -1320,8 +1326,13 @@ impl BimPlugin {
             "Top days:"
         }.to_owned();
 
-        for ((y, m, d), ride_count) in &date_and_ride_count {
-            top_text.push_str(&format!("\n{:04}-{:02}-{:02}: {} rides", y, m, d, ride_count));
+        for (date, ride_count) in &date_and_ride_count {
+            top_text.push_str(&format!(
+                "\n{} {}: {} rides",
+                Self::weekday_abbr2(date.weekday()),
+                date.format("%Y-%m-%d"),
+                ride_count,
+            ));
         }
 
         send_channel_message!(
@@ -1826,6 +1837,35 @@ impl BimPlugin {
             &channel_message.channel.name,
             &response,
         ).await;
+    }
+
+    #[inline]
+    fn weekday_abbr2(weekday: Weekday) -> &'static str {
+        match weekday {
+            Weekday::Mon => "Mo",
+            Weekday::Tue => "Tu",
+            Weekday::Wed => "We",
+            Weekday::Thu => "Th",
+            Weekday::Fri => "Fr",
+            Weekday::Sat => "Sa",
+            Weekday::Sun => "Su",
+        }
+    }
+
+    fn canonical_date_format<Tz: TimeZone>(date_time: &DateTime<Tz>, on_at: bool, seconds: bool) -> String
+            where Tz::Offset: fmt::Display {
+        let dow = Self::weekday_abbr2(date_time.weekday());
+        let date_formatted = date_time.format("%Y-%m-%d");
+        let time_formatted = if seconds {
+            date_time.format("%H:%M:%S")
+        } else {
+            date_time.format("%H:%M")
+        };
+        if on_at {
+            format!("on {} {} at {}", dow, date_formatted, time_formatted)
+        } else {
+            format!("{} {} {}", dow, date_formatted, time_formatted)
+        }
     }
 
     fn english_ordinal(num: usize) -> &'static str {
