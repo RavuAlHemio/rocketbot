@@ -22,3 +22,10 @@ CREATE TABLE bim.ride_vehicles
 , CONSTRAINT pkey_ride_vehicles PRIMARY KEY (ride_id, vehicle_number)
 , CONSTRAINT check_ride_vehicles CHECK (vehicle_number >= 0)
 );
+
+CREATE VIEW bim.rides_and_vehicles AS
+SELECT r.id, r.company, r.rider_username, r."timestamp", r.line
+    , rv.vehicle_number, rv.vehicle_type, rv.spec_position, rv.as_part_of_fixed_coupling, rv.fixed_coupling_position
+FROM bim.rides r
+INNER JOIN bim.ride_vehicles rv ON rv.ride_id = r.id
+;
