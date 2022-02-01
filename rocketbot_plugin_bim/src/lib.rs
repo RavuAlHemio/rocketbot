@@ -632,7 +632,7 @@ impl BimPlugin {
                         &mut resp,
                         " and {} has also ridden it {}",
                         or.rider_username,
-                        BimPlugin::canonical_date_format(&lr.last_ride, true, false),
+                        BimPlugin::canonical_date_format(&or.last_ride, true, false),
                     );
                     if let Some(ln) = &or.last_line {
                         write_expect!(&mut resp, " on line {}", ln);
