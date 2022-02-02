@@ -28,6 +28,9 @@ use tokio_postgres::types::ToSql;
 use crate::range_set::RangeSet;
 
 
+const INVISIBLE_JOINER: &str = "\u{2060}"; // WORD JOINER
+
+
 #[derive(Clone, Copy, Debug, Eq, Hash, Ord, PartialEq, PartialOrd)]
 enum LookbackRange {
     SinceBeginning,
@@ -1486,9 +1489,9 @@ impl BimPlugin {
         let types_counts: Vec<String> = type_and_count.iter()
             .map(|(comp, tp, count)|
                 if *comp == self.default_company.as_str() {
-                    format!("{}: {}", tp, count)
+                    format!("{}{}: {}", tp, INVISIBLE_JOINER, count)
                 } else {
-                    format!("{}/{}: {}", comp, tp, count)
+                    format!("{}/{}{}: {}", comp, tp, INVISIBLE_JOINER, count)
                 }
             )
             .collect();
@@ -1606,9 +1609,9 @@ impl BimPlugin {
         let lines_counts: Vec<String> = line_and_count.iter()
             .map(|(comp, tp, count)|
                 if *comp == self.default_company.as_str() {
-                    format!("{}: {}", tp, count)
+                    format!("{}{}: {}", tp, INVISIBLE_JOINER, count)
                 } else {
-                    format!("{}/{}: {}", comp, tp, count)
+                    format!("{}/{}{}: {}", comp, tp, INVISIBLE_JOINER, count)
                 }
             )
             .collect();
@@ -1679,7 +1682,7 @@ impl BimPlugin {
                         )
                         .collect();
                     let ranges_string = range_strings.join(", ");
-                    format!("{}: {}", tp, ranges_string)
+                    format!("{}{}: {}", tp, INVISIBLE_JOINER, ranges_string)
                 })
                 .collect()
         } else {
@@ -1699,7 +1702,7 @@ impl BimPlugin {
             }
 
             type_to_range.iter()
-                .map(|(tp, (low, high))| format!("{}: {}-{}", tp, low, high))
+                .map(|(tp, (low, high))| format!("{}{}: {}-{}", tp, INVISIBLE_JOINER, low, high))
                 .collect()
         };
         let response = lines.join("\n");
@@ -1835,15 +1838,15 @@ impl BimPlugin {
                 if stats.active_vehicles == 0 {
                     write_expect!(
                         &mut response,
-                        "\n{}: {} vehicles, none active, {} ridden ({:.2}%)",
-                        tp, stats.known_vehicles,
+                        "\n{}{}: {} vehicles, none active, {} ridden ({:.2}%)",
+                        tp, INVISIBLE_JOINER, stats.known_vehicles,
                         stats.ridden_vehicles, stats.ridden_known() * 100.0,
                     );
                 } else {
                     write_expect!(
                         &mut response,
-                        "\n{}: {} vehicles, {} active ({:.2}%), {} ridden ({:.2}% of total, {:.2}% of active)",
-                        tp, stats.known_vehicles,
+                        "\n{}{}: {} vehicles, {} active ({:.2}%), {} ridden ({:.2}% of total, {:.2}% of active)",
+                        tp, INVISIBLE_JOINER, stats.known_vehicles,
                         stats.active_vehicles, stats.active_known() * 100.0,
                         stats.ridden_vehicles, stats.ridden_known() * 100.0, stats.ridden_active() * 100.0,
                     );
