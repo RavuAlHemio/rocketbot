@@ -10,18 +10,20 @@
 
 <table class="bim-vehicles">
   <tr class="head1">
-    <th class="company" rowspan="2">company</th>
-    <th class="vehicle-number" rowspan="2">vehicle</th>
-    <th class="type-code" rowspan="2">type code</th>
-    <th class="manufacturer" rowspan="2">manufacturer</th>
+    <th class="spacer" colspan="4"></th>
     <th class="active" colspan="2">active</th>
-    <th class="ride-count" rowspan="2">rides</th>
+    <th class="spacer"></th>
     <th class="first-ride" colspan="3">first ride</th>
     <th class="latest-ride" colspan="3">latest ride</th>
   </tr>
   <tr class="head2">
+    <th class="company">company</th>
+    <th class="vehicle-number">vehicle</th>
+    <th class="type-code">type code</th>
+    <th class="manufacturer">manufacturer</th>
     <th class="active-from">from</th>
     <th class="active-to">to</th>
+    <th class="ride-count">rides</th>
     <th class="first-rider">rider</th>
     <th class="first-timestamp">timestamp</th>
     <th class="first-line">line</th>

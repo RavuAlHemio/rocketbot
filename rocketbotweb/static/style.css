@@ -35,15 +35,26 @@ table.quotes-votes .votes {
 table.nicks-and-aliases .nick,
 table.nicks-and-aliases .alias,
 table.bim-rides th,
-table.bim-rides td {
+table.bim-rides td,
+table.bim-vehicles th,
+table.bim-vehicles td {
   padding: 0.3em 0.6em;
+}
+
+table.bim-types th,
+table.bim-types td {
+  padding: 0.6em;
 }
 
 table.top-quotes tr.quote:first-child td.body,
 table.quotes-votes tr:first-child td,
 table.nicks-and-aliases tr:first-child td,
 table.bim-rides tr:first-child th,
-table.bim-rides tr:first-child td {
+table.bim-rides tr:first-child td,
+table.bim-types tr:first-child th,
+table.bim-types tr:first-child td,
+table.bim-vehicles tr:first-child th,
+table.bim-vehicles tr:first-child td {
   border-top: 2px solid black;
   padding-top: 0.6em;
 }
@@ -52,7 +63,8 @@ table.top-quotes tr.quote td.body,
 table.top-quotes td.score.changed,
 table.quotes-votes td,
 table.nicks-and-aliases td.alias,
-table.nicks-and-aliases td.nick.changed {
+table.nicks-and-aliases td.nick.changed,
+table.bim-types tr td {
   border-top: 1px solid black;
 }
 
@@ -70,7 +82,11 @@ table.nicks-and-aliases tr:last-child td {
 }
 
 table.bim-rides tr:last-child th,
-table.bim-rides tr:last-child td {
+table.bim-rides tr:last-child td,
+table.bim-types tr:last-child th,
+table.bim-types tr:last-child td,
+table.bim-vehicles tr:last-child th,
+table.bim-vehicles tr:last-child td {
   border-bottom: 2px solid black;
   padding-bottom: 0.6em;
 }
