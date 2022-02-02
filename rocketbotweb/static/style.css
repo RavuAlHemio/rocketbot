@@ -182,3 +182,8 @@ table.bim-types td.ridden {
 table.bim-types tr.unknown-type td.vehicle-type {
   font-style: italic;
 }
+
+table.bim-vehicles td.active-from,
+table.bim-vehicles td.active-to {
+  max-width: 10em;
+}

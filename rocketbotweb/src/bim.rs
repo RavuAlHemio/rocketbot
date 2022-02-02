@@ -2,6 +2,7 @@ use std::collections::{BTreeMap, BTreeSet, HashMap, HashSet};
 use std::convert::{Infallible, TryInto};
 use std::fs::File;
 
+use chrono::{Datelike, DateTime, Local, Weekday};
 use hyper::{Body, Method, Request, Response};
 use log::error;
 use serde::{Deserialize, Serialize, Serializer};
@@ -163,6 +164,49 @@ impl Default for VehicleDatabaseExtract {
             company_to_vehicle_to_type: HashMap::new(),
         }
     }
+}
+
+
+#[derive(Clone, Debug, Eq, Hash, PartialEq)]
+struct RideInfo {
+    pub rider: String,
+    pub timestamp: DateTime<Local>,
+    pub line: Option<String>,
+}
+impl Serialize for RideInfo {
+    fn serialize<S: Serializer>(&self, serializer: S) -> Result<S::Ok, S::Error> {
+        let weekday = match self.timestamp.weekday() {
+            Weekday::Mon => "Mo",
+            Weekday::Tue => "Tu",
+            Weekday::Wed => "We",
+            Weekday::Thu => "Th",
+            Weekday::Fri => "Fr",
+            Weekday::Sat => "Sa",
+            Weekday::Sun => "Su",
+        };
+        let timestamp = format!(
+            "{} {}",
+            weekday, self.timestamp.format("%Y-%m-%d %H:%M:%S"),
+        );
+
+        let mut state = serializer.serialize_struct("RideInfo", 3)?;
+        state.serialize_field("rider", &self.rider)?;
+        state.serialize_field("timestamp", &timestamp)?;
+        state.serialize_field("line", &self.line)?;
+        state.end()
+    }
+}
+
+#[derive(Clone, Debug, Eq, Hash, PartialEq, Serialize)]
+struct VehicleProfile {
+    pub type_code: Option<String>,
+    pub manufacturer: Option<String>,
+    pub active_from: Option<String>,
+    pub active_to: Option<String>,
+    pub add_info: BTreeMap<String, String>,
+    pub ride_count: usize,
+    pub first_ride: Option<RideInfo>,
+    pub last_ride: Option<RideInfo>,
 }
 
 
@@ -524,6 +568,180 @@ pub(crate) async fn handle_bim_types(request: &Request<Body>) -> Result<Response
         }
     } else {
         match render_template("bimtypes.html.tera", &ctx, 200, vec![]).await {
+            Some(r) => Ok(r),
+            None => return_500(),
+        }
+    }
+}
+
+
+pub(crate) async fn handle_bim_vehicles(request: &Request<Body>) -> Result<Response<Body>, Infallible> {
+    if request.method() != Method::GET {
+        return return_405().await;
+    }
+
+    let query_pairs = get_query_pairs(request);
+
+    let db_conn = match connect_to_db().await {
+        Some(c) => c,
+        None => return return_500(),
+    };
+    let company_to_bim_database_opts = match obtain_company_to_bim_database().await {
+        Some(ctbdb) => ctbdb,
+        None => return return_500(),
+    };
+    let mut company_to_bim_database: BTreeMap<String, BTreeMap<u32, serde_json::Value>> = BTreeMap::new();
+    for (company, bim_database_opt) in company_to_bim_database_opts.into_iter() {
+        company_to_bim_database.insert(company, bim_database_opt.unwrap_or_else(|| BTreeMap::new()));
+    }
+
+    let mut company_to_vehicle_to_ride_info: BTreeMap<String, BTreeMap<u32, (i64, RideInfo, RideInfo)>> = BTreeMap::new();
+
+    let vehicles_res = db_conn.query(
+        "
+            WITH vehicle_ride_counts(company, vehicle_number, ride_count) AS (
+                SELECT fravc.company, fravc.vehicle_number, COUNT(*)
+                FROM bim.rides_and_vehicles fravc
+                GROUP BY fravc.company, fravc.vehicle_number
+            )
+            SELECT
+                vrc.company, vrc.vehicle_number, CAST(vrc.ride_count AS bigint),
+                frav.rider_username, frav.\"timestamp\", frav.line,
+                lrav.rider_username, lrav.\"timestamp\", lrav.line
+            FROM vehicle_ride_counts vrc
+            INNER JOIN bim.rides_and_vehicles frav
+                ON frav.company = vrc.company
+                AND frav.vehicle_number = vrc.vehicle_number
+                AND NOT EXISTS (
+                    SELECT 1
+                    FROM bim.rides_and_vehicles frav2
+                    WHERE
+                        frav2.company = frav.company
+                        AND frav2.vehicle_number = frav.vehicle_number
+                        AND frav2.\"timestamp\" < frav.\"timestamp\"
+                )
+            INNER JOIN bim.rides_and_vehicles lrav
+                ON lrav.company = vrc.company
+                AND lrav.vehicle_number = vrc.vehicle_number
+                AND NOT EXISTS (
+                    SELECT 1
+                    FROM bim.rides_and_vehicles lrav2
+                    WHERE
+                        lrav2.company = lrav.company
+                        AND lrav2.vehicle_number = lrav.vehicle_number
+                        AND lrav2.\"timestamp\" > lrav.\"timestamp\"
+                )
+        ",
+        &[],
+    ).await;
+    let vehicle_rows = match vehicles_res {
+        Ok(r) => r,
+        Err(e) => {
+            error!("failed to query vehicles: {}", e);
+            return return_500();
+        },
+    };
+    for vehicle_row in vehicle_rows {
+        let company: String = vehicle_row.get(0);
+        let vehicle_number_i64: i64 = vehicle_row.get(1);
+        let vehicle_number_u32: u32 = match vehicle_number_i64.try_into() {
+            Ok(vn) => vn,
+            Err(_) => {
+                error!("failed to convert vehicle number {} to u32", vehicle_number_i64);
+                continue;
+            },
+        };
+        let ride_count: i64 = vehicle_row.get(2);
+        let first_ride = RideInfo {
+            rider: vehicle_row.get(3),
+            timestamp: vehicle_row.get(4),
+            line: vehicle_row.get(5),
+        };
+        let latest_ride = RideInfo {
+            rider: vehicle_row.get(6),
+            timestamp: vehicle_row.get(7),
+            line: vehicle_row.get(8),
+        };
+
+        company_to_vehicle_to_ride_info
+            .entry(company)
+            .or_insert_with(|| BTreeMap::new())
+            .insert(vehicle_number_u32, (ride_count, first_ride, latest_ride));
+    }
+
+    let mut company_to_vehicle_to_profile: BTreeMap<String, BTreeMap<u32, VehicleProfile>> = BTreeMap::new();
+    for (company, bim_database) in &company_to_bim_database {
+        let vehicle_to_profile = company_to_vehicle_to_profile
+            .entry(company.clone())
+            .or_insert_with(|| BTreeMap::new());
+
+        for (&vn, bim_value) in bim_database {
+            let type_code = bim_value["type_code"].as_str().map(|s| s.to_owned());
+            let active_from = bim_value["in_service_since"].as_str().map(|s| s.to_owned());
+            let active_to = bim_value["out_of_service_since"].as_str().map(|s| s.to_owned());
+            let manufacturer = bim_value["manufacturer"].as_str().map(|s| s.to_owned());
+
+            let mut add_info = BTreeMap::new();
+            if let Some(od) = bim_value["other_data"].as_object() {
+                for (k, v) in od {
+                    if let Some(v_str) = v.as_str() {
+                        add_info.insert(k.clone(), v_str.to_owned());
+                    }
+                }
+            }
+
+            let (ride_count, first_ride_opt, latest_ride_opt) = company_to_vehicle_to_ride_info
+                .get(company)
+                .map(|vtri| vtri.get(&vn))
+                .flatten()
+                .map(|(rc, fr, lr)| (*rc as usize, Some(fr.clone()), Some(lr.clone())))
+                .unwrap_or((0, None, None));
+
+            let profile = VehicleProfile {
+                type_code,
+                manufacturer,
+                active_from,
+                active_to,
+                add_info,
+                ride_count,
+                first_ride: first_ride_opt,
+                last_ride: latest_ride_opt,
+            };
+            vehicle_to_profile.insert(vn, profile);
+        }
+
+        // add those that are missing in the bim database
+        if let Some(vtri) = company_to_vehicle_to_ride_info.get(company) {
+            for (&vn, (ride_count, first_ride, last_ride)) in vtri {
+                vehicle_to_profile
+                    .entry(vn)
+                    .or_insert_with(|| VehicleProfile {
+                        type_code: None,
+                        manufacturer: None,
+                        active_from: None,
+                        active_to: None,
+                        add_info: BTreeMap::new(),
+                        ride_count: *ride_count as usize,
+                        first_ride: Some(first_ride.clone()),
+                        last_ride: Some(last_ride.clone()),
+                    });
+
+                // don't do anything if the entry already exists
+            }
+        }
+    }
+
+    let mut ctx = tera::Context::new();
+    ctx.insert("company_to_vehicle_to_profile", &company_to_vehicle_to_profile);
+
+    if query_pairs.get("format").map(|f| f == "json").unwrap_or(false) {
+        let stats_json = ctx.into_json();
+        match render_json(&stats_json, 200, vec![]).await {
+            Some(r) => Ok(r),
+            None => return_500(),
+        }
+    } else {
+        match render_template("bimvehicles.html.tera", &ctx, 200, vec![]).await {
             Some(r) => Ok(r),
             None => return_500(),
         }
