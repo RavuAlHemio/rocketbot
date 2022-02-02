@@ -429,7 +429,6 @@ pub(crate) async fn handle_bim_types(request: &Request<Body>) -> Result<Response
         SELECT DISTINCT r.rider_username, r.company, rv.vehicle_number
         FROM bim.rides r
         INNER JOIN bim.ride_vehicles rv ON rv.ride_id = r.id
-        WHERE rv.fixed_coupling_position = 0
     ", &[]).await;
     let rows = match query_res {
         Ok(r) => r,
