@@ -206,7 +206,7 @@ struct VehicleProfile {
     pub add_info: BTreeMap<String, String>,
     pub ride_count: usize,
     pub first_ride: Option<RideInfo>,
-    pub last_ride: Option<RideInfo>,
+    pub latest_ride: Option<RideInfo>,
 }
 
 
@@ -705,7 +705,7 @@ pub(crate) async fn handle_bim_vehicles(request: &Request<Body>) -> Result<Respo
                 add_info,
                 ride_count,
                 first_ride: first_ride_opt,
-                last_ride: latest_ride_opt,
+                latest_ride: latest_ride_opt,
             };
             vehicle_to_profile.insert(vn, profile);
         }
@@ -723,7 +723,7 @@ pub(crate) async fn handle_bim_vehicles(request: &Request<Body>) -> Result<Respo
                         add_info: BTreeMap::new(),
                         ride_count: *ride_count as usize,
                         first_ride: Some(first_ride.clone()),
-                        last_ride: Some(last_ride.clone()),
+                        latest_ride: Some(last_ride.clone()),
                     });
 
                 // don't do anything if the entry already exists
