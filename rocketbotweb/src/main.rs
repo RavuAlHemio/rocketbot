@@ -23,7 +23,7 @@ use tokio::sync::{RwLock, RwLockReadGuard};
 use tokio_postgres::{self, NoTls};
 use toml;
 
-use crate::bim::handle_bim_rides;
+use crate::bim::{handle_bim_rides, handle_bim_types};
 use crate::config::WebConfig;
 
 
@@ -37,6 +37,15 @@ fn get_query_pairs<T>(request: &Request<T>) -> HashMap<Cow<str>, Cow<str>> {
             .collect()
     } else {
         HashMap::new()
+    }
+}
+
+
+fn percentify(value: &serde_json::Value, _args: &HashMap<String, serde_json::Value>) -> tera::Result<serde_json::Value> {
+    if let Some(f) = value.as_f64() {
+        Ok(serde_json::Value::String(format!("{:.2}%", f * 100.0)))
+    } else {
+        Err(tera::Error::msg("attempted to percentify non-numeric value"))
     }
 }
 
@@ -624,6 +633,7 @@ async fn handle_request(request: Request<Body>) -> Result<Response<Body>, Infall
         "/aliases" => handle_plaintext_aliases_for_nick(&request).await,
         "/thanks" => handle_thanks(&request).await,
         "/bim-rides" => handle_bim_rides(&request).await,
+        "/bim-types" => handle_bim_types(&request).await,
         _ => return_404().await,
     }
 }
@@ -655,8 +665,9 @@ async fn main() {
     CONFIG.set(RwLock::new(config))
         .expect("failed to set initial config");
 
-    let tera = Tera::new(&template_glob)
+    let mut tera = Tera::new(&template_glob)
         .expect("failed to initialize Tera");
+    tera.register_filter("percentify", percentify);
     TERA.set(RwLock::new(tera))
         .expect("failed to set initial Tera");
 

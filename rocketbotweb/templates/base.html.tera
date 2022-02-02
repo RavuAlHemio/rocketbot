@@ -4,7 +4,7 @@
 <meta charset="utf-8" />
 <title>{% block title %}rocketbot{% endblock %}</title>
 <meta name="viewport" content="width=device-width, initial-scale=1" />
-<link rel="stylesheet" type="text/css" href="static/style.css?20211030-01" />
+<link rel="stylesheet" type="text/css" href="static/style.css?20220202-01" />
 {% block scripts %}
 {% endblock %}
 </head>

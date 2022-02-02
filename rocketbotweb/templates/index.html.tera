@@ -12,6 +12,7 @@
   <li><a href="thanks">Thanks</a></li>
   <li><a href="nicks-aliases">Nicks and Aliases</a> (<a href="aliases">API</a>)</li>
   <li><a href="bim-rides">Public Transport Rides</a></li>
+  <li><a href="bim-types">Public Transport Vehicle Types</a></li>
 </ul>
 
 <p><a href="https://github.com/RavuAlHemio/rocketbot">rocketbot on Github</a></p>

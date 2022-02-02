@@ -1,0 +1,55 @@
+{% extends "base.html.tera" %}
+
+{% block title %}Public Transport Vehicle Types{% endblock %}
+
+{% block content %}
+<main>
+
+<h1>Public Transport Vehicle Types</h1>
+
+<table class="bim-types">
+  <tr class="head">
+    <th class="company">company</th>
+    <th class="vehicle-type">vehicle type</th>
+    <th class="total count">vehicles</th>
+    <th class="total active">active</th>
+    <th class="total ridden">ridden</th>
+    {% for rider in all_riders %}
+      <th class="single-rider ridden">{{ rider|escape }}</th>
+    {% endfor %}
+  </tr>
+  {% for company, stats in company_to_stats %}
+    {% for type, stats in stats.type_to_stats %}
+      <tr class="known-type">
+        <td class="company">{{ company|escape }}</td>
+        <td class="vehicle-type">{{ type|escape }}</td>
+        <td class="total count">{{ stats.total_count }}</td>
+        <td class="total active">
+          <span class="absolute">{{ stats.active_count }}</span>
+          <br/><span class="percent-of-total">{{ stats.active_per_total|percentify }}</span>
+        </td>
+        <td class="total ridden">
+          <span class="absolute">{{ stats.ridden_count }}</span>
+          <br/><span class="percent-of-total">{{ stats.ridden_per_total|percentify }}</span>&#931;
+          {% if stats.ridden_per_active is number %}
+            <br/><span class="percent-of-active">{{ stats.ridden_per_total|percentify }}</span>A
+          {% endif %}
+        </td>
+        {% for rider in all_riders %}
+          {# rider name may contain dots, so use |get() instead of [] #}
+          <td class="single-rider ridden" data-rider-name="{{ rider|escape }}">
+            <span class="absolute">{{ stats.rider_ridden_counts|get(key=rider) }}</span>
+            <br/><span class="percent-of-total">{{ stats.rider_ridden_per_total|get(key=rider)|percentify }}&#931;
+            {% set rrpa = stats.rider_ridden_per_active|get(key=rider) %}
+            {% if rrpa is number %}
+              <br/><span class="percent-of-active">{{ rrpa|percentify }}</span>A
+            {% endif %}
+          </td>
+        {% endfor %}
+      </tr>
+    {% endfor %}
+  {% endfor %}
+</table>
+
+</main>
+{% endblock %}

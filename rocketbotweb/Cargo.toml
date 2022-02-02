@@ -6,7 +6,7 @@ edition = "2018"
 [dependencies]
 env_logger = { version = "0.9" }
 form_urlencoded = { version = "1.0" }
-hyper = { version = "0.14", features = ["client", "http1", "http2", "server"] }
+hyper = { version = "0.14", features = ["client", "http1", "http2", "server", "tcp"] }
 log = { version = "0.4" }
 once_cell = { version = "1.9" }
 serde = { version = "1.0", features = ["derive"] }
