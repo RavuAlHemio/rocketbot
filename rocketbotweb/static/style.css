@@ -178,3 +178,7 @@ table.bim-types td.active,
 table.bim-types td.ridden {
   text-align: right;
 }
+
+table.bim-types tr.unknown-type td.vehicle-type {
+  font-style: italic;
+}

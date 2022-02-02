@@ -54,6 +54,22 @@
         {% endfor %}
       </tr>
     {% endfor %}
+    {% if stats.unknown_type_count > 0 %}
+      <tr class="unknown-type">
+        <td class="company">{{ company|escape }}</td>
+        <td class="vehicle-type">unknown</td>
+        <td class="total count"></td>
+        <td class="total active"></td>
+        <td class="total ridden">{{ stats.unknown_type_count }}</td>
+        {% for rider in all_riders %}
+          <td class="single-rider ridden" data-rider-name="{{ rider|escape }}">
+            {% if stats.rider_to_unknown_type_count|get(key=rider) > 0 %}
+              {{ stats.rider_to_unknown_type_count|get(key=rider) }}
+            {% endif %}
+          </td>
+        {% endfor %}
+      </tr>
+    {% endif %}
   {% endfor %}
 </table>
 
