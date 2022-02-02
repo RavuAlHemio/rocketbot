@@ -26,23 +26,29 @@
         <td class="total count">{{ stats.total_count }}</td>
         <td class="total active">
           <span class="absolute">{{ stats.active_count }}</span>
-          <br/><span class="percent-of-total">{{ stats.active_per_total|percentify }}</span>
+          {% if stats.active_count > 0 %}
+            <br/><span class="percent-of-total">{{ stats.active_per_total|percentify }}</span>
+          {% endif %}
         </td>
         <td class="total ridden">
           <span class="absolute">{{ stats.ridden_count }}</span>
-          <br/><span class="percent-of-total">{{ stats.ridden_per_total|percentify }}</span>&#931;
-          {% if stats.ridden_per_active is number %}
-            <br/><span class="percent-of-active">{{ stats.ridden_per_total|percentify }}</span>A
+          {% if stats.ridden_count > 0 %}
+            <br/><span class="percent-of-total">{{ stats.ridden_per_total|percentify }}</span>&#931;
+            {% if stats.ridden_per_active is number %}
+              <br/><span class="percent-of-active">{{ stats.ridden_per_total|percentify }}</span>A
+            {% endif %}
           {% endif %}
         </td>
         {% for rider in all_riders %}
           {# rider name may contain dots, so use |get() instead of [] #}
           <td class="single-rider ridden" data-rider-name="{{ rider|escape }}">
-            <span class="absolute">{{ stats.rider_ridden_counts|get(key=rider) }}</span>
-            <br/><span class="percent-of-total">{{ stats.rider_ridden_per_total|get(key=rider)|percentify }}&#931;
-            {% set rrpa = stats.rider_ridden_per_active|get(key=rider) %}
-            {% if rrpa is number %}
-              <br/><span class="percent-of-active">{{ rrpa|percentify }}</span>A
+            {% if stats.rider_ridden_counts|get(key=rider) > 0 %}
+              <span class="absolute">{{ stats.rider_ridden_counts|get(key=rider) }}</span>
+              <br/><span class="percent-of-total">{{ stats.rider_ridden_per_total|get(key=rider)|percentify }}&#931;
+              {% set rrpa = stats.rider_ridden_per_active|get(key=rider) %}
+              {% if rrpa is number %}
+                <br/><span class="percent-of-active">{{ rrpa|percentify }}</span>A
+              {% endif %}
             {% endif %}
           </td>
         {% endfor %}
