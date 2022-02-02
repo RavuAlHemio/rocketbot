@@ -35,7 +35,7 @@
           {% if stats.ridden_count > 0 %}
             <br/><span class="percent-of-total">{{ stats.ridden_per_total|percentify }}</span>&#931;
             {% if stats.ridden_per_active is number %}
-              <br/><span class="percent-of-active">{{ stats.ridden_per_total|percentify }}</span>A
+              <br/><span class="percent-of-active">{{ stats.ridden_per_active|percentify }}</span>A
             {% endif %}
           {% endif %}
         </td>
