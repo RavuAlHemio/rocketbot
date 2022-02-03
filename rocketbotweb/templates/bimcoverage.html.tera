@@ -3,6 +3,8 @@
 {% block title %}Public Transport Coverage{% endblock %}
 
 {% block content %}
+<main class="bim-coverage">
+
 <h1>Public Transport Coverage</h1>
 
 {% for company, type_to_block_to_vehicles in company_to_type_to_block_to_vehicles %}
@@ -32,5 +34,7 @@
 {% endfor%}
 {% endfor %}
 {% endfor %}
+
+</main>
 
 {% endblock %}
