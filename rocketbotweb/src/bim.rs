@@ -798,3 +798,154 @@ pub(crate) async fn handle_bim_vehicles(request: &Request<Body>) -> Result<Respo
         }
     }
 }
+
+pub(crate) async fn handle_bim_coverage(request: &Request<Body>) -> Result<Response<Body>, Infallible> {
+    if request.method() != Method::GET {
+        return return_405().await;
+    }
+
+    let query_pairs = get_query_pairs(request);
+
+    let db_conn = match connect_to_db().await {
+        Some(c) => c,
+        None => return return_500(),
+    };
+
+    let (template, ctx) = if let Some(rider_name) = query_pairs.get("rider") {
+        // get ridden vehicles for rider
+        let vehicles_res = if rider_name == "!ALL" {
+            db_conn.query(
+                "SELECT DISTINCT company, vehicle_number FROM bim.rides_and_vehicles",
+                &[],
+            ).await
+        } else {
+            db_conn.query(
+                "SELECT DISTINCT company, vehicle_number FROM bim.rides_and_vehicles WHERE rider_username = $1",
+                &[&rider_name],
+            ).await
+        };
+        let vehicle_rows = match vehicles_res {
+            Ok(r) => r,
+            Err(e) => {
+                error!("failed to query vehicles: {}", e);
+                return return_500();
+            },
+        };
+        let mut company_to_ridden_vehicles: HashMap<String, HashSet<u32>> = HashMap::new();
+        for vehicle_row in vehicle_rows {
+            let company: String = vehicle_row.get(0);
+            let vehicle_number_i64: i64 = vehicle_row.get(1);
+            let vehicle_number_u32: u32 = match vehicle_number_i64.try_into() {    
+                Ok(vn) => vn,
+                Err(_) => {
+                    error!("failed to convert vehicle number {} to u32", vehicle_number_i64);
+                    continue;
+                },
+            };
+            company_to_ridden_vehicles
+                .entry(company)
+                .or_insert_with(|| HashSet::new())
+                .insert(vehicle_number_u32);
+        }
+
+        // get vehicle database
+        let company_to_bim_database_opts = match obtain_company_to_bim_database().await {
+            Some(ctbdb) => ctbdb,
+            None => return return_500(),
+        };
+        let company_to_bim_database: BTreeMap<String, BTreeMap<u32, serde_json::Value>> = company_to_bim_database_opts.iter()
+            .filter_map(|(comp, db_opt)| {
+                if let Some(db) = db_opt.as_ref() {
+                    Some((comp.clone(), db.clone()))
+                } else {
+                    None
+                }
+            })
+            .collect();
+
+        // run through vehicles
+        let mut company_to_type_to_block_to_vehicles: BTreeMap<String, BTreeMap<String, BTreeMap<String, Vec<serde_json::Value>>>> = BTreeMap::new();
+        let no_ridden_vehicles = HashSet::new();
+        for (company, number_to_vehicle) in &company_to_bim_database {
+            let ridden_vehicles = company_to_ridden_vehicles.get(company)
+                .unwrap_or(&no_ridden_vehicles);
+
+            let mut type_to_block_to_vehicles = BTreeMap::new();
+            for (&number, vehicle) in number_to_vehicle {
+                let full_number_string = number.to_string();
+                let (block_str, number_str) = if full_number_string.len() >= 6 {
+                    // assume first four digits are block
+                    full_number_string.split_at(4)
+                } else {
+                    ("", full_number_string.as_str())
+                };
+
+                let type_code = match vehicle["type_code"].as_str() {
+                    Some(tc) => tc.to_owned(),
+                    None => continue,
+                };
+
+                // is the vehicle active?
+                let from_known = vehicle["in_service_since"].is_string();
+                let to_known = vehicle["out_of_service_since"].is_string();
+                let is_active = from_known && !to_known;
+                let was_ridden = ridden_vehicles.contains(&number);
+
+                let vehicle_data = serde_json::json!({
+                    "block_str": block_str,
+                    "number_str": number_str,
+                    "type_code": type_code,
+                    "full_number_str": full_number_string,
+                    "is_active": is_active,
+                    "was_ridden": was_ridden,
+                });
+                type_to_block_to_vehicles
+                    .entry(type_code)
+                    .or_insert_with(|| BTreeMap::new())
+                    .entry(block_str.to_owned())
+                    .or_insert_with(|| Vec::new())
+                    .push(vehicle_data);
+            }
+
+            company_to_type_to_block_to_vehicles.insert(company.clone(), type_to_block_to_vehicles);
+        }
+
+        let mut ctx = tera::Context::new();
+        ctx.insert("company_to_type_to_block_to_vehicles", &company_to_type_to_block_to_vehicles);
+
+        ("bimcoverage.html.tera", ctx)
+    } else {
+        // list riders
+        let riders_res = db_conn.query("SELECT DISTINCT rider_username FROM bim.rides", &[]).await;
+        let rider_rows = match riders_res {
+            Ok(r) => r,
+            Err(e) => {
+                error!("failed to query riders: {}", e);
+                return return_500();
+            },
+        };
+        let mut riders: BTreeSet<String> = BTreeSet::new();
+        for rider_row in rider_rows {
+            let rider: String = rider_row.get(0);
+            riders.insert(rider);
+        }
+
+        let mut ctx = tera::Context::new();
+        ctx.insert("riders", &riders);
+
+        ("bimcoverage-pickrider.html.tera", ctx)
+    };
+
+    if query_pairs.get("format").map(|f| f == "json").unwrap_or(false) {
+        let json = ctx.into_json();
+        match render_json(&json, 200, vec![]).await {
+            Some(r) => Ok(r),
+            None => return_500(),
+        }
+    } else {
+        match render_template(template, &ctx, 200, vec![]).await {
+            Some(r) => Ok(r),
+            None => return_500(),
+        }
+    }
+}

@@ -1,0 +1,17 @@
+{% extends "base.html.tera" %}
+
+{% block title %}Public Transport Coverage{% endblock %}
+
+{% block content %}
+<h1>Public Transport Coverage</h1>
+
+<p>Pick a rider!</p>
+
+<ul>
+  <li><a href="?rider=%21ALL">all</a></li>
+  {% for rider in riders %}
+    <li><a href="?rider={{ rider|urlencode|escape }}">{{ rider|escape }}</a></li>
+  {% endfor %}
+</ul>
+
+{% endblock %}
