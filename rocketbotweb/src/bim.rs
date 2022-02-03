@@ -205,6 +205,7 @@ struct VehicleProfile {
     pub active_to: Option<String>,
     pub add_info: BTreeMap<String, String>,
     pub ride_count: usize,
+    pub rider_to_ride_count: BTreeMap<String, usize>,
     pub first_ride: Option<RideInfo>,
     pub latest_ride: Option<RideInfo>,
 }
@@ -581,6 +582,7 @@ pub(crate) async fn handle_bim_vehicles(request: &Request<Body>) -> Result<Respo
     }
 
     let query_pairs = get_query_pairs(request);
+    let per_rider = query_pairs.get("per-rider").map(|pr| pr == "1").unwrap_or(false);
 
     let db_conn = match connect_to_db().await {
         Some(c) => c,
@@ -595,7 +597,7 @@ pub(crate) async fn handle_bim_vehicles(request: &Request<Body>) -> Result<Respo
         company_to_bim_database.insert(company, bim_database_opt.unwrap_or_else(|| BTreeMap::new()));
     }
 
-    let mut company_to_vehicle_to_ride_info: BTreeMap<String, BTreeMap<u32, (i64, RideInfo, RideInfo)>> = BTreeMap::new();
+    let mut company_to_vehicle_to_ride_info: BTreeMap<String, BTreeMap<u32, (i64, BTreeMap<String, i64>, RideInfo, RideInfo)>> = BTreeMap::new();
 
     let vehicles_res = db_conn.query(
         "
@@ -666,7 +668,44 @@ pub(crate) async fn handle_bim_vehicles(request: &Request<Body>) -> Result<Respo
         company_to_vehicle_to_ride_info
             .entry(company)
             .or_insert_with(|| BTreeMap::new())
-            .insert(vehicle_number_u32, (ride_count, first_ride, latest_ride));
+            .insert(vehicle_number_u32, (ride_count, BTreeMap::new(), first_ride, latest_ride));
+    }
+
+    let rider_vehicles_res = db_conn.query(
+        "
+            SELECT rav.company, rav.vehicle_number, rav.rider_username, CAST(COUNT(*) AS bigint)
+            FROM bim.rides_and_vehicles rav
+            GROUP BY rav.company, rav.vehicle_number, rav.rider_username
+        ",
+        &[],
+    ).await;
+    let rider_vehicle_rows = match rider_vehicles_res {
+        Ok(r) => r,
+        Err(e) => {
+            error!("failed to query vehicles and riders: {}", e);
+            return return_500();
+        },
+    };
+    let mut all_riders: BTreeSet<String> = BTreeSet::new();
+    for rider_vehicle_row in rider_vehicle_rows {
+        let company: String = rider_vehicle_row.get(0);
+        let vehicle_number_i64: i64 = rider_vehicle_row.get(1);
+        let vehicle_number_u32: u32 = match vehicle_number_i64.try_into() {
+            Ok(vn) => vn,
+            Err(_) => {
+                error!("failed to convert vehicle number {} to u32", vehicle_number_i64);
+                continue;
+            },
+        };
+        let rider_username: String = rider_vehicle_row.get(2);
+        let ride_count: i64 = rider_vehicle_row.get(3);
+
+        all_riders.insert(rider_username.clone());
+        company_to_vehicle_to_ride_info
+            .get_mut(&company).expect("company not found")
+            .get_mut(&vehicle_number_u32).expect("vehicle not found")
+            .1
+            .insert(rider_username, ride_count);
     }
 
     let mut company_to_vehicle_to_profile: BTreeMap<String, BTreeMap<u32, VehicleProfile>> = BTreeMap::new();
@@ -690,12 +729,17 @@ pub(crate) async fn handle_bim_vehicles(request: &Request<Body>) -> Result<Respo
                 }
             }
 
-            let (ride_count, first_ride_opt, latest_ride_opt) = company_to_vehicle_to_ride_info
+            let (ride_count, rider_to_ride_count, first_ride_opt, latest_ride_opt) = company_to_vehicle_to_ride_info
                 .get(company)
                 .map(|vtri| vtri.get(&vn))
                 .flatten()
-                .map(|(rc, fr, lr)| (*rc as usize, Some(fr.clone()), Some(lr.clone())))
-                .unwrap_or((0, None, None));
+                .map(|(rc, r2rc, fr, lr)| {
+                    let r2rc_usize: BTreeMap<String, usize> = r2rc.iter()
+                        .map(|(r, rrc)| (r.clone(), *rrc as usize))
+                        .collect();
+                    (*rc as usize, r2rc_usize, Some(fr.clone()), Some(lr.clone()))
+                })
+                .unwrap_or((0, BTreeMap::new(), None, None));
 
             let profile = VehicleProfile {
                 type_code,
@@ -704,6 +748,7 @@ pub(crate) async fn handle_bim_vehicles(request: &Request<Body>) -> Result<Respo
                 active_to,
                 add_info,
                 ride_count,
+                rider_to_ride_count,
                 first_ride: first_ride_opt,
                 latest_ride: latest_ride_opt,
             };
@@ -712,7 +757,10 @@ pub(crate) async fn handle_bim_vehicles(request: &Request<Body>) -> Result<Respo
 
         // add those that are missing in the bim database
         if let Some(vtri) = company_to_vehicle_to_ride_info.get(company) {
-            for (&vn, (ride_count, first_ride, last_ride)) in vtri {
+            for (&vn, (ride_count, rider_to_ride_count, first_ride, last_ride)) in vtri {
+                let rtrc_usize = rider_to_ride_count.iter()
+                    .map(|(r, rrc)| (r.clone(), *rrc as usize))
+                    .collect();
                 vehicle_to_profile
                     .entry(vn)
                     .or_insert_with(|| VehicleProfile {
@@ -722,6 +770,7 @@ pub(crate) async fn handle_bim_vehicles(request: &Request<Body>) -> Result<Respo
                         active_to: None,
                         add_info: BTreeMap::new(),
                         ride_count: *ride_count as usize,
+                        rider_to_ride_count: rtrc_usize,
                         first_ride: Some(first_ride.clone()),
                         latest_ride: Some(last_ride.clone()),
                     });
@@ -732,7 +781,9 @@ pub(crate) async fn handle_bim_vehicles(request: &Request<Body>) -> Result<Respo
     }
 
     let mut ctx = tera::Context::new();
+    ctx.insert("all_riders", &all_riders);
     ctx.insert("company_to_vehicle_to_profile", &company_to_vehicle_to_profile);
+    ctx.insert("per_rider", &per_rider);
 
     if query_pairs.get("format").map(|f| f == "json").unwrap_or(false) {
         let stats_json = ctx.into_json();

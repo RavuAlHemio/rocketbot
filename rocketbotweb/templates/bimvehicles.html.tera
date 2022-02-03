@@ -13,8 +13,12 @@
     <th class="spacer" colspan="4"></th>
     <th class="active" colspan="2">active</th>
     <th class="spacer"></th>
-    <th class="first-ride" colspan="3">first ride</th>
-    <th class="latest-ride" colspan="3">latest ride</th>
+    {% if per_rider %}
+      <th class="spacer" colspan="{{ all_riders|length }}">rider</th>
+    {% else %}
+      <th class="first-ride" colspan="3">first ride</th>
+      <th class="latest-ride" colspan="3">latest ride</th>
+    {% endif %}
   </tr>
   <tr class="head2">
     <th class="company">company</th>
@@ -24,12 +28,18 @@
     <th class="active-from">from</th>
     <th class="active-to">to</th>
     <th class="ride-count">rides</th>
-    <th class="first-rider">rider</th>
-    <th class="first-timestamp">timestamp</th>
-    <th class="first-line">line</th>
-    <th class="latest-rider">rider</th>
-    <th class="latest-timestamp">timestamp</th>
-    <th class="latest-line">line</th>
+    {% if per_rider %}
+      {% for rider in all_riders %}
+        <th class="rider ride-count">{{ rider|escape }}</th>
+      {% endfor %}
+    {% else %}
+      <th class="first-rider">rider</th>
+      <th class="first-timestamp">timestamp</th>
+      <th class="first-line">line</th>
+      <th class="latest-rider">rider</th>
+      <th class="latest-timestamp">timestamp</th>
+      <th class="latest-line">line</th>
+    {% endif %}
   </tr>
   {% for company, vehicle_to_profile in company_to_vehicle_to_profile %}
     {% for vehicle, profile in vehicle_to_profile %}
@@ -41,8 +51,14 @@
         <td class="active-from">{{ profile.active_from|maybe_escape }}</td>
         <td class="active-to">{{ profile.active_to|maybe_escape }}</td>
         <td class="ride-count">{{ profile.ride_count }}</td>
-        {{ macros::output_ride(ride=profile.first_ride, css_class="first") }}
-        {{ macros::output_ride(ride=profile.latest_ride, css_class="last") }}
+        {% if per_rider %}
+          {% for rider in all_riders %}
+            <td class="rider ride-count" data-rider-name="{{ rider|escape }}">{{ profile.rider_to_ride_count|get(key=rider, default="") }}</td>
+          {% endfor %}
+        {% else %}
+          {{ macros::output_ride(ride=profile.first_ride, css_class="first") }}
+          {{ macros::output_ride(ride=profile.latest_ride, css_class="last") }}
+        {% endif %}
       </tr>
     {% endfor %}
   {% endfor %}
