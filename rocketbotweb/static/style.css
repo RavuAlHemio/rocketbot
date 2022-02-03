@@ -203,3 +203,26 @@ table.bim-vehicles td.active-from,
 table.bim-vehicles td.active-to {
   max-width: 10em;
 }
+
+main.bim-coverage .vehicles-box {
+  margin-bottom: 1em;
+}
+main.bim-coverage .vehicles-box .floaty {
+  display: inline-block;
+  padding: 1px;
+  min-width: 3em;
+  text-align: center;
+}
+main.bim-coverage .vehicles-box .block-name::after {
+  content: "\002026";
+}
+main.bim-coverage .vehicles-box .vehicle.ridden {
+  background-color: #0f0;
+}
+main.bim-coverage .vehicles-box .vehicle.unridden.active {
+  background-color: #ccc;
+}
+main.bim-coverage .vehicles-box .vehicle.unridden.inactive {
+  background-color: #000;
+  color: #fff;
+}
