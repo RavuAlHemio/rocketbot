@@ -1,5 +1,6 @@
 mod bim;
 mod config;
+mod templating;
 
 
 use std::borrow::Cow;
@@ -25,6 +26,7 @@ use toml;
 
 use crate::bim::{handle_bim_coverage, handle_bim_rides, handle_bim_types, handle_bim_vehicles};
 use crate::config::WebConfig;
+use crate::templating::augment_tera;
 
 
 pub(crate) static CONFIG: OnceCell<RwLock<WebConfig>> = OnceCell::new();
@@ -37,25 +39,6 @@ fn get_query_pairs<T>(request: &Request<T>) -> HashMap<Cow<str>, Cow<str>> {
             .collect()
     } else {
         HashMap::new()
-    }
-}
-
-
-fn percentify(value: &serde_json::Value, _args: &HashMap<String, serde_json::Value>) -> tera::Result<serde_json::Value> {
-    if let Some(f) = value.as_f64() {
-        Ok(serde_json::Value::String(format!("{:.2}%", f * 100.0)))
-    } else {
-        Err(tera::Error::msg("attempted to percentify non-numeric value"))
-    }
-}
-
-fn maybe_escape(value: &serde_json::Value, _args: &HashMap<String, serde_json::Value>) -> tera::Result<serde_json::Value> {
-    if let Some(s) = value.as_str() {
-        Ok(serde_json::Value::String(tera::escape_html(s)))
-    } else if value.is_null() {
-        Ok(serde_json::Value::String(String::new()))
-    } else {
-        Err(tera::Error::msg("attempted to escape non-string non-null value"))
     }
 }
 
@@ -679,8 +662,7 @@ async fn main() {
 
     let mut tera = Tera::new(&template_glob)
         .expect("failed to initialize Tera");
-    tera.register_filter("percentify", percentify);
-    tera.register_filter("maybe_escape", maybe_escape);
+    augment_tera(&mut tera);
     TERA.set(RwLock::new(tera))
         .expect("failed to set initial Tera");
 

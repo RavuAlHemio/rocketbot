@@ -815,12 +815,21 @@ pub(crate) async fn handle_bim_coverage(request: &Request<Body>) -> Result<Respo
         // get ridden vehicles for rider
         let vehicles_res = if rider_name == "!ALL" {
             db_conn.query(
-                "SELECT DISTINCT company, vehicle_number FROM bim.rides_and_vehicles",
+                "
+                    SELECT company, vehicle_number, CAST(COUNT(*) AS bigint)
+                    FROM bim.rides_and_vehicles
+                    GROUP BY company, vehicle_number
+                ",
                 &[],
             ).await
         } else {
             db_conn.query(
-                "SELECT DISTINCT company, vehicle_number FROM bim.rides_and_vehicles WHERE rider_username = $1",
+                "
+                    SELECT company, vehicle_number, CAST(COUNT(*) AS bigint)
+                    FROM bim.rides_and_vehicles
+                    WHERE rider_username = $1
+                    GROUP BY company, vehicle_number
+                ",
                 &[&rider_name],
             ).await
         };
@@ -831,7 +840,8 @@ pub(crate) async fn handle_bim_coverage(request: &Request<Body>) -> Result<Respo
                 return return_500();
             },
         };
-        let mut company_to_ridden_vehicles: HashMap<String, HashSet<u32>> = HashMap::new();
+        let mut company_to_vehicles_ridden: HashMap<String, HashMap<u32, i64>> = HashMap::new();
+        let mut max_ride_count: i64 = 0;
         for vehicle_row in vehicle_rows {
             let company: String = vehicle_row.get(0);
             let vehicle_number_i64: i64 = vehicle_row.get(1);
@@ -842,10 +852,14 @@ pub(crate) async fn handle_bim_coverage(request: &Request<Body>) -> Result<Respo
                     continue;
                 },
             };
-            company_to_ridden_vehicles
+            let ride_count: i64 = vehicle_row.get(2);
+            if max_ride_count < ride_count {
+                max_ride_count = ride_count;
+            }
+            company_to_vehicles_ridden
                 .entry(company)
-                .or_insert_with(|| HashSet::new())
-                .insert(vehicle_number_u32);
+                .or_insert_with(|| HashMap::new())
+                .insert(vehicle_number_u32, ride_count);
         }
 
         // get vehicle database
@@ -865,9 +879,9 @@ pub(crate) async fn handle_bim_coverage(request: &Request<Body>) -> Result<Respo
 
         // run through vehicles
         let mut company_to_type_to_block_to_vehicles: BTreeMap<String, BTreeMap<String, BTreeMap<String, Vec<serde_json::Value>>>> = BTreeMap::new();
-        let no_ridden_vehicles = HashSet::new();
+        let no_ridden_vehicles = HashMap::new();
         for (company, number_to_vehicle) in &company_to_bim_database {
-            let ridden_vehicles = company_to_ridden_vehicles.get(company)
+            let ridden_vehicles = company_to_vehicles_ridden.get(company)
                 .unwrap_or(&no_ridden_vehicles);
 
             let mut type_to_block_to_vehicles = BTreeMap::new();
@@ -889,7 +903,7 @@ pub(crate) async fn handle_bim_coverage(request: &Request<Body>) -> Result<Respo
                 let from_known = vehicle["in_service_since"].is_string();
                 let to_known = vehicle["out_of_service_since"].is_string();
                 let is_active = from_known && !to_known;
-                let was_ridden = ridden_vehicles.contains(&number);
+                let ride_count = ridden_vehicles.get(&number).map(|c| *c).unwrap_or(0);
 
                 let vehicle_data = serde_json::json!({
                     "block_str": block_str,
@@ -897,7 +911,7 @@ pub(crate) async fn handle_bim_coverage(request: &Request<Body>) -> Result<Respo
                     "type_code": type_code,
                     "full_number_str": full_number_string,
                     "is_active": is_active,
-                    "was_ridden": was_ridden,
+                    "ride_count": ride_count,
                 });
                 type_to_block_to_vehicles
                     .entry(type_code)
@@ -912,6 +926,7 @@ pub(crate) async fn handle_bim_coverage(request: &Request<Body>) -> Result<Respo
 
         let mut ctx = tera::Context::new();
         ctx.insert("company_to_type_to_block_to_vehicles", &company_to_type_to_block_to_vehicles);
+        ctx.insert("max_ride_count", &max_ride_count);
 
         ("bimcoverage.html.tera", ctx)
     } else {
