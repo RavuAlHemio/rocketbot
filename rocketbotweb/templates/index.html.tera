@@ -11,7 +11,13 @@
   <li><a href="topquotes">Top Quotes</a></li>
   <li><a href="thanks">Thanks</a></li>
   <li><a href="nicks-aliases">Nicks and Aliases</a> (<a href="aliases">API</a>)</li>
-  <li>Public Transport <a href="bim-rides">Rides</a>, <a href="bim-types">Vehicle Types</a>, <a href="bim-vehicles">Vehicles</a>, <a href="bim-coverage">Coverage</a></li>
+  <li>
+    Public Transport
+    <a href="bim-rides">Rides</a>,
+    <a href="bim-types">Vehicle Types</a>,
+    <a href="bim-vehicles">Vehicles</a> (<a href="bim-vehicles?per-rider=1">per rider</a>),
+    <a href="bim-coverage">Coverage</a>
+  </li>
 </ul>
 
 <p><a href="https://github.com/RavuAlHemio/rocketbot">rocketbot on Github</a></p>
