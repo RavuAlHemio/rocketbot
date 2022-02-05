@@ -26,6 +26,7 @@ pub struct SedPlugin {
     require_all_transformations_successful: bool,
 
     channel_name_to_last_messages: Mutex<HashMap<String, Vec<ChannelMessage>>>,
+    channel_name_to_my_outgoing_messages: Mutex<HashMap<String, Vec<String>>>,
 }
 impl SedPlugin {
     async fn handle_replacement_command(&self, interface: Arc<dyn RocketBotInterface>, channel_message: ChannelMessage) -> bool {
@@ -90,6 +91,15 @@ impl SedPlugin {
                     replaced = self.result_too_long_message.clone();
                 }
 
+                {
+                    let mut outgoing_guard = self.channel_name_to_my_outgoing_messages
+                        .lock().await;
+                    outgoing_guard
+                        .entry(channel_message.channel.name.clone())
+                        .or_insert_with(|| Vec::new())
+                        .push(replaced.clone());
+                }
+
                 send_channel_message!(
                     interface,
                     &channel_message.channel.name,
@@ -138,6 +148,10 @@ impl RocketBotPlugin for SedPlugin {
             "SedPlugin::channel_name_to_last_message",
             HashMap::new(),
         );
+        let channel_name_to_my_outgoing_messages = Mutex::new(
+            "SedPlugin::channel_name_to_my_outgoing_messages",
+            HashMap::new(),
+        );
 
         SedPlugin {
             interface,
@@ -148,11 +162,43 @@ impl RocketBotPlugin for SedPlugin {
             require_all_transformations_successful,
 
             channel_name_to_last_messages,
+            channel_name_to_my_outgoing_messages,
         }
     }
 
     async fn plugin_name(&self) -> String {
         "sed".to_owned()
+    }
+
+    async fn channel_message_delivered(&self, channel_message: &ChannelMessage) {
+        let raw_msg = match &channel_message.message.raw {
+            Some(msg) => msg,
+            None => return,
+        };
+
+        // a message sent by the bot
+        // is it one sent by this plugin (as a response to a replacement command)?
+        {
+            let mut outgoing_guard = self.channel_name_to_my_outgoing_messages
+                .lock().await;
+            let outgoing_messages = outgoing_guard
+                .entry(channel_message.channel.name.clone())
+                .or_insert_with(|| Vec::new());
+            let msg_pos_opt = outgoing_messages
+                .iter()
+                .position(|msg| msg == raw_msg);
+            if let Some(msg_pos) = msg_pos_opt {
+                // yes, it is
+
+                // it is now accounted for
+                outgoing_messages.remove(msg_pos);
+
+                // do not remember it as a sed-able message
+                return;
+            }
+        }
+
+        self.remember_message(&channel_message).await;
     }
 
     async fn channel_message(&self, channel_message: &ChannelMessage) {
@@ -162,13 +208,13 @@ impl RocketBotPlugin for SedPlugin {
         };
 
         if self.handle_replacement_command(Arc::clone(&interface), channel_message.clone()).await {
+            // it looked very much like a replacement command
+            // do not remember it for further sed-ing
             return;
         }
 
         if channel_message.message.raw.is_some() {
-            if !interface.is_my_user_id(&channel_message.message.sender.id).await {
-                self.remember_message(&channel_message).await;
-            }
+            self.remember_message(&channel_message).await;
         }
     }
 
