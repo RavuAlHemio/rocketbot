@@ -73,5 +73,7 @@
   {% endfor %}
 </table>
 
+<p>%&#931; = percent of total, %A = percent of active</p>
+
 </main>
 {% endblock %}
