@@ -203,6 +203,9 @@ table.bim-vehicles td.active-from,
 table.bim-vehicles td.active-to {
   max-width: 10em;
 }
+table.bim-vehicles td.ride-count {
+  text-align: right;
+}
 
 main.bim-coverage .vehicles-box {
   margin-bottom: 1em;
