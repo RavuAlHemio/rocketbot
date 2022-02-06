@@ -2478,6 +2478,18 @@ async fn obtain_users_in_room(state: &ConnectionState, channel: &Channel) {
             .write().await;
         chan_guard.replace_users_in_channel(&channel.id, users);
     }
+
+    {
+        let plugins = state.shared_state.plugins
+            .read().await;
+        debug!("distributing {:?} user list among plugins", channel);
+        for plugin in plugins.iter() {
+            match channel.channel_type {
+                ChannelType::Channel => plugin.channel_user_list_updated(&channel).await,
+                _ => {},
+            };
+        }
+    }
 }
 
 async fn obtain_builtin_emoji(state: &ConnectionState) -> Vec<Emoji> {

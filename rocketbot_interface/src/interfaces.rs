@@ -231,4 +231,7 @@ pub trait RocketBotPlugin: Send + Sync {
 
     /// Called when a user starts or stops typing in a private conversation.
     async fn user_typing_status_in_private_conversation(&self, _conversation: &PrivateConversation, _user: &User, _typing: bool) {}
+
+    /// Called when the list of users in a channel is updated.
+    async fn channel_user_list_updated(&self, _channel: &Channel) {}
 }
