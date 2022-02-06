@@ -42,6 +42,7 @@ members = [
     "rocketbot_plugin_time",
     "rocketbot_plugin_topic_timer",
     "rocketbot_plugin_transliterate",
+    "rocketbot_plugin_user_list_message",
     "rocketbot_plugin_vaccine",
     "rocketbot_plugin_version",
     "rocketbot_plugin_vitals",
