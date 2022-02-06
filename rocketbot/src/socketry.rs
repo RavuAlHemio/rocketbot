@@ -2416,6 +2416,8 @@ async fn obtain_users_in_room(state: &ConnectionState, channel: &Channel) {
     // FIXME: delay a bit because Rocket.Chat loves giving out stale information
     tokio::time::sleep(Duration::from_millis(1000)).await;
 
+    debug!("obtaining users in channel {:?} ({:?})", channel.name, channel.id);
+
     let uri_path = match channel.channel_type {
         ChannelType::Channel => "api/v1/channels.members",
         ChannelType::Group => "api/v1/groups.members",
@@ -2436,6 +2438,7 @@ async fn obtain_users_in_room(state: &ConnectionState, channel: &Channel) {
             Ok(jv) => jv,
             Err(_) => return,
         };
+        debug!("channel {:?} members at offset {}: {}", channel.id, offset, json_value);
 
         let user_count = json_value["members"].members_or_empty().len();
         if user_count == 0 {
