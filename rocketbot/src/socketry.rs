@@ -1715,8 +1715,8 @@ async fn handle_received(body: &serde_json::Value, mut state: &mut ConnectionSta
                 (channel_opt, convo_opt)
             };
             if let Some(channel) = channel_opt {
-                if message_json["t"] == "au" || message_json["t"] == "ru" {
-                    // add user/remove user
+                if message_json["t"] == "au" || message_json["t"] == "ru" || message_json["t"] == "uj"  || message_json["t"] == "ul" {
+                    // add user/remove user/user joined/user left
                     // update user lists
                     obtain_users_in_room(&mut state, &channel).await;
                     continue;
