@@ -2413,6 +2413,9 @@ async fn get_api_json<Q, K, V>(state: &SharedConnectionState, uri_path: &str, qu
 async fn obtain_users_in_room(state: &ConnectionState, channel: &Channel) {
     let mut users: HashSet<User> = HashSet::new();
 
+    // FIXME: delay a bit because Rocket.Chat loves giving out stale information
+    tokio::time::sleep(Duration::from_millis(1000)).await;
+
     let uri_path = match channel.channel_type {
         ChannelType::Channel => "api/v1/channels.members",
         ChannelType::Group => "api/v1/groups.members",
