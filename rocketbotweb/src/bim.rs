@@ -1,16 +1,18 @@
 use std::collections::{BTreeMap, BTreeSet, HashMap, HashSet};
 use std::convert::{Infallible, TryInto};
 use std::fs::File;
+use std::borrow::Cow;
 
-use chrono::{Datelike, DateTime, Local, Weekday};
+use chrono::{Datelike, DateTime, Local, NaiveDate, Weekday, TimeZone};
 use hyper::{Body, Method, Request, Response};
 use log::{error, warn};
 use serde::{Deserialize, Serialize, Serializer};
 use serde::ser::SerializeStruct;
+use tokio_postgres::types::ToSql;
 
 use crate::{
-    connect_to_db, get_bot_config, get_query_pairs, render_json, render_template, return_405,
-    return_500,
+    connect_to_db, get_bot_config, get_query_pairs, render_json, render_template, return_400,
+    return_405, return_500,
 };
 
 
@@ -208,6 +210,15 @@ struct VehicleProfile {
     pub rider_to_ride_count: BTreeMap<String, usize>,
     pub first_ride: Option<RideInfo>,
     pub latest_ride: Option<RideInfo>,
+}
+
+
+#[inline]
+fn cow_empty_to_none<'a, 'b>(val: Option<&'a Cow<'b, str>>) -> Option<&'a Cow<'b, str>> {
+    match val {
+        None => None,
+        Some(x) => if x.len() > 0 { Some(x) } else { None },
+    }
 }
 
 
@@ -821,27 +832,52 @@ pub(crate) async fn handle_bim_coverage(request: &Request<Body>) -> Result<Respo
     };
 
     let (template, ctx) = if let Some(rider_name) = query_pairs.get("rider") {
-        // get ridden vehicles for rider
-        let vehicles_res = if rider_name == "!ALL" {
-            db_conn.query(
-                "
-                    SELECT company, vehicle_number, CAST(COUNT(*) AS bigint)
-                    FROM bim.rides_and_vehicles
-                    GROUP BY company, vehicle_number
-                ",
-                &[],
-            ).await
+        let mut conditions: Vec<String> = Vec::with_capacity(2);
+        let mut params: Vec<&(dyn ToSql + Sync)> = Vec::with_capacity(2);
+
+        if rider_name != "!ALL" {
+            conditions.push(format!("rider_username = ${}", conditions.len() + 1));
+            params.push(&rider_name);
+        }
+
+        let local_timestamp: DateTime<Local>;
+        if let Some(date_str) = cow_empty_to_none(query_pairs.get("to-date")) {
+            let input_date = match NaiveDate::parse_from_str(date_str, "%Y-%m-%d") {
+                Ok(d) => d,
+                Err(_) => return return_400("invalid date format, expected yyyy-mm-dd").await,
+            };
+
+            // end of that day is actually next day at 04:00
+            let naive_timestamp = input_date.succ().and_hms(4, 0, 0);
+            local_timestamp = match Local.from_local_datetime(&naive_timestamp).earliest() {
+                Some(lts) => lts,
+                None => return return_400("failed to convert timestamp to local time").await,
+            };
+
+            conditions.push(format!("\"timestamp\" <= ${}", conditions.len() + 1));
+            params.push(&local_timestamp);
+        }
+
+        let conditions_string = if conditions.len() > 0 {
+            let mut conds_string = conditions.join(" AND ");
+            conds_string.insert_str(0, "WHERE ");
+            conds_string
         } else {
-            db_conn.query(
-                "
-                    SELECT company, vehicle_number, CAST(COUNT(*) AS bigint)
-                    FROM bim.rides_and_vehicles
-                    WHERE rider_username = $1
-                    GROUP BY company, vehicle_number
-                ",
-                &[&rider_name],
-            ).await
+            String::new()
         };
+
+        let query = format!(
+            "
+                SELECT company, vehicle_number, CAST(COUNT(*) AS bigint)
+                FROM bim.rides_and_vehicles
+                {}
+                GROUP BY company, vehicle_number
+            ",
+            conditions_string,
+        );
+
+        // get ridden vehicles for rider
+        let vehicles_res = db_conn.query(&query, &params).await;
         let vehicle_rows = match vehicles_res {
             Ok(r) => r,
             Err(e) => {

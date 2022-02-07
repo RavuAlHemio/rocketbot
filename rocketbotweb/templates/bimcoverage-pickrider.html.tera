@@ -5,13 +5,21 @@
 {% block content %}
 <h1>Public Transport Coverage</h1>
 
-<p>Pick a rider!</p>
+<form method="get">
+  <p><label for="bimcoverage=rider">Pick a rider!</label></p>
+  <p>
+    <select id="bimcoverage-rider" name="rider" required="required">
+      <option value="!ALL" selected="selected">all</option>
+      {% for rider in riders %}
+        <option value="{{ rider|escape }}">{{ rider|escape }}</option>
+      {% endfor %}
+    </select>
+  </p>
 
-<ul>
-  <li><a href="?rider=%21ALL">all</a></li>
-  {% for rider in riders %}
-    <li><a href="?rider={{ rider|urlencode|escape }}">{{ rider|escape }}</a></li>
-  {% endfor %}
-</ul>
+  <p><label for="bimcoverage-to-date">Optionally, pick a cutoff date:</label></p>
+  <p><input type="date" id="bimcoverage-to-date" name="to-date" /></p>
+
+  <p><input type="submit" value="show coverage" /></p>
+</form>
 
 {% endblock %}
