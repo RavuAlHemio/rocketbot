@@ -1,0 +1,19 @@
+{% extends "base.html.tera" %}
+
+{% block title %}405 Method Not Allowed{% endblock %}
+
+{% block content %}
+<main>
+
+<h1>405 Method Not Allowed</h1>
+
+<p>Allowed methods are:</p>
+
+<ul>
+  {% for method in allowed_methods %}
+    <li><code>{{ method|escape }}</code></li>
+  {% endfor %}
+</ul>
+
+</main>
+{% endblock %}
