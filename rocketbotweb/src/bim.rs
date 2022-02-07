@@ -4,7 +4,7 @@ use std::fs::File;
 
 use chrono::{Datelike, DateTime, Local, Weekday};
 use hyper::{Body, Method, Request, Response};
-use log::error;
+use log::{error, warn};
 use serde::{Deserialize, Serialize, Serializer};
 use serde::ser::SerializeStruct;
 
@@ -219,7 +219,10 @@ async fn obtain_company_to_bim_database() -> Option<BTreeMap<String, Option<BTre
 
     let plugins = match bot_config["plugins"].as_array() {
         Some(ps) => ps,
-        None => return None,
+        None => {
+            warn!("failed to read plugins array from bot config");
+            return None;
+        },
     };
     let bim_plugin_opt = plugins.iter()
         .filter(|p| p["enabled"].as_bool().unwrap_or(false))
@@ -227,12 +230,18 @@ async fn obtain_company_to_bim_database() -> Option<BTreeMap<String, Option<BTre
         .nth(0);
     let bim_plugin = match bim_plugin_opt {
         Some(bp) => bp,
-        None => return None,
+        None => {
+            warn!("no enabled bim plugin found in bot config");
+            return None;
+        },
     };
 
     let company_to_definition = match bim_plugin["config"]["company_to_definition"].as_object() {
         Some(ctd) => ctd,
-        None => return None,
+        None => {
+            warn!("no company_to_definition value found in bot config");
+            return None;
+        },
     };
     let mut company_to_database = BTreeMap::new();
     for (company, definition) in company_to_definition.iter() {
