@@ -826,6 +826,10 @@ pub(crate) async fn handle_bim_coverage(request: &Request<Body>) -> Result<Respo
 
     let query_pairs = get_query_pairs(request);
 
+    let merge_types = query_pairs.get("merge-types")
+        .map(|qp| qp == "1")
+        .unwrap_or(false);
+
     let db_conn = match connect_to_db().await {
         Some(c) => c,
         None => return return_500(),
@@ -943,6 +947,11 @@ pub(crate) async fn handle_bim_coverage(request: &Request<Body>) -> Result<Respo
                     Some(tc) => tc.to_owned(),
                     None => continue,
                 };
+                let type_code_key = if merge_types {
+                    String::new()
+                } else {
+                    type_code.clone()
+                };
 
                 // is the vehicle active?
                 let from_known = vehicle["in_service_since"].is_string();
@@ -959,7 +968,7 @@ pub(crate) async fn handle_bim_coverage(request: &Request<Body>) -> Result<Respo
                     "ride_count": ride_count,
                 });
                 type_to_block_to_vehicles
-                    .entry(type_code)
+                    .entry(type_code_key)
                     .or_insert_with(|| BTreeMap::new())
                     .entry(block_str.to_owned())
                     .or_insert_with(|| Vec::new())

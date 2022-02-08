@@ -38,12 +38,15 @@
 <label><input id="bim-coverage-hide-inactive" type="checkbox" /> hide inactive vehicles</label>
 
 {% for company, type_to_block_to_vehicles in company_to_type_to_block_to_vehicles %}
-<h2 class="company">{{ company|escape }}</h2>
+<section class="company">
+<h2>{{ company|escape }}</h2>
 
 {% for type, block_to_vehicles in type_to_block_to_vehicles %}
-<h3 class="vehicle-type">{{ type|escape }}</h3>
+<section class="vehicle-type">
+{% if type != "" %}<h3 class="vehicle-type">{{ type|escape }}</h3>{% endif %}
 
 {% for blk, vehicles in block_to_vehicles %}
+<section class="vehicle-block">
 
 <div class="vehicles-box">
 
@@ -61,8 +64,13 @@
 
 </div>
 
-{% endfor%}
+</section> {#- end of vehicle block #}
 {% endfor %}
+
+</section> {#- end of vehicle type #}
+{% endfor %}
+
+</section> {#- end of company #}
 {% endfor %}
 
 </main>

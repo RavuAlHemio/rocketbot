@@ -19,6 +19,8 @@
   <p><label for="bimcoverage-to-date">Optionally, pick a cutoff date:</label></p>
   <p><input type="date" id="bimcoverage-to-date" name="to-date" /></p>
 
+  <p><label><input type="checkbox" name="merge-types" value="1" /> Merge types</label></p>
+
   <p><input type="submit" value="show coverage" /></p>
 </form>
 
