@@ -894,7 +894,7 @@ pub(crate) async fn handle_bim_coverage(request: &Request<Body>) -> Result<Respo
         for vehicle_row in vehicle_rows {
             let company: String = vehicle_row.get(0);
             let vehicle_number_i64: i64 = vehicle_row.get(1);
-            let vehicle_number_u32: u32 = match vehicle_number_i64.try_into() {    
+            let vehicle_number_u32: u32 = match vehicle_number_i64.try_into() {
                 Ok(vn) => vn,
                 Err(_) => {
                     error!("failed to convert vehicle number {} to u32", vehicle_number_i64);

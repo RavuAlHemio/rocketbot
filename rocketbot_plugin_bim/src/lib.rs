@@ -2223,7 +2223,7 @@ pub async fn add_ride(
             &[&company, &vehicle_number_i64, &rider_username],
         ).await?;
         let prev_other_count: i64 = prev_other_count_row.get(0);
-    
+
         let prev_other_row_opt = ride_conn.query_opt(
             &prev_other_row_stmt,
             &[&company, &vehicle_number_i64, &rider_username],
@@ -2242,7 +2242,7 @@ pub async fn add_ride(
         } else {
             None
         };
-    
+
         let other_info = if prev_other_count > 0 {
             Some(OtherRiderInfo {
                 rider_username: prev_other_rider.unwrap(),

@@ -11,7 +11,7 @@ use url::Url;
 const SPARQL_QUERY: &'static str = r#"
 # Wikidata
 SELECT ?alpha3code ?alpha2code ?platecode ?countryLabel
-WHERE 
+WHERE
 {
   # country is-a sovereign state
   ?country wdt:P31 wd:Q3624078.

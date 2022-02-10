@@ -129,7 +129,7 @@ impl RocketBotPlugin for UserListMessagePlugin {
             if let Some(lmf) = &channel_info.leave_message_format {
                 let left_usernames: HashSet<&String> = old_usernames
                     .difference(&new_usernames)
-                    .collect();    
+                    .collect();
                 for left_username in left_usernames {
                     let left_message = lmf
                         .replace("{USERNAME}", left_username);
