@@ -1096,11 +1096,13 @@ impl BimPlugin {
                     fav_vehicles(rider_username, company, vehicle_number, ride_count) AS (
                         SELECT rprv.rider_username, rprv.company, rprv.vehicle_number, rprv.ride_count
                         FROM rides_per_rider_vehicle rprv
-                        WHERE ride_count IN (
-                            SELECT rtrc.ride_count
-                            FROM rider_top_ride_counts rtrc
-                            WHERE rtrc.rider_username = rprv.rider_username
-                        )
+                        WHERE
+                            ride_count > 1
+                            AND ride_count IN (
+                                SELECT rtrc.ride_count
+                                FROM rider_top_ride_counts rtrc
+                                WHERE rtrc.rider_username = rprv.rider_username
+                            )
                     )
                 SELECT rider_username, company, vehicle_number, CAST(ride_count AS bigint)
                 FROM fav_vehicles
