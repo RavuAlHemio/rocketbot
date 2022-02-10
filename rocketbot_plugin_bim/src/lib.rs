@@ -132,6 +132,7 @@ pub struct VehicleRideInfo {
 }
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub struct RideInfo {
+    pub ride_id: i64,
     pub line: Option<String>,
     pub vehicles: Vec<VehicleRideInfo>,
 }
@@ -658,6 +659,8 @@ impl BimPlugin {
                 write_expect!(&mut resp, "!");
             }
 
+            write_expect!(&mut resp, " (ride {})", last_ride_infos.ride_id);
+
             resp
         } else {
             // multiple vehicles
@@ -703,9 +706,11 @@ impl BimPlugin {
                 }
                 write_expect!(&mut resp, ")");
             }
+            resp.push_str("\n");
             if let Some(ln) = &last_ride_infos.line {
-                write_expect!(&mut resp, "\non line {}", ln);
+                write_expect!(&mut resp, "on line {} ", ln);
             }
+            write_expect!(&mut resp, "(ride {})", last_ride_infos.ride_id);
             resp
         };
 
@@ -2151,7 +2156,7 @@ pub async fn add_ride(
     rider_username: &str,
     timestamp: DateTime<Local>,
     line: Option<&str>,
-) -> Result<Vec<(Option<LastRideInfo>, Option<OtherRiderInfo>)>, tokio_postgres::Error> {
+) -> Result<(i64, Vec<(Option<LastRideInfo>, Option<OtherRiderInfo>)>), tokio_postgres::Error> {
     let prev_my_count_stmt = ride_conn.prepare(
         "
             SELECT CAST(COUNT(*) AS bigint)
@@ -2292,7 +2297,7 @@ pub async fn add_ride(
         ).await?;
     }
 
-    Ok(vehicle_results)
+    Ok((ride_id, vehicle_results))
 }
 
 #[derive(Debug)]
@@ -2410,11 +2415,11 @@ pub async fn increment_rides_by_spec(
         }
     }
 
-    let vehicle_ride_infos = {
+    let (ride_id, vehicle_ride_infos) = {
         let xact = ride_conn.transaction().await
             .map_err(|e| IncrementBySpecError::DatabaseBeginTransaction(e))?;
 
-        let mut ride_info_vec = add_ride(
+        let (rid, mut ride_info_vec) = add_ride(
             &xact,
             company,
             &all_vehicles,
@@ -2439,10 +2444,11 @@ pub async fn increment_rides_by_spec(
         xact.commit().await
             .map_err(|e| IncrementBySpecError::DatabaseCommitTransaction(e))?;
 
-        vehicle_ride_infos
+        (rid, vehicle_ride_infos)
     };
 
     Ok(RideInfo {
+        ride_id,
         line: line_str_opt.map(|s| s.to_owned()),
         vehicles: vehicle_ride_infos,
     })
