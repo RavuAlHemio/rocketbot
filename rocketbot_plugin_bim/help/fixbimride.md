@@ -1,0 +1,19 @@
+*Usage:* `{cpfx}fixbimride OPTIONS`
+
+Changes properties of a recent ride.
+
+Options are classified into two groups: those that identify the ride to modify and those that specify what to modify.
+
+A ride is identified using:
+
+* `-i ID` or `--id ID`: The ID of the ride to change. This can uniquely identify a ride.
+* `-r USERNAME` or `--rider USERNAME`: The username of the rider. Their most recent ride is targeted.
+
+A ride is modified using:
+
+* `-d` or `--delete`: The ride is deleted.
+* `-c COMPANY` or `--company COMPANY`: The company is changed to the given value. Note that mis-identified fixed couplings etc. are not corrected.
+* `-l LINE` or `--line LINE`: The line is changed to the given value.
+* `-R USERNAME` or `--set-rider USERNAME`: The ride is assigned to a different user. This option can only be used by `bim` administrators.
+
+`bim` administrators can modify all rides. Rides can only modify their own rides which have been registered recently enough.

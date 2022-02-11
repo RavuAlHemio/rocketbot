@@ -246,6 +246,8 @@ pub struct BimPlugin {
     manufacturer_mapping: HashMap<String, String>,
     ride_db_conn_string: String,
     allow_fixed_coupling_combos: bool,
+    admin_usernames: HashSet<String>,
+    max_edit_s: i64,
 }
 impl BimPlugin {
     fn load_bim_database(&self, company: &str) -> Option<HashMap<VehicleNumber, VehicleInfo>> {
@@ -1873,6 +1875,234 @@ impl BimPlugin {
         ).await;
     }
 
+    async fn channel_command_fixbimride(&self, channel_message: &ChannelMessage, command: &CommandInstance) {
+        let interface = match self.interface.upgrade() {
+            None => return,
+            Some(i) => i,
+        };
+
+        // forbid anything trailing the command options
+        if command.rest.trim().len() > 0 {
+            return;
+        }
+
+        let sender_username = channel_message.message.sender.username.as_str();
+
+        let delete = command.flags.contains("d") || command.flags.contains("delete");
+        let ride_id = command.options.get("i")
+            .or_else(|| command.options.get("id"))
+            .map(|cv| cv.as_i64().unwrap());
+        let rider_username = command.options.get("r")
+            .or_else(|| command.options.get("rider"))
+            .map(|cv| cv.as_str().unwrap())
+            .unwrap_or(sender_username);
+
+        let new_rider = command.options.get("R")
+            .or_else(|| command.options.get("set-rider"))
+            .map(|cv| cv.as_str().unwrap());
+        let new_company = command.options.get("c")
+            .or_else(|| command.options.get("set-company"))
+            .map(|cv| cv.as_str().unwrap());
+        let new_line = command.options.get("l")
+            .or_else(|| command.options.get("set-line"))
+            .map(|cv| cv.as_str().unwrap());
+
+        let is_admin = self.admin_usernames.contains(sender_username);
+
+        // verify arguments
+        if !is_admin {
+            if rider_username != sender_username {
+                send_channel_message!(
+                    interface,
+                    &channel_message.channel.name,
+                    "Only `bim` admins can modify other riders' rides.",
+                ).await;
+                return;
+            }
+
+            if new_rider.is_some() {
+                send_channel_message!(
+                    interface,
+                    &channel_message.channel.name,
+                    "Only `bim` admins can modify a ride's rider.",
+                ).await;
+                return;
+            }
+        }
+
+        if delete && (new_rider.is_some() || new_company.is_some() || new_line.is_some()) {
+            send_channel_message!(
+                interface,
+                &channel_message.channel.name,
+                "Doesn't make much sense to delete a ride _and_ change its properties at the same time.",
+            ).await;
+            return;
+        }
+
+        if !delete && new_rider.is_none() && new_company.is_none() && new_line.is_none() {
+            send_channel_message!(
+                interface,
+                &channel_message.channel.name,
+                "Nothing to change.",
+            ).await;
+            return;
+        }
+
+        if let Some(nc) = new_company {
+            if !self.company_to_definition.contains_key(nc) {
+                send_channel_message!(
+                    interface,
+                    &channel_message.channel.name,
+                    "That company does not exist.",
+                ).await;
+                return;
+            }
+
+            // FIXME: verify vehicle and line numbers against company-specific regexes?
+        }
+
+        // find the ride
+        let ride_conn = match self.connect_ride_db().await {
+            Ok(c) => c,
+            Err(_) => {
+                send_channel_message!(
+                    interface,
+                    &channel_message.channel.name,
+                    "Failed to open database connection. :disappointed:",
+                ).await;
+                return;
+            },
+        };
+
+        let ride_row_opt_res = if let Some(rid) = ride_id {
+            ride_conn.query_opt(
+                "
+                    SELECT id, rider_username, \"timestamp\" FROM bim.rides
+                    WHERE id=$1
+                ",
+                &[&rid],
+            ).await
+        } else {
+            ride_conn.query_opt(
+                "
+                    SELECT id, rider_username, \"timestamp\" FROM bim.rides
+                    WHERE rider_username=$1
+                    ORDER BY \"timestamp\" DESC, id DESC
+                    LIMIT 1
+                ",
+                &[&rider_username],
+            ).await
+        };
+        let ride_row = match ride_row_opt_res {
+            Err(e) => {
+                error!("failed to obtain ride to modify: {}", e);
+                send_channel_message!(
+                    interface,
+                    &channel_message.channel.name,
+                    "Failed to obtain ride to modify. :disappointed:",
+                ).await;
+                return;
+            },
+            Ok(None) => {
+                send_channel_message!(
+                    interface,
+                    &channel_message.channel.name,
+                    "Ride not found. :disappointed:",
+                ).await;
+                return;
+            },
+            Ok(Some(r)) => r,
+        };
+
+        let ride_id: i64 = ride_row.get(0);
+        let rider_username: String = ride_row.get(1);
+        let ride_timestamp: DateTime<Local> = ride_row.get(2);
+
+        if !is_admin {
+            let max_edit_dur = Duration::seconds(self.max_edit_s);
+            let now = Local::now();
+            if now - ride_timestamp > max_edit_dur {
+                if self.max_edit_s > 0 {
+                    send_channel_message!(
+                        interface,
+                        &channel_message.channel.name,
+                        &format!("Ride {} is too old to be edited. Ask a `bim` admin for help.", ride_id),
+                    ).await;
+                } else {
+                    send_channel_message!(
+                        interface,
+                        &channel_message.channel.name,
+                        "You cannot edit your own rides. Ask a `bim` admin for help.",
+                    ).await;
+                }
+                return;
+            }
+
+            if rider_username != sender_username {
+                send_channel_message!(
+                    interface,
+                    &channel_message.channel.name,
+                    "Only `bim` admins can modify other riders' rides.",
+                ).await;
+                return;
+            }
+        }
+
+        if delete {
+            let response = match ride_conn.execute("DELETE FROM bim.rides WHERE id=$1", &[&ride_id]).await {
+                Ok(_) => format!("Ride {} deleted.", ride_id),
+                Err(e) => {
+                    error!("failed to delete ride {}: {}", ride_id, e);
+                    format!("Failed to delete ride {}.", ride_id)
+                },
+            };
+            send_channel_message!(
+                interface,
+                &channel_message.channel.name,
+                &response,
+            ).await;
+            return;
+        }
+
+        // update what there is to update
+        let mut props: Vec<String> = Vec::new();
+        let mut values: Vec<&(dyn ToSql + Sync)> = Vec::new();
+
+        let (remember_new_rider, remember_new_company, remember_new_line);
+        if let Some(nr) = new_rider {
+            remember_new_rider = nr.to_owned();
+            props.push(format!("rider_username = ${}", props.len() + 1));
+            values.push(&remember_new_rider);
+        }
+        if let Some(nc) = new_company {
+            remember_new_company = nc.to_owned();
+            props.push(format!("company = ${}", props.len() + 1));
+            values.push(&remember_new_company);
+        }
+        if let Some(nl) = new_line {
+            remember_new_line = nl.to_owned();
+            props.push(format!("line = ${}", props.len() + 1));
+            values.push(&remember_new_line);
+        }
+
+        let props_string = props.join(", ");
+        let query = format!("UPDATE bim.rides SET {} WHERE id = ${}", props_string, props.len() + 1);
+        values.push(&ride_id);
+
+        let response = match ride_conn.execute(&query, &values).await {
+            Ok(_) => format!("Ride {} modified.", ride_id),
+            Err(e) => {
+                error!("failed to modify ride {}: {}", ride_id, e);
+                format!("Failed to modify ride {}.", ride_id)
+            },
+        };
+        send_channel_message!(
+            interface,
+            &channel_message.channel.name,
+            &response,
+        ).await;
+    }
+
     #[inline]
     fn weekday_abbr2(weekday: Weekday) -> &'static str {
         match weekday {
@@ -1955,6 +2185,27 @@ impl RocketBotPlugin for BimPlugin {
         } else {
             config["allow_fixed_coupling_combos"]
                 .as_bool().expect("allow_fixed_coupling_combos not a boolean")
+        };
+
+        let admin_usernames = if config["admin_usernames"].is_null() {
+            HashSet::new()
+        } else {
+            config["admin_usernames"]
+                .as_array().expect("admin_usernames not a list")
+                .iter()
+                .map(|e|
+                    e
+                        .as_str().expect("admin_usernames entry not a string")
+                        .to_owned()
+                )
+                .collect()
+        };
+
+        let max_edit_s = if config["max_edit_s"].is_null() {
+            0
+        } else {
+            config["max_edit_s"]
+                .as_i64().expect("max_edit_s not an i64")
         };
 
         my_interface.register_channel_command(
@@ -2078,6 +2329,27 @@ impl RocketBotPlugin for BimPlugin {
                 .add_option("c", CommandValueType::String)
                 .build()
         ).await;
+        my_interface.register_channel_command(
+            &CommandDefinitionBuilder::new(
+                "fixbimride".to_owned(),
+                "bim".to_owned(),
+                "{cpfx}fixbimride OPTIONS".to_owned(),
+                "Fix some data in a bim ride.".to_owned(),
+            )
+                .add_flag("d")
+                .add_flag("delete")
+                .add_option("i", CommandValueType::Integer)
+                .add_option("id", CommandValueType::Integer)
+                .add_option("r", CommandValueType::String)
+                .add_option("rider", CommandValueType::String)
+                .add_option("R", CommandValueType::String)
+                .add_option("set-rider", CommandValueType::String)
+                .add_option("c", CommandValueType::String)
+                .add_option("set-company", CommandValueType::String)
+                .add_option("l", CommandValueType::String)
+                .add_option("set-line", CommandValueType::String)
+                .build()
+        ).await;
 
         Self {
             interface,
@@ -2086,6 +2358,8 @@ impl RocketBotPlugin for BimPlugin {
             manufacturer_mapping,
             ride_db_conn_string,
             allow_fixed_coupling_combos,
+            admin_usernames,
+            max_edit_s,
         }
     }
 
@@ -2112,6 +2386,8 @@ impl RocketBotPlugin for BimPlugin {
             self.channel_command_bimranges(channel_message, command).await
         } else if command.name == "bimtypes" {
             self.channel_command_bimtypes(channel_message, command).await
+        } else if command.name == "fixbimride" {
+            self.channel_command_fixbimride(channel_message, command).await
         }
     }
 
@@ -2142,6 +2418,8 @@ impl RocketBotPlugin for BimPlugin {
             Some(include_str!("../help/bimranges.md").to_owned())
         } else if command_name == "bimtypes" {
             Some(include_str!("../help/bimtypes.md").to_owned())
+        } else if command_name == "fixbimride" {
+            Some(include_str!("../help/fixbimride.md").to_owned())
         } else {
             None
         }
