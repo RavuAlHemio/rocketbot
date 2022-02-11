@@ -9,6 +9,8 @@ A ride is identified using:
 * `-i ID` or `--id ID`: The ID of the ride to change. This can uniquely identify a ride.
 * `-r USERNAME` or `--rider USERNAME`: The username of the rider. Their most recent ride is targeted.
 
+If neither is given, the last ride of the rider who issued the command is targeted.
+
 A ride is modified using:
 
 * `-d` or `--delete`: The ride is deleted.
@@ -16,4 +18,4 @@ A ride is modified using:
 * `-l LINE` or `--line LINE`: The line is changed to the given value.
 * `-R USERNAME` or `--set-rider USERNAME`: The ride is assigned to a different user. This option can only be used by `bim` administrators.
 
-`bim` administrators can modify all rides. Rides can only modify their own rides which have been registered recently enough.
+`bim` administrators can modify all rides. Riders can only modify their own rides which have been registered recently enough.
