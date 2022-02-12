@@ -162,7 +162,6 @@ async fn return_404() -> Result<Response<Body>, Infallible> {
 async fn return_400(reason: &str) -> Result<Response<Body>, Infallible> {
     let mut ctx = tera::Context::new();
     ctx.insert("reason", reason);
-    let ctx = tera::Context::new();
     match render_template("400.html.tera", &ctx, 400, vec![]).await {
         Some(r) => Ok(r),
         None => return_500(),
