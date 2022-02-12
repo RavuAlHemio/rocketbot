@@ -222,6 +222,22 @@ fn cow_empty_to_none<'a, 'b>(val: Option<&'a Cow<'b, str>>) -> Option<&'a Cow<'b
 }
 
 
+async fn render(template: &str, query_pairs: &HashMap<Cow<'_, str>, Cow<'_, str>>, ctx: tera::Context) -> Result<Response<Body>, Infallible> {
+    if query_pairs.get("format").map(|f| f == "json").unwrap_or(false) {
+        let ctx_json = ctx.into_json();
+        match render_json(&ctx_json, 200, vec![]).await {
+            Some(r) => Ok(r),
+            None => return_500(),
+        }
+    } else {
+        match render_template(template, &ctx, 200, vec![]).await {
+            Some(r) => Ok(r),
+            None => return_500(),
+        }
+    }
+}
+
+
 async fn obtain_company_to_bim_database() -> Option<BTreeMap<String, Option<BTreeMap<u32, serde_json::Value>>>> {
     let bot_config = match get_bot_config().await {
         Some(bc) => bc,
@@ -581,18 +597,7 @@ pub(crate) async fn handle_bim_types(request: &Request<Body>) -> Result<Response
     ctx.insert("company_to_stats", &company_to_stats);
     ctx.insert("all_riders", &all_riders);
 
-    if query_pairs.get("format").map(|f| f == "json").unwrap_or(false) {
-        let stats_json = ctx.into_json();
-        match render_json(&stats_json, 200, vec![]).await {
-            Some(r) => Ok(r),
-            None => return_500(),
-        }
-    } else {
-        match render_template("bimtypes.html.tera", &ctx, 200, vec![]).await {
-            Some(r) => Ok(r),
-            None => return_500(),
-        }
-    }
+    render("bimtypes.html.tera", &query_pairs, ctx).await
 }
 
 
@@ -805,18 +810,7 @@ pub(crate) async fn handle_bim_vehicles(request: &Request<Body>) -> Result<Respo
     ctx.insert("company_to_vehicle_to_profile", &company_to_vehicle_to_profile);
     ctx.insert("per_rider", &per_rider);
 
-    if query_pairs.get("format").map(|f| f == "json").unwrap_or(false) {
-        let stats_json = ctx.into_json();
-        match render_json(&stats_json, 200, vec![]).await {
-            Some(r) => Ok(r),
-            None => return_500(),
-        }
-    } else {
-        match render_template("bimvehicles.html.tera", &ctx, 200, vec![]).await {
-            Some(r) => Ok(r),
-            None => return_500(),
-        }
-    }
+    render("bimvehicles.html.tera", &query_pairs, ctx).await
 }
 
 pub(crate) async fn handle_bim_coverage(request: &Request<Body>) -> Result<Response<Body>, Infallible> {
@@ -1005,16 +999,98 @@ pub(crate) async fn handle_bim_coverage(request: &Request<Body>) -> Result<Respo
         ("bimcoverage-pickrider.html.tera", ctx)
     };
 
-    if query_pairs.get("format").map(|f| f == "json").unwrap_or(false) {
-        let json = ctx.into_json();
-        match render_json(&json, 200, vec![]).await {
-            Some(r) => Ok(r),
-            None => return_500(),
-        }
-    } else {
-        match render_template(template, &ctx, 200, vec![]).await {
-            Some(r) => Ok(r),
-            None => return_500(),
-        }
+    render(template, &query_pairs, ctx).await
+}
+
+pub(crate) async fn handle_bim_detail(request: &Request<Body>) -> Result<Response<Body>, Infallible> {
+    if request.method() != Method::GET {
+        return return_405().await;
     }
+
+    let query_pairs = get_query_pairs(request);
+
+    let company = match query_pairs.get("company") {
+        Some(c) => c.to_owned().into_owned(),
+        None => return return_400("missing parameter \"company\"").await,
+    };
+    let vehicle_number_str = match query_pairs.get("vehicle") {
+        Some(v) => v,
+        None => return return_400("missing parameter \"vehicle\"").await,
+    };
+    let vehicle_number: u32 = match vehicle_number_str.parse() {
+        Ok(vn) => vn,
+        Err(_) => return return_400("invalid parameter value for \"vehicle\"").await,
+    };
+
+    let company_to_bim_database_opts = match obtain_company_to_bim_database().await {
+        Some(ctbdb) => ctbdb,
+        None => return return_500(),
+    };
+    let mut company_to_bim_database: BTreeMap<String, BTreeMap<u32, serde_json::Value>> = BTreeMap::new();
+    for (company, bim_database_opt) in company_to_bim_database_opts.into_iter() {
+        company_to_bim_database.insert(company, bim_database_opt.unwrap_or_else(|| BTreeMap::new()));
+    }
+
+    let company_bim_database = match company_to_bim_database.get(&company) {
+        Some(bd) => bd,
+        None => return return_400("unknown company").await,
+    };
+
+    let db_conn = match connect_to_db().await {
+        Some(c) => c,
+        None => return return_500(),
+    };
+
+    let vehicle_json = company_bim_database.get(&vehicle_number)
+        .map(|v| v.clone())
+        .unwrap_or(serde_json::Value::Null);
+
+    // query rides
+    let vehicle_number_i64: i64 = vehicle_number.into();
+    let ride_rows_res = db_conn.query(
+        "
+            SELECT
+                rav.id, rav.rider_username, rav.\"timestamp\", rav.line, rav.spec_position,
+                rav.as_part_of_fixed_coupling, rav.fixed_coupling_position
+            FROM bim.rides_and_vehicles rav
+            WHERE rav.company = $1
+            AND rav.vehicle_number = $2
+            ORDER BY rav.\"timestamp\" DESC, rav.id
+        ",
+        &[&company, &vehicle_number_i64],
+    ).await;
+    let ride_rows = match ride_rows_res {
+        Ok(rs) => rs,
+        Err(e) => {
+            error!("error querying vehicle rides: {}", e);
+            return return_500();
+        },
+    };
+
+    let mut rides_json = Vec::new();
+    for ride_row in ride_rows {
+        let ride_id: i64 = ride_row.get(0);
+        let rider_username: String = ride_row.get(1);
+        let timestamp: DateTime<Local> = ride_row.get(2);
+        let line: Option<String> = ride_row.get(3);
+        let spec_position: i64 = ride_row.get(4);
+        let as_part_of_fixed_coupling: bool = ride_row.get(5);
+        let fixed_coupling_position: i64 = ride_row.get(6);
+
+        rides_json.push(serde_json::json!({
+            "id": ride_id,
+            "rider_username": rider_username,
+            "timestamp": timestamp.format("%Y-%m-%d %H:%M:%S").to_string(),
+            "line": line,
+            "spec_position": spec_position,
+            "as_part_of_fixed_coupling": as_part_of_fixed_coupling,
+            "fixed_coupling_position": fixed_coupling_position,
+        }));
+    }
+
+    let mut ctx = tera::Context::new();
+    ctx.insert("vehicle", &vehicle_json);
+    ctx.insert("rides", &rides_json);
+
+    render("bimdetails.html.tera", &query_pairs, ctx).await
 }

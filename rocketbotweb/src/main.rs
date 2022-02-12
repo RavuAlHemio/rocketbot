@@ -24,7 +24,9 @@ use tokio::sync::{RwLock, RwLockReadGuard};
 use tokio_postgres::{self, NoTls};
 use toml;
 
-use crate::bim::{handle_bim_coverage, handle_bim_rides, handle_bim_types, handle_bim_vehicles};
+use crate::bim::{
+    handle_bim_coverage, handle_bim_detail, handle_bim_rides, handle_bim_types, handle_bim_vehicles,
+};
 use crate::config::WebConfig;
 use crate::templating::augment_tera;
 
@@ -638,6 +640,7 @@ async fn handle_request(request: Request<Body>) -> Result<Response<Body>, Infall
         "/bim-types" => handle_bim_types(&request).await,
         "/bim-vehicles" => handle_bim_vehicles(&request).await,
         "/bim-coverage" => handle_bim_coverage(&request).await,
+        "/bim-detail" => handle_bim_detail(&request).await,
         _ => return_404().await,
     }
 }

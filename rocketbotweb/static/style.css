@@ -37,7 +37,9 @@ table.nicks-and-aliases .alias,
 table.bim-rides th,
 table.bim-rides td,
 table.bim-vehicles th,
-table.bim-vehicles td {
+table.bim-vehicles td,
+main.bim-details table th,
+main.bim-details table td {
   padding: 0.3em 0.6em;
 }
 
@@ -54,7 +56,9 @@ table.bim-rides tr:first-child td,
 table.bim-types tr:first-child th,
 table.bim-types tr:first-child td,
 table.bim-vehicles tr:first-child th,
-table.bim-vehicles tr:first-child td {
+table.bim-vehicles tr:first-child td,
+main.bim-details table tr:first-child th,
+main.bim-details table tr:first-child td {
   border-top: 2px solid black;
   padding-top: 0.6em;
 }
@@ -86,7 +90,9 @@ table.bim-rides tr:last-child td,
 table.bim-types tr:last-child th,
 table.bim-types tr:last-child td,
 table.bim-vehicles tr:last-child th,
-table.bim-vehicles tr:last-child td {
+table.bim-vehicles tr:last-child td,
+main.bim-details table tr:last-child th,
+main.bim-details table tr:last-child td {
   border-bottom: 2px solid black;
   padding-bottom: 0.6em;
 }
@@ -228,4 +234,10 @@ main.bim-coverage .vehicles-box .vehicle.unridden.active {
 main.bim-coverage .vehicles-box .vehicle.unridden.inactive {
   background-color: #000;
   color: #fff;
+}
+
+main.bim-details td.id,
+main.bim-details td.spec-pos,
+main.bim-details td.fixed-coupling-pos {
+  text-align: right;
 }
