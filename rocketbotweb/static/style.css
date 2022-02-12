@@ -228,9 +228,11 @@ main.bim-coverage .vehicles-box .block-name::after {
 }
 main.bim-coverage .vehicles-box .vehicle.ridden {
   background-color: #0f0;
+  color: #000;
 }
 main.bim-coverage .vehicles-box .vehicle.unridden.active {
   background-color: #ccc;
+  color: #000;
 }
 main.bim-coverage .vehicles-box .vehicle.unridden.inactive {
   background-color: #000;
