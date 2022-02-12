@@ -1089,6 +1089,7 @@ pub(crate) async fn handle_bim_detail(request: &Request<Body>) -> Result<Respons
     }
 
     let mut ctx = tera::Context::new();
+    ctx.insert("company", &company);
     ctx.insert("vehicle", &vehicle_json);
     ctx.insert("rides", &rides_json);
 

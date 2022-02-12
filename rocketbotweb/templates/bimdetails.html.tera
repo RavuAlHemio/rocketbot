@@ -43,6 +43,24 @@
     </tr>
   {% endfor %}
 </table>
+
+{% if vehicle.fixed_coupling|length > 0 %}
+  <p class="fixed-coupling">
+    part of fixed coupling:
+    <span class="fixed-coupling">
+      {%- for fcvn in vehicle.fixed_coupling -%}
+        {%- if not loop.first -%}
+          +
+        {%- endif -%}
+        {%- if fcvn == vehicle.number -%}
+          <strong class="this-vehicle">{{ fcvn }}</strong>
+        {%- else -%}
+          <a class="other-vehicle" href="?company={{ company|urlencode|escape }}&amp;vehicle={{ fcvn }}">{{ fcvn }}</a>
+        {%- endif -%}
+      {%- endfor -%}
+    </span>
+  </p>
+{% endif %}
 </section>
 {% endif %}
 
