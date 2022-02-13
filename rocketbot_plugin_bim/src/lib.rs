@@ -1132,12 +1132,12 @@ impl BimPlugin {
             },
         };
 
-        let mut rider_to_fav_vehicles: BTreeMap<String, BTreeSet<(String, u32, i64)>> = BTreeMap::new();
+        let mut rider_to_fav_vehicles: BTreeMap<String, BTreeSet<(String, VehicleNumber, i64)>> = BTreeMap::new();
         for row in rows {
             let rider_username: String = row.get(0);
             let company: String = row.get(1);
             let vehicle_number_i64: i64 = row.get(2);
-            let vehicle_number_u32: u32 = match vehicle_number_i64.try_into() {
+            let vehicle_number: VehicleNumber = match vehicle_number_i64.try_into() {
                 Ok(vn) => vn,
                 Err(_) => continue,
             };
@@ -1152,14 +1152,14 @@ impl BimPlugin {
             rider_to_fav_vehicles
                 .entry(rider_username)
                 .or_insert_with(|| BTreeSet::new())
-                .insert((company, vehicle_number_u32, ride_count));
+                .insert((company, vehicle_number, ride_count));
         }
 
         let mut fav_vehicle_strings = Vec::new();
         if rider_username_opt.is_some() {
             // output all
             let mut db_rider_username = None;
-            let mut ride_count_to_vehicles: BTreeMap<i64, BTreeSet<(String, u32)>> = BTreeMap::new();
+            let mut ride_count_to_vehicles: BTreeMap<i64, BTreeSet<(String, VehicleNumber)>> = BTreeMap::new();
             for (rider, fav_vehicles) in rider_to_fav_vehicles.iter() {
                 if db_rider_username.is_none() {
                     db_rider_username = Some(rider.clone());
@@ -1461,7 +1461,7 @@ impl BimPlugin {
         for row in rows {
             let company: String = row.get(0);
             let vehicle_number_i64: i64 = row.get(1);
-            let vehicle_number_u32: u32 = match vehicle_number_i64.try_into() {
+            let vehicle_number: VehicleNumber = match vehicle_number_i64.try_into() {
                 Ok(vn) => vn,
                 Err(_) => continue,
             };
@@ -1473,7 +1473,7 @@ impl BimPlugin {
             let vehicle_type_opt = bim_database_opt
                 .as_ref()
                 .map(|bd| bd
-                    .get(&vehicle_number_u32)
+                    .get(&vehicle_number)
                     .map(|vi| vi.type_code.clone())
                 )
                 .flatten();
