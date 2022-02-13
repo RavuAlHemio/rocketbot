@@ -16,11 +16,14 @@ use crate::{
 };
 
 
+type VehicleNumber = u32;
+
+
 #[derive(Clone, Debug, Deserialize, Eq, Hash, PartialEq, Serialize)]
 struct RideRow {
     company: String,
     vehicle_type_opt: Option<String>,
-    vehicle_numbers: Vec<u32>,
+    vehicle_numbers: Vec<VehicleNumber>,
     ride_count: i64,
     last_line: Option<String>,
 }
@@ -28,7 +31,7 @@ impl RideRow {
     pub fn new(
         company: String,
         vehicle_type_opt: Option<String>,
-        vehicle_numbers: Vec<u32>,
+        vehicle_numbers: Vec<VehicleNumber>,
         ride_count: i64,
         last_line: Option<String>,
     ) -> Self {
@@ -41,7 +44,7 @@ impl RideRow {
         }
     }
 
-    pub fn sort_key(&self) -> (String, Vec<u32>, i64, Option<String>) {
+    pub fn sort_key(&self) -> (String, Vec<VehicleNumber>, i64, Option<String>) {
         let mut sorted_vehicle_numbers = self.vehicle_numbers.clone();
         sorted_vehicle_numbers.sort_unstable();
 
@@ -145,13 +148,13 @@ impl CompanyTypeStats {
 
 #[derive(Clone, Debug, Deserialize, Eq, PartialEq, Serialize)]
 struct VehicleDatabaseExtract {
-    pub company_to_vehicle_to_fixed_coupling: HashMap<String, HashMap<u32, Vec<u32>>>,
-    pub company_to_vehicle_to_type: HashMap<String, HashMap<u32, String>>,
+    pub company_to_vehicle_to_fixed_coupling: HashMap<String, HashMap<VehicleNumber, Vec<VehicleNumber>>>,
+    pub company_to_vehicle_to_type: HashMap<String, HashMap<VehicleNumber, String>>,
 }
 impl VehicleDatabaseExtract {
     pub fn new(
-        company_to_vehicle_to_fixed_coupling: HashMap<String, HashMap<u32, Vec<u32>>>,
-        company_to_vehicle_to_type: HashMap<String, HashMap<u32, String>>,
+        company_to_vehicle_to_fixed_coupling: HashMap<String, HashMap<VehicleNumber, Vec<VehicleNumber>>>,
+        company_to_vehicle_to_type: HashMap<String, HashMap<VehicleNumber, String>>,
     ) -> Self {
         Self {
             company_to_vehicle_to_fixed_coupling,
@@ -238,7 +241,7 @@ async fn render(template: &str, query_pairs: &HashMap<Cow<'_, str>, Cow<'_, str>
 }
 
 
-async fn obtain_company_to_bim_database() -> Option<BTreeMap<String, Option<BTreeMap<u32, serde_json::Value>>>> {
+async fn obtain_company_to_bim_database() -> Option<BTreeMap<String, Option<BTreeMap<VehicleNumber, serde_json::Value>>>> {
     let bot_config = match get_bot_config().await {
         Some(bc) => bc,
         None => return None,
@@ -307,7 +310,7 @@ async fn obtain_company_to_bim_database() -> Option<BTreeMap<String, Option<BTre
             },
         };
 
-        let mut bim_map: BTreeMap<u32, serde_json::Value> = BTreeMap::new();
+        let mut bim_map: BTreeMap<VehicleNumber, serde_json::Value> = BTreeMap::new();
         for bim in bim_array {
             let number_i64 = match bim["number"].as_i64() {
                 Some(bn) => bn,
@@ -316,14 +319,14 @@ async fn obtain_company_to_bim_database() -> Option<BTreeMap<String, Option<BTre
                     continue;
                 },
             };
-            let number_u32: u32 = match number_i64.try_into() {
+            let number: VehicleNumber = match number_i64.try_into() {
                 Ok(n) => n,
                 Err(_) => {
-                    error!("number {} in {:?} bim database file {:?} not convertible to u32", number_i64, company, bim_database_path);
+                    error!("number {} in {:?} bim database file {:?} not convertible to VehicleNumber", number_i64, company, bim_database_path);
                     continue;
                 },
             };
-            bim_map.insert(number_u32, bim.clone());
+            bim_map.insert(number, bim.clone());
         }
         company_to_database.insert(
             company.clone(),
@@ -364,7 +367,7 @@ async fn obtain_vehicle_extract() -> VehicleDatabaseExtract {
                     continue;
                 },
             };
-            let mut fixed_coupling_u32s: Vec<u32> = Vec::new();
+            let mut fixed_coupling_vns: Vec<VehicleNumber> = Vec::new();
             for fixed_coupling_value in fixed_coupling {
                 let fc_i64 = match fixed_coupling_value.as_i64() {
                     Some(n) => n,
@@ -373,19 +376,19 @@ async fn obtain_vehicle_extract() -> VehicleDatabaseExtract {
                         continue;
                     },
                 };
-                let fc_u32: u32 = match fc_i64.try_into() {
+                let fc_vn: VehicleNumber = match fc_i64.try_into() {
                     Ok(n) => n,
                     Err(_) => {
-                        error!("fixed coupling value {} in {:?} bim database file not a u32", fc_i64, company);
+                        error!("fixed coupling value {} in {:?} bim database file not a VehicleNumber", fc_i64, company);
                         continue;
                     },
                 };
-                fixed_coupling_u32s.push(fc_u32);
+                fixed_coupling_vns.push(fc_vn);
             }
-            if fixed_coupling_u32s.len() > 0 {
+            if fixed_coupling_vns.len() > 0 {
                 company_to_vehicle_to_fixed_coupling.entry(company.clone())
                     .or_insert_with(|| HashMap::new())
-                    .insert(number, fixed_coupling_u32s);
+                    .insert(number, fixed_coupling_vns);
             }
         }
     }
@@ -426,7 +429,7 @@ pub(crate) async fn handle_bim_rides(request: &Request<Body>) -> Result<Response
             return return_500();
         },
     };
-    let mut company_to_known_fixed_couplings: HashMap<String, HashSet<Vec<u32>>> = HashMap::new();
+    let mut company_to_known_fixed_couplings: HashMap<String, HashSet<Vec<VehicleNumber>>> = HashMap::new();
     let mut rides: Vec<RideRow> = Vec::new();
     let mut has_any_vehicle_type = false;
     for row in rows {
@@ -435,12 +438,12 @@ pub(crate) async fn handle_bim_rides(request: &Request<Body>) -> Result<Response
         let ride_count: i64 = row.get(2);
         let last_line: Option<String> = row.get(3);
 
-        let vehicle_number_u32: u32 = vehicle_number_i64.try_into().unwrap();
+        let vehicle_number: VehicleNumber = vehicle_number_i64.try_into().unwrap();
 
         let vehicle_type_opt = vehicle_extract
             .company_to_vehicle_to_type
             .get(&company)
-            .and_then(|v2t| v2t.get(&vehicle_number_u32))
+            .and_then(|v2t| v2t.get(&vehicle_number))
             .map(|t| t.clone());
         if !has_any_vehicle_type && vehicle_type_opt.is_some() {
             has_any_vehicle_type = true;
@@ -449,7 +452,7 @@ pub(crate) async fn handle_bim_rides(request: &Request<Body>) -> Result<Response
         let fixed_coupling_opt = vehicle_extract
             .company_to_vehicle_to_fixed_coupling
             .get(&company)
-            .and_then(|v2fc| v2fc.get(&vehicle_number_u32));
+            .and_then(|v2fc| v2fc.get(&vehicle_number));
         if let Some(fixed_coupling) = fixed_coupling_opt {
             let known_fixed_couplings = company_to_known_fixed_couplings
                 .entry(company.clone())
@@ -465,7 +468,7 @@ pub(crate) async fn handle_bim_rides(request: &Request<Body>) -> Result<Response
             rides.push(RideRow::new(company, vehicle_type_opt, fixed_coupling.clone(), ride_count, last_line));
         } else {
             // not a fixed coupling; output 1:1
-            rides.push(RideRow::new(company, vehicle_type_opt, vec![vehicle_number_u32], ride_count, last_line));
+            rides.push(RideRow::new(company, vehicle_type_opt, vec![vehicle_number], ride_count, last_line));
         }
     }
 
@@ -518,19 +521,19 @@ pub(crate) async fn handle_bim_types(request: &Request<Body>) -> Result<Response
             return return_500();
         },
     };
-    let mut company_to_vehicle_to_riders: HashMap<String, HashMap<u32, BTreeSet<String>>> = HashMap::new();
+    let mut company_to_vehicle_to_riders: HashMap<String, HashMap<VehicleNumber, BTreeSet<String>>> = HashMap::new();
     let mut all_riders: BTreeSet<String> = BTreeSet::new();
     for row in rows {
         let rider_username: String = row.get(0);
         let company: String = row.get(1);
         let vehicle_number_i64: i64 = row.get(2);
 
-        let vehicle_number_u32: u32 = vehicle_number_i64.try_into().unwrap();
+        let vehicle_number: VehicleNumber = vehicle_number_i64.try_into().unwrap();
 
         company_to_vehicle_to_riders
             .entry(company)
             .or_insert_with(|| HashMap::new())
-            .entry(vehicle_number_u32)
+            .entry(vehicle_number)
             .or_insert_with(|| BTreeSet::new())
             .insert(rider_username.clone());
         all_riders.insert(rider_username);
@@ -617,12 +620,12 @@ pub(crate) async fn handle_bim_vehicles(request: &Request<Body>) -> Result<Respo
         Some(ctbdb) => ctbdb,
         None => return return_500(),
     };
-    let mut company_to_bim_database: BTreeMap<String, BTreeMap<u32, serde_json::Value>> = BTreeMap::new();
+    let mut company_to_bim_database: BTreeMap<String, BTreeMap<VehicleNumber, serde_json::Value>> = BTreeMap::new();
     for (company, bim_database_opt) in company_to_bim_database_opts.into_iter() {
         company_to_bim_database.insert(company, bim_database_opt.unwrap_or_else(|| BTreeMap::new()));
     }
 
-    let mut company_to_vehicle_to_ride_info: BTreeMap<String, BTreeMap<u32, (i64, BTreeMap<String, i64>, RideInfo, RideInfo)>> = BTreeMap::new();
+    let mut company_to_vehicle_to_ride_info: BTreeMap<String, BTreeMap<VehicleNumber, (i64, BTreeMap<String, i64>, RideInfo, RideInfo)>> = BTreeMap::new();
 
     let vehicles_res = db_conn.query(
         "
@@ -671,10 +674,10 @@ pub(crate) async fn handle_bim_vehicles(request: &Request<Body>) -> Result<Respo
     for vehicle_row in vehicle_rows {
         let company: String = vehicle_row.get(0);
         let vehicle_number_i64: i64 = vehicle_row.get(1);
-        let vehicle_number_u32: u32 = match vehicle_number_i64.try_into() {
+        let vehicle_number: VehicleNumber = match vehicle_number_i64.try_into() {
             Ok(vn) => vn,
             Err(_) => {
-                error!("failed to convert vehicle number {} to u32", vehicle_number_i64);
+                error!("failed to convert vehicle number {} to VehicleNumber", vehicle_number_i64);
                 continue;
             },
         };
@@ -693,7 +696,7 @@ pub(crate) async fn handle_bim_vehicles(request: &Request<Body>) -> Result<Respo
         company_to_vehicle_to_ride_info
             .entry(company)
             .or_insert_with(|| BTreeMap::new())
-            .insert(vehicle_number_u32, (ride_count, BTreeMap::new(), first_ride, latest_ride));
+            .insert(vehicle_number, (ride_count, BTreeMap::new(), first_ride, latest_ride));
     }
 
     let rider_vehicles_res = db_conn.query(
@@ -715,10 +718,10 @@ pub(crate) async fn handle_bim_vehicles(request: &Request<Body>) -> Result<Respo
     for rider_vehicle_row in rider_vehicle_rows {
         let company: String = rider_vehicle_row.get(0);
         let vehicle_number_i64: i64 = rider_vehicle_row.get(1);
-        let vehicle_number_u32: u32 = match vehicle_number_i64.try_into() {
+        let vehicle_number: VehicleNumber = match vehicle_number_i64.try_into() {
             Ok(vn) => vn,
             Err(_) => {
-                error!("failed to convert vehicle number {} to u32", vehicle_number_i64);
+                error!("failed to convert vehicle number {} to VehicleNumber", vehicle_number_i64);
                 continue;
             },
         };
@@ -728,12 +731,12 @@ pub(crate) async fn handle_bim_vehicles(request: &Request<Body>) -> Result<Respo
         all_riders.insert(rider_username.clone());
         company_to_vehicle_to_ride_info
             .get_mut(&company).expect("company not found")
-            .get_mut(&vehicle_number_u32).expect("vehicle not found")
+            .get_mut(&vehicle_number).expect("vehicle not found")
             .1
             .insert(rider_username, ride_count);
     }
 
-    let mut company_to_vehicle_to_profile: BTreeMap<String, BTreeMap<u32, VehicleProfile>> = BTreeMap::new();
+    let mut company_to_vehicle_to_profile: BTreeMap<String, BTreeMap<VehicleNumber, VehicleProfile>> = BTreeMap::new();
     for (company, bim_database) in &company_to_bim_database {
         let vehicle_to_profile = company_to_vehicle_to_profile
             .entry(company.clone())
@@ -883,15 +886,15 @@ pub(crate) async fn handle_bim_coverage(request: &Request<Body>) -> Result<Respo
                 return return_500();
             },
         };
-        let mut company_to_vehicles_ridden: HashMap<String, HashMap<u32, i64>> = HashMap::new();
+        let mut company_to_vehicles_ridden: HashMap<String, HashMap<VehicleNumber, i64>> = HashMap::new();
         let mut max_ride_count: i64 = 0;
         for vehicle_row in vehicle_rows {
             let company: String = vehicle_row.get(0);
             let vehicle_number_i64: i64 = vehicle_row.get(1);
-            let vehicle_number_u32: u32 = match vehicle_number_i64.try_into() {
+            let vehicle_number: VehicleNumber = match vehicle_number_i64.try_into() {
                 Ok(vn) => vn,
                 Err(_) => {
-                    error!("failed to convert vehicle number {} to u32", vehicle_number_i64);
+                    error!("failed to convert vehicle number {} to VehicleNumber", vehicle_number_i64);
                     continue;
                 },
             };
@@ -902,7 +905,7 @@ pub(crate) async fn handle_bim_coverage(request: &Request<Body>) -> Result<Respo
             company_to_vehicles_ridden
                 .entry(company)
                 .or_insert_with(|| HashMap::new())
-                .insert(vehicle_number_u32, ride_count);
+                .insert(vehicle_number, ride_count);
         }
 
         // get vehicle database
@@ -910,7 +913,7 @@ pub(crate) async fn handle_bim_coverage(request: &Request<Body>) -> Result<Respo
             Some(ctbdb) => ctbdb,
             None => return return_500(),
         };
-        let company_to_bim_database: BTreeMap<String, BTreeMap<u32, serde_json::Value>> = company_to_bim_database_opts.iter()
+        let company_to_bim_database: BTreeMap<String, BTreeMap<VehicleNumber, serde_json::Value>> = company_to_bim_database_opts.iter()
             .filter_map(|(comp, db_opt)| {
                 if let Some(db) = db_opt.as_ref() {
                     Some((comp.clone(), db.clone()))
@@ -1017,7 +1020,7 @@ pub(crate) async fn handle_bim_detail(request: &Request<Body>) -> Result<Respons
         Some(v) => v,
         None => return return_400("missing parameter \"vehicle\"").await,
     };
-    let vehicle_number: u32 = match vehicle_number_str.parse() {
+    let vehicle_number: VehicleNumber = match vehicle_number_str.parse() {
         Ok(vn) => vn,
         Err(_) => return return_400("invalid parameter value for \"vehicle\"").await,
     };
@@ -1026,7 +1029,7 @@ pub(crate) async fn handle_bim_detail(request: &Request<Body>) -> Result<Respons
         Some(ctbdb) => ctbdb,
         None => return return_500(),
     };
-    let mut company_to_bim_database: BTreeMap<String, BTreeMap<u32, serde_json::Value>> = BTreeMap::new();
+    let mut company_to_bim_database: BTreeMap<String, BTreeMap<VehicleNumber, serde_json::Value>> = BTreeMap::new();
     for (company, bim_database_opt) in company_to_bim_database_opts.into_iter() {
         company_to_bim_database.insert(company, bim_database_opt.unwrap_or_else(|| BTreeMap::new()));
     }
