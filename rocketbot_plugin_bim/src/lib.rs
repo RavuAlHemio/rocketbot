@@ -445,10 +445,8 @@ impl BimPlugin {
 
             let mut ret = if count == 0 {
                 format!("This vehicle has not been ridden yet.")
-            } else if count == 1 {
-                format!("This vehicle has been ridden once.")
             } else {
-                format!("This vehicle has been ridden {} times.", count)
+                format!("This vehicle has been ridden {}.", BimPlugin::english_adverbial_number(count))
             };
 
             for (is_you, operator) in &[(true, "="), (false, "<>")] {
@@ -830,12 +828,7 @@ impl BimPlugin {
         } else {
             let mut output = format!("The most ridden vehicles are:");
             for (&count, vehicle_numbers) in count_to_vehicles.iter().rev() {
-                let times = match count {
-                    1 => "once".to_owned(),
-                    2 => "twice".to_owned(),
-                    // "thrice" and above are already too poetic
-                    other => format!("{} times", other),
-                };
+                let times = Self::english_adverbial_number(count);
 
                 let vehicle_number_strings: Vec<String> = vehicle_numbers.iter()
                     .map(|vn| vn.to_string())
@@ -2148,6 +2141,15 @@ impl BimPlugin {
             "rd"
         } else {
             "th"
+        }
+    }
+
+    fn english_adverbial_number(num: i64) -> String {
+        match num {
+            1 => "once".to_owned(),
+            2 => "twice".to_owned(),
+            // "thrice" and above are already too poetic
+            other => format!("{} times", other),
         }
     }
 }
