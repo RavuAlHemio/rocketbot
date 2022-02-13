@@ -2096,6 +2096,137 @@ impl BimPlugin {
         ).await;
     }
 
+    async fn channel_command_widestbims(&self, channel_message: &ChannelMessage, command: &CommandInstance) {
+        let interface = match self.interface.upgrade() {
+            None => return,
+            Some(i) => i,
+        };
+
+        let lookback_range = match Self::lookback_range_from_command(command) {
+            Some(lr) => lr,
+            None => {
+                send_channel_message!(
+                    interface,
+                    &channel_message.channel.name,
+                    "Hey, no mixing options that mean different time ranges!",
+                ).await;
+                return;
+            },
+        };
+
+        let ride_conn = match self.connect_ride_db().await {
+            Ok(c) => c,
+            Err(_) => {
+                send_channel_message!(
+                    interface,
+                    &channel_message.channel.name,
+                    "Failed to open database connection. :disappointed:",
+                ).await;
+                return;
+            },
+        };
+
+        let ride_rows_res = Self::timestamp_query(
+            &ride_conn,
+            "
+                WITH vehicle_and_distinct_rider_count(company, vehicle_number, rider_count) AS (
+                    SELECT rav.company, rav.vehicle_number, COUNT(DISTINCT rav.rider_username)
+                    FROM bim.rides_and_vehicles rav
+                    WHERE rav.fixed_coupling_position = 0
+                    {LOOKBACK_TIMESTAMP}
+                    GROUP BY rav.company, rav.vehicle_number
+                )
+                SELECT vadrc.company, vadrc.vehicle_number, CAST(vadrc.rider_count AS bigint) rc
+                FROM vehicle_and_distinct_rider_count vadrc
+                WHERE NOT EXISTS ( -- ensure it's the maximum
+                    SELECT 1
+                    FROM vehicle_and_distinct_rider_count vadrc2
+                    WHERE vadrc2.rider_count > vadrc.rider_count
+                )
+            ",
+            "AND rav.\"timestamp\" >= $1",
+            "",
+            lookback_range,
+            &[],
+        ).await;
+        let ride_rows = match ride_rows_res {
+            Ok(rr) => rr,
+            Err(e) => {
+                error!("failed to obtain widest-audience vehicles: {}", e);
+                send_channel_message!(
+                    interface,
+                    &channel_message.channel.name,
+                    "Failed to obtain widest-audience vehicles. :disappointed:",
+                ).await;
+                return;
+            },
+        };
+
+        let mut default_company_widest_bims: BTreeSet<VehicleNumber> = BTreeSet::new();
+        let mut company_to_widest_bims: BTreeMap<String, BTreeSet<VehicleNumber>> = BTreeMap::new();
+
+        let mut max_rider_count_opt = None;
+        for ride_row in ride_rows {
+            let company: String = ride_row.get(0);
+            let vehicle_number_i64: i64 = ride_row.get(1);
+            let vehicle_number: VehicleNumber = vehicle_number_i64.try_into().unwrap();
+            let rider_count: i64 = ride_row.get(2);
+
+            max_rider_count_opt = Some(rider_count);
+
+            if company == self.default_company {
+                default_company_widest_bims.insert(vehicle_number);
+            } else {
+                company_to_widest_bims
+                    .entry(company)
+                    .or_insert_with(|| BTreeSet::new())
+                    .insert(vehicle_number);
+            }
+        }
+
+        let max_rider_count = match max_rider_count_opt {
+            Some(mrc) => mrc,
+            None => {
+                // if this value has never been set, it means nobody has ever ridden any vehicle
+                send_channel_message!(
+                    interface,
+                    &channel_message.channel.name,
+                    "Nobody has ever ridden any vehicle. :disappointed:",
+                ).await;
+                return;
+            },
+        };
+
+        let mut default_company_bim_strings: Vec<String> = default_company_widest_bims.iter()
+            .map(|b| b.to_string())
+            .collect();
+        let mut other_company_bim_strings: Vec<String> = company_to_widest_bims.iter()
+            .flat_map(|(comp, bims)|
+                bims.iter()
+                    .map(move |bim| format!("{}/{}", comp, bim))
+            )
+            .collect();
+        let mut all_bim_strings = Vec::with_capacity(default_company_bim_strings.len() + other_company_bim_strings.len());
+        all_bim_strings.append(&mut default_company_bim_strings);
+        all_bim_strings.append(&mut other_company_bim_strings);
+
+        let bim_string = all_bim_strings.join(", ");
+        let rider_str = if max_rider_count == 1 {
+            "rider"
+        } else {
+            "riders"
+        };
+
+        send_channel_message!(
+            interface,
+            &channel_message.channel.name,
+            &format!(
+                "The following vehicles have been ridden by {} {}:\n{}",
+                max_rider_count, rider_str, bim_string,
+            ),
+        ).await;
+    }
+
     #[inline]
     fn weekday_abbr2(weekday: Weekday) -> &'static str {
         match weekday {
@@ -2352,6 +2483,16 @@ impl RocketBotPlugin for BimPlugin {
                 .add_option("set-line", CommandValueType::String)
                 .build()
         ).await;
+        my_interface.register_channel_command(
+            &CommandDefinitionBuilder::new(
+                "widestbims".to_owned(),
+                "bim".to_owned(),
+                "{cpfx}widestbims".to_owned(),
+                "Lists vehicles that have served the widest selection of riders.".to_owned(),
+            )
+                .add_lookback_flags()
+                .build()
+        ).await;
 
         Self {
             interface,
@@ -2390,6 +2531,8 @@ impl RocketBotPlugin for BimPlugin {
             self.channel_command_bimtypes(channel_message, command).await
         } else if command.name == "fixbimride" {
             self.channel_command_fixbimride(channel_message, command).await
+        } else if command.name == "widestbims" {
+            self.channel_command_widestbims(channel_message, command).await
         }
     }
 
@@ -2422,6 +2565,8 @@ impl RocketBotPlugin for BimPlugin {
             Some(include_str!("../help/bimtypes.md").to_owned())
         } else if command_name == "fixbimride" {
             Some(include_str!("../help/fixbimride.md").to_owned())
+        } else if command_name == "widestbims" {
+            Some(include_str!("../help/widestbims.md").to_owned())
         } else {
             None
         }
