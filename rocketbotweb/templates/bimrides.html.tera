@@ -23,7 +23,7 @@
     {% if has_any_vehicle_type %}
       <td class="vehicle-type">{% if ride.vehicle_type_opt is string %}{{ ride.vehicle_type_opt|escape }}{% endif %}</td>
     {% endif %}
-    <td class="vehicle-numbers">{% for vn in ride.vehicle_numbers %}{% if not loop.first %}+{% endif %}{{ vn }}{% endfor %}</td>
+    <td class="vehicle-numbers">{% for vn in ride.vehicle_numbers %}{% if not loop.first %}+{% endif %}<a href="bim-detail?company={{ ride.company|urlencode|escape }}&amp;vehicle={{ vn }}">{{ vn }}</a>{% endfor %}</td>
     <td class="ride-count">{{ ride.ride_count }}</td>
     <td class="line">{% set line = ride.last_line %}{% if line is string %}{{ line|escape }}{% endif %}</td>
   </tr>

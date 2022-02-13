@@ -45,7 +45,7 @@
     {% for vehicle, profile in vehicle_to_profile %}
       <tr>
         <td class="company">{{ company|escape }}</td>
-        <td class="vehicle-number">{{ vehicle }}</td>
+        <td class="vehicle-number"><a href="bim-detail?company={{ company|urlencode|escape }}&amp;vehicle={{ vehicle|urlencode|escape }}">{{ vehicle }}</a></td>
         <td class="type-code">{{ profile.type_code|maybe_escape }}</td>
         <td class="manufacturer">{{ profile.manufacturer|maybe_escape }}</td>
         <td class="active-from">{{ profile.active_from|maybe_escape }}</td>
