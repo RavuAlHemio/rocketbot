@@ -1,0 +1,34 @@
+{% extends "base.html.tera" %}
+
+{% block title %}Wide-Audience Public Transport Vehicles{% endblock %}
+
+{% block content %}
+<main class="wide-bims">
+
+<h1>Wide-Audience Public Transport Vehicles</h1>
+
+<p>The following vehicles have been ridden by <span class="max-rider-count">{{ max_rider_count }}</span> riders.</p>
+
+{% for group in rider_groups %}
+<section class="rider-group">
+
+<h2>
+    {%- for rider in group.riders -%}
+        {%- if not loop.first %}, {% endif -%}
+        <span class="rider">{{- rider|escape -}}</span>
+    {%- endfor -%}
+</h2>
+
+<p>
+    {%- for vehicle in group.vehicles -%}
+        {%- if not loop.first %}, {% endif -%}
+        <a href="bim-detail?company={{ vehicle.company|urlencode|escape }}&amp;vehicle={{ vehicle.number }}"><span class="company">{{ vehicle.company|escape }}</span>/<span class="number">{{ vehicle.number }}</span></a>
+    {%- endfor -%}
+</p>
+
+</section> {#- end of rider group #}
+{% endfor %}
+
+</main>
+
+{% endblock %}

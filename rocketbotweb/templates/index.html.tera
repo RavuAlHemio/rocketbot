@@ -16,6 +16,7 @@
     <a href="bim-rides">Rides</a>,
     <a href="bim-types">Vehicle Types</a>,
     <a href="bim-vehicles">Vehicles</a> (<a href="bim-vehicles?per-rider=1">per rider</a>),
+    <a href="wide-bims">Wide-Audience Vehicles</a>,
     <a href="bim-coverage">Coverage</a>
   </li>
 </ul>
