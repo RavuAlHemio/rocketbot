@@ -1,4 +1,4 @@
-*Usage:* `{cpfx}bimridertypes [-n|--sort-by-number] [-y|--last-year|-m|--last-month|-w|--last-week] [USERNAME]`
+*Usage:* `{cpfx}bimridertypes [-n|--sort-by-number] [-y|--last-year|-m|--last-month|-w|--last-week|-d|--last-day] [USERNAME]`
 
 Returns the types of vehicles ridden by the rider with the given `USERNAME`. If none is given, outputs this information about the user who issued the command.
 
@@ -8,3 +8,4 @@ Normally considers all rides "since the beginning of time". This can be limited:
 * With `-y` or `--last-year`, only considers rides in the last 366 days.
 * With `-m` or `--last-month`, only considers rides in the last 31 days.
 * With `-w` or `--last-week`, only considers rides in the last 7 days.
+* With `-d` or `--last-day`, only considers rides the last day (24 hours).

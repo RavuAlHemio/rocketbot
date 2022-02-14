@@ -37,6 +37,7 @@ enum LookbackRange {
     LastYear,
     LastMonth,
     LastWeek,
+    LastDay,
 }
 impl LookbackRange {
     pub fn days(&self) -> Option<i64> {
@@ -45,6 +46,7 @@ impl LookbackRange {
             Self::LastYear => Some(366),
             Self::LastMonth => Some(31), // yeah, I know
             Self::LastWeek => Some(7),
+            Self::LastDay => Some(1),
         }
     }
 
@@ -70,6 +72,8 @@ impl AddLookbackFlags for CommandDefinitionBuilder {
             .add_flag("last-year")
             .add_flag("w")
             .add_flag("last-week")
+            .add_flag("d")
+            .add_flag("last-day")
     }
 }
 
@@ -309,12 +313,17 @@ impl BimPlugin {
             command.flags.contains("w")
             || command.flags.contains("last-week")
         ;
+        let last_day =
+            command.flags.contains("d")
+            || command.flags.contains("last-day")
+        ;
 
-        match (last_year, last_month, last_week) {
-            (true, false, false) => Some(LookbackRange::LastYear),
-            (false, true, false) => Some(LookbackRange::LastMonth),
-            (false, false, true) => Some(LookbackRange::LastWeek),
-            (false, false, false) => Some(LookbackRange::SinceBeginning),
+        match (last_year, last_month, last_week, last_day) {
+            (true, false, false, false) => Some(LookbackRange::LastYear),
+            (false, true, false, false) => Some(LookbackRange::LastMonth),
+            (false, false, true, false) => Some(LookbackRange::LastWeek),
+            (false, false, false, true) => Some(LookbackRange::LastDay),
+            (false, false, false, false) => Some(LookbackRange::SinceBeginning),
             _ => None,
         }
     }
