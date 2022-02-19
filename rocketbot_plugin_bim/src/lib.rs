@@ -203,25 +203,50 @@ impl CompanyDefinition {
             .map(|r| r.as_str())
             .unwrap_or(".+");
 
+        // {vehicle}
+        // {vehicle}/{line}
+        // {vehicle}+{vehicle}+{vehicle}
+        // {vehicle}+{vehicle}+{vehicle}/line
+        // {line}:{vehicle}
+        // {line}:{vehicle}+{vehicle}+{vehicle}
         let valr_string = format!(
             concat!(
                 "^",
-                "(?P<vehicles>",
-                    "(?:{})",
-                    "(?:",
-                        "[+]",
-                        "(?:{})",
-                    ")*",
-                ")",
                 "(?:",
-                    "[/]",
-                    "(?P<line>",
-                        "(?:{})",
+                    "(?:",
+                        "(?P<vehicles>",
+                            "(?:{})",
+                            "(?:",
+                                "[+]",
+                                "(?:{})",
+                            ")*",
+                        ")",
+                        "(?:",
+                            "[/]",
+                            "(?P<line>",
+                                "(?:{})",
+                            ")",
+                        ")?",
                     ")",
-                ")?",
+                "|",
+                    "(?:",
+                        "(?P<line_lv>",
+                            "(?:{})",
+                        ")",
+                        "\\:",
+                        "(?P<vehicles_lv>",
+                            "(?:{})",
+                            "(?:",
+                                "[+]",
+                                "(?:{})",
+                            ")*",
+                        ")",
+                    ")",
+                ")",
                 "$"
             ),
             vehicle_number_rstr, vehicle_number_rstr, line_number_rstr,
+            line_number_rstr, vehicle_number_rstr, vehicle_number_rstr,
         );
         let valr = Regex::new(&valr_string)
             .expect("failed to assemble vehicle-and-line regex");
@@ -2769,13 +2794,37 @@ pub async fn increment_rides_by_spec(
     allow_fixed_coupling_combos: bool,
 ) -> Result<RideInfo, IncrementBySpecError> {
     let spec_no_spaces = rides_spec.replace(" ", "");
-    let caps = match company_def.vehicle_and_line_regex().captures(&spec_no_spaces) {
+
+    let vehicle_and_line_regex = company_def.vehicle_and_line_regex();
+    let mut vehicle_cap_names = Vec::new();
+    let mut line_cap_names = Vec::new();
+    for cap_name in vehicle_and_line_regex.capture_names() {
+        if let Some(cn) = cap_name {
+            if cn.starts_with("vehicles") {
+                vehicle_cap_names.push(cn);
+            } else if cn.starts_with("line") {
+                line_cap_names.push(cn);
+            }
+        }
+    }
+
+    let caps = match vehicle_and_line_regex.captures(&spec_no_spaces) {
         Some(c) => c,
         None => return Err(IncrementBySpecError::SpecParseFailure(spec_no_spaces)),
     };
 
-    let vehicles_str = caps.name("vehicles").expect("failed to capture vehicles").as_str();
-    let line_str_opt = caps.name("line").map(|l| l.as_str());
+    let vehicles_str_opt = vehicle_cap_names
+        .iter()
+        .filter_map(|cn| caps.name(cn))
+        .map(|cap| cap.as_str())
+        .nth(0);
+    let vehicles_str = vehicles_str_opt.expect("failed to capture vehicles");
+
+    let line_str_opt = line_cap_names
+        .iter()
+        .filter_map(|cn| caps.name(cn))
+        .map(|cap| cap.as_str())
+        .nth(0);
 
     let vehicle_num_strs: Vec<&str> = vehicles_str.split("+").collect();
     let mut vehicle_nums = Vec::new();
