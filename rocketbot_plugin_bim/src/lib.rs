@@ -233,7 +233,7 @@ impl CompanyDefinition {
                         "(?P<line_lv>",
                             "(?:{})",
                         ")",
-                        "\\:",
+                        ":",
                         "(?P<vehicles_lv>",
                             "(?:{})",
                             "(?:",
