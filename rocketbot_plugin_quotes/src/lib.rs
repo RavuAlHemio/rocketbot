@@ -394,7 +394,7 @@ RETURNING quote_id
 
         send_channel_message!(
             interface,
-            channel_name,
+            &channel_message.channel.name,
             &format!("Adding quote {}", command.rest),
         ).await;
 
