@@ -364,6 +364,9 @@ RETURNING quote_id
             None => return,
             Some(i) => i,
         };
+        let mut quotes_lock = self.quotes_state.lock().await;
+        let mut quotes_state = &mut *quotes_lock;
+
         let new_quote = Quote::new(
             -1,
             Utc::now(),
@@ -388,6 +391,17 @@ RETURNING quote_id
                 ),
             ).await;
         }
+
+        send_channel_message!(
+            interface,
+            channel_name,
+            &format!("Adding quote {}", command.rest),
+        ).await;
+
+        // invalidate
+        quotes_state.shuffled_any_quotes = None;
+        quotes_state.shuffled_bad_quotes = None;
+        quotes_state.shuffled_good_quotes = None;
     }
 
     async fn handle_remember(&self, channel_message: &ChannelMessage, command: &CommandInstance) {
