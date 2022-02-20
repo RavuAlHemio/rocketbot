@@ -15,7 +15,7 @@ CREATE SEQUENCE quotes.quote_votes_vote_id_seq AS bigint;
 CREATE TABLE quotes.quote_votes
 ( vote_id bigint NOT NULL DEFAULT nextval('quotes.quote_votes_vote_id_seq')
 , quote_id bigint NOT NULL
-, voter_lowercase character varying(255) NOT NULL,
+, voter_lowercase character varying(255) NOT NULL
 , points smallint NOT NULL
 , CONSTRAINT quote_votes_pkey PRIMARY KEY (vote_id)
 , CONSTRAINT quote_votes_quote_id_voter_lowercase_key UNIQUE (quote_id, voter_lowercase)
