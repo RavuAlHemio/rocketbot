@@ -86,6 +86,8 @@ fn substring_to_like(substring: &str, escape_char: char) -> String {
 pub struct QuotesPlugin {
     interface: Weak<dyn RocketBotInterface>,
     db_conn_string: String,
+    command_prefix: String,
+    table_prefix: String,
     remember_posts_for_quotes: usize,
     vote_threshold: i64,
     quotes_state: Mutex<QuotesState>,
@@ -117,8 +119,8 @@ impl QuotesPlugin {
     ) -> Result<Vec<QuoteAndVoteSum>, tokio_postgres::Error> {
         let quote_query_format = "
 SELECT q.quote_id, q.timestamp, q.channel, q.author, q.message_type, q.body, COALESCE(SUM(qv.points), 0) vote_sum
-FROM quotes.quotes q
-LEFT OUTER JOIN quotes.quote_votes qv ON qv.quote_id = q.quote_id
+FROM quotes.{{table_prefix}}quotes q
+LEFT OUTER JOIN quotes.{{table_prefix}}quote_votes qv ON qv.quote_id = q.quote_id
 {{where_filter}}
 GROUP BY q.quote_id, q.timestamp, q.channel, q.author, q.message_type, q.body
 {{having_filter}}
@@ -181,6 +183,10 @@ GROUP BY q.quote_id, q.timestamp, q.channel, q.author, q.message_type, q.body
         };
 
         let quote_query = quote_query_format
+            .replace(
+                "{{table_prefix}}",
+                &self.table_prefix,
+            )
             .replace(
                 "{{having_filter}}",
                 &having_filter,
@@ -254,7 +260,10 @@ GROUP BY q.quote_id, q.timestamp, q.channel, q.author, q.message_type, q.body
                 },
             };
             let rows_res = db_client.query_opt(
-                "SELECT points FROM quotes.quote_votes WHERE quote_id = $1 AND voter_lowercase = $2",
+                &format!(
+                    "SELECT points FROM quotes.{}quote_votes WHERE quote_id = $1 AND voter_lowercase = $2",
+                    self.table_prefix,
+                ),
                 &[&quote_and_vote_sum.quote.id, &requestor_username],
             ).await;
             match rows_res {
@@ -333,11 +342,14 @@ GROUP BY q.quote_id, q.timestamp, q.channel, q.author, q.message_type, q.body
         message_type_string.push(message_type_char);
 
         let inserted_row = db_client.query_one(
-            r#"
-INSERT INTO quotes.quotes ("timestamp", channel, author, message_type, body)
+            &format!(
+                r#"
+INSERT INTO quotes.{}quotes ("timestamp", channel, author, message_type, body)
 VALUES ($1, $2, $3, $4, $5)
 RETURNING quote_id
-            "#,
+                "#,
+                self.table_prefix,
+            ),
             &[&new_quote.timestamp, &new_quote.channel, &new_quote.author, &message_type_string, &new_quote.body],
         ).await?;
         let inserted_id: i64 = inserted_row.get(0);
@@ -492,7 +504,7 @@ RETURNING quote_id
         let channel_name = &channel_message.channel.name;
         let sender_username = &channel_message.message.sender.username;
 
-        let author_username = if command.name == "quoteuser" {
+        let author_username = if command.name == format!("{}quoteuser", self.command_prefix) {
             Some(command.args[0].as_str())
         } else {
             None
@@ -632,10 +644,13 @@ RETURNING quote_id
     async fn upsert_vote(&self, quote_id: i64, voter_username: &str, vote_points: i16) -> Result<(), tokio_postgres::Error> {
         let db_client = self.connect_db().await?;
         db_client.execute(
-            r#"
-INSERT INTO quotes.quote_votes (quote_id, voter_lowercase, points) VALUES ($1, $2, $3)
+            &format!(
+                r#"
+INSERT INTO quotes.{}quote_votes (quote_id, voter_lowercase, points) VALUES ($1, $2, $3)
 ON CONFLICT (quote_id, voter_lowercase) DO UPDATE SET points = excluded.points
-            "#,
+                "#,
+                self.table_prefix,
+            ),
             &[&quote_id, &voter_username, &vote_points],
         ).await?;
         Ok(())
@@ -647,9 +662,13 @@ ON CONFLICT (quote_id, voter_lowercase) DO UPDATE SET points = excluded.points
             Some(i) => i,
         };
 
-        let vote_points: i16 = if command.name == "upquote" || command.name == "uq" {
+        let vote_points: i16 = if
+                command.name == format!("{}upquote", self.command_prefix)
+                || command.name == format!("{}uq", self.command_prefix) {
             1
-        } else if command.name == "downquote" || command.name == "dq" {
+        } else if
+                command.name == format!("{}downquote", self.command_prefix)
+                || command.name == format!("{}dq", self.command_prefix) {
             -1
         } else {
             panic!("unexpected command {:?} in handle_vote", command.name);
@@ -701,6 +720,12 @@ impl RocketBotPlugin for QuotesPlugin {
             .as_usize().unwrap_or(30);
         let vote_threshold = config["vote_threshold"]
             .as_i64().unwrap_or(-3);
+        let command_prefix = config["command_prefix"]
+            .as_str().unwrap_or("")
+            .to_owned();
+        let table_prefix = config["table_prefix"]
+            .as_str().unwrap_or("")
+            .to_owned();
 
         let quotes_state = Mutex::new(
             "QuotesPlugin::quotes_state",
@@ -718,25 +743,25 @@ impl RocketBotPlugin for QuotesPlugin {
         );
 
         let addquote_command = CommandDefinition::new(
-            "addquote".to_owned(),
+            format!("{}addquote", command_prefix),
             "quotes".to_owned(),
             Some(HashSet::new()),
             HashMap::new(),
             0,
             CommandBehaviors::empty(),
-            "{cpfx}addquote QUOTE".to_owned(),
+            format!("{{cpfx}}{}addquote QUOTE", command_prefix),
             "Adds the given quote to the quote database.".to_owned(),
         );
         my_interface.register_channel_command(&addquote_command).await;
 
         let remember_command = CommandDefinition::new(
-            "remember".to_owned(),
+            format!("{}remember", command_prefix),
             "quotes".to_owned(),
             Some(HashSet::new()),
             HashMap::new(),
             1,
             CommandBehaviors::empty(),
-            "{cpfx}remember USERNAME SUBSTRING".to_owned(),
+            format!("{{cpfx}}{}remember USERNAME SUBSTRING", command_prefix),
             "Adds a recent utterance of the given user to the quote database.".to_owned(),
         );
         my_interface.register_channel_command(&remember_command).await;
@@ -750,54 +775,54 @@ impl RocketBotPlugin for QuotesPlugin {
         quote_case_flags.insert("c".to_owned());
 
         let quote_command = CommandDefinition::new(
-            "quote".to_owned(),
+            format!("{}quote", command_prefix),
             "quotes".to_owned(),
             Some(quote_case_flags.clone()),
             HashMap::new(),
             0,
             CommandBehaviors::empty(),
-            "{cpfx}quote [{lopfx}any|{lopfx}bad] [{sopfx}r] [{sopfx}c] [SUBSTRING]".to_owned(),
+            format!("{{cpfx}}{}quote [{{lopfx}}any|{{lopfx}}bad] [{{sopfx}}r] [{{sopfx}}c] [SUBSTRING]", command_prefix),
             "Outputs a random quote containing the given substring.".to_owned(),
         );
         my_interface.register_channel_command(&quote_command).await;
 
         let quoteuser_command = CommandDefinition::new(
-            "quoteuser".to_owned(),
+            format!("{}quoteuser", command_prefix),
             "quotes".to_owned(),
             Some(quote_case_flags.clone()),
             HashMap::new(),
             1,
             CommandBehaviors::empty(),
-            "{cpfx}quoteuser [{lopfx}any|{lopfx}bad] [{sopfx}r] [{sopfx}c] USERNAME [SUBSTRING]".to_owned(),
+            format!("{{cpfx}}{}quoteuser [{{lopfx}}any|{{lopfx}}bad] [{{sopfx}}r] [{{sopfx}}c] USERNAME [SUBSTRING]", command_prefix),
             "Outputs a random quote from the given user containing the given substring.".to_owned(),
         );
         my_interface.register_channel_command(&quoteuser_command).await;
 
         let nextquote_command = CommandDefinition::new(
-            "nextquote".to_owned(),
+            format!("{}nextquote", command_prefix),
             "quotes".to_owned(),
             Some(quote_flags.clone()),
             HashMap::new(),
             0,
             CommandBehaviors::empty(),
-            "{cpfx}nextquote [{lopfx}any|{lopfx}bad] [{sopfx}r]".to_owned(),
+            format!("{{cpfx}}{}nextquote [{{lopfx}}any|{{lopfx}}bad] [{{sopfx}}r]", command_prefix),
             "Displays the next quote from a pre-shuffled list of quotes.".to_owned(),
         );
         my_interface.register_channel_command(&nextquote_command).await;
 
         let upquote_command = CommandDefinition::new(
-            "upquote".to_owned(),
+            format!("{}upquote", command_prefix),
             "quotes".to_owned(),
             Some(quote_flags.clone()),
             HashMap::new(),
             0,
             CommandBehaviors::empty(),
-            "{cpfx}uq|{cpfx}upquote|{cpfx}dq|{cpfx}downquote".to_owned(),
+            format!("{{cpfx}}{0}uq|{{cpfx}}{0}upquote|{{cpfx}}{0}dq|{{cpfx}}{0}downquote", command_prefix),
             "Updates the most recently added or displayed quote with a positive or a negative vote from you.".to_owned(),
         );
-        let uq_command = upquote_command.copy_named("uq");
-        let downquote_command = upquote_command.copy_named("downquote");
-        let dq_command = upquote_command.copy_named("dq");
+        let uq_command = upquote_command.copy_named(&format!("{}uq", command_prefix));
+        let downquote_command = upquote_command.copy_named(&format!("{}downquote", command_prefix));
+        let dq_command = upquote_command.copy_named(&format!("{}dq", command_prefix));
         my_interface.register_channel_command(&upquote_command).await;
         my_interface.register_channel_command(&uq_command).await;
         my_interface.register_channel_command(&downquote_command).await;
@@ -806,6 +831,8 @@ impl RocketBotPlugin for QuotesPlugin {
         QuotesPlugin {
             interface,
             db_conn_string,
+            command_prefix,
+            table_prefix,
             remember_posts_for_quotes,
             vote_threshold,
             quotes_state,
@@ -852,35 +879,43 @@ impl RocketBotPlugin for QuotesPlugin {
     }
 
     async fn channel_command(&self, channel_message: &ChannelMessage, command: &CommandInstance) {
-        if command.name == "addquote" {
+        if command.name == format!("{}addquote", self.command_prefix) {
             self.handle_addquote(channel_message, command).await
-        } else if command.name == "remember" {
+        } else if command.name == format!("{}remember", self.command_prefix) {
             self.handle_remember(channel_message, command).await
-        } else if command.name == "quote" {
+        } else if command.name == format!("{}quote", self.command_prefix) {
             self.handle_quote_quoteuser(channel_message, command).await
-        } else if command.name == "quoteuser" {
+        } else if command.name == format!("{}quoteuser", self.command_prefix) {
             self.handle_quote_quoteuser(channel_message, command).await
-        } else if command.name == "nextquote" {
+        } else if command.name == format!("{}nextquote", self.command_prefix) {
             self.handle_nextquote(channel_message, command).await
-        } else if command.name == "upquote" || command.name == "uq" || command.name == "downquote" || command.name == "dq" {
+        } else if
+                command.name == format!("{}upquote", self.command_prefix)
+                || command.name == format!("{}uq", self.command_prefix)
+                || command.name == format!("{}downquote", self.command_prefix)
+                || command.name == format!("{}dq", self.command_prefix) {
             self.handle_vote(channel_message, command).await
         }
     }
 
     async fn get_command_help(&self, command_name: &str) -> Option<String> {
-        if command_name == "addquote" {
+        if command_name == format!("{}addquote", self.command_prefix) {
             Some(include_str!("../help/addquote.md").to_owned())
-        } else if command_name == "remember" {
+        } else if command_name == format!("{}remember", self.command_prefix) {
             Some(include_str!("../help/remember.md").to_owned())
-        } else if command_name == "quote" {
+        } else if command_name == format!("{}quote", self.command_prefix) {
             Some(include_str!("../help/quote.md").to_owned())
-        } else if command_name == "quoteuser" {
+        } else if command_name == format!("{}quoteuser", self.command_prefix) {
             Some(include_str!("../help/quoteuser.md").to_owned())
-        } else if command_name == "nextquote" {
+        } else if command_name == format!("{}nextquote", self.command_prefix) {
             Some(include_str!("../help/nextquote.md").to_owned())
-        } else if command_name == "upquote" || command_name == "uq" {
+        } else if
+                command_name == format!("{}upquote", self.command_prefix)
+                || command_name == format!("{}uq", self.command_prefix) {
             Some(include_str!("../help/upquote.md").to_owned())
-        } else if command_name == "downquote" || command_name == "dq" {
+        } else if
+                command_name == format!("{}downquote", self.command_prefix)
+                || command_name == format!("{}dq", self.command_prefix) {
             Some(include_str!("../help/downquote.md").to_owned())
         } else {
             None
