@@ -18,7 +18,7 @@ CREATE TABLE bim.ride_vehicles
 , spec_position bigint NOT NULL
 , as_part_of_fixed_coupling boolean NOT NULL
 , fixed_coupling_position bigint NOT NULL
-, CONSTRAINT fkey_ride_vehicles_ride_id FOREIGN KEY (ride_id) REFERENCES bim.rides (id) ON DELETE CASCADE
+, CONSTRAINT fkey_ride_vehicles_ride_id FOREIGN KEY (ride_id) REFERENCES bim.rides (id) ON DELETE CASCADE DEFERRABLE
 , CONSTRAINT pkey_ride_vehicles PRIMARY KEY (ride_id, vehicle_number)
 , CONSTRAINT check_ride_vehicles CHECK (vehicle_number >= 0)
 );
