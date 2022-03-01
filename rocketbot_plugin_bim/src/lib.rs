@@ -122,6 +122,7 @@ pub struct LastRideInfo {
 
 #[derive(Clone, Debug, Hash, Eq, PartialEq)]
 pub struct OtherRiderInfo {
+    pub all_other_rider_count: usize,
     pub rider_username: String,
     pub last_ride: DateTime<Local>,
     pub last_line: Option<String>,
@@ -580,18 +581,16 @@ impl BimPlugin {
             },
         };
 
-        let increment_res = {
-            increment_rides_by_spec(
-                &mut ride_conn,
-                bim_database_opt.as_ref(),
-                company,
-                company_def,
-                &channel_message.message.sender.username,
-                channel_message.message.timestamp.with_timezone(&Local),
-                &command.rest,
-                self.allow_fixed_coupling_combos,
-            ).await
-        };
+        let increment_res = increment_rides_by_spec(
+            &mut ride_conn,
+            bim_database_opt.as_ref(),
+            company,
+            company_def,
+            &channel_message.message.sender.username,
+            channel_message.message.timestamp.with_timezone(&Local),
+            &command.rest,
+            self.allow_fixed_coupling_combos,
+        ).await;
         let mut last_ride_infos = match increment_res {
             Ok(lri) => lri,
             Err(IncrementBySpecError::SpecParseFailure(spec)) => {
@@ -675,6 +674,12 @@ impl BimPlugin {
                     if let Some(ln) = &or.last_line {
                         write_expect!(&mut resp, " on line {}", ln);
                     }
+                    let total_ride_count = lr.ride_count + or.all_other_rider_count + 1;
+                    write_expect!(&mut resp,
+                        ", making it {} {} in total.",
+                        total_ride_count,
+                        if total_ride_count == 1 { "ride" } else { "rides" },
+                    );
                 }
                 write_expect!(&mut resp, ".");
             } else {
@@ -689,6 +694,12 @@ impl BimPlugin {
                     if let Some(ln) = &or.last_line {
                         write_expect!(&mut resp, " on line {}", ln);
                     }
+                    let total_ride_count = or.all_other_rider_count + 1;
+                    write_expect!(&mut resp,
+                        ", making it {} {} in total",
+                        total_ride_count,
+                        if total_ride_count == 1 { "ride" } else { "rides" },
+                    );
                 }
                 write_expect!(&mut resp, "!");
             }
@@ -721,7 +732,20 @@ impl BimPlugin {
                         BimPlugin::canonical_date_format(&lr.last_ride, false, false),
                     );
                     if let Some(ln) = &lr.last_line {
-                        write_expect!(&mut resp, " on line {}", ln);
+                        write_expect!(&mut resp, " on {}", ln);
+                    }
+                    if let Some(or) = &vehicle_ride.last_ride_other_rider {
+                        write_expect!(
+                            &mut resp,
+                            " and {} {}",
+                            or.rider_username,
+                            BimPlugin::canonical_date_format(&or.last_ride, false, false),
+                        );
+                        if let Some(ln) = &or.last_line {
+                            write_expect!(&mut resp, " on {}", ln);
+                        }
+                        let total_ride_count = lr.ride_count + or.all_other_rider_count + 1;
+                        write_expect!(&mut resp, " ({} total)", total_ride_count);
                     }
                 } else {
                     write_expect!(&mut resp, "first time");
@@ -733,8 +757,10 @@ impl BimPlugin {
                             BimPlugin::canonical_date_format(&or.last_ride, false, false),
                         );
                         if let Some(ln) = &or.last_line {
-                            write_expect!(&mut resp, " on line {}", ln);
+                            write_expect!(&mut resp, " on {}", ln);
                         }
+                        let total_ride_count = or.all_other_rider_count + 1;
+                        write_expect!(&mut resp, " ({} total)", total_ride_count);
                     }
                     write_expect!(&mut resp, "!");
                 }
@@ -742,7 +768,7 @@ impl BimPlugin {
             }
             resp.push_str("\n");
             if let Some(ln) = &last_ride_infos.line {
-                write_expect!(&mut resp, "on line {} ", ln);
+                write_expect!(&mut resp, "on {} ", ln);
             }
             write_expect!(&mut resp, "(ride {})", last_ride_infos.ride_id);
             resp
@@ -2708,7 +2734,9 @@ pub async fn add_ride(
         };
 
         let other_info = if prev_other_count > 0 {
+            let all_other_rider_count: usize = prev_other_count.try_into().unwrap();
             Some(OtherRiderInfo {
+                all_other_rider_count,
                 rider_username: prev_other_rider.unwrap(),
                 last_ride: prev_other_timestamp.unwrap(),
                 last_line: prev_other_line,
