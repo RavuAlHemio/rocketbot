@@ -676,7 +676,7 @@ impl BimPlugin {
                     }
                     let total_ride_count = lr.ride_count + or.all_other_rider_count + 1;
                     write_expect!(&mut resp,
-                        ", making it {} {} in total.",
+                        ", making it {} {} in total",
                         total_ride_count,
                         if total_ride_count == 1 { "ride" } else { "rides" },
                     );
@@ -710,9 +710,13 @@ impl BimPlugin {
         } else {
             // multiple vehicles
             let mut resp = format!(
-                "{} is currently riding:",
+                "{} is currently riding",
                 channel_message.message.sender.username,
             );
+            if let Some(ln) = &last_ride_infos.line {
+                write_expect!(&mut resp, " on {}", ln);
+            }
+            resp.push_str(":");
             for vehicle_ride in &last_ride_infos.vehicles {
                 let vehicle_type = if let Some(bd) = &bim_database_opt {
                     bd
@@ -745,7 +749,7 @@ impl BimPlugin {
                             write_expect!(&mut resp, " on {}", ln);
                         }
                         let total_ride_count = lr.ride_count + or.all_other_rider_count + 1;
-                        write_expect!(&mut resp, " ({} total)", total_ride_count);
+                        write_expect!(&mut resp, " \u{2013} {} total", total_ride_count);
                     }
                 } else {
                     write_expect!(&mut resp, "first time");
@@ -760,17 +764,13 @@ impl BimPlugin {
                             write_expect!(&mut resp, " on {}", ln);
                         }
                         let total_ride_count = or.all_other_rider_count + 1;
-                        write_expect!(&mut resp, " ({} total)", total_ride_count);
+                        write_expect!(&mut resp, " \u{2013} {} total", total_ride_count);
                     }
                     write_expect!(&mut resp, "!");
                 }
                 write_expect!(&mut resp, ")");
             }
-            resp.push_str("\n");
-            if let Some(ln) = &last_ride_infos.line {
-                write_expect!(&mut resp, "on {} ", ln);
-            }
-            write_expect!(&mut resp, "(ride {})", last_ride_infos.ride_id);
+            write_expect!(&mut resp, "\n(ride {})", last_ride_infos.ride_id);
             resp
         };
 
