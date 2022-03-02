@@ -1,3 +1,3 @@
-*Usage:* `{cpfx}sedparse PATTERNS`
+*Usage:* `{cpfx}sedparse COMMANDS`
 
-Attempts to parse `PATTERNS` as a series of one or more sed patterns and outputs information about whether parsing was successful.
+Attempts to parse `COMMANDS` as a series of one or more sed commands and outputs information about whether parsing was successful.

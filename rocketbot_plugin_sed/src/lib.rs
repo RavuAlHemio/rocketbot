@@ -3,7 +3,7 @@ mod parsing;
 
 
 use std::collections::HashMap;
-use std::sync::{Arc, Weak};
+use std::sync::Weak;
 
 use async_trait::async_trait;
 use log::info;
@@ -30,7 +30,7 @@ pub struct SedPlugin {
     channel_name_to_my_outgoing_messages: Mutex<HashMap<String, Vec<String>>>,
 }
 impl SedPlugin {
-    async fn handle_replacement_command(&self, interface: Arc<dyn RocketBotInterface>, channel_message: ChannelMessage) -> bool {
+    async fn handle_replacement_command(&self, channel_message: ChannelMessage) -> bool {
         let raw_message = match &channel_message.message.raw {
             Some(rm) => rm,
             None => return false, // non-textual messages do not contain commands
@@ -39,6 +39,20 @@ impl SedPlugin {
             // this message is non-textual too
             return false;
         }
+
+        self.perform_replacements(
+            &raw_message,
+            &channel_message.channel.name,
+            channel_message.message.is_by_bot,
+            self.require_all_transformations_successful,
+        ).await
+    }
+
+    async fn perform_replacements(&self, raw_message: &str, channel_name: &str, is_bot_message: bool, require_all_transformations_successful: bool) -> bool {
+        let interface = match self.interface.upgrade() {
+            None => return false,
+            Some(i) => i,
+        };
 
         let transformations = match parse_replacement_commands(&raw_message) {
             Ok(sc) => sc,
@@ -59,7 +73,7 @@ impl SedPlugin {
             return true;
         }
 
-        if channel_message.message.is_by_bot {
+        if is_bot_message {
             // avoid botloops
             return true;
         }
@@ -68,7 +82,7 @@ impl SedPlugin {
             // find the message to perform a replacement in
             let messages_guard = self.channel_name_to_last_messages
                 .lock().await;
-            match messages_guard.get(&channel_message.channel.name) {
+            match messages_guard.get(channel_name) {
                 Some(lm) => lm.clone(),
                 None => {
                     // no last bodies for this channel; never mind
@@ -92,7 +106,7 @@ impl SedPlugin {
                 replaced = this_replaced;
             }
 
-            if replaced != last_raw_message && (!self.require_all_transformations_successful || all_transformations_successful) {
+            if replaced != last_raw_message && (!require_all_transformations_successful || all_transformations_successful) {
                 // success!
                 if self.max_result_length > 0 && replaced.len() > self.max_result_length {
                     replaced = self.result_too_long_message.clone();
@@ -102,14 +116,14 @@ impl SedPlugin {
                     let mut outgoing_guard = self.channel_name_to_my_outgoing_messages
                         .lock().await;
                     outgoing_guard
-                        .entry(channel_message.channel.name.clone())
+                        .entry(channel_name.to_owned())
                         .or_insert_with(|| Vec::new())
                         .push(replaced.clone());
                 }
 
                 send_channel_message!(
                     interface,
-                    &channel_message.channel.name,
+                    &channel_name,
                     &replaced,
                 ).await;
 
@@ -157,6 +171,15 @@ impl SedPlugin {
             &output,
         ).await;
     }
+
+    async fn channel_command_sedall_sedany(&self, channel_message: &ChannelMessage, command: &CommandInstance, require_all_transformations_successful: bool) {
+        self.perform_replacements(
+            &command.rest,
+            &channel_message.channel.name,
+            channel_message.message.is_by_bot,
+            require_all_transformations_successful,
+        ).await;
+    }
 }
 #[async_trait]
 impl RocketBotPlugin for SedPlugin {
@@ -187,7 +210,27 @@ impl RocketBotPlugin for SedPlugin {
                 "sedparse".to_owned(),
                 "sed".to_owned(),
                 "{cpfx}sedparse SEDCOMMANDS".to_owned(),
-                "Attempts to parse a series of sed commands and pinpoint issues.".to_owned(),
+                "Attempts to parse one or more sed commands and pinpoint issues.".to_owned(),
+            )
+                .behaviors(CommandBehaviors::NO_ARGUMENT_PARSING)
+                .build()
+        ).await;
+        my_interface.register_channel_command(
+            &CommandDefinitionBuilder::new(
+                "sedany".to_owned(),
+                "sed".to_owned(),
+                "{cpfx}sedany SEDCOMMANDS".to_owned(),
+                "Performs the given sed command(s) on the most recent message where at least one command matches.".to_owned(),
+            )
+                .behaviors(CommandBehaviors::NO_ARGUMENT_PARSING)
+                .build()
+        ).await;
+        my_interface.register_channel_command(
+            &CommandDefinitionBuilder::new(
+                "sedall".to_owned(),
+                "sed".to_owned(),
+                "{cpfx}sedall SEDCOMMANDS".to_owned(),
+                "Performs the given sed command(s) on the most recent message where all commands match.".to_owned(),
             )
                 .behaviors(CommandBehaviors::NO_ARGUMENT_PARSING)
                 .build()
@@ -242,12 +285,7 @@ impl RocketBotPlugin for SedPlugin {
     }
 
     async fn channel_message(&self, channel_message: &ChannelMessage) {
-        let interface = match self.interface.upgrade() {
-            None => return,
-            Some(i) => i,
-        };
-
-        if self.handle_replacement_command(Arc::clone(&interface), channel_message.clone()).await {
+        if self.handle_replacement_command(channel_message.clone()).await {
             // it looked very much like a replacement command
             // do not remember it for further sed-ing
             return;
@@ -261,6 +299,10 @@ impl RocketBotPlugin for SedPlugin {
     async fn channel_command(&self, channel_message: &ChannelMessage, command: &CommandInstance) {
         if command.name == "sedparse" {
             self.channel_command_sedparse(channel_message, command).await
+        } else if command.name == "sedall" {
+            self.channel_command_sedall_sedany(channel_message, command, true).await
+        } else if command.name == "sedany" {
+            self.channel_command_sedall_sedany(channel_message, command, false).await
         }
     }
 
@@ -288,6 +330,10 @@ impl RocketBotPlugin for SedPlugin {
             Some(include_str!("../help/s.md").to_owned())
         } else if command_name == "tr" {
             Some(include_str!("../help/tr.md").to_owned())
+        } else if command_name == "sedall" {
+            Some(include_str!("../help/sedall.md").to_owned())
+        } else if command_name == "sedany" {
+            Some(include_str!("../help/sedany.md").to_owned())
         } else if command_name == "sedparse" {
             Some(include_str!("../help/sedparse.md").to_owned())
         } else {
