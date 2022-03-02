@@ -8,6 +8,7 @@ use std::sync::{Arc, Weak};
 use async_trait::async_trait;
 use log::info;
 use rocketbot_interface::{JsonValueExtensions, send_channel_message};
+use rocketbot_interface::commands::{CommandBehaviors, CommandDefinitionBuilder, CommandInstance};
 use rocketbot_interface::interfaces::{RocketBotInterface, RocketBotPlugin};
 use rocketbot_interface::model::ChannelMessage;
 use rocketbot_interface::sync::Mutex;
@@ -40,10 +41,16 @@ impl SedPlugin {
         }
 
         let transformations = match parse_replacement_commands(&raw_message) {
-            Some(sc) => sc,
-            None => {
-                // something that didn't even look like sed commands
-                return false;
+            Ok(sc) => sc,
+            Err(e) => {
+                return if e.is_disqualifying() {
+                    // something that didn't even look like sed commands
+                    false
+                } else {
+                    // similar enough to a sed command but not valid
+                    info!("failed to parse command in {:?}: {}", raw_message, e);
+                    true
+                };
             },
         };
 
@@ -133,10 +140,32 @@ impl SedPlugin {
             last_messages.remove(last_messages.len() - 1);
         }
     }
+
+    async fn channel_command_sedparse(&self, channel_message: &ChannelMessage, command: &CommandInstance) {
+        let interface = match self.interface.upgrade() {
+            None => return,
+            Some(i) => i,
+        };
+
+        let output = match parse_replacement_commands(&command.rest) {
+            Ok(cmds) => format!("Successfully parsed {} {}.", cmds.len(), if cmds.len() == 1 { "command" } else { "commands" }),
+            Err(e) => format!("Error while parsing: {}", e),
+        };
+        send_channel_message!(
+            interface,
+            &channel_message.channel.name,
+            &output,
+        ).await;
+    }
 }
 #[async_trait]
 impl RocketBotPlugin for SedPlugin {
     async fn new(interface: Weak<dyn RocketBotInterface>, config: serde_json::Value) -> Self {
+        let my_interface = match interface.upgrade() {
+            None => panic!("interface is gone"),
+            Some(i) => i,
+        };
+
         let remember_last_messages = config["remember_last_messages"].as_usize().unwrap_or(50);
         let max_result_length = config["max_result_length"].as_usize().unwrap_or(1024);
         let result_too_long_message = config["result_too_long_message"].as_str()
@@ -152,6 +181,17 @@ impl RocketBotPlugin for SedPlugin {
             "SedPlugin::channel_name_to_my_outgoing_messages",
             HashMap::new(),
         );
+
+        my_interface.register_channel_command(
+            &CommandDefinitionBuilder::new(
+                "sedparse".to_owned(),
+                "sed".to_owned(),
+                "{cpfx}sedparse SEDCOMMANDS".to_owned(),
+                "Attempts to parse a series of sed commands and pinpoint issues.".to_owned(),
+            )
+                .behaviors(CommandBehaviors::NO_ARGUMENT_PARSING)
+                .build()
+        ).await;
 
         SedPlugin {
             interface,
@@ -218,6 +258,12 @@ impl RocketBotPlugin for SedPlugin {
         }
     }
 
+    async fn channel_command(&self, channel_message: &ChannelMessage, command: &CommandInstance) {
+        if command.name == "sedparse" {
+            self.channel_command_sedparse(channel_message, command).await
+        }
+    }
+
     async fn get_additional_channel_commands_usages(&self) -> HashMap<String, (String, String)> {
         let mut ret = HashMap::new();
         ret.insert(
@@ -242,6 +288,8 @@ impl RocketBotPlugin for SedPlugin {
             Some(include_str!("../help/s.md").to_owned())
         } else if command_name == "tr" {
             Some(include_str!("../help/tr.md").to_owned())
+        } else if command_name == "sedparse" {
+            Some(include_str!("../help/sedparse.md").to_owned())
         } else {
             None
         }

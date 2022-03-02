@@ -45,6 +45,11 @@ impl SubstituteCommand {
             replace_all,
         }
     }
+
+    #[allow(unused)] pub fn pattern(&self) -> &Regex { &self.pattern }
+    #[allow(unused)] pub fn replacement(&self) -> &str { self.replacement.as_str() }
+    #[allow(unused)] pub fn first_match(&self) -> isize { self.first_match }
+    #[allow(unused)] pub fn replace_all(&self) -> bool { self.replace_all }
 }
 impl Transformer for SubstituteCommand {
     fn transform(&self, text: &str) -> String {
