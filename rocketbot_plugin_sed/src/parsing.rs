@@ -1,8 +1,8 @@
 use std::collections::{HashMap, HashSet};
 use std::fmt;
 
+use fancy_regex::Regex;
 use once_cell::sync::Lazy;
-use regex::Regex;
 
 use crate::commands::{SedCommand, SubstituteCommand, TransposeCommand};
 

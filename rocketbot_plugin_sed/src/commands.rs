@@ -1,8 +1,8 @@
 use std::collections::HashMap;
 use std::convert::TryInto;
 
+use fancy_regex::{Captures, Regex};
 use log::warn;
-use regex::{Captures, Regex};
 
 
 pub trait Transformer {
