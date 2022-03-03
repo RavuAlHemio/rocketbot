@@ -26,7 +26,7 @@ use toml;
 
 use crate::bim::{
     handle_bim_coverage, handle_bim_detail, handle_bim_rides, handle_bim_types, handle_bim_vehicles,
-    handle_wide_bims,
+    handle_top_bims, handle_wide_bims,
 };
 use crate::config::WebConfig;
 use crate::templating::augment_tera;
@@ -642,6 +642,7 @@ async fn handle_request(request: Request<Body>) -> Result<Response<Body>, Infall
         "/bim-vehicles" => handle_bim_vehicles(&request).await,
         "/bim-coverage" => handle_bim_coverage(&request).await,
         "/bim-detail" => handle_bim_detail(&request).await,
+        "/top-bims" => handle_top_bims(&request).await,
         "/wide-bims" => handle_wide_bims(&request).await,
         _ => return_404().await,
     }

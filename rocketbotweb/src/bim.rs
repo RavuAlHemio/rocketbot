@@ -1211,3 +1211,90 @@ pub(crate) async fn handle_wide_bims(request: &Request<Body>) -> Result<Response
 
     render("widebims.html.tera", &query_pairs, ctx).await
 }
+
+pub(crate) async fn handle_top_bims(request: &Request<Body>) -> Result<Response<Body>, Infallible> {
+    if request.method() != Method::GET {
+        return return_405().await;
+    }
+
+    let query_pairs = get_query_pairs(request);
+
+    let top_count: i64 = query_pairs.get("count")
+        .map(|c_str| c_str.parse().ok())
+        .flatten()
+        .filter(|tc| *tc > 0)
+        .unwrap_or(10);
+
+    let db_conn = match connect_to_db().await {
+        Some(c) => c,
+        None => return return_500(),
+    };
+
+    // query rides
+    let ride_rows_res = db_conn.query(
+        "
+            WITH ride_counts(company, vehicle_number, ride_count) AS (
+                SELECT rav.company, rav.vehicle_number, COUNT(*)
+                FROM bim.rides_and_vehicles rav
+                WHERE rav.fixed_coupling_position = 0
+                GROUP BY rav.company, rav.vehicle_number
+            ),
+            top_ride_counts(ride_count) AS (
+                SELECT DISTINCT ride_count
+                FROM ride_counts
+                ORDER BY ride_count DESC
+                LIMIT $1
+            )
+            SELECT rc.company, rc.vehicle_number, CAST(rc.ride_count AS bigint)
+            FROM ride_counts rc
+            WHERE EXISTS (
+                SELECT 1
+                FROM top_ride_counts trc
+                WHERE trc.ride_count = rc.ride_count
+            )
+        ",
+        &[&top_count],
+    ).await;
+    let ride_rows = match ride_rows_res {
+        Ok(rs) => rs,
+        Err(e) => {
+            error!("error querying vehicle rides: {}", e);
+            return return_500();
+        },
+    };
+
+    let mut count_to_vehicles: BTreeMap<i64, BTreeSet<(String, VehicleNumber)>> = BTreeMap::new();
+    for ride_row in ride_rows {
+        let company: String = ride_row.get(0);
+        let vehicle_number_i64: i64 = ride_row.get(1);
+        let ride_count: i64 = ride_row.get(2);
+
+        let vehicle_number: VehicleNumber = vehicle_number_i64.try_into().unwrap();
+
+        count_to_vehicles
+            .entry(ride_count)
+            .or_insert_with(|| BTreeSet::new())
+            .insert((company, vehicle_number));
+    }
+
+    let counts_vehicles: Vec<serde_json::Value> = count_to_vehicles.iter()
+        .rev()
+        .map(|(count, vehicles)| {
+            let vehicles_json: Vec<serde_json::Value> = vehicles.iter()
+                .map(|(c, vn)| serde_json::json!({
+                    "company": c,
+                    "number": vn,
+                }))
+                .collect();
+            serde_json::json!({
+                "ride_count": *count,
+                "vehicles": vehicles_json,
+            })
+        })
+        .collect();
+
+    let mut ctx = tera::Context::new();
+    ctx.insert("counts_vehicles", &counts_vehicles);
+
+    render("topbims.html.tera", &query_pairs, ctx).await
+}
