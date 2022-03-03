@@ -2,7 +2,7 @@
 
 Searches for the regular expression `OLD` in the recent channel messages, takes the most recent message found, and replaces the first occurrence of `OLD` with `NEW`.
 
-The format of the regex pattern `OLD` is bound by the feature set of the [Rust `regex` module](https://docs.rs/regex/).
+The format of the regex pattern `OLD` is bound by the feature set of the [Rust `fancy-regex` module](https://docs.rs/fancy-regex/).
 
 `NEW` can contain references to the full match using `\0` as well as references to parenthesized capture groups 1 through 9 using `\1` through `\9`.
 
