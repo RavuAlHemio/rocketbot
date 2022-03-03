@@ -7,7 +7,7 @@
 
 <h1>Wide-Audience Public Transport Vehicles</h1>
 
-<p>The following vehicles have been ridden by <span class="max-rider-count">{{ max_rider_count }}</span> riders.</p>
+<p>The following vehicles have been ridden by <span class="rider-count">{{ rider_count }}</span> {% if rider_count == 1 %}rider{% else %}riders{% endif %}.</p>
 
 {% for group in rider_groups %}
 <section class="rider-group">

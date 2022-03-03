@@ -1106,9 +1106,39 @@ pub(crate) async fn handle_wide_bims(request: &Request<Body>) -> Result<Response
 
     let query_pairs = get_query_pairs(request);
 
+    let count_opt: Option<i64> = query_pairs.get("count")
+        .map(|c_str| c_str.parse().ok())
+        .flatten();
+
     let db_conn = match connect_to_db().await {
         Some(c) => c,
         None => return return_500(),
+    };
+
+    let rider_count = if let Some(c) = count_opt {
+        c
+    } else {
+        // query for most riders per vehicle
+        let most_riders_row_opt_res = db_conn.query_opt(
+            "
+                WITH vehicle_and_distinct_rider_count(company, vehicle_number, rider_count) AS (
+                    SELECT rav.company, rav.vehicle_number, COUNT(DISTINCT rav.rider_username)
+                    FROM bim.rides_and_vehicles rav
+                    WHERE rav.fixed_coupling_position = 0
+                    GROUP BY rav.company, rav.vehicle_number
+                )
+                SELECT CAST(COALESCE(MAX(rider_count), 0) AS bigint) FROM vehicle_and_distinct_rider_count
+            ",
+            &[],
+        ).await;
+        match most_riders_row_opt_res {
+            Ok(Some(r)) => r.get(0),
+            Ok(None) => 0,
+            Err(e) => {
+                error!("error querying maximum distinct rider count: {}", e);
+                return return_500();
+            },
+        }
     };
 
     // query rides
@@ -1119,23 +1149,16 @@ pub(crate) async fn handle_wide_bims(request: &Request<Body>) -> Result<Response
                 FROM bim.rides_and_vehicles rav
                 WHERE rav.fixed_coupling_position = 0
                 GROUP BY rav.company, rav.vehicle_number
-            ),
-            most_ridden_vehicles(company, vehicle_number, rider_count) AS (
-                SELECT vadrc.company, vadrc.vehicle_number, vadrc.rider_count
-                FROM vehicle_and_distinct_rider_count vadrc
-                WHERE NOT EXISTS ( -- ensure it's the maximum
-                    SELECT 1
-                    FROM vehicle_and_distinct_rider_count vadrc2
-                    WHERE vadrc2.rider_count > vadrc.rider_count
-                )
             )
-            SELECT DISTINCT rav2.company, rav2.vehicle_number, rav2.rider_username, CAST(mrv.rider_count AS bigint) rc
-            FROM bim.rides_and_vehicles rav2
-            INNER JOIN most_ridden_vehicles mrv
-                ON mrv.company = rav2.company
-                AND mrv.vehicle_number = rav2.vehicle_number
+            SELECT DISTINCT rav.company, rav.vehicle_number, rav.rider_username rc
+            FROM bim.rides_and_vehicles rav
+            INNER JOIN vehicle_and_distinct_rider_count vadrc
+                ON vadrc.company = rav.company
+                AND vadrc.vehicle_number = rav.vehicle_number
+            WHERE
+                vadrc.rider_count = $1
         ",
-        &[],
+        &[&rider_count],
     ).await;
     let ride_rows = match ride_rows_res {
         Ok(rs) => rs,
@@ -1146,16 +1169,12 @@ pub(crate) async fn handle_wide_bims(request: &Request<Body>) -> Result<Response
     };
 
     let mut vehicle_to_riders: HashMap<(String, VehicleNumber), BTreeSet<String>> = HashMap::new();
-    let mut max_rider_count = 0;
     for ride_row in ride_rows {
         let company: String = ride_row.get(0);
         let vehicle_number_i64: i64 = ride_row.get(1);
         let rider_username: String = ride_row.get(2);
-        let rider_count: i64 = ride_row.get(3);
 
         let vehicle_number: VehicleNumber = vehicle_number_i64.try_into().unwrap();
-
-        max_rider_count = rider_count;
 
         vehicle_to_riders
             .entry((company, vehicle_number))
@@ -1187,7 +1206,7 @@ pub(crate) async fn handle_wide_bims(request: &Request<Body>) -> Result<Response
         .collect();
 
     let mut ctx = tera::Context::new();
-    ctx.insert("max_rider_count", &max_rider_count);
+    ctx.insert("rider_count", &rider_count);
     ctx.insert("rider_groups", &rider_groups);
 
     render("widebims.html.tera", &query_pairs, ctx).await
