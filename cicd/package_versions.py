@@ -31,8 +31,6 @@ def main():
             if ver is not None:
                 packages_versions[package].add(ver)
 
-    print(packages_versions["url"])
-
     for package, versions in sorted(packages_versions.items(), key=lambda kv: kv[0]):
         sorted_versions = ", ".join(sorted(versions))
         print(f"{package}: {sorted_versions}")
