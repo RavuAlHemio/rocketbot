@@ -9,7 +9,7 @@ base45 = { version = "3.0" }
 chrono = { version = "0.4" }
 flate2 = { version = "1.0" }
 log = { version = "0.4" }
-minicbor = { version = "0.12", features = ["std"] }
+minicbor = { version = "0.14", features = ["std"] }
 rand = { version = "0.8" }
 rocketbot_barcode = { path = "../rocketbot_barcode" }
 rocketbot_interface = { path = "../rocketbot_interface" }

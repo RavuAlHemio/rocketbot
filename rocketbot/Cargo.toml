@@ -13,7 +13,7 @@ futures-util = { version = "0.3" }
 hyper = { version = "0.14", features = ["client", "http1", "http2"] }
 hyper-rustls = { version = "0.23", features = ["http2"] }
 log = { version = "0.4" }
-once_cell = { version = "1.9" }
+once_cell = { version = "1.10" }
 rand = { version = "0.8" }
 rocketbot_interface = { path = "../rocketbot_interface" }
 rocketbot_plugin_allograph = { path = "../rocketbot_plugin_allograph" }
@@ -62,6 +62,6 @@ rocketbot_plugin_wienerlinien = { path = "../rocketbot_plugin_wienerlinien" }
 serde = { version = "1.0", features = ["derive"] }
 serde_json = { version = "1.0" }
 sha2 = { version = "0.10" }
-tokio = { version = "1.15", features = ["macros", "net", "rt-multi-thread", "sync", "time"] }
-tokio-tungstenite = { version = "0.16", features = ["rustls-tls-native-roots"] }
+tokio = { version = "1.17", features = ["macros", "net", "rt-multi-thread", "sync", "time"] }
+tokio-tungstenite = { version = "0.17", features = ["rustls-tls-native-roots"] }
 url = { version = "2.2" }

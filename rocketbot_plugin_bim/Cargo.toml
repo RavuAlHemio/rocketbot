@@ -8,13 +8,13 @@ async-trait = { version = "0.1" }
 chrono = { version = "0.4" }
 indexmap = { version = "1.8", features = ["serde-1"] }
 log = { version = "0.4" }
-once_cell = { version = "1.9" }
+once_cell = { version = "1.10" }
 rand = { version = "0.8" }
 regex = { version = "1.5" }
 rocketbot_interface = { path = "../rocketbot_interface" }
 serde = { version = "1.0", features = ["derive"] }
 serde_json = { version = "1.0" }
-tokio = { version = "1.15", features = ["rt"] }
+tokio = { version = "1.17", features = ["rt"] }
 tokio-postgres = { version = "0.7", features = ["with-chrono-0_4"] }
 
 [dev-dependencies]
@@ -22,4 +22,4 @@ form_urlencoded = { version = "1.0" }
 reqwest = { version = "0.11", features = ["rustls-tls"] }
 sxd-document = { version = "0.3" }
 sxd-xpath = { version = "0.4" }
-tokio = { version = "1.15", features = ["macros", "rt-multi-thread"] }
+tokio = { version = "1.17", features = ["macros", "rt-multi-thread"] }
