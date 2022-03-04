@@ -6,6 +6,7 @@ use std::borrow::Cow;
 use chrono::{Datelike, DateTime, Local, NaiveDate, Weekday, TimeZone};
 use hyper::{Body, Method, Request, Response};
 use log::{error, warn};
+use png;
 use serde::{Deserialize, Serialize, Serializer};
 use serde::ser::SerializeStruct;
 use tokio_postgres::types::ToSql;
@@ -1297,4 +1298,147 @@ pub(crate) async fn handle_top_bims(request: &Request<Body>) -> Result<Response<
     ctx.insert("counts_vehicles", &counts_vehicles);
 
     render("topbims.html.tera", &query_pairs, ctx).await
+}
+
+pub(crate) async fn handle_bim_coverage_field(request: &Request<Body>) -> Result<Response<Body>, Infallible> {
+    if request.method() != Method::GET {
+        return return_405().await;
+    }
+
+    let query_pairs = get_query_pairs(request);
+
+    let rider_opt = query_pairs.get("rider");
+
+    let company_opt = query_pairs.get("company");
+    let company = match company_opt {
+        Some(c) => c,
+        _ => return return_400("GET parameter \"company\" is required").await,
+    };
+
+    let company_to_bim_database_opts = match obtain_company_to_bim_database().await {
+        Some(ctbdb) => ctbdb,
+        None => return return_500(),
+    };
+    let mut company_to_bim_database: BTreeMap<String, BTreeMap<VehicleNumber, serde_json::Value>> = BTreeMap::new();
+    for (company, bim_database_opt) in company_to_bim_database_opts.into_iter() {
+        if let Some(bd) = bim_database_opt {
+            company_to_bim_database.insert(company, bd);
+        }
+    }
+
+    let bim_database = match company_to_bim_database.get(company.as_ref()) {
+        Some(bd) => bd,
+        None => return return_400("company does not exist or does not have a vehicle database").await,
+    };
+
+    let db_conn = match connect_to_db().await {
+        Some(c) => c,
+        None => return return_500(),
+    };
+
+    let vehicle_rows_res = if let Some(rider) = rider_opt {
+        db_conn.query(
+            "
+                SELECT DISTINCT rav.vehicle_number
+                FROM bim.rides_and_vehicles rav
+                WHERE rav.company = $1
+                AND rav.rider_username = $2
+            ",
+            &[&company, &rider],
+        ).await
+    } else {
+        db_conn.query(
+            "
+                SELECT DISTINCT rav.vehicle_number
+                FROM bim.rides_and_vehicles rav
+                WHERE rav.company = $1
+            ",
+            &[&company],
+        ).await
+    };
+    let vehicle_rows = match vehicle_rows_res {
+        Ok(rs) => rs,
+        Err(e) => {
+            error!("error querying vehicles: {}", e);
+            return return_500();
+        },
+    };
+
+    let mut vehicles = HashSet::new();
+    for vehicle_row in vehicle_rows {
+        let vehicle_number_i64: i64 = vehicle_row.get(0);
+        let vehicle_number: VehicleNumber = vehicle_number_i64.try_into().unwrap();
+
+        vehicles.insert(vehicle_number);
+    }
+
+    let mut pixels = Vec::with_capacity(bim_database.len());
+    for vehicle in bim_database.values() {
+        let number: VehicleNumber = vehicle["number"].as_i64().unwrap().try_into().unwrap();
+        pixels.push(vehicles.contains(&number));
+    }
+
+    let image_side = (pixels.len() as f64).sqrt() as usize;
+    let image_height = image_side;
+    let width_correction = if pixels.len() % image_height as usize != 0 { 1 } else { 0 };
+    let image_width = pixels.len() / image_height + width_correction;
+
+    let scanline_width_correction = if image_width % 8 != 0 { 1 } else { 0 };
+    let scanline_width = image_width / 8 + scanline_width_correction;
+
+    let mut pixel_bytes = vec![0u8; scanline_width * image_height];
+    for (i, pixel) in pixels.iter().enumerate() {
+        if !*pixel {
+            continue;
+        }
+
+        let row_index = i / image_width;
+        let column_index = i % image_width;
+
+        let column_byte_index = column_index / 8;
+        let column_bit_index = 7 - (column_index % 8);
+
+        let byte_index = row_index * scanline_width + column_byte_index;
+
+        pixel_bytes[byte_index] |= 1 << column_bit_index;
+    }
+
+    // make a PNG!
+    let mut png_bytes: Vec<u8> = Vec::new();
+    {
+        let mut png = png::Encoder::new(&mut png_bytes, image_width as u32, image_height as u32);
+        png.set_color(png::ColorType::Indexed);
+        png.set_depth(png::BitDepth::One);
+        png.set_palette(vec![
+            0x00, 0x00, 0x00, // index 0: black (transparent)
+            0x00, 0xFF, 0x00, // index 1: green
+        ]);
+        png.set_trns(vec![
+            0x00, // index 0: transparent
+            0xFF, // index 1: opaque
+        ]);
+        let mut writer = match png.write_header() {
+            Ok(w) => w,
+            Err(e) => {
+                error!("error writing PNG header: {}", e);
+                return return_500();
+            },
+        };
+        if let Err(e) =  writer.write_image_data(&pixel_bytes) {
+            error!("error writing PNG data: {}", e);
+            return return_500();
+        }
+    }
+
+    let body = Body::from(png_bytes);
+    let resp_res = Response::builder()
+        .header("Content-Type", "image/png")
+        .body(body);
+    match resp_res {
+        Ok(resp) => Ok(resp),
+        Err(e) => {
+            error!("error generating PNG response: {}", e);
+            return return_500();
+        },
+    }
 }

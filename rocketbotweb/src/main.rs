@@ -25,8 +25,8 @@ use tokio_postgres::{self, NoTls};
 use toml;
 
 use crate::bim::{
-    handle_bim_coverage, handle_bim_detail, handle_bim_rides, handle_bim_types, handle_bim_vehicles,
-    handle_top_bims, handle_wide_bims,
+    handle_bim_coverage, handle_bim_coverage_field, handle_bim_detail, handle_bim_rides,
+    handle_bim_types, handle_bim_vehicles, handle_top_bims, handle_wide_bims,
 };
 use crate::config::WebConfig;
 use crate::templating::augment_tera;
@@ -644,6 +644,7 @@ async fn handle_request(request: Request<Body>) -> Result<Response<Body>, Infall
         "/bim-detail" => handle_bim_detail(&request).await,
         "/top-bims" => handle_top_bims(&request).await,
         "/wide-bims" => handle_wide_bims(&request).await,
+        "/bim-coverage-field" => handle_bim_coverage_field(&request).await,
         _ => return_404().await,
     }
 }
