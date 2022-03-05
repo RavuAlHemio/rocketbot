@@ -26,6 +26,13 @@ impl<T: ?Sized> Mutex<T> {
         debug!("Mutex: locked {}", self.identifier);
         MutexGuard::new(self.identifier, inner_guard)
     }
+
+    pub fn blocking_lock(&self) -> MutexGuard<'_, T> {
+        debug!("Mutex: block-locking {}", self.identifier);
+        let inner_guard = self.inner_mutex.blocking_lock();
+        debug!("Mutex: block-locked {}", self.identifier);
+        MutexGuard::new(self.identifier, inner_guard)
+    }
 }
 impl<T: fmt::Debug> fmt::Debug for Mutex<T> {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
