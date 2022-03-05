@@ -180,6 +180,7 @@ mod tests {
     #[test]
     fn test_try_factor() {
         let mut cache = PrimeCache::new();
+        let stopper = AtomicBool::new(false);
         cache.extend_to(&BigUint::from(100u8), &stopper);
 
         assert_eq!(cache.primes().len(), 25);
@@ -194,13 +195,14 @@ mod tests {
     #[test]
     fn test_factor_caching() {
         let mut cache = PrimeCache::new();
-        cache.extend_to(&BigUint::from(100u8));
+        let stopper = AtomicBool::new(false);
+        cache.extend_to(&BigUint::from(100u8), &stopper);
 
         assert_eq!(cache.primes().len(), 25);
 
         let too_large_factors_u32: u32 = 2 * 3 * 109 * 127;
         let too_large_factors = BigUint::from(too_large_factors_u32);
-        let factors = cache.factor_caching(&too_large_factors);
+        let factors = cache.factor_caching(&too_large_factors, &stopper).unwrap();
 
         fn factor_is(factors: &BTreeMap<BigUint, BigUint>, factor: u64, expected_power: u64) {
             let factor_bu = BigUint::from(factor);
