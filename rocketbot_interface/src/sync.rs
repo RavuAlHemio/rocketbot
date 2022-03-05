@@ -1,8 +1,12 @@
 use std::fmt;
 use std::ops::{Deref, DerefMut};
+use std::sync::Arc;
+use std::sync::atomic::{AtomicBool, Ordering};
+use std::time::Duration;
 
-use log::debug;
+use log::{debug, error};
 use tokio;
+use tokio::task::JoinError;
 
 
 pub struct Mutex<T: ?Sized> {
@@ -162,5 +166,61 @@ impl<T: ?Sized> DerefMut for RwLockWriteGuard<'_, T> {
 impl<T: ?Sized> Drop for RwLockWriteGuard<'_, T> {
     fn drop(&mut self) {
         debug!("RwLock: write-unlocking {}", self.identifier);
+    }
+}
+
+
+#[derive(Debug)]
+pub enum StoppableTaskResult<R> {
+    Success(R),
+    Timeout,
+    TaskPanicked(JoinError),
+    ChannelBreakdown,
+}
+
+
+/// Spawns a blocking task that takes an [`AtomicBool`] as a stop-early flag, raises the flag if a
+/// timeout elapses, and collects the task's result.
+///
+/// The task is expected to return [`None`] if it was stopped early and [`Some(_)`] if it has
+/// completed successfully. The [`AtomicBool`] is initially `false` and is changed to `true` once
+/// the given timeout elapses.
+pub async fn run_stoppable_task_timeout<F, R>(timeout: Duration, task: F) -> StoppableTaskResult<R>
+        where F: FnOnce(&AtomicBool) -> Option<R> + Send + 'static, R: Send + 'static {
+    let stopper = Arc::new(AtomicBool::new(false));
+    let task_stopper = Arc::clone(&stopper);
+
+    // we need to use a channel here because oneshot etc. are consumed
+    // the first time they are awaited, which doesn't work well with tokio::select!
+    let (result_send, mut result_receive) = tokio::sync::mpsc::channel(1);
+
+    let factors_handle = tokio::task::spawn_blocking(move || {
+        let result = task(&task_stopper);
+        if let Err(e) = result_send.blocking_send(result) {
+            error!("sending result failed: {}", e);
+        }
+    });
+    let sleepyhead = tokio::time::sleep(timeout);
+    let result_opt_opt = tokio::select! {
+        _ = sleepyhead => {
+            // signal end
+            stopper.store(true, Ordering::SeqCst);
+
+            // wait for finish
+            result_receive.recv().await
+        },
+        factors_opt = result_receive.recv() => {
+            // done
+            factors_opt
+        },
+    };
+    if let Err(e) = factors_handle.await {
+        return StoppableTaskResult::TaskPanicked(e);
+    }
+
+    match result_opt_opt {
+        None => StoppableTaskResult::ChannelBreakdown,
+        Some(None) => StoppableTaskResult::Timeout,
+        Some(Some(r)) => StoppableTaskResult::Success(r),
     }
 }
