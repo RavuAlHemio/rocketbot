@@ -139,3 +139,64 @@ pub fn phrase_join<S: AsRef<str>>(items: &[S], general_glue: &str, final_glue: &
     }
     ret
 }
+
+pub fn add_thousands_separators(separate_me: &mut String, separator: &str) {
+    if separate_me.len() < 4 {
+        return;
+    }
+
+    let mut i = separate_me.len() - 3;
+    loop {
+        separate_me.insert_str(i, separator);
+        if i < 4 {
+            break;
+        }
+        i -= 3;
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::add_thousands_separators;
+
+    #[test]
+    fn test_add_thousands_separators() {
+        fn tat(separate_me: &str, separator: &str, expected: &str) {
+            let mut separate_me_owned = separate_me.to_owned();
+            add_thousands_separators(&mut separate_me_owned, separator);
+            assert_eq!(separate_me_owned.as_str(), expected);
+        }
+
+        tat("", ",", "");
+        tat("", "'", "");
+
+        tat("1", ",", "1");
+        tat("12", ",", "12");
+        tat("123", ",", "123");
+
+        tat("1234", ",", "1,234");
+        tat("1234", "'", "1'234");
+        tat("1234", "\\,", "1\\,234");
+        tat("1234", "argh", "1argh234");
+
+        tat("123456", ",", "123,456");
+        tat("123456", "'", "123'456");
+        tat("123456", "\\,", "123\\,456");
+        tat("123456", "argh", "123argh456");
+
+        tat("1234567", ",", "1,234,567");
+        tat("1234567", "'", "1'234'567");
+        tat("1234567", "\\,", "1\\,234\\,567");
+        tat("1234567", "argh", "1argh234argh567");
+
+        tat("123456789", ",", "123,456,789");
+        tat("123456789", "'", "123'456'789");
+        tat("123456789", "\\,", "123\\,456\\,789");
+        tat("123456789", "argh", "123argh456argh789");
+
+        tat("1234567890", ",", "1,234,567,890");
+        tat("1234567890", "'", "1'234'567'890");
+        tat("1234567890", "\\,", "1\\,234\\,567\\,890");
+        tat("1234567890", "argh", "1argh234argh567argh890");
+    }
+}
