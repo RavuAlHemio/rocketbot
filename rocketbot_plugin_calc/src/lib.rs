@@ -1,6 +1,7 @@
 mod ast;
 #[cfg(feature = "currency")]
 mod currency;
+mod factor;
 mod grimoire;
 mod numbers;
 mod parsing;
@@ -10,23 +11,25 @@ mod units;
 use std::collections::{HashMap, HashSet};
 use std::fs::File;
 use std::io::Read;
-use std::sync::Weak;
+use std::sync::{Arc, Weak};
 use std::time::{Duration, Instant};
 
 use async_trait::async_trait;
 use chrono::{DateTime, TimeZone, Utc};
 use log::error;
-use rocketbot_interface::{JsonValueExtensions, send_channel_message};
+use num_bigint::BigUint;
+use rocketbot_interface::{add_thousands_separators, JsonValueExtensions, send_channel_message};
 use rocketbot_interface::commands::{
     CommandBehaviors, CommandDefinition, CommandDefinitionBuilder, CommandInstance,
 };
 use rocketbot_interface::interfaces::{RocketBotInterface, RocketBotPlugin};
 use rocketbot_interface::model::ChannelMessage;
-use rocketbot_interface::sync::{Mutex, RwLock};
+use rocketbot_interface::sync::{Mutex, run_stoppable_task_timeout, RwLock, StoppableTaskResult};
 use serde_json;
 use toml;
 
 use crate::ast::{AstNode, SimplificationState};
+use crate::factor::PrimeCache;
 use crate::grimoire::{get_canonical_constants, get_canonical_functions};
 use crate::parsing::parse_full_expression;
 use crate::units::{StoredUnitDatabase, UnitDatabase};
@@ -39,6 +42,7 @@ pub struct CalcPlugin {
     unit_database: RwLock<UnitDatabase>,
     currency_units: bool,
     last_currency_update: Mutex<DateTime<Utc>>,
+    prime_cache: Arc<Mutex<PrimeCache>>,
 }
 impl CalcPlugin {
     async fn handle_calc(&self, channel_message: &ChannelMessage, command: &CommandInstance) {
@@ -183,6 +187,92 @@ impl CalcPlugin {
             &format!("The following functions are available: {}", funcs_str),
         ).await;
     }
+
+    async fn handle_factor(&self, channel_message: &ChannelMessage, command: &CommandInstance) {
+        let interface = match self.interface.upgrade() {
+            None => return,
+            Some(i) => i,
+        };
+
+        let number: BigUint = match command.rest.trim().parse() {
+            Ok(n) => n,
+            Err(_) => {
+                send_channel_message!(
+                    interface,
+                    &channel_message.channel.name,
+                    &format!("Failed to parse that as a natural number."),
+                ).await;
+                return;
+            },
+        };
+
+        // handle pathological cases with grace
+        let two = BigUint::from(2u8);
+        if number < two {
+            send_channel_message!(
+                interface,
+                &channel_message.channel.name,
+                &format!("\\[{0} = {0}\\]", number),
+            ).await;
+            return;
+        }
+
+        let prime_cache_mutex = Arc::clone(&self.prime_cache);
+        let factors_tr = run_stoppable_task_timeout(
+            Duration::from_secs_f64(self.timeout_seconds),
+            move |stopper| {
+                let mut prime_cache_guard = prime_cache_mutex.blocking_lock();
+                prime_cache_guard.factor_caching(&number, &stopper)
+            },
+        ).await;
+
+        let factors = match factors_tr {
+            StoppableTaskResult::ChannelBreakdown => {
+                error!("factoring result channel broke down");
+                return;
+            },
+            StoppableTaskResult::TaskPanicked(e) => {
+                error!("factoring task panicked: {}", e);
+                return;
+            },
+            StoppableTaskResult::Timeout => {
+                send_channel_message!(
+                    interface,
+                    &channel_message.channel.name,
+                    "That took too long.",
+                ).await;
+                return;
+            },
+            StoppableTaskResult::Success(fs) => fs,
+        };
+
+        let mut factor_strings = Vec::with_capacity(factors.len());
+        let one = BigUint::from(1u8);
+        let nine = BigUint::from(9u8);
+        for (factor, power) in &factors {
+            let mut factor_string = factor.to_string();
+
+            add_thousands_separators(&mut factor_string, "\\,");
+
+            if power == &one {
+                factor_strings.push(factor_string);
+            } else if power <= &nine {
+                factor_strings.push(format!("{}^{}", factor_string, power));
+            } else {
+                let mut power_string = power.to_string();
+                add_thousands_separators(&mut power_string, "\\,");
+
+                factor_strings.push(format!("{}^{}{}{}", factor_string, '{', power_string, '}'));
+            }
+        }
+
+        let factor_string = factor_strings.join("\\cdot ");
+        send_channel_message!(
+            interface,
+            &channel_message.channel.name,
+            &format!("\\[{}\\]", factor_string),
+        ).await;
+    }
 }
 #[async_trait]
 impl RocketBotPlugin for CalcPlugin {
@@ -226,6 +316,11 @@ impl RocketBotPlugin for CalcPlugin {
                 .and_hms(0, 0, 0)
         );
 
+        let prime_cache = Arc::new(Mutex::new(
+            "CalcPlugin::prime_cache",
+            PrimeCache::new(),
+        ));
+
         my_interface.register_channel_command(&CommandDefinition::new(
             "calc".to_owned(),
             "calc".to_owned(),
@@ -254,6 +349,15 @@ impl RocketBotPlugin for CalcPlugin {
             )
                 .build()
         ).await;
+        my_interface.register_channel_command(
+            &CommandDefinitionBuilder::new(
+                "factor".to_owned(),
+                "calc".to_owned(),
+                "{cpfx}factor NUMBER".to_owned(),
+                "Attempts to subdivide the given natural number into its prime factors.".to_owned(),
+            )
+                .build()
+        ).await;
 
         CalcPlugin {
             interface,
@@ -262,6 +366,7 @@ impl RocketBotPlugin for CalcPlugin {
             unit_database,
             currency_units,
             last_currency_update,
+            prime_cache,
         }
     }
 
@@ -276,6 +381,8 @@ impl RocketBotPlugin for CalcPlugin {
             self.handle_calcconst(channel_message, command).await
         } else if command.name == "calcfunc" {
             self.handle_calcfunc(channel_message, command).await
+        } else if command.name == "factor" {
+            self.handle_factor(channel_message, command).await
         }
     }
 
@@ -286,6 +393,8 @@ impl RocketBotPlugin for CalcPlugin {
             Some(include_str!("../help/calcconst.md").to_owned())
         } else if command_name == "calcfunc" {
             Some(include_str!("../help/calcfunc.md").to_owned())
+        } else if command_name == "factor" {
+            Some(include_str!("../help/factor.md").to_owned())
         } else {
             None
         }
