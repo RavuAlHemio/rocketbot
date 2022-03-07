@@ -47,6 +47,7 @@ rocketbot_plugin_serious_mode = { path = "../rocketbot_plugin_serious_mode" }
 rocketbot_plugin_simultype = { path = "../rocketbot_plugin_simultype" }
 rocketbot_plugin_slogan = { path = "../rocketbot_plugin_slogan" }
 rocketbot_plugin_sockpuppet = { path = "../rocketbot_plugin_sockpuppet" }
+rocketbot_plugin_syllable = { path = "../rocketbot_plugin_syllable" }
 rocketbot_plugin_text = { path = "../rocketbot_plugin_text" }
 rocketbot_plugin_text_commands = { path = "../rocketbot_plugin_text_commands" }
 rocketbot_plugin_topic_timer = { path = "../rocketbot_plugin_topic_timer" }

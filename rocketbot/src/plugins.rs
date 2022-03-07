@@ -87,6 +87,8 @@ pub(crate) async fn load_plugins(iface: Weak<dyn RocketBotInterface>) -> Vec<Box
                 Box::new(rocketbot_plugin_slogan::SloganPlugin::new(iface_weak, inner_config).await)
             } else if plugin_config.name == "sockpuppet" {
                 Box::new(rocketbot_plugin_sockpuppet::SockpuppetPlugin::new(iface_weak, inner_config).await)
+            } else if plugin_config.name == "syllable" {
+                Box::new(rocketbot_plugin_syllable::SyllablePlugin::new(iface_weak, inner_config).await)
             } else if plugin_config.name == "text" {
                 Box::new(rocketbot_plugin_text::TextPlugin::new(iface_weak, inner_config).await)
             } else if plugin_config.name == "text_commands" {

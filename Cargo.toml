@@ -36,6 +36,7 @@ members = [
     "rocketbot_plugin_simultype",
     "rocketbot_plugin_slogan",
     "rocketbot_plugin_sockpuppet",
+    "rocketbot_plugin_syllable",
     "rocketbot_plugin_text",
     "rocketbot_plugin_text_commands",
     "rocketbot_plugin_thanks",

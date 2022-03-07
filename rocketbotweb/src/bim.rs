@@ -256,7 +256,10 @@ async fn obtain_company_to_bim_database() -> Option<BTreeMap<String, Option<BTre
         },
     };
     let bim_plugin_opt = plugins.iter()
-        .filter(|p| p["enabled"].as_bool().unwrap_or(false))
+        .filter(|p|
+            p["enabled"].as_bool().unwrap_or(false)
+            || p["web_enabled"].as_bool().unwrap_or(false)
+        )
         .filter(|p| p["name"].as_str().map(|n| n == "bim").unwrap_or(false))
         .nth(0);
     let bim_plugin = match bim_plugin_opt {

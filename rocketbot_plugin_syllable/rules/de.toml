@@ -1,0 +1,20 @@
+rules = [
+    # disqualify URLs
+    { find = "://", disqualify = true },
+
+    # disqualify commands
+    { find = "^\\s*!", disqualify = true },
+
+    # in "zuerst" etc., "ue" is not a dipththong
+    { find = "(?i)zue", replace = "e" },
+
+    # approximation of syllabizing -xl (where x is a consonant)
+    { find = "(?i)[bdfgkmnpqstvwxz]l\\b" },
+    { find = "(?i)[bdfgkmnpqstvwxz]l[bcdfghjklmnpqrstvwxz]" },
+
+    # diphthongs make a syllable
+    { find = "[aeiouäöü]{2}" },
+
+    # vowels make a syllable
+    { find = "[aeiou]" },
+]

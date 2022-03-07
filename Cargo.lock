@@ -1792,6 +1792,7 @@ dependencies = [
  "rocketbot_plugin_simultype",
  "rocketbot_plugin_slogan",
  "rocketbot_plugin_sockpuppet",
+ "rocketbot_plugin_syllable",
  "rocketbot_plugin_text",
  "rocketbot_plugin_text_commands",
  "rocketbot_plugin_thanks",
@@ -2288,6 +2289,19 @@ dependencies = [
  "log",
  "rocketbot_interface",
  "serde_json",
+]
+
+[[package]]
+name = "rocketbot_plugin_syllable"
+version = "0.1.0"
+dependencies = [
+ "async-trait",
+ "log",
+ "regex",
+ "rocketbot_interface",
+ "serde",
+ "serde_json",
+ "toml",
 ]
 
 [[package]]
