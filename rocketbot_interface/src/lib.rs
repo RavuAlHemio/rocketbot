@@ -29,15 +29,57 @@ macro_rules! uint_conv {
 }
 
 
+/// Adds convenience functions for working with JSON values.
 pub trait JsonValueExtensions {
+    /// Attempts to interpret the JSON value as an unsigned 8-bit value.
+    ///
+    /// Returns `Some(_)` if the value is a [number][serde_json::Value::Number] and fits into `u8`;
+    /// returns `None` otherwise.
     fn as_u8(&self) -> Option<u8>;
+
+    /// Attempts to interpret the JSON value as an unsigned 32-bit value.
+    ///
+    /// Returns `Some(_)` if the value is a [number][serde_json::Value::Number] and fits into `u32`;
+    /// returns `None` otherwise.
     fn as_u32(&self) -> Option<u32>;
+
+    /// Attempts to interpret the JSON value as an unsigned pointer-sized value.
+    ///
+    /// Returns `Some(_)` if the value is a [number][serde_json::Value::Number] and fits into
+    /// `usize`; returns `None` otherwise.
     fn as_usize(&self) -> Option<usize>;
+
+    /// Attempts to interpret the JSON value as an object and return an iterator of its entries.
+    ///
+    /// Returns `Some(_)` (an iterator over the object's entries) if the value is an
+    /// [object][serde_json::Value::Object]; returns `None` otherwise.
     fn entries(&self) -> Option<serde_json::map::Iter>;
+
+    /// Attempts to interpret the JSON value as a list and return an iterator of its members.
+    ///
+    /// Returns `Some(_)` (an iterator over the list's members) if the value is a
+    /// [list][serde_json::Value::Array]; returns `None` otherwise.
     fn members(&self) -> Option<slice::Iter<serde_json::Value>>;
+
+    /// Attempts to interpret the JSON value as an object and return whether it contains the given
+    /// key.
+    ///
+    /// Returns `true` if the value is an [object][serde_json::Value::Object] and contains the given
+    /// key; returns `false` otherwise.
     fn has_key(&self, key: &str) -> bool;
+
+    /// Attempts to interpret the JSON value as a string and return its value or an empty string.
+    ///
+    /// If the value is a [string][serde_json::Value::String], returns a reference to this string;
+    /// otherwise, returns `""`.
     fn as_str_or_empty(&self) -> &str;
 
+    /// Attempts to interpret the JSON value as an object and return an iterator over its entries,
+    /// or returns an iterator over an empty JSON object.
+    ///
+    /// If the value is an [object][serde_json::Value::Object], returns an iterator over the entries
+    /// of this object; otherwise, returns an iterator over the entries of an empty object (an empty
+    /// iterator).
     fn entries_or_empty(&self) -> serde_json::map::Iter {
         match self.entries() {
             Some(i) => i,
@@ -45,6 +87,12 @@ pub trait JsonValueExtensions {
         }
     }
 
+    /// Attempts to interpret the JSON value as a list and return an iterator over its members,
+    /// or returns an iterator over an empty JSON list.
+    ///
+    /// If the value is a [list][serde_json::Value::Array], returns an iterator over the members of
+    /// this array; otherwise, returns an iterator over the entries of an empty object (an empty
+    /// iterator).
     fn members_or_empty(&self) -> slice::Iter<serde_json::Value> {
         match self.members() {
             Some(i) => i,
@@ -52,6 +100,26 @@ pub trait JsonValueExtensions {
         }
     }
 
+    /// Attempts to interpret the JSON value as an object and return an iterator over its entries or
+    /// an empty iterator for null values.
+    ///
+    /// If the value is an [object][serde_json::Value::Object], returns the iterator over the
+    /// entries of this object; if the value is [null][serde_json::Value::Null], returns an iterator
+    /// over the entries of an empty object (an empty iterator); otherwise, i.e. if the value has
+    /// any other type, returns `None`.
+    fn entries_or_empty_strict(&self) -> Option<serde_json::map::Iter>;
+
+    /// Attempts to interpret the JSON value as a list and return an iterator over its entries or
+    /// an empty iterator for null values.
+    ///
+    /// If the value is a [list][serde_json::Value::Array], returns the iterator over the members
+    /// of this list; if the value is [null][serde_json::Value::Null], returns an iterator over the
+    /// entries of an empty list (an empty iterator); otherwise, i.e. if the value has any other
+    /// type, returns `None`.
+    fn members_or_empty_strict(&self) -> Option<slice::Iter<serde_json::Value>>;
+
+    /// Inserts the given key and value into this object value. Panics if this is not an object
+    /// value.
     fn insert(&mut self, key: String, val: serde_json::Value) -> Option<serde_json::Value>;
 }
 impl JsonValueExtensions for serde_json::Value {
@@ -76,6 +144,22 @@ impl JsonValueExtensions for serde_json::Value {
 
     fn as_str_or_empty(&self) -> &str {
         self.as_str().unwrap_or("")
+    }
+
+    fn entries_or_empty_strict(&self) -> Option<serde_json::map::Iter> {
+        if self.is_null() {
+            Some(EMPTY_MAP.iter())
+        } else {
+            self.entries()
+        }
+    }
+
+    fn members_or_empty_strict(&self) -> Option<slice::Iter<serde_json::Value>> {
+        if self.is_null() {
+            Some([].iter())
+        } else {
+            self.members()
+        }
     }
 
     fn insert(&mut self, key: String, val: serde_json::Value) -> Option<serde_json::Value> {
