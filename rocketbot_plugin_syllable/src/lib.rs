@@ -4,6 +4,7 @@ use std::io::Read;
 use std::sync::Weak;
 
 use async_trait::async_trait;
+use chrono::Local;
 use regex::{Captures, Regex};
 use rocketbot_interface::{JsonValueExtensions, send_channel_message};
 use rocketbot_interface::commands::{CommandDefinitionBuilder, CommandInstance};
@@ -177,6 +178,14 @@ impl RocketBotPlugin for SyllablePlugin {
                 return;
             }
         };
+
+        // do not trigger output logic if Serious Mode is active
+        let behavior_flags = serde_json::Value::Object(interface.obtain_behavior_flags().await);
+        if let Some(serious_mode_until) = behavior_flags["srs"][&channel_message.channel.id].as_i64() {
+            if serious_mode_until > Local::now().timestamp() {
+                return;
+            }
+        }
 
         // we have released the mutex; post a response
         send_channel_message!(
