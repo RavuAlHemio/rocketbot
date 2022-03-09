@@ -376,9 +376,7 @@ RETURNING quote_id
             command.rest.clone(),
         );
         let insert_res = {
-            let mut state_guard = self.quotes_state
-                .lock().await;
-            self.insert_quote(&new_quote, &mut state_guard.last_quote_id_per_channel_name).await
+            self.insert_quote(&new_quote, &mut quotes_state.last_quote_id_per_channel_name).await
         };
         if let Err(e) = insert_res {
             error!("failed to insert quote: {}", e);
