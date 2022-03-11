@@ -17,6 +17,7 @@ use rocketbot_interface::commands::{
 use rocketbot_interface::interfaces::{RocketBotInterface, RocketBotPlugin};
 use rocketbot_interface::model::ChannelMessage;
 use rocketbot_interface::sync::Mutex;
+use serde::{Deserialize, Serialize};
 use serde_json;
 
 
@@ -34,46 +35,7 @@ static SEPARATOR_REGEX: Lazy<Regex> = Lazy::new(|| Regex::new(
 ).expect("failed to compile separator regex"));
 
 
-fn strings_from_json<T: FromIterator<String>>(json: &serde_json::Value) -> T {
-    if json.is_null() {
-        std::iter::empty()
-            .collect()
-    } else {
-        json.members()
-            .expect("not an array")
-            .filter_map(|m| m.as_str().map(|s| s.to_owned()))
-            .collect()
-    }
-}
-fn string_from_json(json: &serde_json::Value, default: &str) -> String {
-    json.as_str().unwrap_or(default).to_owned()
-}
-fn u8_from_json(json: &serde_json::Value, default: u8) -> u8 {
-    json.as_u8().unwrap_or(default)
-}
-fn u64_from_json(json: &serde_json::Value, default: u64) -> u64 {
-    json.as_u64().unwrap_or(default)
-}
-fn opt_u64_from_json(upper_json: &serde_json::Value, key: &str, default: Option<u64>) -> Option<u64> {
-    if !upper_json.has_key(key) {
-        default
-    } else {
-        let json = &upper_json[key];
-        if json.is_null() {
-            None
-        } else if let Some(n) = json.as_u64() {
-            Some(n)
-        } else {
-            default
-        }
-    }
-}
-fn usize_from_json(json: &serde_json::Value, default: usize) -> usize {
-    json.as_usize().unwrap_or(default)
-}
-
-
-#[derive(Clone, Debug, Eq, PartialEq)]
+#[derive(Clone, Debug, Deserialize, Eq, PartialEq, Serialize)]
 struct DiceConfig {
     pub channels: HashSet<String>,
     pub obstinate_answers: Vec<String>,
@@ -89,39 +51,7 @@ struct DiceConfig {
     pub cooldown_upper_boundary: Option<u64>,
     pub default_wikipedia_language: String,
 }
-impl From<&serde_json::Value> for DiceConfig {
-    fn from(jv: &serde_json::Value) -> Self {
-        let channels: HashSet<String> = strings_from_json(&jv["channels"]);
-        let obstinate_answers: Vec<String> = strings_from_json(&jv["obstinate_answers"]);
-        let yes_no_answers: Vec<String> = strings_from_json(&jv["yes_no_answers"]);
-        let decision_splitters: Vec<String> = strings_from_json(&jv["decision_splitters"]);
-        let special_decision_answers: Vec<String> = strings_from_json(&jv["special_decision_answers"]);
-        let cooldown_answers: Vec<String> = strings_from_json(&jv["cooldown_answers"]);
-        let special_decision_answer_percent = u8_from_json(&jv["special_decision_answer_percent"], 10);
-        let max_roll_count = usize_from_json(&jv["max_roll_count"], 16);
-        let max_dice_count = usize_from_json(&jv["max_dice_count"], 1024);
-        let max_side_count = u64_from_json(&jv["max_side_count"], 1048576);
-        let cooldown_per_command_usage = u64_from_json(&jv["cooldown_per_command_usage"], 4);
-        let cooldown_upper_boundary = opt_u64_from_json(&jv, "cooldown_upper_boundary", Some(32));
-        let default_wikipedia_language = string_from_json(&jv["default_wikipedia_language"], "en");
 
-        DiceConfig {
-            channels,
-            obstinate_answers,
-            yes_no_answers,
-            decision_splitters,
-            special_decision_answers,
-            cooldown_answers,
-            special_decision_answer_percent,
-            max_roll_count,
-            max_dice_count,
-            max_side_count,
-            cooldown_per_command_usage,
-            cooldown_upper_boundary,
-            default_wikipedia_language,
-        }
-    }
-}
 
 #[derive(Clone, Copy, Debug, Eq, Hash, PartialEq)]
 struct CooldownState {
