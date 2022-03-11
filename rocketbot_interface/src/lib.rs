@@ -9,6 +9,7 @@ pub mod sync;
 
 
 use std::convert::TryInto;
+use std::fmt;
 use std::slice;
 
 use chrono::{DateTime, TimeZone, Utc};
@@ -167,6 +168,25 @@ impl JsonValueExtensions for serde_json::Value {
             map.insert(key, val)
         } else {
             panic!("this is not an object value")
+        }
+    }
+}
+
+
+/// Add convenience functions to [`Result`] types.
+pub trait ResultExtensions<T, E> {
+    /// If `self` is [`Ok(_)`], returns `self`. If self is [`Err(e)`], logs `error_message` and `e`
+    /// using [`log::error!`] and returns [`Err(error_message)`].
+    fn or_msg(self, error_message: &'static str) -> Result<T, &'static str>;
+}
+impl<T, E: fmt::Display> ResultExtensions<T, E> for Result<T, E> {
+    fn or_msg(self, error_message: &'static str) -> Result<T, &'static str> {
+        match self {
+            Ok(t) => Ok(t),
+            Err(e) => {
+                log::error!("{}: {}", error_message, e);
+                Err(error_message)
+            },
         }
     }
 }
