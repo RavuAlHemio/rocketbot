@@ -498,6 +498,18 @@ impl RocketBotInterface for ServerConnection {
         }
     }
 
+    async fn unregister_channel_command(&self, command_name: &str) -> bool {
+        let mut commands_guard = self.shared_state.channel_commands
+            .write().await;
+        commands_guard.remove(command_name).is_some()
+    }
+
+    async fn unregister_private_message_command(&self, command_name: &str) -> bool {
+        let mut commands_guard = self.shared_state.private_message_commands
+            .write().await;
+        commands_guard.remove(command_name).is_some()
+    }
+
     async fn get_command_configuration(&self) -> CommandConfiguration {
         self.shared_state.command_config.clone()
     }

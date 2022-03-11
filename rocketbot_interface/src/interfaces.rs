@@ -71,6 +71,14 @@ pub trait RocketBotInterface : Send + Sync {
     /// already exists.
     async fn register_private_message_command(&self, command: &CommandDefinition) -> bool;
 
+    /// Unregisters a command previously registered using [`register_channel_command`]. Returns
+    /// whether the command was unregistered successfully.
+    async fn unregister_channel_command(&self, command_name: &str) -> bool;
+
+    /// Unregisters a command previously registered using [`register_private_message_command`].
+    /// Returns whether the command was unregistered successfully.
+    async fn unregister_private_message_command(&self, command_name: &str) -> bool;
+
     /// Obtains a copy of the command configuration currently in operation.
     async fn get_command_configuration(&self) -> CommandConfiguration;
 
