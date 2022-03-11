@@ -13,11 +13,13 @@ use rand::rngs::StdRng;
 use rocketbot_barcode::bitmap::BitmapRenderOptions;
 use rocketbot_barcode::datamatrix::datamatrix_string_to_bitmap;
 use rocketbot_barcode::qr::qr_string_to_bitmap;
+use rocketbot_interface::ResultExtensions;
 use rocketbot_interface::commands::{
     CommandDefinitionBuilder, CommandInstance, CommandValueType,
 };
 use rocketbot_interface::interfaces::{RocketBotInterface, RocketBotPlugin};
 use rocketbot_interface::model::{Attachment, ChannelMessage, OutgoingMessageWithAttachment};
+use rocketbot_interface::sync::RwLock;
 
 use crate::vaxcert::{encode_vax, make_vax_pdf, normalize_name, PdfSettings, VaxInfo};
 
@@ -40,9 +42,15 @@ fn generate_cert_id(country: &str) -> String {
 }
 
 
+#[derive(Clone, Debug, PartialEq)]
+struct Config {
+    vax_pdf_settings: Option<PdfSettings>,
+}
+
+
 pub struct BarcodePlugin {
     interface: Weak<dyn RocketBotInterface>,
-    vax_pdf_settings: Option<PdfSettings>,
+    config: RwLock<Config>,
 }
 impl BarcodePlugin {
     async fn handle_datamatrix(&self, channel_message: &ChannelMessage, command: &CommandInstance) {
@@ -245,7 +253,8 @@ impl BarcodePlugin {
         };
 
         if command.flags.contains("p") || command.flags.contains("pdf") {
-            let pdf_settings = match &self.vax_pdf_settings {
+            let config_guard = self.config.read().await;
+            let pdf_settings = match &config_guard.vax_pdf_settings {
                 Some(ps) => ps,
                 None => {
                     interface.send_channel_message(
@@ -307,6 +316,25 @@ impl BarcodePlugin {
             )
         ).await;
     }
+
+    fn try_get_config(config: serde_json::Value) -> Result<Config, &'static str> {
+        let vax_pdf_settings = if config["vax_pdf_settings"].is_null() {
+            None
+        } else {
+            // deserialize
+            let vax_pdf_file_name = config["vax_pdf_settings"]
+                .as_str().ok_or("vax_pdf_settings not a string")?;
+            let vax_pdf_file = File::open(vax_pdf_file_name)
+                .or_msg("failed to open vax_pdf_settings file")?;
+            let pdf_settings = serde_json::from_reader(vax_pdf_file)
+                .or_msg("failed to deserialize vax_pdf_settings")?;
+            Some(pdf_settings)
+        };
+
+        Ok(Config {
+            vax_pdf_settings,
+        })
+    }
 }
 #[async_trait]
 impl RocketBotPlugin for BarcodePlugin {
@@ -315,6 +343,13 @@ impl RocketBotPlugin for BarcodePlugin {
             None => panic!("interface is gone"),
             Some(i) => i,
         };
+
+        let config_object = Self::try_get_config(config)
+            .expect("failed to load config");
+        let config_lock = RwLock::new(
+            "BarcodePlugin::config",
+            config_object,
+        );
 
         my_interface.register_channel_command(
             &CommandDefinitionBuilder::new(
@@ -368,23 +403,9 @@ impl RocketBotPlugin for BarcodePlugin {
                 .build()
         ).await;
 
-        let vax_pdf_settings = if config["vax_pdf_settings"].is_null() {
-            None
-        } else {
-            // deserialize
-            let vax_pdf_file_name = config["vax_pdf_settings"]
-                .as_str().expect("vax_pdf_settings not a string");
-            let vax_pdf_file = File::open(vax_pdf_file_name)
-                .expect("failed to open vax_pdf_settings file");
-            Some(
-                serde_json::from_reader(vax_pdf_file)
-                    .expect("failed to deserialize vax_pdf_settings")
-            )
-        };
-
         BarcodePlugin {
             interface,
-            vax_pdf_settings,
+            config: config_lock,
         }
     }
 
@@ -407,6 +428,20 @@ impl RocketBotPlugin for BarcodePlugin {
                 Some(include_str!("../help/vaxcert.md").to_owned())
         } else {
             None
+        }
+    }
+
+    async fn configuration_updated(&self, new_config: serde_json::Value) -> bool {
+        match Self::try_get_config(new_config) {
+            Ok(c) => {
+                let mut config_guard = self.config.write().await;
+                *config_guard = c;
+                true
+            },
+            Err(e) => {
+                error!("failed to reload configuration: {}", e);
+                false
+            },
         }
     }
 }

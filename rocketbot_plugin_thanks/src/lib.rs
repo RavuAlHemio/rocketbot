@@ -9,18 +9,25 @@ use rocketbot_interface::{JsonValueExtensions, send_channel_message};
 use rocketbot_interface::commands::{CommandBehaviors, CommandDefinition, CommandInstance};
 use rocketbot_interface::interfaces::{RocketBotInterface, RocketBotPlugin};
 use rocketbot_interface::model::ChannelMessage;
+use rocketbot_interface::sync::RwLock;
 use serde_json;
 use tokio_postgres::{self, NoTls};
 
 
-pub struct ThanksPlugin {
-    interface: Weak<dyn RocketBotInterface>,
+#[derive(Clone, Debug, Eq, Hash, PartialEq)]
+struct Config {
     db_conn_string: String,
     most_grateful_count: usize,
 }
+
+
+pub struct ThanksPlugin {
+    interface: Weak<dyn RocketBotInterface>,
+    config: RwLock<Config>,
+}
 impl ThanksPlugin {
-    async fn connect_db(&self) -> Result<tokio_postgres::Client, tokio_postgres::Error> {
-        let (client, connection) = match tokio_postgres::connect(&self.db_conn_string, NoTls).await {
+    async fn connect_db(&self, config: &Config) -> Result<tokio_postgres::Client, tokio_postgres::Error> {
+        let (client, connection) = match tokio_postgres::connect(&config.db_conn_string, NoTls).await {
             Ok(cc) => cc,
             Err(e) => {
                 error!("error connecting to database: {}", e);
@@ -38,7 +45,8 @@ impl ThanksPlugin {
             None => return,
             Some(i) => i,
         };
-        let db_client = match self.connect_db().await {
+        let config_guard = self.config.read().await;
+        let db_client = match self.connect_db(&config_guard).await {
             Ok(c) => c,
             Err(_e) => return,
         };
@@ -133,7 +141,8 @@ impl ThanksPlugin {
             None => return,
             Some(i) => i,
         };
-        let db_client = match self.connect_db().await {
+        let config_guard = self.config.read().await;
+        let db_client = match self.connect_db(&config_guard).await {
             Ok(c) => c,
             Err(_e) => return,
         };
@@ -173,7 +182,7 @@ impl ThanksPlugin {
             String::new()
         } else {
             // also show stats
-            let count_plus_one: i64 = (self.most_grateful_count + 1).try_into()
+            let count_plus_one: i64 = (config_guard.most_grateful_count + 1).try_into()
                 .expect("most grateful count not representable as i64");
             let most_grateful_res = db_client.query(
                 r#"
@@ -193,15 +202,15 @@ impl ThanksPlugin {
                 },
                 Ok(mg) => {
                     let mut entries = Vec::new();
-                    for row in mg.iter().take(self.most_grateful_count) {
+                    for row in mg.iter().take(config_guard.most_grateful_count) {
                         let thanker: String = row.get(0);
                         let count: i64 = row.get(1);
                         entries.push(format!("{}: {}\u{D7}", thanker, count));
                     }
                     let entries_string = entries.join(", ");
-                    if mg.len() > self.most_grateful_count {
+                    if mg.len() > config_guard.most_grateful_count {
                         // additional people have been grateful
-                        format!(" (Most grateful {}: {})", self.most_grateful_count, entries_string)
+                        format!(" (Most grateful {}: {})", config_guard.most_grateful_count, entries_string)
                     } else {
                         // nobody else has been
                         format!(" ({})", entries_string)
@@ -228,7 +237,8 @@ impl ThanksPlugin {
             None => return,
             Some(i) => i,
         };
-        let db_client = match self.connect_db().await {
+        let config_guard = self.config.read().await;
+        let db_client = match self.connect_db(&config_guard).await {
             Ok(c) => c,
             Err(_e) => return,
         };
@@ -268,7 +278,7 @@ impl ThanksPlugin {
             String::new()
         } else {
             // also show stats
-            let count_plus_one: i64 = (self.most_grateful_count + 1).try_into()
+            let count_plus_one: i64 = (config_guard.most_grateful_count + 1).try_into()
                 .expect("most grateful count not representable as i64");
             let most_thanked_res = db_client.query(
                 r#"
@@ -288,15 +298,15 @@ impl ThanksPlugin {
                 },
                 Ok(mg) => {
                     let mut entries = Vec::new();
-                    for row in mg.iter().take(self.most_grateful_count) {
+                    for row in mg.iter().take(config_guard.most_grateful_count) {
                         let thankee: String = row.get(0);
                         let count: i64 = row.get(1);
                         entries.push(format!("{}: {}\u{D7}", thankee, count));
                     }
                     let entries_string = entries.join(", ");
-                    if mg.len() > self.most_grateful_count {
+                    if mg.len() > config_guard.most_grateful_count {
                         // user thanked additional people
-                        format!(" (Most thanked {}: {})", self.most_grateful_count, entries_string)
+                        format!(" (Most thanked {}: {})", config_guard.most_grateful_count, entries_string)
                     } else {
                         // user thanked nobody else
                         format!(" ({})", entries_string)
@@ -323,12 +333,13 @@ impl ThanksPlugin {
             None => return,
             Some(i) => i,
         };
-        let db_client = match self.connect_db().await {
+        let config_guard = self.config.read().await;
+        let db_client = match self.connect_db(&config_guard).await {
             Ok(c) => c,
             Err(_e) => return,
         };
 
-        let count: i64 = self.most_grateful_count.try_into()
+        let count: i64 = config_guard.most_grateful_count.try_into()
             .expect("most grateful count not representable as i64");
         let most_thanked_res = db_client.query(
             r#"
@@ -347,7 +358,7 @@ impl ThanksPlugin {
             },
             Ok(mg) => {
                 let mut entries = Vec::new();
-                for row in mg.iter().take(self.most_grateful_count) {
+                for row in mg.iter().take(config_guard.most_grateful_count) {
                     let thankee: String = row.get(0);
                     let count: i64 = row.get(1);
                     entries.push(format!("{}: {}\u{D7}", thankee, count));
@@ -371,12 +382,13 @@ impl ThanksPlugin {
             None => return,
             Some(i) => i,
         };
-        let db_client = match self.connect_db().await {
+        let config_guard = self.config.read().await;
+        let db_client = match self.connect_db(&config_guard).await {
             Ok(c) => c,
             Err(_e) => return,
         };
 
-        let count: i64 = self.most_grateful_count.try_into()
+        let count: i64 = config_guard.most_grateful_count.try_into()
             .expect("most grateful count not representable as i64");
         let most_thanked_res = db_client.query(
             r#"
@@ -395,7 +407,7 @@ impl ThanksPlugin {
             },
             Ok(mg) => {
                 let mut entries = Vec::new();
-                for row in mg.iter().take(self.most_grateful_count) {
+                for row in mg.iter().take(config_guard.most_grateful_count) {
                     let thanker: String = row.get(0);
                     let count: i64 = row.get(1);
                     entries.push(format!("{}: {}\u{D7}", thanker, count));
@@ -413,6 +425,19 @@ impl ThanksPlugin {
             },
         }
     }
+
+    fn try_get_config(config: serde_json::Value) -> Result<Config, &'static str> {
+        let db_conn_string = config["db_conn_string"]
+            .as_str().ok_or("db_conn_string is not a string")?
+            .to_owned();
+        let most_grateful_count = config["most_grateful_count"]
+            .as_usize().ok_or("most_grateful_count is not a usize")?;
+
+        Ok(Config {
+            db_conn_string,
+            most_grateful_count,
+        })
+    }
 }
 #[async_trait]
 impl RocketBotPlugin for ThanksPlugin {
@@ -422,6 +447,13 @@ impl RocketBotPlugin for ThanksPlugin {
             None => panic!("interface is gone"),
             Some(i) => i,
         };
+
+        let config_object = Self::try_get_config(config)
+            .expect("failed to load config");
+        let config_lock = RwLock::new(
+            "ThanksPlugin::config",
+            config_object,
+        );
 
         let thanks_command = CommandDefinition::new(
             "thanks".to_owned(),
@@ -487,11 +519,7 @@ impl RocketBotPlugin for ThanksPlugin {
 
         ThanksPlugin {
             interface,
-            db_conn_string: config["db_conn_string"]
-                .as_str().expect("db_conn_string is not a string")
-                .to_owned(),
-            most_grateful_count: config["most_grateful_count"]
-                .as_usize().expect("most_grateful_count is not a usize"),
+            config: config_lock,
         }
     }
 
@@ -526,6 +554,20 @@ impl RocketBotPlugin for ThanksPlugin {
             Some(include_str!("../help/topgrateful.md").to_owned())
         } else {
             None
+        }
+    }
+
+    async fn configuration_updated(&self, new_config: serde_json::Value) -> bool {
+        match Self::try_get_config(new_config) {
+            Ok(c) => {
+                let mut config_guard = self.config.write().await;
+                *config_guard = c;
+                true
+            },
+            Err(e) => {
+                error!("failed to load new config: {}", e);
+                false
+            },
         }
     }
 }

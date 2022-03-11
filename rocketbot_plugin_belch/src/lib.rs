@@ -36,4 +36,9 @@ impl RocketBotPlugin for BelchPlugin {
                 .await;
         }
     }
+
+    async fn configuration_updated(&self, _new_config: serde_json::Value) -> bool {
+        // not much to reload
+        true
+    }
 }

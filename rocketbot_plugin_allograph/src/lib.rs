@@ -3,20 +3,22 @@ use std::sync::Weak;
 
 use async_trait::async_trait;
 use chrono::Local;
-use log::debug;
+use log::{debug, error};
 use rand::{Rng, SeedableRng};
 use rand::rngs::StdRng;
 use regex::Regex;
-use rocketbot_interface::{JsonValueExtensions, send_channel_message, send_private_message};
+use rocketbot_interface::{
+    JsonValueExtensions, ResultExtensions, send_channel_message, send_private_message,
+};
 use rocketbot_interface::commands::{CommandDefinitionBuilder, CommandInstance};
 use rocketbot_interface::interfaces::{RocketBotInterface, RocketBotPlugin};
 use rocketbot_interface::model::{ChannelMessage, PrivateMessage};
-use rocketbot_interface::sync::Mutex;
+use rocketbot_interface::sync::{Mutex, RwLock};
 use rocketbot_regex_replace::ReplacerRegex;
 use serde_json;
 
 
-#[derive(Debug)]
+#[derive(Clone, Debug)]
 struct LocalReplacerRegex {
     pub replacer_regex: ReplacerRegex,
     pub additional_probability_percent: u8,
@@ -55,12 +57,18 @@ impl InnerState {
 }
 
 
-pub struct AllographPlugin {
-    interface: Weak<dyn RocketBotInterface>,
+#[derive(Clone, Debug)]
+struct Config {
     probability_percent: u8,
     replacer_regexes: Vec<LocalReplacerRegex>,
     cooldown_increase_per_hit: usize,
     ignore_bot_messages: bool,
+}
+
+
+pub struct AllographPlugin {
+    interface: Weak<dyn RocketBotInterface>,
+    config: RwLock<Config>,
     inner_state: Mutex<InnerState>,
 }
 impl AllographPlugin {
@@ -91,6 +99,69 @@ impl AllographPlugin {
             &format!("Cooldowns for this channel: {:?}", cooldowns),
         ).await;
     }
+
+    fn try_get_config(config: serde_json::Value) -> Result<Config, &'static str> {
+        let probability_percent = config["probability_percent"].as_u8()
+            .ok_or("probability_percent missing or not representable as u8")?;
+
+        let replacements = config["replacements"].members()
+            .ok_or("replacements is not a list")?;
+        let mut replacer_regexes: Vec<LocalReplacerRegex> = Vec::new();
+        for repl in replacements {
+            let regex_string = repl["regex_string"].as_str()
+                .ok_or("regex_string missing or not a string")?;
+            let regex = Regex::new(regex_string)
+                .or_msg("failed to compile regex")?;
+            let replacement_string = repl["replacement_string"].as_str()
+                .ok_or("replacement_string missing or not a string")?
+                .to_owned();
+
+            let replacer_regex = ReplacerRegex::compile_new(regex, replacement_string)
+                .or_msg("failed to compile replacer regex")?;
+
+            let additional_probability_percent = if repl.has_key("additional_probability_percent") {
+                repl["additional_probability_percent"].as_u8()
+                    .ok_or("additional_probability_percent not representable as u8")?
+            } else {
+                100
+            };
+
+            let custom_cooldown_increase_per_hit = if repl.has_key("custom_cooldown_increase_per_hit") {
+                Some(
+                    repl["custom_cooldown_increase_per_hit"].as_usize()
+                        .ok_or("custom_cooldown_increase_per_hit not representable as usize")?
+                )
+            } else {
+                None
+            };
+
+            replacer_regexes.push(LocalReplacerRegex::new(
+                replacer_regex,
+                additional_probability_percent,
+                custom_cooldown_increase_per_hit,
+            ));
+        }
+
+        let cooldown_increase_per_hit = if config.has_key("cooldown_increase_per_hit") {
+            config["cooldown_increase_per_hit"].as_usize()
+                .ok_or("cooldown_increase_per_hit not representable as usize")?
+        } else {
+            0
+        };
+        let ignore_bot_messages = if config["ignore_bot_messages"].is_null() {
+            true
+        } else {
+            config["ignore_bot_messages"].as_bool()
+                .ok_or("ignore_bot_messages not representable as bool")?
+        };
+
+        Ok(Config {
+            probability_percent,
+            replacer_regexes,
+            cooldown_increase_per_hit,
+            ignore_bot_messages,
+        })
+    }
 }
 #[async_trait]
 impl RocketBotPlugin for AllographPlugin {
@@ -100,47 +171,12 @@ impl RocketBotPlugin for AllographPlugin {
             Some(i) => i,
         };
 
-        let probability_percent = config["probability_percent"].as_u8()
-            .expect("probability_percent missing or not representable as u8");
-        let replacer_regexes: Vec<LocalReplacerRegex> = config["replacements"].members()
-            .expect("replacements is not a list")
-            .map(|repl| LocalReplacerRegex::new(
-                ReplacerRegex::compile_new(
-                    Regex::new(
-                        repl["regex_string"].as_str().expect("regex_string missing or not a string"),
-                    ).unwrap(),
-                    repl["replacement_string"].as_str()
-                        .expect("replacement_string missing or not a string")
-                        .to_owned(),
-                ).expect("failed to compile replacer regex"),
-                if repl.has_key("additional_probability_percent") {
-                    repl["additional_probability_percent"].as_u8()
-                        .expect("additional_probability_percent not representable as u8")
-                } else {
-                    100
-                },
-                if repl.has_key("custom_cooldown_increase_per_hit") {
-                    Some(
-                        repl["custom_cooldown_increase_per_hit"].as_usize()
-                            .expect("custom_cooldown_increase_per_hit not representable as usize")
-                    )
-                } else {
-                    None
-                },
-            ))
-            .collect();
-        let cooldown_increase_per_hit = if config.has_key("cooldown_increase_per_hit") {
-            config["cooldown_increase_per_hit"].as_usize()
-                .expect("cooldown_increase_per_hit not representable as usize")
-        } else {
-            0
-        };
-        let ignore_bot_messages = if config["ignore_bot_messages"].is_null() {
-            true
-        } else {
-            config["ignore_bot_messages"].as_bool()
-                .expect("ignore_bot_messages not representable as bool")
-        };
+        let config_obj = Self::try_get_config(config)
+            .expect("failed to load config");
+        let config_lock = RwLock::new(
+            "AllographPlugin::config",
+            config_obj,
+        );
 
         my_interface.register_private_message_command(
             &CommandDefinitionBuilder::new(
@@ -162,10 +198,7 @@ impl RocketBotPlugin for AllographPlugin {
 
         AllographPlugin {
             interface,
-            probability_percent,
-            replacer_regexes,
-            cooldown_increase_per_hit,
-            ignore_bot_messages,
+            config: config_lock,
             inner_state,
         }
     }
@@ -180,7 +213,9 @@ impl RocketBotPlugin for AllographPlugin {
             Some(i) => i,
         };
 
-        if self.ignore_bot_messages && channel_message.message.is_by_bot {
+        let config_guard = self.config.read().await;
+
+        if config_guard.ignore_bot_messages && channel_message.message.is_by_bot {
             return;
         }
 
@@ -197,17 +232,23 @@ impl RocketBotPlugin for AllographPlugin {
 
         let channel_cooldowns = inner_state.cooldowns_per_channel
             .entry(channel_name.clone())
-            .or_insert_with(|| vec![0usize; self.replacer_regexes.len()]);
+            .or_insert_with(|| vec![0usize; config_guard.replacer_regexes.len()]);
 
         let mut lookups: HashMap<String, String> = HashMap::new();
         lookups.insert("username".to_owned(), sender_nickname.to_owned());
 
         let mut changing_body = original_body.clone();
-        for (i, replacement) in self.replacer_regexes.iter().enumerate() {
+        for (i, replacement) in config_guard.replacer_regexes.iter().enumerate() {
+            // ensure we have all cooldowns stored
+            // (we might be in the middle of a config reload)
+            while channel_cooldowns.len() <= i {
+                channel_cooldowns.push(0);
+            }
+
             // perform the replacement
             let replaced = replacement.replacer_regex.replace(&changing_body, &lookups);
 
-            if self.cooldown_increase_per_hit > 0 || replacement.custom_cooldown_increase_per_hit.is_some() {
+            if config_guard.cooldown_increase_per_hit > 0 || replacement.custom_cooldown_increase_per_hit.is_some() {
                 if changing_body != replaced {
                     // this rule changed something!
 
@@ -227,7 +268,7 @@ impl RocketBotPlugin for AllographPlugin {
                     channel_cooldowns[i] += if let Some(cciph) = replacement.custom_cooldown_increase_per_hit {
                         cciph
                     } else {
-                        self.cooldown_increase_per_hit
+                        config_guard.cooldown_increase_per_hit
                     };
                 } else if channel_cooldowns[i] > 0 {
                     // cool it down
@@ -261,15 +302,15 @@ impl RocketBotPlugin for AllographPlugin {
         }
 
         let main_prob = inner_state.rng.gen_range(0..100);
-        if main_prob < self.probability_percent {
-            debug!("{} < {}; posting {:?}", main_prob, self.probability_percent, changing_body);
+        if main_prob < config_guard.probability_percent {
+            debug!("{} < {}; posting {:?}", main_prob, config_guard.probability_percent, changing_body);
             send_channel_message!(
                 interface,
                 channel_name,
                 &changing_body,
             ).await;
         } else {
-            debug!("{} >= {}; not posting {:?}", main_prob, self.probability_percent, changing_body);
+            debug!("{} >= {}; not posting {:?}", main_prob, config_guard.probability_percent, changing_body);
         }
     }
 
@@ -284,6 +325,35 @@ impl RocketBotPlugin for AllographPlugin {
             Some(include_str!("../help/allocool.md").to_owned())
         } else {
             None
+        }
+    }
+
+    async fn configuration_updated(&self, new_config: serde_json::Value) -> bool {
+        match Self::try_get_config(new_config) {
+            Ok(c) => {
+                // get number of replacements
+                let replacement_count = c.replacer_regexes.len();
+
+                // store new config
+                {
+                    let mut config_guard = self.config.write().await;
+                    *config_guard = c;
+                }
+
+                // update cooldown caches
+                {
+                    let mut state_guard = self.inner_state.lock().await;
+                    for cooldown_vec in state_guard.cooldowns_per_channel.values_mut() {
+                        *cooldown_vec = vec![0; replacement_count];
+                    }
+                }
+
+                true
+            },
+            Err(e) => {
+                error!("failed to load new config: {}", e);
+                false
+            },
         }
     }
 }

@@ -6,20 +6,27 @@ use std::collections::{HashMap, HashSet};
 use std::sync::Weak;
 
 use async_trait::async_trait;
+use log::error;
 use rocketbot_interface::{JsonValueExtensions, send_channel_message};
 use rocketbot_interface::commands::{CommandBehaviors, CommandDefinition, CommandInstance};
 use rocketbot_interface::interfaces::{RocketBotInterface, RocketBotPlugin};
 use rocketbot_interface::model::ChannelMessage;
+use rocketbot_interface::sync::RwLock;
 use serde_json::Value;
 
 use crate::interface::VitalsReader;
 
 
-pub struct VitalsPlugin {
-    interface: Weak<dyn RocketBotInterface>,
+struct Config {
     lower_key_to_reader: HashMap<String, Box<dyn VitalsReader>>,
     lower_alias_to_lower_key: HashMap<String, String>,
     default_target_lower: String,
+}
+
+
+pub struct VitalsPlugin {
+    interface: Weak<dyn RocketBotInterface>,
+    config: RwLock<Config>,
 }
 impl VitalsPlugin {
     async fn vitals_command(&self, channel_message: &ChannelMessage, command: &CommandInstance) {
@@ -28,18 +35,20 @@ impl VitalsPlugin {
             Some(i) => i,
         };
 
+        let config_guard = self.config.read().await;
+
         let mut target_lower = command.rest.trim().to_lowercase();
         if target_lower.len() == 0 {
-            target_lower = self.default_target_lower.clone();
+            target_lower = config_guard.default_target_lower.clone();
         }
 
         // resolve aliases
-        let target_lower_aliased = match self.lower_alias_to_lower_key.get(&target_lower) {
+        let target_lower_aliased = match config_guard.lower_alias_to_lower_key.get(&target_lower) {
             Some(t) => t.clone(),
             None => target_lower.clone(),
         };
 
-        let reader = match self.lower_key_to_reader.get(&target_lower_aliased) {
+        let reader = match config_guard.lower_key_to_reader.get(&target_lower_aliased) {
             Some(r) => r,
             None => {
                 send_channel_message!(
@@ -67,7 +76,9 @@ impl VitalsPlugin {
             Some(i) => i,
         };
 
-        let key_list: Vec<String> = self.lower_key_to_reader
+        let config_guard = self.config.read().await;
+
+        let key_list: Vec<String> = config_guard.lower_key_to_reader
             .keys()
             .map(|k| format!("`{}`", k))
             .collect();
@@ -79,19 +90,12 @@ impl VitalsPlugin {
             &format!("Available vitals: {}", key_string),
         ).await;
     }
-}
-#[async_trait]
-impl RocketBotPlugin for VitalsPlugin {
-    async fn new(interface: Weak<dyn RocketBotInterface>, config: Value) -> Self {
-        let my_interface = match interface.upgrade() {
-            None => panic!("interface is gone"),
-            Some(i) => i,
-        };
 
+    async fn try_get_config(config: serde_json::Value) -> Result<Config, &'static str> {
         let mut lower_key_to_reader = HashMap::new();
-        for (target, target_properties) in config["targets"].as_object().expect("targets is not an object").iter() {
+        for (target, target_properties) in config["targets"].as_object().ok_or("targets is not an object")?.iter() {
             let reader = target_properties["reader"].as_str()
-                .expect("reader is not a string");
+                .ok_or("reader is not a string")?;
             let reader_config = &target_properties["config"];
 
             let reader_obj: Box<dyn VitalsReader> = if reader == "beepee" {
@@ -103,7 +107,8 @@ impl RocketBotPlugin for VitalsPlugin {
             } else if reader == "random" {
                 Box::new(crate::readers::random::RandomReader::new(&reader_config).await)
             } else {
-                panic!("unknown reader type {:?}", reader);
+                error!("unknown reader type {:?}", reader);
+                return Err("unknown reader type");
             };
 
             lower_key_to_reader.insert(target.to_lowercase(), reader_obj);
@@ -113,24 +118,51 @@ impl RocketBotPlugin for VitalsPlugin {
         for (alias, key_object) in config["aliases"].entries_or_empty() {
             let key_lower = match key_object.as_str() {
                 Some(s) => s.to_lowercase(),
-                None => panic!("aliases[{:?}] not a string", alias),
+                None => {
+                    error!("aliases[{:?}] not a string", alias);
+                    return Err("one of aliases not a string");
+                },
             };
             if !lower_key_to_reader.contains_key(&key_lower) {
-                panic!("aliases[{:?}] points to unknown target {:?}", alias, key_lower);
+                error!("aliases[{:?}] points to unknown target {:?}", alias, key_lower);
+                return Err("one of aliases points to an unknown target");
             }
             lower_alias_to_lower_key.insert(alias.to_lowercase(), key_lower);
         }
 
-        let default_target_lower = config["default_target"].as_str()
-            .expect("default_target is not a string")
+        let default_target_lower = config["default_target"]
+            .as_str().ok_or("default_target is not a string")?
             .to_lowercase();
         let default_target_known =
             lower_key_to_reader.contains_key(&default_target_lower)
             || lower_alias_to_lower_key.contains_key(&default_target_lower)
         ;
         if !default_target_known {
-            panic!("default_target {:?} found neither in targets nor in aliases", default_target_lower);
+            error!("default_target {:?} found neither in targets nor in aliases", default_target_lower);
+            return Err("default_target found neither in targets nor in aliases");
         }
+
+        Ok(Config {
+            lower_key_to_reader,
+            lower_alias_to_lower_key,
+            default_target_lower,
+        })
+    }
+}
+#[async_trait]
+impl RocketBotPlugin for VitalsPlugin {
+    async fn new(interface: Weak<dyn RocketBotInterface>, config: Value) -> Self {
+        let my_interface = match interface.upgrade() {
+            None => panic!("interface is gone"),
+            Some(i) => i,
+        };
+
+        let config_object = Self::try_get_config(config).await
+            .expect("failed to obtain config");
+        let config_lock = RwLock::new(
+            "VitalsPlugin::config",
+            config_object,
+        );
 
         my_interface.register_channel_command(&CommandDefinition::new(
             "vitals".to_owned(),
@@ -155,9 +187,7 @@ impl RocketBotPlugin for VitalsPlugin {
 
         VitalsPlugin {
             interface,
-            lower_key_to_reader,
-            lower_alias_to_lower_key,
-            default_target_lower,
+            config: config_lock,
         }
     }
 
@@ -180,6 +210,20 @@ impl RocketBotPlugin for VitalsPlugin {
             Some(include_str!("../help/vitallist.md").to_owned())
         } else {
             None
+        }
+    }
+
+    async fn configuration_updated(&self, new_config: serde_json::Value) -> bool {
+        match Self::try_get_config(new_config).await {
+            Ok(c) => {
+                let mut config_guard = self.config.write().await;
+                *config_guard = c;
+                true
+            },
+            Err(e) => {
+                error!("failed to load new config: {}", e);
+                false
+            },
         }
     }
 }

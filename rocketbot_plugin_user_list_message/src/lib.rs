@@ -2,7 +2,7 @@ use std::collections::{HashMap, HashSet};
 use std::sync::Weak;
 
 use async_trait::async_trait;
-use log::debug;
+use log::{debug, warn};
 use rocketbot_interface::send_channel_message;
 use rocketbot_interface::interfaces::{RocketBotInterface, RocketBotPlugin};
 use rocketbot_interface::model::Channel;
@@ -144,5 +144,10 @@ impl RocketBotPlugin for UserListMessagePlugin {
 
         // remember the current users for later
         channel_info.usernames = Some(new_usernames);
+    }
+
+    async fn configuration_updated(&self, _new_config: serde_json::Value) -> bool {
+        warn!("configuration updates are not yet supported for the user_list_message plugin");
+        false
     }
 }

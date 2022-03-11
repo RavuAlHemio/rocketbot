@@ -2,18 +2,40 @@ use std::collections::{HashMap, HashSet};
 use std::sync::Weak;
 
 use async_trait::async_trait;
+use log::error;
 use rocketbot_interface::{JsonValueExtensions, send_channel_message_advanced};
 use rocketbot_interface::commands::{
     CommandBehaviors, CommandDefinition, CommandInstance, CommandValueType,
 };
 use rocketbot_interface::interfaces::{RocketBotInterface, RocketBotPlugin};
 use rocketbot_interface::model::{ImpersonationInfo, OutgoingMessage, PrivateMessage};
+use rocketbot_interface::sync::RwLock;
 use serde_json;
+
+
+#[derive(Clone, Debug, Eq, PartialEq)]
+struct Config {
+    allowed_usernames: HashSet<String>,
+}
 
 
 pub struct SockpuppetPlugin {
     interface: Weak<dyn RocketBotInterface>,
-    allowed_usernames: HashSet<String>,
+    config: RwLock<Config>,
+}
+impl SockpuppetPlugin {
+    fn try_get_config(config: serde_json::Value) -> Result<Config, &'static str> {
+        let mut allowed_usernames = HashSet::new();
+        for username_value in config["allowed_usernames"].members().ok_or("allowed_usernames not a list")? {
+            let username = username_value
+                .as_str().ok_or("entry in allowed_usernames not a string")?;
+            allowed_usernames.insert(username.to_owned());
+        }
+
+        Ok(Config {
+            allowed_usernames,
+        })
+    }
 }
 #[async_trait]
 impl RocketBotPlugin for SockpuppetPlugin {
@@ -23,12 +45,12 @@ impl RocketBotPlugin for SockpuppetPlugin {
             Some(i) => i,
         };
 
-        let mut allowed_usernames = HashSet::new();
-        for username_value in config["allowed_usernames"].members().expect("allowed_usernames not a list") {
-            let username = username_value
-                .as_str().expect("entry in allowed_usernames not a string");
-            allowed_usernames.insert(username.to_owned());
-        }
+        let config_object = Self::try_get_config(config)
+            .expect("failed to load config");
+        let config_lock = RwLock::new(
+            "SockpuppetPlugin::config",
+            config_object,
+        );
 
         let mut chansend_options = HashMap::new();
         chansend_options.insert("impersonate".to_owned(), CommandValueType::String);
@@ -46,7 +68,7 @@ impl RocketBotPlugin for SockpuppetPlugin {
 
         SockpuppetPlugin {
             interface,
-            allowed_usernames,
+            config: config_lock,
         }
     }
 
@@ -64,7 +86,9 @@ impl RocketBotPlugin for SockpuppetPlugin {
             return;
         }
 
-        if !self.allowed_usernames.contains(&private_message.message.sender.username) {
+        let config_guard = self.config.read().await;
+
+        if !config_guard.allowed_usernames.contains(&private_message.message.sender.username) {
             return;
         }
 
@@ -107,6 +131,20 @@ impl RocketBotPlugin for SockpuppetPlugin {
             Some(include_str!("../help/chansend.md").to_owned())
         } else {
             None
+        }
+    }
+
+    async fn configuration_updated(&self, new_config: serde_json::Value) -> bool {
+        match Self::try_get_config(new_config) {
+            Ok(c) => {
+                let mut config_guard = self.config.write().await;
+                *config_guard = c;
+                true
+            },
+            Err(e) => {
+                error!("failed to load new config: {}", e);
+                false
+            },
         }
     }
 }

@@ -4,16 +4,23 @@ use async_trait::async_trait;
 use log::error;
 use rocketbot_interface::interfaces::{RocketBotInterface, RocketBotPlugin};
 use rocketbot_interface::model::ChannelMessage;
+use rocketbot_interface::sync::RwLock;
 use serde_json;
 use tokio_postgres::NoTls;
 
 
-pub struct LoggerPlugin {
+#[derive(Clone, Debug, Eq, Hash, PartialEq)]
+struct Config {
     db_conn_string: String,
 }
+
+
+pub struct LoggerPlugin {
+    config: RwLock<Config>,
+}
 impl LoggerPlugin {
-    async fn connect_db(&self) -> Result<tokio_postgres::Client, tokio_postgres::Error> {
-        let (client, connection) = match tokio_postgres::connect(&self.db_conn_string, NoTls).await {
+    async fn connect_db(&self, config: &Config) -> Result<tokio_postgres::Client, tokio_postgres::Error> {
+        let (client, connection) = match tokio_postgres::connect(&config.db_conn_string, NoTls).await {
             Ok(cc) => cc,
             Err(e) => {
                 error!("error connecting to database: {}", e);
@@ -27,7 +34,8 @@ impl LoggerPlugin {
     }
 
     async fn channel_message_received_or_delivered(&self, channel_message: &ChannelMessage) {
-        let db_conn = match self.connect_db().await {
+        let config_guard = self.config.read().await;
+        let db_conn = match self.connect_db(&config_guard).await {
             Ok(dbc) => dbc,
             Err(e) => {
                 error!("failed to connect to database: {}", e);
@@ -89,16 +97,29 @@ impl LoggerPlugin {
             return;
         }
     }
+
+    fn try_get_config(config: serde_json::Value) -> Result<Config, &'static str> {
+        let db_conn_string = config["db_conn_string"]
+            .as_str().ok_or("db_conn_string missing or not a string")?
+            .to_owned();
+
+        Ok(Config {
+            db_conn_string,
+        })
+    }
 }
 #[async_trait]
 impl RocketBotPlugin for LoggerPlugin {
     async fn new(_interface: Weak<dyn RocketBotInterface>, config: serde_json::Value) -> Self {
-        let db_conn_string = config["db_conn_string"].as_str()
-            .expect("db_conn_string missing or not a string")
-            .to_owned();
+        let config_object = Self::try_get_config(config)
+            .expect("failed to load config");
+        let config_lock = RwLock::new(
+            "LoggerPlugin::config",
+            config_object,
+        );
 
         LoggerPlugin {
-            db_conn_string,
+            config: config_lock,
         }
     }
 
@@ -115,7 +136,8 @@ impl RocketBotPlugin for LoggerPlugin {
     }
 
     async fn channel_message_edited(&self, channel_message: &ChannelMessage) {
-        let db_conn = match self.connect_db().await {
+        let config_guard = self.config.read().await;
+        let db_conn = match self.connect_db(&config_guard).await {
             Ok(dbc) => dbc,
             Err(e) => {
                 error!("failed to connect to database: {}", e);
@@ -149,6 +171,20 @@ impl RocketBotPlugin for LoggerPlugin {
         if let Err(e) = msg_res {
             error!("failed to insert message revision: {}", e);
             return;
+        }
+    }
+
+    async fn configuration_updated(&self, new_config: serde_json::Value) -> bool {
+        match Self::try_get_config(new_config) {
+            Ok(c) => {
+                let mut config_guard = self.config.write().await;
+                *config_guard = c;
+                true
+            },
+            Err(e) => {
+                error!("failed to load new config: {}", e);
+                false
+            },
         }
     }
 }

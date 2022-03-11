@@ -2,7 +2,7 @@ use std::sync::{Arc, Weak};
 
 use async_trait::async_trait;
 use chrono::{DateTime, TimeZone, Timelike, Utc};
-use log::debug;
+use log::{debug, warn};
 use regex::Regex;
 use rocketbot_interface::JsonValueExtensions;
 use rocketbot_interface::interfaces::{RocketBotInterface, RocketBotPlugin};
@@ -137,5 +137,10 @@ impl RocketBotPlugin for TopicTimerPlugin {
         }
 
         register_topic_timer(Arc::clone(&interface), &counter.base_timestamp, index).await;
+    }
+
+    async fn configuration_updated(&self, _new_config: serde_json::Value) -> bool {
+        warn!("configuration updates are not yet supported for the topic_timer plugin");
+        false
     }
 }

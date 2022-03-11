@@ -2,12 +2,14 @@ use std::fmt::Write;
 use std::sync::Weak;
 
 use async_trait::async_trait;
+use log::error;
 use once_cell::sync::Lazy;
 use regex::{Captures, Regex};
 use rocketbot_interface::{JsonValueExtensions, send_channel_message};
 use rocketbot_interface::commands::{CommandDefinitionBuilder, CommandInstance, CommandValueType};
 use rocketbot_interface::interfaces::{RocketBotInterface, RocketBotPlugin};
 use rocketbot_interface::model::ChannelMessage;
+use rocketbot_interface::sync::RwLock;
 use serde_json;
 
 
@@ -22,9 +24,29 @@ static PROGRESS_INDICATOR_RE: Lazy<Regex> = Lazy::new(|| Regex::new(concat!(
 )).expect("failed to parse progress indicator regex"));
 
 
+#[derive(Clone, Copy, Debug, Eq, Hash, PartialEq)]
+struct Config {
+    bar_length: usize,
+}
+
+
 pub struct ProgressPlugin {
     interface: Weak<dyn RocketBotInterface>,
-    bar_length: usize,
+    config: RwLock<Config>,
+}
+impl ProgressPlugin {
+    fn try_get_config(config: serde_json::Value) -> Result<Config, &'static str> {
+        let bar_length = if config["bar_length"].is_null() {
+            20
+        } else {
+            config["bar_length"].as_usize()
+                .ok_or("bar_length not representable as a usize")?
+        };
+
+        Ok(Config {
+            bar_length,
+        })
+    }
 }
 #[async_trait]
 impl RocketBotPlugin for ProgressPlugin {
@@ -34,12 +56,12 @@ impl RocketBotPlugin for ProgressPlugin {
             Some(i) => i,
         };
 
-        let bar_length = if config["bar_length"].is_null() {
-            20
-        } else {
-            config["bar_length"].as_usize()
-                .expect("bar_length not representable as a usize")
-        };
+        let config_object = Self::try_get_config(config)
+            .expect("failed to load config");
+        let config_lock = RwLock::new(
+            "ProgressPlugin::config",
+            config_object,
+        );
 
         my_interface.register_channel_command(
             &CommandDefinitionBuilder::new(
@@ -65,7 +87,7 @@ impl RocketBotPlugin for ProgressPlugin {
 
         Self {
             interface,
-            bar_length,
+            config: config_lock,
         }
     }
 
@@ -81,6 +103,8 @@ impl RocketBotPlugin for ProgressPlugin {
             None => return,
             Some(i) => i,
         };
+
+        let config_guard = self.config.read().await;
 
         let foreground = command.options.get("foreground")
             .or_else(|| command.options.get("f"))
@@ -116,7 +140,7 @@ impl RocketBotPlugin for ProgressPlugin {
         let replaced = PROGRESS_INDICATOR_RE.replace_all(
             &command.rest,
             |caps: &Captures| regex_replacement_func(
-                caps, self.bar_length,
+                caps, config_guard.bar_length,
                 foreground, background, start_bar, end_bar, start_box, end_box,
             ),
         );
@@ -134,6 +158,20 @@ impl RocketBotPlugin for ProgressPlugin {
             Some(include_str!("../help/progress.md").to_owned())
         } else {
             None
+        }
+    }
+
+    async fn configuration_updated(&self, new_config: serde_json::Value) -> bool {
+        match Self::try_get_config(new_config) {
+            Ok(c) => {
+                let mut config_guard = self.config.write().await;
+                *config_guard = c;
+                true
+            },
+            Err(e) => {
+                error!("failed to load new config: {}", e);
+                false
+            },
         }
     }
 }

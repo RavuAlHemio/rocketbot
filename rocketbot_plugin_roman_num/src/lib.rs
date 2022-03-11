@@ -104,6 +104,11 @@ impl RocketBotPlugin for RomanNumPlugin {
             self.handle_unroman(channel_message, command).await
         }
     }
+
+    async fn configuration_updated(&self, _new_config: serde_json::Value) -> bool {
+        // not much to update
+        true
+    }
 }
 
 

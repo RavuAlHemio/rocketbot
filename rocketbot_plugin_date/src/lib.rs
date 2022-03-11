@@ -165,4 +165,9 @@ impl RocketBotPlugin for DatePlugin {
             self.handle_weekday(channel_message, command).await;
         }
     }
+
+    async fn configuration_updated(&self, _new_config: serde_json::Value) -> bool {
+        // no config to update
+        true
+    }
 }

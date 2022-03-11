@@ -5,14 +5,15 @@ use std::sync::{Arc, Weak};
 
 use async_trait::async_trait;
 use chrono::Local;
-use log::debug;
+use log::{debug, error};
 use rand::{Rng, RngCore, SeedableRng};
 use rand::rngs::StdRng;
 use rand::seq::SliceRandom;
 use regex::Regex;
+use rocketbot_interface::ResultExtensions;
 use rocketbot_interface::interfaces::{RocketBotInterface, RocketBotPlugin};
 use rocketbot_interface::model::{Attachment, ChannelMessage, OutgoingMessageWithAttachmentBuilder};
-use rocketbot_interface::sync::Mutex;
+use rocketbot_interface::sync::{Mutex, RwLock};
 
 
 #[derive(Debug)]
@@ -24,10 +25,56 @@ struct Response {
 }
 
 
+#[derive(Debug)]
+struct Config {
+    responses: Vec<Response>,
+}
+
+
 pub struct PicRespondPlugin {
     interface: Weak<dyn RocketBotInterface>,
     rng: Arc<Mutex<Box<dyn RngCore + Send>>>,
-    responses: Vec<Response>,
+    config: RwLock<Config>,
+}
+impl PicRespondPlugin {
+    fn try_get_config(config: serde_json::Value) -> Result<Config, &'static str> {
+        let mut responses = Vec::new();
+        for (key, values) in config["responses"].as_object().ok_or("responses not an object")? {
+            let regex = Regex::new(key).or_msg("failed to parse regex")?;
+            let file_name = values["file_name"]
+                .as_str().unwrap_or("picture")
+                .to_owned();
+            let percentage = if values["percentage"].is_null() {
+                100.0
+            } else {
+                values["percentage"].as_f64().ok_or("percentage not a float")?
+            };
+            let mut response_paths: Vec<String> = Vec::new();
+            let path_values = values["paths"]
+                .as_array().ok_or("paths not an array")?;
+            for path_val in path_values {
+                response_paths.push(
+                    path_val
+                        .as_str().ok_or("paths entry not a string")?
+                        .to_owned()
+                );
+            }
+            if response_paths.len() == 0 {
+                error!("responses value for key {:?} has no entries", key);
+                return Err("responses value has no entries");
+            }
+            responses.push(Response {
+                regex,
+                file_name,
+                response_paths,
+                percentage,
+            });
+        }
+
+        Ok(Config {
+            responses,
+        })
+    }
 }
 #[async_trait]
 impl RocketBotPlugin for PicRespondPlugin {
@@ -38,36 +85,17 @@ impl RocketBotPlugin for PicRespondPlugin {
             rng_box,
         ));
 
-        let mut responses = Vec::new();
-        for (key, values) in config["responses"].as_object().expect("responses not an object") {
-            let regex = Regex::new(key).expect("failed to parse regex");
-            let file_name = values["file_name"]
-                .as_str().unwrap_or("picture")
-                .to_owned();
-            let percentage = if values["percentage"].is_null() {
-                100.0
-            } else {
-                values["percentage"].as_f64().expect("percentage not a float")
-            };
-            let response_paths: Vec<String> = values["paths"].as_array().expect("paths not an array")
-                .iter()
-                .map(|path_val| path_val.as_str().expect("paths entry not a string").to_owned())
-                .collect();
-            if response_paths.len() == 0 {
-                panic!("responses value for key {:?} has no entries", key);
-            }
-            responses.push(Response {
-                regex,
-                file_name,
-                response_paths,
-                percentage,
-            });
-        }
+        let config_object = Self::try_get_config(config)
+            .expect("failed to load config");
+        let config_lock = RwLock::new(
+            "PicRespondPlugin::config",
+            config_object,
+        );
 
         Self {
             interface,
             rng,
-            responses,
+            config: config_lock,
         }
     }
 
@@ -94,7 +122,9 @@ impl RocketBotPlugin for PicRespondPlugin {
             }
         }
 
-        for response in &self.responses {
+        let config_guard = self.config.read().await;
+
+        for response in &config_guard.responses {
             if !response.regex.is_match(raw_message) {
                 continue;
             }
@@ -147,6 +177,20 @@ impl RocketBotPlugin for PicRespondPlugin {
                 mess,
             ).await;
             return;
+        }
+    }
+
+    async fn configuration_updated(&self, new_config: serde_json::Value) -> bool {
+        match Self::try_get_config(new_config) {
+            Ok(c) => {
+                let mut config_guard = self.config.write().await;
+                *config_guard = c;
+                true
+            },
+            Err(e) => {
+                error!("failed to load new config: {}", e);
+                false
+            },
         }
     }
 }

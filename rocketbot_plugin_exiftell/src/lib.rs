@@ -13,6 +13,7 @@ use rocketbot_geocoding::{Geocoder, GeoCoordinates};
 use rocketbot_interface::{JsonValueExtensions, send_channel_message_advanced};
 use rocketbot_interface::interfaces::{RocketBotInterface, RocketBotPlugin};
 use rocketbot_interface::model::{ChannelMessage, OutgoingMessage};
+use rocketbot_interface::sync::RwLock;
 use serde_json;
 
 
@@ -188,41 +189,59 @@ fn get_location_from_values(gps_lat: &exif::Field, gps_lat_ref: &exif::Field, gp
 }
 
 
-pub struct ExifTellPlugin {
-    interface: Weak<dyn RocketBotInterface>,
+struct Config {
     max_image_bytes: usize,
     max_messages_per_image: Option<usize>,
     geo_links_format: String,
     geocoder: Geocoder,
 }
-#[async_trait]
-impl RocketBotPlugin for ExifTellPlugin {
-    async fn new(interface: Weak<dyn RocketBotInterface>, config: serde_json::Value) -> Self {
+
+
+pub struct ExifTellPlugin {
+    interface: Weak<dyn RocketBotInterface>,
+    config: RwLock<Config>,
+}
+impl ExifTellPlugin {
+    async fn try_get_config(config: serde_json::Value) -> Result<Config, &'static str> {
         let max_image_bytes = config["max_image_bytes"].as_usize()
-            .expect("max_image_bytes not representable as a usize");
+            .ok_or("max_image_bytes not representable as a usize")?;
         let max_messages_per_image = if config["max_messages_per_image"].is_null() {
             None
         } else {
             Some(
                 config["max_messages_per_image"].as_usize()
-                    .expect("max_image_bytes not representable as a usize")
+                    .ok_or("max_image_bytes not representable as a usize")?
             )
         };
         let geo_links_format = if config["geo_links_format"].is_null() {
             String::new()
         } else {
             config["geo_links_format"].as_str()
-                .expect("geo_links_format not representable as a string")
+                .ok_or("geo_links_format not representable as a string")?
                 .to_owned()
         };
-        let geocoder = Geocoder::new(&config["geocoding"]).await;
-
-        Self {
-            interface,
+        let geocoder = Geocoder::new(&config["geocoding"]).await?;
+        Ok(Config {
             max_image_bytes,
             max_messages_per_image,
             geo_links_format,
             geocoder,
+        })
+    }
+}
+#[async_trait]
+impl RocketBotPlugin for ExifTellPlugin {
+    async fn new(interface: Weak<dyn RocketBotInterface>, config: serde_json::Value) -> Self {
+        let config_object = Self::try_get_config(config).await
+            .expect("failed to load config");
+        let config_lock = RwLock::new(
+            "ExifTellPlugin::config",
+            config_object,
+        );
+
+        Self {
+            interface,
+            config: config_lock,
         }
     }
 
@@ -236,6 +255,8 @@ impl RocketBotPlugin for ExifTellPlugin {
             Some(i) => i,
         };
 
+        let config_guard = self.config.read().await;
+
         // lazy EXIF reader for when there is an attachment
         let exif_reader: Lazy<exif::Reader> = Lazy::new(|| exif::Reader::new());
 
@@ -243,7 +264,7 @@ impl RocketBotPlugin for ExifTellPlugin {
         for attachment in &channel_message.message.attachments {
             match attachment.image_size_bytes {
                 None => continue,
-                Some(isb) => if isb > self.max_image_bytes { continue },
+                Some(isb) => if isb > config_guard.max_image_bytes { continue },
             };
 
             if !attachment.title_link.starts_with("/") {
@@ -306,12 +327,12 @@ impl RocketBotPlugin for ExifTellPlugin {
 
             let final_lat_str = format!("{:.5}", final_lat_f64);
             let final_lon_str = format!("{:.5}", final_lon_f64);
-            let geo_link = self.geo_links_format
+            let geo_link = config_guard.geo_links_format
                 .replace("{LAT}", &final_lat_str)
                 .replace("{LON}", &final_lon_str);
 
             // try to reverse-geocode
-            let geonames_location = match self.geocoder.reverse_geocode(GeoCoordinates::new(final_lat_f64, final_lon_f64)).await {
+            let geonames_location = match config_guard.geocoder.reverse_geocode(GeoCoordinates::new(final_lat_f64, final_lon_f64)).await {
                 Ok(loc) => format!("{} ({} {}){}", loc, final_lat_str, final_lon_str, geo_link),
                 Err(errors) => {
                     for e in errors {
@@ -334,11 +355,25 @@ impl RocketBotPlugin for ExifTellPlugin {
             ).await;
 
             sent_messages += 1;
-            if let Some(mmpi) = self.max_messages_per_image {
+            if let Some(mmpi) = config_guard.max_messages_per_image {
                 if sent_messages >= mmpi {
                     break;
                 }
             }
+        }
+    }
+
+    async fn configuration_updated(&self, new_config: serde_json::Value) -> bool {
+        match Self::try_get_config(new_config).await {
+            Ok(c) => {
+                let mut config_guard = self.config.write().await;
+                *config_guard = c;
+                true
+            },
+            Err(e) => {
+                error!("failed to load new config: {}", e);
+                false
+            },
         }
     }
 }

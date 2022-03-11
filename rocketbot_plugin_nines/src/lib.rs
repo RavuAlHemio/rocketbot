@@ -214,6 +214,11 @@ impl RocketBotPlugin for NinesPlugin {
             None
         }
     }
+
+    async fn configuration_updated(&self, _new_config: serde_json::Value) -> bool {
+        // not much to update
+        true
+    }
 }
 
 #[cfg(test)]

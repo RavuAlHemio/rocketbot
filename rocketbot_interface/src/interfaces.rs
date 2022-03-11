@@ -242,4 +242,8 @@ pub trait RocketBotPlugin: Send + Sync {
 
     /// Called when the list of users in a channel is updated.
     async fn channel_user_list_updated(&self, _channel: &Channel) {}
+
+    /// Called when the plugin is expected to update its configuration. Returns whether the
+    /// configuration update was successful.
+    async fn configuration_updated(&self, _new_config: serde_json::Value) -> bool { false }
 }

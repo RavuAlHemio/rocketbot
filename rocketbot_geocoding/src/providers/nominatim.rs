@@ -6,7 +6,7 @@ use async_trait::async_trait;
 use bytes::Buf;
 use log::debug;
 use reqwest::{self, IntoUrl};
-use rocketbot_interface::JsonValueExtensions;
+use rocketbot_interface::{JsonValueExtensions, ResultExtensions};
 use rocketbot_interface::sync::Mutex;
 use serde::{Deserialize, Serialize};
 use serde::de::DeserializeOwned;
@@ -172,27 +172,27 @@ impl NominatimGeocodingProvider {
 }
 #[async_trait]
 impl GeocodingProvider for NominatimGeocodingProvider {
-    async fn new(config: &serde_json::Value, _country_code_mapping: Arc<CountryCodeMapping>) -> Self {
+    async fn new(config: &serde_json::Value, _country_code_mapping: Arc<CountryCodeMapping>) -> Result<Self, &'static str> {
         let base_url = if config["base_url"].is_null() {
             Url::parse("https://nominatim.openstreetmap.org/")
                 .expect("failed to parse default Nominatim URL")
         } else {
             config["base_url"]
-                .as_str().expect("base_url missing or not a string")
-                .parse().expect("failed to parse base_url as a string")
+                .as_str().ok_or("base_url missing or not a string")?
+                .parse().or_msg("failed to parse base_url as a string")?
         };
         let user_agent: String = config["user_agent"]
-            .as_str().expect("user_agent missing or not a string")
+            .as_str().ok_or("user_agent missing or not a string")?
             .to_owned();
         let additional_headers = if config["additional_headers"].is_null() {
             HashMap::new()
         } else {
             let mut headers = HashMap::new();
             let header_map = config["additional_headers"].entries()
-                .expect("additional_headers not a map");
+                .ok_or("additional_headers not a map")?;
             for (key, value) in header_map {
                 let value_str = value
-                    .as_str().expect("additional_headers value not a string");
+                    .as_str().ok_or("additional_headers value not a string")?;
                 headers.insert(key.clone(), value_str.to_owned());
             }
             headers
@@ -202,12 +202,12 @@ impl GeocodingProvider for NominatimGeocodingProvider {
             reqwest::Client::new(),
         );
 
-        Self {
+        Ok(Self {
             base_url,
             user_agent,
             additional_headers,
             http_client,
-        }
+        })
     }
 
     async fn geocode(&self, place: &str) -> Result<GeoLocation, GeocodingError> {

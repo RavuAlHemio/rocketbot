@@ -1,22 +1,22 @@
 use std::collections::{HashMap, HashSet};
-use std::iter::FromIterator;
 use std::sync::Weak;
 
 use async_trait::async_trait;
 use chrono::{Datelike, Local};
+use log::error;
 use num_bigint::BigInt;
 use once_cell::sync::Lazy;
 use rand::{Rng, SeedableRng};
 use rand::seq::SliceRandom;
 use rand::rngs::StdRng;
 use regex::{Captures, Regex};
-use rocketbot_interface::{JsonValueExtensions, send_channel_message};
+use rocketbot_interface::{ResultExtensions, send_channel_message};
 use rocketbot_interface::commands::{
     CommandBehaviors, CommandDefinition, CommandInstance, CommandValueType,
 };
 use rocketbot_interface::interfaces::{RocketBotInterface, RocketBotPlugin};
 use rocketbot_interface::model::ChannelMessage;
-use rocketbot_interface::sync::Mutex;
+use rocketbot_interface::sync::{Mutex, RwLock};
 use serde::{Deserialize, Serialize};
 use serde_json;
 
@@ -96,12 +96,12 @@ impl DiceGroup {
 
 pub struct DicePlugin {
     interface: Weak<dyn RocketBotInterface>,
-    config: DiceConfig,
+    config: RwLock<DiceConfig>,
     rng: Mutex<StdRng>,
     channel_name_to_cooldown_state: Mutex<HashMap<String, CooldownState>>,
 }
 impl DicePlugin {
-    async fn obtain_dice_group(&self, roll_match_captures: &Captures<'_>, channel_name: &str, sender_username: &str) -> Option<DiceGroup> {
+    async fn obtain_dice_group(&self, config: &DiceConfig, roll_match_captures: &Captures<'_>, channel_name: &str, sender_username: &str) -> Option<DiceGroup> {
         let interface = match self.interface.upgrade() {
             None => return None,
             Some(i) => i,
@@ -111,10 +111,10 @@ impl DicePlugin {
             .map(|dcm| dcm.as_str())
             .or(Some("1"))
             .and_then(|dcs| dcs.parse().ok())
-            .and_then(|dc| if dc > self.config.max_dice_count { None } else { Some(dc) });
+            .and_then(|dc| if dc > config.max_dice_count { None } else { Some(dc) });
         let side_count: Option<u64> = roll_match_captures.name("sides")
             .and_then(|sm| sm.as_str().parse().ok())
-            .and_then(|s| if s > self.config.max_side_count { None } else { Some(s) });
+            .and_then(|s| if s > config.max_side_count { None } else { Some(s) });
         let multiply_value: Option<i64> = roll_match_captures.name("mul_value")
             .map(|mm| mm.as_str())
             .or(Some("1"))
@@ -172,6 +172,8 @@ impl DicePlugin {
         let channel_name = &channel_message.channel.name;
         let sender_username = &channel_message.message.sender.username;
 
+        let config_guard = self.config.read().await;
+
         let rolls = SEPARATOR_REGEX.split(&command.rest);
         let mut dice_groups = Vec::new();
         for roll in rolls {
@@ -186,7 +188,7 @@ impl DicePlugin {
                     return;
                 },
             };
-            let dice_group = match self.obtain_dice_group(&roll_match_captures, channel_name, sender_username).await {
+            let dice_group = match self.obtain_dice_group(&config_guard, &roll_match_captures, channel_name, sender_username).await {
                 Some(dg) => dg,
                 None => {
                     // error message already output; bail out
@@ -196,7 +198,7 @@ impl DicePlugin {
             dice_groups.push(dice_group);
         }
 
-        if dice_groups.len() > self.config.max_roll_count {
+        if dice_groups.len() > config_guard.max_roll_count {
             send_channel_message!(
                 interface,
                 channel_name,
@@ -228,10 +230,10 @@ impl DicePlugin {
             for dice_group in &dice_groups {
                 let mut these_rolls = Vec::with_capacity(dice_group.die_count);
                 for _ in 0..dice_group.die_count {
-                    if dice_group.side_count == 1 && self.config.obstinate_answers.len() > 0 {
+                    if dice_group.side_count == 1 && config_guard.obstinate_answers.len() > 0 {
                         // special case: give an obstinate answer instead
                         // since a 1-sided toss has an obvious result
-                        let obstinate_answer = self.config.obstinate_answers
+                        let obstinate_answer = config_guard.obstinate_answers
                             .choose(&mut *rng_guard).unwrap();
                         these_rolls.push(obstinate_answer.clone());
                     } else {
@@ -258,13 +260,13 @@ impl DicePlugin {
         ).await;
     }
 
-    async fn is_on_cooldown(&self, sender_username: &str, channel_name: &str) -> bool {
+    async fn is_on_cooldown(&self, config: &DiceConfig, sender_username: &str, channel_name: &str) -> bool {
         let interface = match self.interface.upgrade() {
             None => return false,
             Some(i) => i,
         };
 
-        if self.config.cooldown_upper_boundary.is_none() {
+        if config.cooldown_upper_boundary.is_none() {
             // the cooldown feature is not being used
             return false;
         }
@@ -274,17 +276,17 @@ impl DicePlugin {
         let cooldown_state = cooldown_guard.entry(channel_name.to_string())
             .or_insert_with(|| CooldownState::new(0, false));
 
-        cooldown_state.cooldown_value += self.config.cooldown_per_command_usage;
+        cooldown_state.cooldown_value += config.cooldown_per_command_usage;
 
         let cooling_down = if cooldown_state.cooldown_triggered {
             cooldown_state.cooldown_value > 0
         } else {
-            cooldown_state.cooldown_value > self.config.cooldown_upper_boundary.unwrap()
+            cooldown_state.cooldown_value > config.cooldown_upper_boundary.unwrap()
         };
 
         if cooling_down {
             cooldown_state.cooldown_triggered = true;
-            if let Some(cooldown_answer) = self.config.cooldown_answers.choose(&mut *rng_guard) {
+            if let Some(cooldown_answer) = config.cooldown_answers.choose(&mut *rng_guard) {
                 send_channel_message!(
                     interface,
                     channel_name,
@@ -306,12 +308,14 @@ impl DicePlugin {
         let sender_username = &channel_message.message.sender.username;
         let channel_name = &channel_message.channel.name;
 
-        if self.is_on_cooldown(sender_username, channel_name).await {
+        let config_guard = self.config.read().await;
+
+        if self.is_on_cooldown(&config_guard, sender_username, channel_name).await {
             return;
         }
 
         let mut rng_guard = self.rng.lock().await;
-        let yes_no_answer = self.config.yes_no_answers.choose(&mut *rng_guard);
+        let yes_no_answer = config_guard.yes_no_answers.choose(&mut *rng_guard);
         if let Some(yna) = yes_no_answer {
             send_channel_message!(
                 interface,
@@ -331,7 +335,9 @@ impl DicePlugin {
         let channel_name = &channel_message.channel.name;
         let decision_string = &command.rest;
 
-        let splitter_opt = self.config.decision_splitters.iter()
+        let config_guard = self.config.read().await;
+
+        let splitter_opt = config_guard.decision_splitters.iter()
             .filter(|s| decision_string.contains(*s))
             .nth(0);
         let splitter = match splitter_opt {
@@ -347,11 +353,11 @@ impl DicePlugin {
         };
 
         let mut rng_guard = self.rng.lock().await;
-        if self.config.special_decision_answers.len() > 0 {
+        if config_guard.special_decision_answers.len() > 0 {
             let percent = rng_guard.gen_range(0..100);
-            if percent < self.config.special_decision_answer_percent {
+            if percent < config_guard.special_decision_answer_percent {
                 // special answer instead!
-                let special_answer = self.config.special_decision_answers.choose(&mut *rng_guard);
+                let special_answer = config_guard.special_decision_answers.choose(&mut *rng_guard);
                 if let Some(sa) = special_answer {
                     send_channel_message!(
                         interface,
@@ -383,7 +389,9 @@ impl DicePlugin {
         let channel_name = &channel_message.channel.name;
         let decision_string = &command.rest;
 
-        let splitter_opt = self.config.decision_splitters.iter()
+        let config_guard = self.config.read().await;
+
+        let splitter_opt = config_guard.decision_splitters.iter()
             .filter(|s| decision_string.contains(*s))
             .nth(0);
         let splitter = match splitter_opt {
@@ -418,11 +426,13 @@ impl DicePlugin {
         let sender_username = &channel_message.message.sender.username;
         let channel_name = &channel_message.channel.name;
 
+        let config_guard = self.config.read().await;
+
         let wikipedia = command.options.iter()
             .filter(|(it, _cv)| *it == "w" || *it == "wikipedia")
             .map(|(_it, cv)| cv.as_str().unwrap().to_owned())
             .last()
-            .unwrap_or(self.config.default_wikipedia_language.clone());
+            .unwrap_or(config_guard.default_wikipedia_language.clone());
 
         let wikipedia_invalid = wikipedia
             .chars()
@@ -450,6 +460,11 @@ impl DicePlugin {
             &format!("@{} https://{}.wikipedia.org/wiki/{}", sender_username, wikipedia, year),
         ).await;
     }
+
+    fn try_get_config(config: serde_json::Value) -> Result<DiceConfig, &'static str> {
+        serde_json::from_value(config)
+            .or_msg("failed to load config")
+    }
 }
 #[async_trait]
 impl RocketBotPlugin for DicePlugin {
@@ -459,7 +474,13 @@ impl RocketBotPlugin for DicePlugin {
             Some(i) => i,
         };
 
-        let dice_config = DiceConfig::from(&config);
+        let config_object = Self::try_get_config(config)
+            .expect("failed to load config");
+        let config_lock = RwLock::new(
+            "DicePlugin::config",
+            config_object,
+        );
+
         let rng = Mutex::new(
             "DicePlugin::rng",
             StdRng::from_entropy(),
@@ -534,7 +555,7 @@ impl RocketBotPlugin for DicePlugin {
 
         DicePlugin {
             interface,
-            config: dice_config,
+            config: config_lock,
             rng,
             channel_name_to_cooldown_state,
         }
@@ -547,7 +568,9 @@ impl RocketBotPlugin for DicePlugin {
     async fn channel_message(&self, channel_message: &ChannelMessage) {
         let channel_name = &channel_message.channel.name;
 
-        if self.config.cooldown_upper_boundary.is_none() {
+        let config_guard = self.config.read().await;
+
+        if config_guard.cooldown_upper_boundary.is_none() {
             // the cooldown feature is not being used
             return;
         }
@@ -584,7 +607,8 @@ impl RocketBotPlugin for DicePlugin {
         } else if command_name == "yn" {
             Some(include_str!("../help/yn.md").to_owned())
         } else if command_name == "decide" || command_name == "shuffle" {
-            let separator_lines: String = self.config.decision_splitters.iter()
+            let config_guard = self.config.read().await;
+            let separator_lines: String = config_guard.decision_splitters.iter()
                 .map(|ds| format!("* `{}`", ds))
                 .collect::<Vec<String>>()
                 .join("\n");
@@ -599,12 +623,27 @@ impl RocketBotPlugin for DicePlugin {
 
             Some(base_help.replace("{separators}", &separator_lines))
         } else if command_name == "someyear" {
+            let config_guard = self.config.read().await;
             Some(
                 include_str!("../help/someyear.md")
-                    .replace("{defwiki}", &self.config.default_wikipedia_language)
+                    .replace("{defwiki}", &config_guard.default_wikipedia_language)
             )
         } else {
             None
+        }
+    }
+
+    async fn configuration_updated(&self, new_config: serde_json::Value) -> bool {
+        match Self::try_get_config(new_config) {
+            Ok(c) => {
+                let mut config_guard = self.config.write().await;
+                *config_guard = c;
+                true
+            },
+            Err(e) => {
+                error!("failed to load new config: {}", e);
+                false
+            },
         }
     }
 }

@@ -3,18 +3,38 @@ use std::sync::Weak;
 
 use async_trait::async_trait;
 use chrono::Local;
+use log::error;
 use rocketbot_interface::{JsonValueExtensions, send_channel_message};
 use rocketbot_interface::interfaces::{RocketBotInterface, RocketBotPlugin};
 use rocketbot_interface::model::ChannelMessage;
-use rocketbot_interface::sync::Mutex;
+use rocketbot_interface::sync::{Mutex, RwLock};
 use serde_json;
+
+
+#[derive(Clone, Copy, Debug, Eq, Hash, PartialEq)]
+struct Config {
+    message_remember_count: usize,
+    trigger_count: usize,
+}
 
 
 pub struct GroupPressurePlugin {
     interface: Weak<dyn RocketBotInterface>,
+    config: RwLock<Config>,
     channel_name_to_recent_messages: Mutex<HashMap<String, VecDeque<ChannelMessage>>>,
-    message_remember_count: usize,
-    trigger_count: usize,
+}
+impl GroupPressurePlugin {
+    fn try_get_config(config: serde_json::Value) -> Result<Config, &'static str> {
+        let message_remember_count = config["message_remember_count"]
+            .as_usize().ok_or("message_remember_count missing or not representable as a usize")?;
+        let trigger_count = config["trigger_count"]
+            .as_usize().ok_or("trigger_count missing or not representable as a usize")?;
+
+        Ok(Config {
+            message_remember_count,
+            trigger_count,
+        })
+    }
 }
 #[async_trait]
 impl RocketBotPlugin for GroupPressurePlugin {
@@ -23,16 +43,18 @@ impl RocketBotPlugin for GroupPressurePlugin {
             "GroupPressurePlugin::channel_name_to_recent_messages",
             HashMap::new(),
         );
-        let message_remember_count = config["message_remember_count"]
-            .as_usize().expect("message_remember_count missing or not representable as a usize");
-        let trigger_count = config["trigger_count"]
-            .as_usize().expect("trigger_count missing or not representable as a usize");
+
+        let config_object = Self::try_get_config(config)
+            .expect("failed to load config");
+        let config_lock = RwLock::new(
+            "GroupPressurePlugin::config",
+            config_object,
+        );
 
         GroupPressurePlugin {
             interface,
             channel_name_to_recent_messages,
-            message_remember_count,
-            trigger_count,
+            config: config_lock,
         }
     }
 
@@ -55,12 +77,13 @@ impl RocketBotPlugin for GroupPressurePlugin {
             return;
         }
 
+        let config_guard = self.config.read().await;
         let mut recent_messages_guard = self.channel_name_to_recent_messages
             .lock().await;
 
         let recent_messages_queue = recent_messages_guard
             .entry(channel_message.channel.name.clone())
-            .or_insert_with(|| VecDeque::with_capacity(self.message_remember_count + 1));
+            .or_insert_with(|| VecDeque::with_capacity(config_guard.message_remember_count + 1));
 
         // have enough people said the same message?
         let mut usernames_said = HashSet::new();
@@ -71,7 +94,7 @@ impl RocketBotPlugin for GroupPressurePlugin {
             }
         }
 
-        if usernames_said.len() >= self.trigger_count {
+        if usernames_said.len() >= config_guard.trigger_count {
             // yes
 
             // do not output anything if Serious Mode is active
@@ -100,9 +123,23 @@ impl RocketBotPlugin for GroupPressurePlugin {
             recent_messages_queue.push_back(channel_message.clone());
 
             // dare to forget
-            while recent_messages_queue.len() > self.message_remember_count {
+            while recent_messages_queue.len() > config_guard.message_remember_count {
                 recent_messages_queue.pop_front();
             }
+        }
+    }
+
+    async fn configuration_updated(&self, new_config: serde_json::Value) -> bool {
+        match Self::try_get_config(new_config) {
+            Ok(c) => {
+                let mut config_guard = self.config.write().await;
+                *config_guard = c;
+                true
+            },
+            Err(e) => {
+                error!("failed to load new config: {}", e);
+                false
+            },
         }
     }
 }

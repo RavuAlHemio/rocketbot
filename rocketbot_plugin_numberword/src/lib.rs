@@ -12,6 +12,7 @@ use rocketbot_interface::send_channel_message;
 use rocketbot_interface::commands::{CommandDefinitionBuilder, CommandInstance};
 use rocketbot_interface::interfaces::{RocketBotInterface, RocketBotPlugin};
 use rocketbot_interface::model::ChannelMessage;
+use rocketbot_interface::sync::RwLock;
 use serde_json;
 
 use crate::pseudotrie::StringPseudotrie;
@@ -21,9 +22,15 @@ use crate::pseudotrie::StringPseudotrie;
 struct Singleton;
 
 
+#[derive(Clone, Debug)]
+struct Config {
+    words: StringPseudotrie<Singleton>,
+}
+
+
 pub struct NumberwordPlugin {
     interface: Weak<dyn RocketBotInterface>,
-    words: StringPseudotrie<Singleton>,
+    config: RwLock<Config>,
     digit_to_letters: HashMap<char, Vec<char>>,
 }
 impl NumberwordPlugin {
@@ -32,6 +39,8 @@ impl NumberwordPlugin {
             None => return,
             Some(i) => i,
         };
+
+        let config_guard = self.config.read().await;
 
         let trimmed_chars: Vec<char> = command.rest.trim().chars().collect();
 
@@ -42,7 +51,7 @@ impl NumberwordPlugin {
             }
         }
 
-        let wfd = self.get_words_for_digits(&trimmed_chars, "");
+        let wfd = self.get_words_for_digits(&config_guard, &trimmed_chars, "");
         let response_text = if wfd.len() > 5 {
             let mut r = wfd[0..5].join(", ");
             r.push_str(", ...");
@@ -62,18 +71,18 @@ impl NumberwordPlugin {
         ).await;
     }
 
-    fn get_words_for_digits(&self, digits: &[char], prefix: &str) -> Vec<String> {
+    fn get_words_for_digits(&self, config: &Config, digits: &[char], prefix: &str) -> Vec<String> {
         if digits.len() == 0 {
             // a full word!
 
-            return if self.words.get(prefix).is_some() {
+            return if config.words.get(prefix).is_some() {
                 vec![prefix.to_owned()]
             } else {
                 Vec::with_capacity(0)
             };
         }
 
-        if !self.words.contains_entries_with_prefix(prefix) {
+        if !config.words.contains_entries_with_prefix(prefix) {
             // no such words...
             return Vec::with_capacity(0);
         }
@@ -84,31 +93,14 @@ impl NumberwordPlugin {
             let mut sub_prefix = prefix.to_owned();
             sub_prefix.push(letter);
 
-            let mut this_sub_words = self.get_words_for_digits(&digits[1..], &sub_prefix);
+            let mut this_sub_words = self.get_words_for_digits(config, &digits[1..], &sub_prefix);
             sub_words.append(&mut this_sub_words);
         }
 
         sub_words
     }
-}
-#[async_trait]
-impl RocketBotPlugin for NumberwordPlugin {
-    async fn new(interface: Weak<dyn RocketBotInterface>, config: serde_json::Value) -> Self {
-        let my_interface = match interface.upgrade() {
-            None => panic!("interface is gone"),
-            Some(i) => i,
-        };
 
-        my_interface.register_channel_command(
-            &CommandDefinitionBuilder::new(
-                "unkeypad".to_owned(),
-                "numberword".to_owned(),
-                "{cpfx}unkeypad NUMBER".to_owned(),
-                "Attempts to guess the word described by the phone-keypad number.".to_owned(),
-            )
-                .build()
-        ).await;
-
+    fn try_get_config(config: serde_json::Value) -> Result<Config, &'static str> {
         let mut words = StringPseudotrie::new();
         for entry in config["wordlists"].as_array().expect("wordlists is not an array") {
             let file_name = entry.as_str().expect("wordlists entry is not a string");
@@ -138,6 +130,36 @@ impl RocketBotPlugin for NumberwordPlugin {
             }
         }
 
+        Ok(Config {
+            words,
+        })
+    }
+}
+#[async_trait]
+impl RocketBotPlugin for NumberwordPlugin {
+    async fn new(interface: Weak<dyn RocketBotInterface>, config: serde_json::Value) -> Self {
+        let my_interface = match interface.upgrade() {
+            None => panic!("interface is gone"),
+            Some(i) => i,
+        };
+
+        let config_object = Self::try_get_config(config)
+            .expect("failed to load config");
+        let config_lock = RwLock::new(
+            "NumberwordPlugin::config",
+            config_object,
+        );
+
+        my_interface.register_channel_command(
+            &CommandDefinitionBuilder::new(
+                "unkeypad".to_owned(),
+                "numberword".to_owned(),
+                "{cpfx}unkeypad NUMBER".to_owned(),
+                "Attempts to guess the word described by the phone-keypad number.".to_owned(),
+            )
+                .build()
+        ).await;
+
         let digit_to_letters = {
             let mut dtl = HashMap::new();
 
@@ -155,7 +177,7 @@ impl RocketBotPlugin for NumberwordPlugin {
 
         Self {
             interface,
-            words,
+            config: config_lock,
             digit_to_letters,
         }
     }
@@ -175,6 +197,20 @@ impl RocketBotPlugin for NumberwordPlugin {
             Some(include_str!("../help/unkeypad.md").to_owned())
         } else {
             None
+        }
+    }
+
+    async fn configuration_updated(&self, new_config: serde_json::Value) -> bool {
+        match Self::try_get_config(new_config) {
+            Ok(c) => {
+                let mut config_guard = self.config.write().await;
+                *config_guard = c;
+                true
+            },
+            Err(e) => {
+                error!("failed to load new config: {}", e);
+                false
+            },
         }
     }
 }
