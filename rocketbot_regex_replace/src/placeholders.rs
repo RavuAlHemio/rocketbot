@@ -3,7 +3,7 @@ use std::collections::HashMap;
 use regex::{Captures, Regex};
 
 
-#[derive(Debug)]
+#[derive(Clone, Debug)]
 pub(crate) struct ReplacementState<'a> {
     input_string: &'a str,
     #[allow(unused)] regex: &'a Regex,

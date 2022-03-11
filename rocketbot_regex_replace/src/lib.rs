@@ -10,7 +10,7 @@ use crate::compiler::{CompilationError, compile};
 use crate::placeholders::{Placeholder, ReplacementState};
 
 
-#[derive(Debug)]
+#[derive(Clone, Debug)]
 pub struct ReplacerRegex {
     regex: Regex,
     #[allow(unused)] replacement_string: String,
