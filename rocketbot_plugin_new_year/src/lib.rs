@@ -2,23 +2,25 @@ use std::sync::Weak;
 
 use async_trait::async_trait;
 use chrono::{Datelike, Local, TimeZone, Utc};
+use log::error;
 use rocketbot_interface::{JsonValueExtensions, send_channel_message};
 use rocketbot_interface::interfaces::{RocketBotInterface, RocketBotPlugin};
+use rocketbot_interface::sync::RwLock;
 use serde_json;
+
+
+#[derive(Clone, Debug, Eq, Hash, PartialEq)]
+struct Config {
+    channels: Vec<String>,
+}
 
 
 pub struct NewYearPlugin {
     interface: Weak<dyn RocketBotInterface>,
-    channels: Vec<String>,
+    config: RwLock<Config>,
 }
-#[async_trait]
-impl RocketBotPlugin for NewYearPlugin {
-    async fn new(interface: Weak<dyn RocketBotInterface>, config: serde_json::Value) -> Self {
-        let my_interface = match interface.upgrade() {
-            None => panic!("interface is gone"),
-            Some(i) => i,
-        };
-
+impl NewYearPlugin {
+    fn try_get_config(config: serde_json::Value) -> Result<Config, &'static str> {
         let mut channels = Vec::new();
         for channel in config["channels"].members_or_empty() {
             let ch = match channel.as_str() {
@@ -28,22 +30,42 @@ impl RocketBotPlugin for NewYearPlugin {
             channels.push(ch.to_owned());
         }
 
-        if channels.len() > 0 {
-            let now_local = Local::now();
-            let next_year = now_local.year()+1;
-            let new_year_local = Local
-                .ymd(next_year, 1, 1)
-                .and_hms(0, 0, 0);
-            let new_year_utc = new_year_local.with_timezone(&Utc);
+        Ok(Config {
+            channels,
+        })
+    }
+}
+#[async_trait]
+impl RocketBotPlugin for NewYearPlugin {
+    async fn new(interface: Weak<dyn RocketBotInterface>, config: serde_json::Value) -> Self {
+        let my_interface = match interface.upgrade() {
+            None => panic!("interface is gone"),
+            Some(i) => i,
+        };
 
-            let custom_data = serde_json::json!(["new_year", next_year]);
-            my_interface.register_timer(new_year_utc, custom_data)
-                .await;
-        }
+        let config_object = Self::try_get_config(config)
+            .expect("failed to load config");
+
+        // register timer in any case; channel list in config might change in the meantime
+        let now_local = Local::now();
+        let next_year = now_local.year()+1;
+        let new_year_local = Local
+            .ymd(next_year, 1, 1)
+            .and_hms(0, 0, 0);
+        let new_year_utc = new_year_local.with_timezone(&Utc);
+
+        let custom_data = serde_json::json!(["new_year", next_year]);
+        my_interface.register_timer(new_year_utc, custom_data)
+            .await;
+
+        let config_lock = RwLock::new(
+            "NewYearPlugin::channels",
+            config_object,
+        );
 
         NewYearPlugin {
             interface,
-            channels,
+            config: config_lock,
         }
     }
 
@@ -68,7 +90,9 @@ impl RocketBotPlugin for NewYearPlugin {
             Some(i) => i,
         };
 
-        for channel in &self.channels {
+        let config_guard = self.config.read().await;
+
+        for channel in &config_guard.channels {
             send_channel_message!(
                 interface,
                 channel,
@@ -79,6 +103,20 @@ impl RocketBotPlugin for NewYearPlugin {
                 channel,
                 &format!("<{}>", new_year),
             ).await;
+        }
+    }
+
+    async fn configuration_updated(&self, new_config: serde_json::Value) -> bool {
+        match Self::try_get_config(new_config) {
+            Ok(c) => {
+                let mut config_guard = self.config.write().await;
+                *config_guard = c;
+                true
+            },
+            Err(e) => {
+                error!("failed to load new config: {}", e);
+                false
+            },
         }
     }
 }

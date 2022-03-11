@@ -6,31 +6,36 @@ use std::collections::HashMap;
 use std::sync::Weak;
 
 use async_trait::async_trait;
-use log::info;
+use log::{error, info};
 use rocketbot_interface::{JsonValueExtensions, send_channel_message};
 use rocketbot_interface::commands::{CommandBehaviors, CommandDefinitionBuilder, CommandInstance};
 use rocketbot_interface::interfaces::{RocketBotInterface, RocketBotPlugin};
 use rocketbot_interface::model::ChannelMessage;
-use rocketbot_interface::sync::Mutex;
+use rocketbot_interface::sync::{Mutex, RwLock};
 use serde_json;
 
 use crate::commands::Transformer;
 use crate::parsing::parse_replacement_commands;
 
 
-pub struct SedPlugin {
-    interface: Weak<dyn RocketBotInterface>,
-
+#[derive(Clone, Debug, Eq, Hash, PartialEq)]
+struct Config {
     remember_last_messages: usize,
     max_result_length: usize,
     result_too_long_message: String,
     require_all_transformations_successful: bool,
+}
 
+
+pub struct SedPlugin {
+    interface: Weak<dyn RocketBotInterface>,
+
+    config: RwLock<Config>,
     channel_name_to_last_messages: Mutex<HashMap<String, Vec<ChannelMessage>>>,
     channel_name_to_my_outgoing_messages: Mutex<HashMap<String, Vec<String>>>,
 }
 impl SedPlugin {
-    async fn handle_replacement_command(&self, channel_message: ChannelMessage) -> bool {
+    async fn handle_replacement_command(&self, config: &Config, channel_message: ChannelMessage) -> bool {
         let raw_message = match &channel_message.message.raw {
             Some(rm) => rm,
             None => return false, // non-textual messages do not contain commands
@@ -41,14 +46,15 @@ impl SedPlugin {
         }
 
         self.perform_replacements(
+            config,
             &raw_message,
             &channel_message.channel.name,
             channel_message.message.is_by_bot,
-            self.require_all_transformations_successful,
+            config.require_all_transformations_successful,
         ).await
     }
 
-    async fn perform_replacements(&self, raw_message: &str, channel_name: &str, is_bot_message: bool, require_all_transformations_successful: bool) -> bool {
+    async fn perform_replacements(&self, config: &Config, raw_message: &str, channel_name: &str, is_bot_message: bool, require_all_transformations_successful: bool) -> bool {
         let interface = match self.interface.upgrade() {
             None => return false,
             Some(i) => i,
@@ -108,8 +114,8 @@ impl SedPlugin {
 
             if replaced != last_raw_message && (!require_all_transformations_successful || all_transformations_successful) {
                 // success!
-                if self.max_result_length > 0 && replaced.len() > self.max_result_length {
-                    replaced = self.result_too_long_message.clone();
+                if config.max_result_length > 0 && replaced.len() > config.max_result_length {
+                    replaced = config.result_too_long_message.clone();
                 }
 
                 {
@@ -142,7 +148,7 @@ impl SedPlugin {
         true
     }
 
-    async fn remember_message(&self, channel_message: &ChannelMessage) {
+    async fn remember_message(&self, config: &Config, channel_message: &ChannelMessage) {
         let mut messages_guard = self.channel_name_to_last_messages
             .lock().await;
         let last_messages = messages_guard
@@ -150,7 +156,7 @@ impl SedPlugin {
             .or_insert_with(|| Vec::new());
 
         last_messages.insert(0, channel_message.clone());
-        while last_messages.len() > self.remember_last_messages && last_messages.len() > 0 {
+        while last_messages.len() > config.remember_last_messages && last_messages.len() > 0 {
             last_messages.remove(last_messages.len() - 1);
         }
     }
@@ -173,12 +179,33 @@ impl SedPlugin {
     }
 
     async fn channel_command_sedall_sedany(&self, channel_message: &ChannelMessage, command: &CommandInstance, require_all_transformations_successful: bool) {
+        let config_guard = self.config.read().await;
         self.perform_replacements(
+            &config_guard,
             &command.rest,
             &channel_message.channel.name,
             channel_message.message.is_by_bot,
             require_all_transformations_successful,
         ).await;
+    }
+
+    fn try_get_config(config: serde_json::Value) -> Result<Config, &'static str> {
+        let remember_last_messages = config["remember_last_messages"]
+            .as_usize().unwrap_or(50);
+        let max_result_length = config["max_result_length"]
+            .as_usize().unwrap_or(1024);
+        let result_too_long_message = config["result_too_long_message"]
+            .as_str().unwrap_or("(sorry, that's too long)")
+            .to_owned();
+        let require_all_transformations_successful = config["require_all_transformations_successful"]
+            .as_bool().unwrap_or(true);
+
+        Ok(Config {
+            remember_last_messages,
+            max_result_length,
+            result_too_long_message,
+            require_all_transformations_successful,
+        })
     }
 }
 #[async_trait]
@@ -189,12 +216,12 @@ impl RocketBotPlugin for SedPlugin {
             Some(i) => i,
         };
 
-        let remember_last_messages = config["remember_last_messages"].as_usize().unwrap_or(50);
-        let max_result_length = config["max_result_length"].as_usize().unwrap_or(1024);
-        let result_too_long_message = config["result_too_long_message"].as_str()
-            .unwrap_or("(sorry, that's too long)").to_owned();
-        let require_all_transformations_successful = config["require_all_transformations_successful"]
-            .as_bool().unwrap_or(true);
+        let config_object = Self::try_get_config(config)
+            .expect("failed to load config");
+        let config_lock = RwLock::new(
+            "SedPlugin::config",
+            config_object,
+        );
 
         let channel_name_to_last_messages = Mutex::new(
             "SedPlugin::channel_name_to_last_message",
@@ -239,11 +266,7 @@ impl RocketBotPlugin for SedPlugin {
         SedPlugin {
             interface,
 
-            remember_last_messages,
-            max_result_length,
-            result_too_long_message,
-            require_all_transformations_successful,
-
+            config: config_lock,
             channel_name_to_last_messages,
             channel_name_to_my_outgoing_messages,
         }
@@ -281,18 +304,20 @@ impl RocketBotPlugin for SedPlugin {
             }
         }
 
-        self.remember_message(&channel_message).await;
+        let config_guard = self.config.read().await;
+        self.remember_message(&config_guard, &channel_message).await;
     }
 
     async fn channel_message(&self, channel_message: &ChannelMessage) {
-        if self.handle_replacement_command(channel_message.clone()).await {
+        let config_guard = self.config.read().await;
+        if self.handle_replacement_command(&config_guard, channel_message.clone()).await {
             // it looked very much like a replacement command
             // do not remember it for further sed-ing
             return;
         }
 
         if channel_message.message.raw.is_some() {
-            self.remember_message(&channel_message).await;
+            self.remember_message(&config_guard, &channel_message).await;
         }
     }
 
@@ -338,6 +363,20 @@ impl RocketBotPlugin for SedPlugin {
             Some(include_str!("../help/sedparse.md").to_owned())
         } else {
             None
+        }
+    }
+
+    async fn configuration_updated(&self, new_config: serde_json::Value) -> bool {
+        match Self::try_get_config(new_config) {
+            Ok(c) => {
+                let mut config_guard = self.config.write().await;
+                *config_guard = c;
+                true
+            },
+            Err(e) => {
+                error!("failed to load new config: {}", e);
+                false
+            },
         }
     }
 }

@@ -1,17 +1,18 @@
-use std::collections::{HashMap, VecDeque};
+use std::collections::{HashMap, HashSet, VecDeque};
 use std::fs::File;
 use std::io::Read;
 use std::sync::Weak;
 
 use async_trait::async_trait;
 use chrono::Local;
+use log::error;
 use regex::{Captures, Regex};
-use rocketbot_interface::{JsonValueExtensions, send_channel_message};
+use rocketbot_interface::{JsonValueExtensions, ResultExtensions, send_channel_message};
 use rocketbot_interface::commands::{CommandDefinitionBuilder, CommandInstance};
 use rocketbot_interface::model::ChannelMessage;
 use rocketbot_interface::interfaces::{RocketBotInterface, RocketBotPlugin};
 use rocketbot_interface::serde::serde_regex;
-use rocketbot_interface::sync::Mutex;
+use rocketbot_interface::sync::{Mutex, RwLock};
 use serde::{Deserialize, Serialize};
 use serde_json;
 use toml;
@@ -49,9 +50,16 @@ fn calculate_syllables(text: &str, rules: &[SyllableRule]) -> Option<isize> {
 }
 
 
+#[derive(Clone, Debug)]
+struct Config {
+    rules: Vec<SyllableRule>,
+    detect_haiku_channel_names: HashSet<String>,
+}
+
+
 pub struct SyllablePlugin {
     interface: Weak<dyn RocketBotInterface>,
-    rules: Vec<SyllableRule>,
+    config: RwLock<Config>,
     channel_to_last_syllables: Mutex<HashMap<String, VecDeque<isize>>>,
 }
 impl SyllablePlugin {
@@ -61,8 +69,10 @@ impl SyllablePlugin {
             Some(i) => i,
         };
 
+        let config_guard = self.config.read().await;
+
         // calculate the number of syllables
-        if let Some(sc) = calculate_syllables(&command.rest, &self.rules) {
+        if let Some(sc) = calculate_syllables(&command.rest, &config_guard.rules) {
             send_channel_message!(
                 interface,
                 &channel_message.channel.name,
@@ -76,6 +86,37 @@ impl SyllablePlugin {
             ).await;
         }
     }
+
+    fn try_get_config(config: serde_json::Value) -> Result<Config, &'static str> {
+        let rules_path = config["rules_path"]
+            .as_str().ok_or("rules_path not a string")?;
+        let rules: Vec<SyllableRule> = {
+            let mut f = File::open(rules_path)
+                .or_msg("failed to open rules file")?;
+            let mut buf = Vec::new();
+            f.read_to_end(&mut buf)
+                .or_msg("failed to read rules file")?;
+            let toml_value: toml::Value = toml::from_slice(&buf)
+                .or_msg("failed to parse rules file")?;
+            toml_value["rules"].clone().try_into()
+                .or_msg("failed to decode rules")?
+        };
+
+        let detect_haiku_channel_name_values = config["detect_haiku_channel_names"]
+            .members_or_empty_strict().ok_or("detect_haiku_channel_names not a list")?;
+        let mut detect_haiku_channel_names: HashSet<String> = HashSet::new();
+        for value in detect_haiku_channel_name_values {
+            let channel_name = value
+                .as_str().ok_or("detect_haiku_channel_names member not a string")?
+                .to_owned();
+            detect_haiku_channel_names.insert(channel_name);
+        }
+
+        Ok(Config {
+            rules,
+            detect_haiku_channel_names,
+        })
+    }
 }
 #[async_trait]
 impl RocketBotPlugin for SyllablePlugin {
@@ -85,33 +126,21 @@ impl RocketBotPlugin for SyllablePlugin {
             Some(i) => i,
         };
 
-        let rules_path = config["rules_path"].as_str().expect("rules_path not a string");
-        let rules: Vec<SyllableRule> = {
-            let mut f = File::open(rules_path)
-                .expect("failed to open rules file");
-            let mut buf = Vec::new();
-            f.read_to_end(&mut buf)
-                .expect("failed to read rules file");
-            let toml_value: toml::Value = toml::from_slice(&buf)
-                .expect("failed to parse rules file");
-            toml_value["rules"].clone().try_into()
-                .expect("failed to decode rules")
-        };
-
-        let channel_to_last_syllables_map: HashMap<String, VecDeque<isize>> = config["detect_haiku_channel_names"]
-            .members_or_empty_strict()
-            .expect("detect_haiku_channel_names not a list")
-            .map(|cn_val| {
-                let channel_name = cn_val
-                    .as_str().expect("detect_haiku_channel_names member not a string")
-                    .to_owned();
-                (channel_name, VecDeque::with_capacity(4))
-            })
-            .collect();
+        let config_object = Self::try_get_config(config)
+            .expect("failed to load config");
 
         let channel_to_last_syllables = Mutex::new(
             "SyllablePlugin::channel_to_last_syllables",
-            channel_to_last_syllables_map,
+            config_object.detect_haiku_channel_names.iter()
+                .map(|cn|
+                    (cn.clone(), VecDeque::with_capacity(4))
+                )
+                .collect(),
+        );
+
+        let config_lock = RwLock::new(
+            "SyllablePlugin::config",
+            config_object,
         );
 
         my_interface.register_channel_command(
@@ -126,7 +155,7 @@ impl RocketBotPlugin for SyllablePlugin {
 
         Self {
             interface,
-            rules,
+            config: config_lock,
             channel_to_last_syllables,
         }
     }
@@ -141,6 +170,8 @@ impl RocketBotPlugin for SyllablePlugin {
             Some(i) => i,
         };
 
+        let config_guard = self.config.read().await;
+
         {
             let mut guard = self.channel_to_last_syllables
                 .lock().await;
@@ -151,7 +182,7 @@ impl RocketBotPlugin for SyllablePlugin {
 
             // calculate syllables in this message
             let syllables_opt = if let Some(r) = &channel_message.message.raw {
-                calculate_syllables(r, &self.rules)
+                calculate_syllables(r, &config_guard.rules)
             } else {
                 None
             };
@@ -215,6 +246,44 @@ impl RocketBotPlugin for SyllablePlugin {
             Some(include_str!("../help/syl.md").to_owned())
         } else {
             None
+        }
+    }
+
+    async fn configuration_updated(&self, new_config: serde_json::Value) -> bool {
+        match Self::try_get_config(new_config) {
+            Ok(c) => {
+                {
+                    // update channel-to-last-syllables
+                    let mut ctls_guard = self.channel_to_last_syllables.lock().await;
+
+                    // remove goners
+                    let old_channels: Vec<String> = ctls_guard.keys().map(|c| c.clone()).collect();
+                    for oc in &old_channels {
+                        if !c.detect_haiku_channel_names.contains(oc) {
+                            ctls_guard.remove(oc);
+                        }
+                    }
+
+                    // insert new channels
+                    for new_chan in &c.detect_haiku_channel_names {
+                        ctls_guard
+                            .entry(new_chan.clone())
+                            .or_insert_with(|| VecDeque::with_capacity(4));
+                    }
+                }
+
+                {
+                    // update config itself
+                    let mut config_guard = self.config.write().await;
+                    *config_guard = c;
+                }
+
+                true
+            },
+            Err(e) => {
+                error!("failed to load new config: {}", e);
+                false
+            },
         }
     }
 }

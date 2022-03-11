@@ -6,7 +6,7 @@ use std::collections::{HashMap, HashSet};
 use std::sync::Weak;
 
 use async_trait::async_trait;
-use log::warn;
+use log::{error, warn};
 use once_cell::sync::Lazy;
 use regex::Regex;
 use rocketbot_geocoding::{Geocoder, GeoCoordinates};
@@ -14,6 +14,7 @@ use rocketbot_interface::{JsonValueExtensions, send_channel_message};
 use rocketbot_interface::commands::{CommandBehaviors, CommandDefinition, CommandInstance};
 use rocketbot_interface::interfaces::{RocketBotInterface, RocketBotPlugin};
 use rocketbot_interface::model::ChannelMessage;
+use rocketbot_interface::sync::RwLock;
 use serde_json;
 
 use crate::interface::WeatherProvider;
@@ -33,12 +34,17 @@ static LAT_LON_REGEX: Lazy<Regex> = Lazy::new(|| Regex::new(
 ).expect("regex parsed successfully"));
 
 
-pub struct WeatherPlugin {
+struct Config {
     default_location: String,
     location_aliases: HashMap<String, String>,
-    interface: Weak<dyn RocketBotInterface>,
     providers: Vec<Box<dyn WeatherProvider>>,
     geocoder: Geocoder,
+}
+
+
+pub struct WeatherPlugin {
+    interface: Weak<dyn RocketBotInterface>,
+    config: RwLock<Config>,
 }
 impl WeatherPlugin {
     async fn handle_weather_command(&self, channel_message: &ChannelMessage, command: &CommandInstance) {
@@ -49,19 +55,21 @@ impl WeatherPlugin {
 
         let show_loc_name = command.name == "weather" || command.name == "wetter";
 
+        let config_guard = self.config.read().await;
+
         let mut location: &str = &command.rest;
         if location.len() == 0 {
-            location = &self.default_location;
+            location = &config_guard.default_location;
         }
 
         // lookup alias
-        if let Some(loc) = self.location_aliases.get(location) {
+        if let Some(loc) = config_guard.location_aliases.get(location) {
             location = loc;
         }
 
         // try specials first
         let mut special_handled = false;
-        for provider in &self.providers {
+        for provider in &config_guard.providers {
             if let Some(weather) = provider.get_weather_description_for_special(location).await {
                 self.output_weather(&channel_message, None, &weather).await;
                 special_handled = true;
@@ -82,7 +90,7 @@ impl WeatherPlugin {
                 .as_str()
                 .parse().expect("parsing longitude failed");
             let loc_name = if show_loc_name {
-                self.geocoder.reverse_geocode(GeoCoordinates::new(latitude, longitude)).await
+                config_guard.geocoder.reverse_geocode(GeoCoordinates::new(latitude, longitude)).await
                     .ok()
             } else {
                 None
@@ -90,7 +98,7 @@ impl WeatherPlugin {
             (latitude, longitude, loc_name)
         } else {
             // find the location using a different geocoder (Wunderground's geocoding is really bad)
-            let loc = match self.geocoder.geocode(&location).await {
+            let loc = match config_guard.geocoder.geocode(&location).await {
                 Err(errors) => {
                     for e in errors {
                         warn!("geocoding error: {}", e);
@@ -111,7 +119,7 @@ impl WeatherPlugin {
             (loc.coordinates.latitude_deg, loc.coordinates.longitude_deg, Some(loc.place))
         };
 
-        for provider in &self.providers {
+        for provider in &config_guard.providers {
             let weather = provider
                 .get_weather_description_for_coordinates(latitude, longitude).await;
             self.output_weather(
@@ -142,6 +150,47 @@ impl WeatherPlugin {
             ).await;
         }
     }
+
+    async fn try_get_config(config: serde_json::Value) -> Result<Config, &'static str> {
+        let default_location = config["default_location"]
+            .as_str().ok_or("default_location is missing or not a string")?
+            .to_owned();
+
+        let location_alias_entries = config["location_aliases"]
+            .entries().ok_or("location_aliases is not an object")?;
+        let mut location_aliases: HashMap<String, String> = HashMap::new();
+        for (k, v) in location_alias_entries {
+            let key = k.to_owned();
+            let value = v
+                .as_str().ok_or("location alias is not a string")?
+                .to_owned();
+            location_aliases.insert(key, value);
+        }
+
+        let mut providers = Vec::new();
+        for provider_entry in config["providers"].members().ok_or("providers is not a list")? {
+            let name = provider_entry["name"]
+                .as_str().ok_or("provider name missing or not representable as a string")?;
+            let provider_config = provider_entry["config"].clone();
+
+            let provider: Box<dyn WeatherProvider> = if name == "owm" {
+                Box::new(crate::providers::owm::OpenWeatherMapProvider::new(provider_config).await)
+            } else {
+                error!("unknown weather provider {:?}", name);
+                return Err("unknown weather provider");
+            };
+            providers.push(provider);
+        }
+
+        let geocoder = Geocoder::new(&config["geocoding"]).await?;
+
+        Ok(Config {
+            default_location,
+            location_aliases,
+            providers,
+            geocoder,
+        })
+    }
 }
 #[async_trait]
 impl RocketBotPlugin for WeatherPlugin {
@@ -151,6 +200,13 @@ impl RocketBotPlugin for WeatherPlugin {
             None => panic!("interface is gone"),
             Some(i) => i,
         };
+
+        let config_object = Self::try_get_config(config).await
+            .expect("failed to load config");
+        let config_lock = RwLock::new(
+            "WeatherPlugin::config",
+            config_object,
+        );
 
         let weather_command = CommandDefinition::new(
             "weather".to_owned(),
@@ -170,42 +226,9 @@ impl RocketBotPlugin for WeatherPlugin {
         my_interface.register_channel_command(&wetter_command).await;
         my_interface.register_channel_command(&owetter_command).await;
 
-        let default_location = config["default_location"]
-            .as_str().expect("default_location is missing or not a string")
-            .to_owned();
-
-        let location_aliases: HashMap<String, String> = config["location_aliases"].entries()
-            .expect("location_aliases is not an object")
-            .map(|(k, v)| {
-                let key = k.to_owned();
-                let value = v.as_str().expect("location alias is not a string")
-                    .to_owned();
-                (key, value)
-            })
-            .collect();
-
-        let mut providers = Vec::new();
-        for provider_entry in config["providers"].members().expect("providers is not a list") {
-            let name = provider_entry["name"]
-                .as_str().expect("provider name missing or not representable as a string");
-            let provider_config = provider_entry["config"].clone();
-
-            let provider: Box<dyn WeatherProvider> = if name == "owm" {
-                Box::new(crate::providers::owm::OpenWeatherMapProvider::new(provider_config).await)
-            } else {
-                panic!("unknown weather provider {:?}", name);
-            };
-            providers.push(provider);
-        }
-
-        let geocoder = Geocoder::new(&config["geocoding"]).await;
-
         WeatherPlugin {
-            default_location,
-            location_aliases,
             interface,
-            providers,
-            geocoder,
+            config: config_lock,
         }
     }
 
@@ -224,6 +247,20 @@ impl RocketBotPlugin for WeatherPlugin {
             Some(include_str!("../help/weather.md").to_owned())
         } else {
             None
+        }
+    }
+
+    async fn configuration_updated(&self, new_config: serde_json::Value) -> bool {
+        match Self::try_get_config(new_config).await {
+            Ok(c) => {
+                let mut config_guard = self.config.write().await;
+                *config_guard = c;
+                true
+            },
+            Err(e) => {
+                error!("failed to load new config: {}", e);
+                false
+            },
         }
     }
 }

@@ -6,14 +6,16 @@ use std::sync::Weak;
 
 use async_trait::async_trait;
 use bigdecimal::BigDecimal;
+use log::error;
 use num_bigint::BigInt;
 use num_traits::{FromPrimitive, One, Zero};
 use once_cell::sync::Lazy;
 use regex::Regex;
-use rocketbot_interface::send_channel_message;
+use rocketbot_interface::{ResultExtensions, send_channel_message};
 use rocketbot_interface::commands::{CommandBehaviors, CommandDefinition, CommandInstance};
 use rocketbot_interface::interfaces::{RocketBotInterface, RocketBotPlugin};
 use rocketbot_interface::model::ChannelMessage;
+use rocketbot_interface::sync::RwLock;
 use serde_json;
 
 
@@ -248,10 +250,31 @@ fn maybe_to_scientific(dec: &BigDecimal) -> String {
 }
 
 
-pub struct PaperPlugin {
-    interface: Weak<dyn RocketBotInterface>,
+#[derive(Clone, Debug, Eq, Hash, PartialEq)]
+struct Config {
     max_index: BigInt,
     output_precision: u64,
+}
+
+
+pub struct PaperPlugin {
+    interface: Weak<dyn RocketBotInterface>,
+    config: RwLock<Config>,
+}
+impl PaperPlugin {
+    fn try_get_config(config: serde_json::Value) -> Result<Config, &'static str> {
+        let max_index_str = config["max_index"].as_str()
+            .ok_or("max_index missing or not a string")?;
+        let max_index: BigInt = max_index_str.parse()
+            .or_msg("failed to parse max_index")?;
+        let output_precision = config["output_precision"].as_u64()
+            .ok_or("output_precision missing or not a u64")?;
+
+        Ok(Config {
+            max_index,
+            output_precision,
+        })
+    }
 }
 #[async_trait]
 impl RocketBotPlugin for PaperPlugin {
@@ -261,12 +284,12 @@ impl RocketBotPlugin for PaperPlugin {
             Some(i) => i,
         };
 
-        let max_index_str = config["max_index"].as_str()
-            .expect("max_index missing or not a string");
-        let max_index: BigInt = max_index_str.parse()
-            .expect("failed to parse max_index");
-        let output_precision = config["output_precision"].as_u64()
-            .expect("output_precision missing or not a u64");
+        let config_object = Self::try_get_config(config)
+            .expect("failed to load config");
+        let config_lock = RwLock::new(
+            "PaperPlugin::config",
+            config_object,
+        );
 
         my_interface.register_channel_command(&CommandDefinition::new(
             "paper".to_owned(),
@@ -281,8 +304,7 @@ impl RocketBotPlugin for PaperPlugin {
 
         PaperPlugin {
             interface,
-            max_index,
-            output_precision,
+            config: config_lock,
         }
     }
 
@@ -299,6 +321,8 @@ impl RocketBotPlugin for PaperPlugin {
         if command.name != "paper" {
             return;
         }
+
+        let config_guard = self.config.read().await;
 
         let (series, index_str) = match PAPER_RE.captures(&command.rest) {
             Some(caps) => (caps.name("series").unwrap().as_str(), caps.name("index").unwrap().as_str()),
@@ -331,7 +355,7 @@ impl RocketBotPlugin for PaperPlugin {
             },
         };
 
-        if index > self.max_index || index < -&self.max_index {
+        if index > config_guard.max_index || index < -&config_guard.max_index {
             send_channel_message!(
                 interface,
                 &channel_message.channel.name,
@@ -354,8 +378,8 @@ impl RocketBotPlugin for PaperPlugin {
         let (long_pfx, long_val) = si_prefix(long_m);
         let (short_pfx, short_val) = si_prefix(short_m);
 
-        let long_prec = long_val.with_prec(self.output_precision);
-        let short_prec = short_val.with_prec(self.output_precision);
+        let long_prec = long_val.with_prec(config_guard.output_precision);
+        let short_prec = short_val.with_prec(config_guard.output_precision);
         let long_sci = maybe_to_scientific(&long_prec);
         let short_sci = maybe_to_scientific(&short_prec);
 
@@ -376,6 +400,20 @@ impl RocketBotPlugin for PaperPlugin {
             Some(include_str!("../help/paper.md").to_owned())
         } else {
             None
+        }
+    }
+
+    async fn configuration_updated(&self, new_config: serde_json::Value) -> bool {
+        match Self::try_get_config(new_config) {
+            Ok(c) => {
+                let mut config_guard = self.config.write().await;
+                *config_guard = c;
+                true
+            },
+            Err(e) => {
+                error!("failed to load new config: {}", e);
+                false
+            },
         }
     }
 }

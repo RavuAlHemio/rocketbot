@@ -3,10 +3,11 @@ use std::sync::Weak;
 use async_trait::async_trait;
 use log::{debug, error};
 use regex::Regex;
-use rocketbot_interface::{send_channel_message, send_private_message};
+use rocketbot_interface::{ResultExtensions, send_channel_message, send_private_message};
 use rocketbot_interface::commands::{CommandDefinitionBuilder, CommandInstance};
 use rocketbot_interface::interfaces::{RocketBotInterface, RocketBotPlugin};
 use rocketbot_interface::model::{ChannelMessage, PrivateMessage};
+use rocketbot_interface::sync::RwLock;
 use serde_json;
 use sxd_document;
 use sxd_document::dom::Element;
@@ -20,37 +21,43 @@ struct CleanupRegex {
 }
 
 
-pub struct SloganPlugin {
-    interface: Weak<dyn RocketBotInterface>,
+#[derive(Clone, Debug)]
+struct Config {
     slogan_url: String,
     cleanup_regexes: Vec<CleanupRegex>,
     slogan_xpath: String,
     subject_placeholder: String,
 }
+
+
+pub struct SloganPlugin {
+    interface: Weak<dyn RocketBotInterface>,
+    config: RwLock<Config>,
+}
 impl SloganPlugin {
-    async fn generate_slogan(&self, subject: &str) -> Option<String> {
+    async fn generate_slogan(&self, config: &Config, subject: &str) -> Option<String> {
         // obtain URL content
-        let response = match reqwest::get(&self.slogan_url).await {
+        let response = match reqwest::get(&config.slogan_url).await {
             Ok(r) => r,
             Err(e) => {
-                error!("failed to obtain {} response: {}", self.slogan_url, e);
+                error!("failed to obtain {} response: {}", config.slogan_url, e);
                 return None;
             },
         };
         if response.status() != 200 {
-            error!("response from {} is {}", self.slogan_url, response.status());
+            error!("response from {} is {}", config.slogan_url, response.status());
             return None;
         }
         let mut response_text = match response.text().await {
             Ok(rt) => rt,
             Err(e) => {
-                error!("failed to open {} response text: {}", self.slogan_url, e);
+                error!("failed to open {} response text: {}", config.slogan_url, e);
                 return None;
             },
         };
 
         // apply cleanup regexes
-        for clean_regex in &self.cleanup_regexes {
+        for clean_regex in &config.cleanup_regexes {
             response_text = clean_regex.regex
                 .replace_all(&response_text, &clean_regex.replacement)
                 .into_owned();
@@ -60,7 +67,7 @@ impl SloganPlugin {
         let doc_package = match sxd_document::parser::parse(&response_text) {
             Ok(dp) => dp,
             Err(e) => {
-                error!("failed to parse {} response: {}", self.slogan_url, e);
+                error!("failed to parse {} response: {}", config.slogan_url, e);
                 debug!("document content is: {:?}", response_text);
                 return None;
             },
@@ -68,14 +75,14 @@ impl SloganPlugin {
 
         // apply xpath
         let xpath_factory = sxd_xpath::Factory::new();
-        let xpath = match xpath_factory.build(&self.slogan_xpath) {
+        let xpath = match xpath_factory.build(&config.slogan_xpath) {
             Ok(Some(xp)) => xp,
             Ok(None) => {
-                error!("XPath {:?} generated a None value", self.slogan_xpath);
+                error!("XPath {:?} generated a None value", config.slogan_xpath);
                 return None;
             },
             Err(e) => {
-                error!("failed to parse XPath {:?}: {}", self.slogan_xpath, e);
+                error!("failed to parse XPath {:?}: {}", config.slogan_xpath, e);
                 return None;
             },
         };
@@ -84,7 +91,7 @@ impl SloganPlugin {
         let xpath_result = match xpath.evaluate(&xpath_ctx, doc_package.as_document().root()) {
             Ok(r) => r,
             Err(e) => {
-                error!("failed to evaluate XPath {:?}: {}", self.slogan_xpath, e);
+                error!("failed to evaluate XPath {:?}: {}", config.slogan_xpath, e);
                 return None;
             },
         };
@@ -105,15 +112,52 @@ impl SloganPlugin {
                 total_text
             },
             other => {
-                error!("XPath {:?} returned {:?}, not a string value", self.slogan_xpath, other);
+                error!("XPath {:?} returned {:?}, not a string value", config.slogan_xpath, other);
                 return None;
             },
         };
 
         let response_string = xpath_string
-            .replace(&self.subject_placeholder, &format!("*{}*", subject));
+            .replace(&config.subject_placeholder, &format!("*{}*", subject));
 
         Some(response_string)
+    }
+
+    fn try_get_config(config: serde_json::Value) -> Result<Config, &'static str> {
+        let slogan_url = config["slogan_url"]
+            .as_str().ok_or("slogan_url is not a string")?
+            .to_owned();
+
+        let mut cleanup_regexes = Vec::new();
+        for cleanup_regex_obj in config["cleanup_regexes"].as_array().ok_or("cleanup_regexes not an array")?.iter() {
+            let regex_str = cleanup_regex_obj["regex"]
+                .as_str().ok_or("cleanup_regexes[...].regex not a string")?;
+            let regex = Regex::new(regex_str)
+                .or_msg("failed to parse cleanup_regexes[...].regex")?;
+
+            let replacement = cleanup_regex_obj["replacement"]
+                .as_str().ok_or("cleanup_regexes[...].replacement not a string")?
+                .to_owned();
+
+            cleanup_regexes.push(CleanupRegex {
+                regex,
+                replacement,
+            })
+        }
+
+        let slogan_xpath = config["slogan_xpath"]
+            .as_str().ok_or("slogan_xpath is not a string")?
+            .to_owned();
+        let subject_placeholder = config["subject_placeholder"]
+            .as_str().ok_or("subject_placeholder is not a string")?
+            .to_owned();
+
+        Ok(Config {
+            slogan_url,
+            cleanup_regexes,
+            slogan_xpath,
+            subject_placeholder,
+        })
     }
 }
 #[async_trait]
@@ -124,33 +168,12 @@ impl RocketBotPlugin for SloganPlugin {
             Some(i) => i,
         };
 
-        let slogan_url = config["slogan_url"].as_str()
-            .expect("slogan_url is not a string")
-            .to_owned();
-
-        let mut cleanup_regexes = Vec::new();
-        for cleanup_regex_obj in config["cleanup_regexes"].as_array().expect("cleanup_regexes not an array").iter() {
-            let regex_str = cleanup_regex_obj["regex"]
-                .as_str().expect("cleanup_regexes[...].regex not a string");
-            let regex = Regex::new(regex_str)
-                .expect("failed to parse cleanup_regexes[...].regex");
-
-            let replacement = cleanup_regex_obj["replacement"]
-                .as_str().expect("cleanup_regexes[...].replacement not a string")
-                .to_owned();
-
-            cleanup_regexes.push(CleanupRegex {
-                regex,
-                replacement,
-            })
-        }
-
-        let slogan_xpath = config["slogan_xpath"].as_str()
-            .expect("slogan_xpath is not a string")
-            .to_owned();
-        let subject_placeholder = config["subject_placeholder"].as_str()
-            .expect("subject_placeholder is not a string")
-            .to_owned();
+        let config_object = Self::try_get_config(config)
+            .expect("failed to load config");
+        let config_lock = RwLock::new(
+            "SloganPlugin::config",
+            config_object,
+        );
 
         let slogan_command = CommandDefinitionBuilder::new(
             "slogan".to_owned(),
@@ -164,10 +187,7 @@ impl RocketBotPlugin for SloganPlugin {
 
         Self {
             interface,
-            slogan_url,
-            cleanup_regexes,
-            slogan_xpath,
-            subject_placeholder,
+            config: config_lock,
         }
     }
 
@@ -190,7 +210,9 @@ impl RocketBotPlugin for SloganPlugin {
             return;
         }
 
-        let response_string = match self.generate_slogan(subject).await {
+        let config_guard = self.config.read().await;
+
+        let response_string = match self.generate_slogan(&config_guard, subject).await {
             Some(rs) => rs,
             None => return,
         };
@@ -218,7 +240,9 @@ impl RocketBotPlugin for SloganPlugin {
             return;
         }
 
-        let response_string = match self.generate_slogan(subject).await {
+        let config_guard = self.config.read().await;
+
+        let response_string = match self.generate_slogan(&config_guard, subject).await {
             Some(rs) => rs,
             None => return,
         };
@@ -229,6 +253,20 @@ impl RocketBotPlugin for SloganPlugin {
             &private_message.conversation.id,
             &response_string,
         ).await;
+    }
+
+    async fn configuration_updated(&self, new_config: serde_json::Value) -> bool {
+        match Self::try_get_config(new_config) {
+            Ok(c) => {
+                let mut config_guard = self.config.write().await;
+                *config_guard = c;
+                true
+            },
+            Err(e) => {
+                error!("failed to load new config: {}", e);
+                false
+            },
+        }
     }
 }
 

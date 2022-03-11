@@ -18,7 +18,9 @@ use async_trait::async_trait;
 use chrono::{DateTime, TimeZone, Utc};
 use log::error;
 use num_bigint::BigUint;
-use rocketbot_interface::{add_thousands_separators, JsonValueExtensions, send_channel_message};
+use rocketbot_interface::{
+    add_thousands_separators, JsonValueExtensions, ResultExtensions, send_channel_message,
+};
 use rocketbot_interface::commands::{
     CommandBehaviors, CommandDefinition, CommandDefinitionBuilder, CommandInstance,
 };
@@ -35,12 +37,18 @@ use crate::parsing::parse_full_expression;
 use crate::units::{StoredUnitDatabase, UnitDatabase};
 
 
-pub struct CalcPlugin {
-    interface: Weak<dyn RocketBotInterface>,
+#[derive(Clone, Debug)]
+struct Config {
     timeout_seconds: f64,
     max_result_string_length: usize,
-    unit_database: RwLock<UnitDatabase>,
     currency_units: bool,
+    unit_database: UnitDatabase,
+}
+
+
+pub struct CalcPlugin {
+    interface: Weak<dyn RocketBotInterface>,
+    config: RwLock<Config>,
     last_currency_update: Mutex<DateTime<Utc>>,
     prime_cache: Arc<Mutex<PrimeCache>>,
 }
@@ -72,28 +80,24 @@ impl CalcPlugin {
             let delta = Utc::now() - (*lcu_guard);
             if delta > chrono::Duration::hours(24) {
                 // update!
-                let mut write_guard = self.unit_database
+                let mut write_guard = self.config
                     .write().await;
-                if cfg!(feature = "currency") && self.currency_units {
-                    crate::currency::update_currencies(&mut write_guard).await;
+                if cfg!(feature = "currency") && write_guard.currency_units {
+                    crate::currency::update_currencies(&mut write_guard.unit_database).await;
                 }
                 *lcu_guard = Utc::now();
             }
         }
 
-        let unit_database = {
-            let read_guard = self.unit_database
-                .read().await;
-            (*read_guard).clone()
-        };
+        let config_guard = self.config.read().await;
 
         let simplified_res = {
             let mut state = SimplificationState {
                 constants: get_canonical_constants(),
                 functions: get_canonical_functions(),
-                units: unit_database,
+                units: config_guard.unit_database.clone(),
                 start_time: Instant::now(),
-                timeout: Duration::from_secs_f64(self.timeout_seconds),
+                timeout: Duration::from_secs_f64(config_guard.timeout_seconds),
             };
             top_node.simplify(&mut state)
         };
@@ -114,7 +118,7 @@ impl CalcPlugin {
                     },
                 };
 
-                if result_string.len() > self.max_result_string_length {
+                if result_string.len() > config_guard.max_result_string_length {
                     send_channel_message!(
                         interface,
                         channel_name,
@@ -194,6 +198,8 @@ impl CalcPlugin {
             Some(i) => i,
         };
 
+        let config_guard = self.config.read().await;
+
         let number: BigUint = match command.rest.trim().parse() {
             Ok(n) => n,
             Err(_) => {
@@ -219,7 +225,7 @@ impl CalcPlugin {
 
         let prime_cache_mutex = Arc::clone(&self.prime_cache);
         let factors_tr = run_stoppable_task_timeout(
-            Duration::from_secs_f64(self.timeout_seconds),
+            Duration::from_secs_f64(config_guard.timeout_seconds),
             move |stopper| {
                 let mut prime_cache_guard = prime_cache_mutex.blocking_lock();
                 prime_cache_guard.factor_caching(&number, &stopper)
@@ -273,6 +279,39 @@ impl CalcPlugin {
             &format!("\\[{}\\]", factor_string),
         ).await;
     }
+
+    fn try_get_config(config: serde_json::Value) -> Result<Config, &'static str> {
+        let timeout_seconds = config["timeout_seconds"].as_f64()
+            .ok_or("timeout_seconds missing or not representable as f64")?;
+        let max_result_string_length = config["max_result_string_length"].as_usize()
+            .ok_or("max_result_string_length missing or not representable as usize")?;
+        let currency_units = config["currency_units"].as_bool()
+            .ok_or("currency_units missing or not representable as boolean")?;
+
+        let unit_db_file_value = &config["unit_database_file"];
+        let unit_database = if unit_db_file_value.is_null() {
+            UnitDatabase::new_empty()
+        } else {
+            let unit_db_file = unit_db_file_value.as_str()
+                .ok_or("unit_database_file not a string")?;
+            let mut f = File::open(unit_db_file)
+                .or_msg("failed to open unit_database_file")?;
+            let mut unit_db_toml = Vec::new();
+            f.read_to_end(&mut unit_db_toml)
+                .or_msg("failed to read unit_database_file")?;
+            let unit_db: StoredUnitDatabase = toml::from_slice(&unit_db_toml)
+                .or_msg("failed to load unit_database_file")?;
+            unit_db.to_unit_database()
+                .or_msg("failed to process unit database file")?
+        };
+
+        Ok(Config {
+            timeout_seconds,
+            max_result_string_length,
+            currency_units,
+            unit_database,
+        })
+    }
 }
 #[async_trait]
 impl RocketBotPlugin for CalcPlugin {
@@ -282,32 +321,11 @@ impl RocketBotPlugin for CalcPlugin {
             Some(i) => i,
         };
 
-        let timeout_seconds = config["timeout_seconds"].as_f64()
-            .expect("timeout_seconds missing or not representable as f64");
-        let max_result_string_length = config["max_result_string_length"].as_usize()
-            .expect("max_result_string_length missing or not representable as usize");
-        let currency_units = config["currency_units"].as_bool()
-            .expect("currency_units missing or not representable as boolean");
-
-        let unit_db_file_value = &config["unit_database_file"];
-        let unit_database_inner = if unit_db_file_value.is_null() {
-            UnitDatabase::new_empty()
-        } else {
-            let unit_db_file = unit_db_file_value.as_str()
-                .expect("unit_database_file not a string");
-            let mut f = File::open(unit_db_file)
-                .expect("failed to open unit_database_file");
-            let mut unit_db_toml = Vec::new();
-            f.read_to_end(&mut unit_db_toml)
-                .expect("failed to read unit_database_file");
-            let unit_db: StoredUnitDatabase = toml::from_slice(&unit_db_toml)
-                .expect("failed to load unit_database_file");
-            unit_db.to_unit_database()
-                .expect("failed to process unit database file")
-        };
-        let unit_database = RwLock::new(
-            "CalcPlugin::unit_database",
-            unit_database_inner,
+        let config_object = Self::try_get_config(config)
+            .expect("failed to load config");
+        let config_lock = RwLock::new(
+            "CalcPlugin::config",
+            config_object,
         );
 
         let last_currency_update = Mutex::new(
@@ -361,10 +379,7 @@ impl RocketBotPlugin for CalcPlugin {
 
         CalcPlugin {
             interface,
-            timeout_seconds,
-            max_result_string_length,
-            unit_database,
-            currency_units,
+            config: config_lock,
             last_currency_update,
             prime_cache,
         }
@@ -397,6 +412,20 @@ impl RocketBotPlugin for CalcPlugin {
             Some(include_str!("../help/factor.md").to_owned())
         } else {
             None
+        }
+    }
+
+    async fn configuration_updated(&self, new_config: serde_json::Value) -> bool {
+        match Self::try_get_config(new_config) {
+            Ok(c) => {
+                let mut config_guard = self.config.write().await;
+                *config_guard = c;
+                true
+            },
+            Err(e) => {
+                error!("failed to reload configuration: {}", e);
+                false
+            },
         }
     }
 }

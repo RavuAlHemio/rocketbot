@@ -159,19 +159,19 @@ impl GeonamesGeocodingProvider {
 }
 #[async_trait]
 impl GeocodingProvider for GeonamesGeocodingProvider {
-    async fn new(config: &serde_json::Value, _country_code_mapping: Arc<CountryCodeMapping>) -> Self {
+    async fn new(config: &serde_json::Value, _country_code_mapping: Arc<CountryCodeMapping>) -> Result<Self, &'static str> {
         let username = config["username"]
-            .as_str().expect("\"username\" not a string")
+            .as_str().ok_or("\"username\" not a string")?
             .to_owned();
         let http_client = Mutex::new(
             "GeonamesGeocodingProvider::http_client",
             reqwest::Client::new(),
         );
 
-        GeonamesGeocodingProvider {
+        Ok(GeonamesGeocodingProvider {
             username,
             http_client,
-        }
+        })
     }
 
     async fn geocode(&self, place: &str) -> Result<GeoLocation, GeocodingError> {

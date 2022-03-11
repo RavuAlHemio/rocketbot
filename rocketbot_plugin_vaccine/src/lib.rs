@@ -67,15 +67,46 @@ struct ExtractedVaccineStats {
 }
 
 
-pub struct VaccinePlugin {
-    interface: Weak<dyn RocketBotInterface>,
+#[derive(Clone, Debug, Eq, Hash, PartialEq)]
+struct Config {
     default_target: String,
     doses_timeline_url: String,
     vax_certs_url: String,
     prev_vax_certs_url_format: String,
     max_age_h: i64,
+}
 
+
+pub struct VaccinePlugin {
+    interface: Weak<dyn RocketBotInterface>,
+    config: RwLock<Config>,
     vaccine_database: RwLock<VaccineDatabase>,
+}
+impl VaccinePlugin {
+    fn try_get_config(config: serde_json::Value) -> Result<Config, &'static str> {
+        let default_target = config["default_target"]
+            .as_str().ok_or("default_target missing or not a string")?
+            .to_owned();
+        let doses_timeline_url = config["doses_timeline_url"]
+            .as_str().ok_or("doses_timeline_url missing or not a string")?
+            .to_owned();
+        let vax_certs_url = config["vax_certs_url"]
+            .as_str().ok_or("vax_certs_url missing or not a string")?
+            .to_owned();
+        let prev_vax_certs_url_format = config["prev_vax_certs_url_format"]
+            .as_str().ok_or("prev_vax_certs_url_format missing or not a string")?
+            .to_owned();
+        let max_age_h = config["max_age_h"]
+            .as_i64().ok_or("max_age_h missing or not an i64")?;
+
+        Ok(Config {
+            default_target,
+            doses_timeline_url,
+            vax_certs_url,
+            prev_vax_certs_url_format,
+            max_age_h,
+        })
+    }
 }
 #[async_trait]
 impl RocketBotPlugin for VaccinePlugin {
@@ -85,29 +116,22 @@ impl RocketBotPlugin for VaccinePlugin {
             Some(i) => i,
         };
 
-        let default_target = config["default_target"]
-            .as_str().expect("default_target missing or not a string")
-            .to_owned();
-        let doses_timeline_url = config["doses_timeline_url"]
-            .as_str().expect("doses_timeline_url missing or not a string")
-            .to_owned();
-        let vax_certs_url = config["vax_certs_url"]
-            .as_str().expect("vax_certs_url missing or not a string")
-            .to_owned();
-        let prev_vax_certs_url_format = config["prev_vax_certs_url_format"]
-            .as_str().expect("prev_vax_certs_url_format missing or not a string")
-            .to_owned();
-        let max_age_h = config["max_age_h"]
-            .as_i64().expect("max_age_h missing or not an i64");
+        let config_object = Self::try_get_config(config)
+            .expect("failed to load config");
 
         let vaccine_database = RwLock::new(
             "VaccinePlugin::vaccine_database",
-            match VaccineDatabase::new_from_urls(&doses_timeline_url, &vax_certs_url, &prev_vax_certs_url_format).await {
+            match VaccineDatabase::new_from_urls(&config_object.doses_timeline_url, &config_object.vax_certs_url, &config_object.prev_vax_certs_url_format).await {
                 Ok(d) => d,
                 Err(e) => {
                     panic!("initial database population failed: {}", e);
                 },
             },
+        );
+
+        let config_lock = RwLock::new(
+            "VaccinePlugin::config",
+            config_object,
         );
 
         let vaccine_command = CommandDefinition::new(
@@ -124,11 +148,7 @@ impl RocketBotPlugin for VaccinePlugin {
 
         VaccinePlugin {
             interface,
-            default_target,
-            doses_timeline_url,
-            vax_certs_url,
-            prev_vax_certs_url_format,
-            max_age_h,
+            config: config_lock,
             vaccine_database,
         }
     }
@@ -147,11 +167,13 @@ impl RocketBotPlugin for VaccinePlugin {
             return;
         }
 
+        let config_guard = self.config.read().await;
+
         let rest_trim = command.rest.trim();
         let name = if rest_trim.len() > 0 {
             rest_trim
         } else {
-            &self.default_target
+            &config_guard.default_target
         };
         let name_lower = name.to_lowercase();
 
@@ -160,8 +182,8 @@ impl RocketBotPlugin for VaccinePlugin {
                 .read().await;
             Utc::now() - db_guard.corona_timestamp
         };
-        if update_delta.num_hours() > self.max_age_h {
-            match VaccineDatabase::new_from_urls(&self.doses_timeline_url, &self.vax_certs_url, &self.prev_vax_certs_url_format).await {
+        if update_delta.num_hours() > config_guard.max_age_h {
+            match VaccineDatabase::new_from_urls(&config_guard.doses_timeline_url, &config_guard.vax_certs_url, &config_guard.prev_vax_certs_url_format).await {
                 Ok(d) => {
                     let mut db_guard = self.vaccine_database
                         .write().await;
@@ -336,6 +358,20 @@ impl RocketBotPlugin for VaccinePlugin {
             Some(include_str!("../help/vaccine.md").to_owned())
         } else {
             None
+        }
+    }
+
+    async fn configuration_updated(&self, new_config: serde_json::Value) -> bool {
+        match Self::try_get_config(new_config) {
+            Ok(c) => {
+                let mut config_guard = self.config.write().await;
+                *config_guard = c;
+                true
+            },
+            Err(e) => {
+                error!("failed to load new config: {}", e);
+                false
+            },
         }
     }
 }

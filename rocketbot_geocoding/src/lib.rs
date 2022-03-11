@@ -11,8 +11,10 @@ use std::path::Path;
 use std::sync::Arc;
 
 use async_trait::async_trait;
+use log::error;
 use once_cell::sync::Lazy;
 use regex::Regex;
+use rocketbot_interface::ResultExtensions;
 use serde::{Deserialize, Serialize};
 use serde_json;
 
@@ -71,7 +73,7 @@ impl GeoLocation {
 #[async_trait]
 pub trait GeocodingProvider : Send + Sync {
     /// Creates a new instance of this geocoding provider.
-    async fn new(config: &serde_json::Value, country_code_mapping: Arc<CountryCodeMapping>) -> Self where Self : Sized;
+    async fn new(config: &serde_json::Value, country_code_mapping: Arc<CountryCodeMapping>) -> Result<Self, &'static str> where Self : Sized;
 
     /// Attempts to convert a place name to its geographical coordinates.
     async fn geocode(&self, place: &str) -> Result<GeoLocation, GeocodingError>;
@@ -173,26 +175,27 @@ pub struct Geocoder {
     confuser: Confuser,
 }
 impl Geocoder {
-    pub async fn new(config: &serde_json::Value) -> Self {
+    pub async fn new(config: &serde_json::Value) -> Result<Self, &'static str> {
         // load country codes
         let country_code_mapping_inner = CountryCodeMapping::load_from_file(Path::new("CountryCodes.json"))
-            .expect("failed to load country code mappings");
+            .or_msg("failed to load country code mappings")?;
         let country_code_mapping = Arc::new(country_code_mapping_inner);
 
         let mut providers = Vec::new();
         let provider_objects = config["providers"]
-            .as_array().expect("providers is not a list");
+            .as_array().ok_or("providers is not a list")?;
         for provider_object in provider_objects {
             let name = provider_object["name"]
-                .as_str().expect("name of provider entry is not a string");
+                .as_str().ok_or("name of provider entry is not a string")?;
             let config = &provider_object["config"];
 
             let provider: Box<dyn GeocodingProvider> = if name == "geonames" {
-                Box::new(crate::providers::geonames::GeonamesGeocodingProvider::new(config, Arc::clone(&country_code_mapping)).await)
+                Box::new(crate::providers::geonames::GeonamesGeocodingProvider::new(config, Arc::clone(&country_code_mapping)).await?)
             } else if name == "nominatim" {
-                Box::new(crate::providers::nominatim::NominatimGeocodingProvider::new(config, Arc::clone(&country_code_mapping)).await)
+                Box::new(crate::providers::nominatim::NominatimGeocodingProvider::new(config, Arc::clone(&country_code_mapping)).await?)
             } else {
-                panic!("unknown geocoding provider {:?}", name);
+                error!("unknown geocoding provider {:?}", name);
+                return Err("unknown geocoding provider");
             };
 
             providers.push(provider);
@@ -210,13 +213,13 @@ impl Geocoder {
         config: &serde_json::Value,
         providers: Vec<Box<dyn GeocodingProvider>>,
         country_code_mapping: Arc<CountryCodeMapping>,
-    ) -> Self {
-        let confuser = Confuser::new(config);
-        Self {
+    ) -> Result<Self, &'static str> {
+        let confuser = Confuser::new(config)?;
+        Ok(Self {
             providers,
             country_code_mapping,
             confuser,
-        }
+        })
     }
 
     #[cfg(not(feature = "confusion"))]
@@ -224,11 +227,11 @@ impl Geocoder {
         _config: &serde_json::Value,
         providers: Vec<Box<dyn GeocodingProvider>>,
         country_code_mapping: Arc<CountryCodeMapping>,
-    ) -> Self {
-        Self {
+    ) -> Result<Self, &'static str> {
+        Ok(Self {
             providers,
             country_code_mapping,
-        }
+        })
     }
 
     #[cfg(feature = "confusion")]

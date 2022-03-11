@@ -5,20 +5,61 @@ use std::path::Path;
 use std::sync::Weak;
 
 use async_trait::async_trait;
+use log::error;
 use rand::{Rng, SeedableRng};
 use rand::rngs::StdRng;
-use rocketbot_interface::{JsonValueExtensions, send_channel_message};
+use rocketbot_interface::{JsonValueExtensions, ResultExtensions, send_channel_message};
 use rocketbot_interface::commands::{CommandBehaviors, CommandDefinition, CommandInstance};
 use rocketbot_interface::interfaces::{RocketBotInterface, RocketBotPlugin};
 use rocketbot_interface::model::ChannelMessage;
-use rocketbot_interface::sync::Mutex;
+use rocketbot_interface::sync::{Mutex, RwLock};
 use serde_json;
+
+
+#[derive(Clone, Debug, Eq, PartialEq)]
+struct Config {
+    name_to_fortunes: HashMap<String, Vec<String>>,
+}
 
 
 pub struct FortunePlugin {
     interface: Weak<dyn RocketBotInterface>,
-    name_to_fortunes: HashMap<String, Vec<String>>,
+    config: RwLock<Config>,
     rng: Mutex<StdRng>,
+}
+impl FortunePlugin {
+    fn try_get_config(config: serde_json::Value) -> Result<Config, &'static str> {
+        let mut name_to_fortunes = HashMap::new();
+        for fortune_file_path_value in config["fortune_files"].members().ok_or("fortune_files not a list")? {
+            let fortune_file_path = fortune_file_path_value
+                .as_str().ok_or("entry in fortune_files is not a string")?;
+            let fortune_file_name: String = Path::new(fortune_file_path)
+                .file_name().ok_or("file name does not exist")?
+                .to_str().ok_or("file name is not valid UTF-8")?
+                .to_owned();
+            let mut fortune_file = match File::open(fortune_file_path) {
+                Ok(ff) => ff,
+                Err(e) => {
+                    error!("failed to open fortune file {}: {}", fortune_file_path, e);
+                    return Err("failed to open fortune file");
+                },
+            };
+
+            let mut content = String::new();
+            fortune_file.read_to_string(&mut content)
+                .or_msg("failed to read file")?;
+
+            let mut fortunes: Vec<String> = Vec::new();
+            for piece in content.split("\n%\n") {
+                fortunes.push(piece.trim().into());
+            }
+            name_to_fortunes.insert(fortune_file_name, fortunes);
+        }
+
+        Ok(Config {
+            name_to_fortunes,
+        })
+    }
 }
 #[async_trait]
 impl RocketBotPlugin for FortunePlugin {
@@ -27,6 +68,13 @@ impl RocketBotPlugin for FortunePlugin {
             None => panic!("interface is gone"),
             Some(i) => i,
         };
+
+        let config_object = Self::try_get_config(config)
+            .expect("failed to load config");
+        let config_lock = RwLock::new(
+            "FortunePlugin::config",
+            config_object,
+        );
 
         let fortune_command = CommandDefinition::new(
             "fortune".to_owned(),
@@ -40,30 +88,6 @@ impl RocketBotPlugin for FortunePlugin {
         );
         my_interface.register_channel_command(&fortune_command).await;
 
-        let mut name_to_fortunes = HashMap::new();
-        for fortune_file_path_value in config["fortune_files"].members().expect("fortune_files not a list") {
-            let fortune_file_path = fortune_file_path_value
-                .as_str().expect("entry in fortune_files is not a string");
-            let fortune_file_name: String = Path::new(fortune_file_path)
-                .file_name().expect("file name exists")
-                .to_str().expect("file name is valid UTF-8")
-                .into();
-            let mut fortune_file = match File::open(fortune_file_path) {
-                Ok(ff) => ff,
-                Err(e) => panic!("failed to open fortune file {}: {}", fortune_file_path, e),
-            };
-
-            let mut content = String::new();
-            fortune_file.read_to_string(&mut content)
-                .expect("failed to read file");
-
-            let mut fortunes: Vec<String> = Vec::new();
-            for piece in content.split("\n%\n") {
-                fortunes.push(piece.trim().into());
-            }
-            name_to_fortunes.insert(fortune_file_name, fortunes);
-        }
-
         let rng = Mutex::new(
             "FortunePlugin::rng",
             StdRng::from_entropy(),
@@ -71,7 +95,7 @@ impl RocketBotPlugin for FortunePlugin {
 
         FortunePlugin {
             interface,
-            name_to_fortunes,
+            config: config_lock,
             rng,
         }
     }
@@ -90,16 +114,18 @@ impl RocketBotPlugin for FortunePlugin {
             return;
         }
 
+        let config_guard = self.config.read().await;
+
         let category: Option<String> = match command.rest.trim() {
             "" => None,
             other => Some(other.into()),
         };
 
         if let Some(cat) = category {
-            match self.name_to_fortunes.get(&cat) {
+            match config_guard.name_to_fortunes.get(&cat) {
                 None => {
                     // well, what groups _do_ we have?
-                    let mut fortune_groups: Vec<String> = self.name_to_fortunes.keys()
+                    let mut fortune_groups: Vec<String> = config_guard.name_to_fortunes.keys()
                         .map(|k| format!("`{}`", k))
                         .collect();
                     fortune_groups.sort_unstable();
@@ -133,14 +159,14 @@ impl RocketBotPlugin for FortunePlugin {
             }
         } else {
             // pick one from all categories
-            let total_count: usize = self.name_to_fortunes.values()
+            let total_count: usize = config_guard.name_to_fortunes.values()
                 .map(|v| v.len())
                 .sum();
             if total_count > 0 {
                 let mut rng_guard = self.rng
                     .lock().await;
                 let mut index = rng_guard.gen_range(0..total_count);
-                for fortunes in self.name_to_fortunes.values() {
+                for fortunes in config_guard.name_to_fortunes.values() {
                     if index >= fortunes.len() {
                         index -= fortunes.len();
                         continue;
@@ -161,7 +187,8 @@ impl RocketBotPlugin for FortunePlugin {
 
     async fn get_command_help(&self, command_name: &str) -> Option<String> {
         if command_name == "fortune" {
-            let mut fortune_groups: Vec<String> = self.name_to_fortunes.keys()
+            let config_guard = self.config.read().await;
+            let mut fortune_groups: Vec<String> = config_guard.name_to_fortunes.keys()
                 .map(|k| format!("`{}`", k))
                 .collect();
             fortune_groups.sort_unstable();
@@ -173,6 +200,20 @@ impl RocketBotPlugin for FortunePlugin {
             )
         } else {
             None
+        }
+    }
+
+    async fn configuration_updated(&self, new_config: serde_json::Value) -> bool {
+        match Self::try_get_config(new_config) {
+            Ok(c) => {
+                let mut config_guard = self.config.write().await;
+                *config_guard = c;
+                true
+            },
+            Err(e) => {
+                error!("failed to load new config: {}", e);
+                false
+            },
         }
     }
 }

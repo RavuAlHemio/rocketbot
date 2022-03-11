@@ -15,11 +15,12 @@ use log::error;
 use once_cell::sync::OnceCell;
 use rand::{Rng, thread_rng};
 use regex::Regex;
-use rocketbot_interface::{JsonValueExtensions, phrase_join, send_channel_message};
+use rocketbot_interface::{JsonValueExtensions, phrase_join, ResultExtensions, send_channel_message};
 use rocketbot_interface::commands::{CommandDefinitionBuilder, CommandInstance, CommandValueType};
 use rocketbot_interface::interfaces::{RocketBotInterface, RocketBotPlugin};
 use rocketbot_interface::model::ChannelMessage;
 use rocketbot_interface::serde::serde_opt_regex;
+use rocketbot_interface::sync::RwLock;
 use serde::{Deserialize, Serialize};
 use serde_json;
 use tokio_postgres::NoTls;
@@ -269,8 +270,8 @@ impl CompanyDefinition {
 }
 
 
-pub struct BimPlugin {
-    interface: Weak<dyn RocketBotInterface>,
+#[derive(Clone, Debug)]
+struct Config {
     company_to_definition: HashMap<String, CompanyDefinition>,
     default_company: String,
     manufacturer_mapping: HashMap<String, String>,
@@ -279,9 +280,15 @@ pub struct BimPlugin {
     admin_usernames: HashSet<String>,
     max_edit_s: i64,
 }
+
+
+pub struct BimPlugin {
+    interface: Weak<dyn RocketBotInterface>,
+    config: RwLock<Config>,
+}
 impl BimPlugin {
-    fn load_bim_database(&self, company: &str) -> Option<HashMap<VehicleNumber, VehicleInfo>> {
-        let path_opt = match self.company_to_definition.get(company) {
+    fn load_bim_database(&self, config: &Config, company: &str) -> Option<HashMap<VehicleNumber, VehicleInfo>> {
+        let path_opt = match config.company_to_definition.get(company) {
             Some(p) => p.bim_database_path.as_ref(),
             None => {
                 error!("unknown company {:?}", company);
@@ -312,8 +319,8 @@ impl BimPlugin {
         Some(vehicle_hash_map)
     }
 
-    async fn connect_ride_db(&self) -> Result<tokio_postgres::Client, tokio_postgres::Error> {
-        let (client, connection) = match tokio_postgres::connect(&self.ride_db_conn_string, NoTls).await {
+    async fn connect_ride_db(&self, config: &Config) -> Result<tokio_postgres::Client, tokio_postgres::Error> {
+        let (client, connection) = match tokio_postgres::connect(&config.ride_db_conn_string, NoTls).await {
             Ok(cc) => cc,
             Err(e) => {
                 error!("error connecting to database: {}", e);
@@ -383,6 +390,8 @@ impl BimPlugin {
             Some(i) => i,
         };
 
+        let config_guard = self.config.read().await;
+
         let number_str = command.rest.trim();
         let number: VehicleNumber = match number_str.parse() {
             Ok(n) => n,
@@ -395,9 +404,9 @@ impl BimPlugin {
         let company = command.options.get("company")
             .or_else(|| command.options.get("c"))
             .map(|v| v.as_str().unwrap())
-            .unwrap_or(self.default_company.as_str());
+            .unwrap_or(config_guard.default_company.as_str());
 
-        let mut response = match self.load_bim_database(company) {
+        let mut response = match self.load_bim_database(&config_guard, company) {
             None => "No vehicle database exists for this company.".to_owned(),
             Some(db) => {
                 match db.get(&number) {
@@ -421,7 +430,7 @@ impl BimPlugin {
                         };
 
                         if let Some(manuf) = &vehicle.manufacturer {
-                            let full_manuf = self.manufacturer_mapping.get(manuf).unwrap_or(manuf);
+                            let full_manuf = config_guard.manufacturer_mapping.get(manuf).unwrap_or(manuf);
                             write_expect!(db_response, "\n*hergestellt von* {}", full_manuf);
                         }
 
@@ -447,8 +456,8 @@ impl BimPlugin {
             },
         };
 
-        async fn get_last_ride(me: &BimPlugin, username: &str, company: &str, vehicle_number: VehicleNumber) -> Option<String> {
-            let ride_conn = match me.connect_ride_db().await {
+        async fn get_last_ride(me: &BimPlugin, config: &Config, username: &str, company: &str, vehicle_number: VehicleNumber) -> Option<String> {
+            let ride_conn = match me.connect_ride_db(config).await {
                 Ok(c) => c,
                 Err(_) => return None,
             };
@@ -534,7 +543,7 @@ impl BimPlugin {
 
             Some(ret)
         }
-        if let Some(last_ride) = get_last_ride(&self, &channel_message.message.sender.username, &company, number).await {
+        if let Some(last_ride) = get_last_ride(&self, &config_guard, &channel_message.message.sender.username, &company, number).await {
             write_expect!(response, "\n{}", last_ride);
         }
 
@@ -551,12 +560,14 @@ impl BimPlugin {
             Some(i) => i,
         };
 
+        let config_guard = self.config.read().await;
+
         let company = command.options.get("company")
             .or_else(|| command.options.get("c"))
             .map(|v| v.as_str().unwrap())
-            .unwrap_or(self.default_company.as_str());
+            .unwrap_or(config_guard.default_company.as_str());
 
-        let company_def = match self.company_to_definition.get(company) {
+        let company_def = match config_guard.company_to_definition.get(company) {
             Some(cd) => cd,
             None => {
                 send_channel_message!(
@@ -568,8 +579,8 @@ impl BimPlugin {
             }
         };
 
-        let bim_database_opt = self.load_bim_database(company);
-        let mut ride_conn = match self.connect_ride_db().await {
+        let bim_database_opt = self.load_bim_database(&config_guard, company);
+        let mut ride_conn = match self.connect_ride_db(&config_guard).await {
             Ok(c) => c,
             Err(_) => {
                 send_channel_message!(
@@ -589,7 +600,7 @@ impl BimPlugin {
             &channel_message.message.sender.username,
             channel_message.message.timestamp.with_timezone(&Local),
             &command.rest,
-            self.allow_fixed_coupling_combos,
+            config_guard.allow_fixed_coupling_combos,
         ).await;
         let mut last_ride_infos = match increment_res {
             Ok(lri) => lri,
@@ -787,10 +798,12 @@ impl BimPlugin {
             Some(i) => i,
         };
 
+        let config_guard = self.config.read().await;
+
         let company = command.options.get("company")
             .or_else(|| command.options.get("c"))
             .map(|v| v.as_str().unwrap())
-            .unwrap_or(self.default_company.as_str());
+            .unwrap_or(config_guard.default_company.as_str());
         let lookback_range = match Self::lookback_range_from_command(command) {
             Some(lr) => lr,
             None => {
@@ -803,7 +816,7 @@ impl BimPlugin {
             },
         };
 
-        if !self.company_to_definition.contains_key(company) {
+        if !config_guard.company_to_definition.contains_key(company) {
             send_channel_message!(
                 interface,
                 &channel_message.channel.name,
@@ -812,7 +825,7 @@ impl BimPlugin {
             return;
         }
 
-        let ride_conn = match self.connect_ride_db().await {
+        let ride_conn = match self.connect_ride_db(&config_guard).await {
             Ok(c) => c,
             Err(_) => {
                 send_channel_message!(
@@ -912,6 +925,8 @@ impl BimPlugin {
             Some(i) => i,
         };
 
+        let config_guard = self.config.read().await;
+
         let lookback_range = match Self::lookback_range_from_command(command) {
             Some(lr) => lr,
             None => {
@@ -924,7 +939,7 @@ impl BimPlugin {
             },
         };
 
-        let ride_conn = match self.connect_ride_db().await {
+        let ride_conn = match self.connect_ride_db(&config_guard).await {
             Ok(c) => c,
             Err(_) => {
                 send_channel_message!(
@@ -1064,7 +1079,9 @@ impl BimPlugin {
             Some(i) => i,
         };
 
-        if self.company_to_definition.len() == 0 {
+        let config_guard = self.config.read().await;
+
+        if config_guard.company_to_definition.len() == 0 {
             send_channel_message!(
                 interface,
                 &channel_message.channel.name,
@@ -1073,7 +1090,7 @@ impl BimPlugin {
             return;
         }
 
-        let mut company_names: Vec<(&String, &String)> = self.company_to_definition
+        let mut company_names: Vec<(&String, &String)> = config_guard.company_to_definition
             .iter()
             .map(|(abbr, cd)| (abbr, &cd.name))
             .collect();
@@ -1097,6 +1114,8 @@ impl BimPlugin {
             Some(i) => i,
         };
 
+        let config_guard = self.config.read().await;
+
         let lookback_range = match Self::lookback_range_from_command(command) {
             Some(lr) => lr,
             None => {
@@ -1118,7 +1137,7 @@ impl BimPlugin {
             }
         };
 
-        let ride_conn = match self.connect_ride_db().await {
+        let ride_conn = match self.connect_ride_db(&config_guard).await {
             Ok(c) => c,
             Err(_) => {
                 send_channel_message!(
@@ -1235,7 +1254,7 @@ impl BimPlugin {
                 let vehicle_strs: Vec<String> = vehicles
                     .iter()
                     .map(|(comp, vnr)|
-                        if comp == &self.default_company {
+                        if comp == &config_guard.default_company {
                             format!("{}", vnr)
                         } else {
                             format!("{}/{}", comp, vnr)
@@ -1267,7 +1286,7 @@ impl BimPlugin {
                 fav_vehicle_strings.push(format!(
                     "{}: {} ({} {})",
                     rider,
-                    if fav_comp == &self.default_company {
+                    if fav_comp == &config_guard.default_company {
                         format!("{}", fav_vehicle)
                     } else {
                         format!("{}/{}", fav_comp, fav_vehicle)
@@ -1295,6 +1314,8 @@ impl BimPlugin {
             Some(i) => i,
         };
 
+        let config_guard = self.config.read().await;
+
         let lookback_range = match Self::lookback_range_from_command(command) {
             Some(lr) => lr,
             None => {
@@ -1316,7 +1337,7 @@ impl BimPlugin {
             }
         };
 
-        let ride_conn = match self.connect_ride_db().await {
+        let ride_conn = match self.connect_ride_db(&config_guard).await {
             Ok(c) => c,
             Err(_) => {
                 send_channel_message!(
@@ -1437,6 +1458,8 @@ impl BimPlugin {
             Some(i) => i,
         };
 
+        let config_guard = self.config.read().await;
+
         let lookback_range = match Self::lookback_range_from_command(command) {
             Some(lr) => lr,
             None => {
@@ -1462,7 +1485,7 @@ impl BimPlugin {
             }
         };
 
-        let ride_conn = match self.connect_ride_db().await {
+        let ride_conn = match self.connect_ride_db(&config_guard).await {
             Ok(c) => c,
             Err(_) => {
                 send_channel_message!(
@@ -1522,7 +1545,7 @@ impl BimPlugin {
 
             let bim_database_opt = company_to_bim_database_opt
                 .entry(company.clone())
-                .or_insert_with(|| self.load_bim_database(&company));
+                .or_insert_with(|| self.load_bim_database(&config_guard, &company));
             let vehicle_type_opt = bim_database_opt
                 .as_ref()
                 .map(|bd| bd
@@ -1550,7 +1573,7 @@ impl BimPlugin {
         }
         let types_counts: Vec<String> = type_and_count.iter()
             .map(|(comp, tp, count)|
-                if *comp == self.default_company.as_str() {
+                if *comp == config_guard.default_company.as_str() {
                     format!("{}{}: {}", tp, INVISIBLE_JOINER, count)
                 } else {
                     format!("{}/{}{}: {}", comp, tp, INVISIBLE_JOINER, count)
@@ -1578,6 +1601,8 @@ impl BimPlugin {
             Some(i) => i,
         };
 
+        let config_guard = self.config.read().await;
+
         let sort_by_number =
             command.flags.contains("n")
             || command.flags.contains("sort-by-number")
@@ -1603,7 +1628,7 @@ impl BimPlugin {
             }
         };
 
-        let ride_conn = match self.connect_ride_db().await {
+        let ride_conn = match self.connect_ride_db(&config_guard).await {
             Ok(c) => c,
             Err(_) => {
                 send_channel_message!(
@@ -1670,7 +1695,7 @@ impl BimPlugin {
         }
         let lines_counts: Vec<String> = line_and_count.iter()
             .map(|(comp, tp, count)|
-                if *comp == self.default_company.as_str() {
+                if *comp == config_guard.default_company.as_str() {
                     format!("{}{}: {}", tp, INVISIBLE_JOINER, count)
                 } else {
                     format!("{}/{}{}: {}", comp, tp, INVISIBLE_JOINER, count)
@@ -1697,10 +1722,12 @@ impl BimPlugin {
             Some(i) => i,
         };
 
+        let config_guard = self.config.read().await;
+
         let company = command.options.get("company")
             .or_else(|| command.options.get("c"))
             .map(|v| v.as_str().unwrap())
-            .unwrap_or(self.default_company.as_str());
+            .unwrap_or(config_guard.default_company.as_str());
         if company.len() == 0 {
             return;
         }
@@ -1710,7 +1737,7 @@ impl BimPlugin {
             || command.flags.contains("p")
         ;
 
-        let database = match self.load_bim_database(company) {
+        let database = match self.load_bim_database(&config_guard, company) {
             Some(db) => db,
             None => {
                 send_channel_message!(
@@ -1782,14 +1809,16 @@ impl BimPlugin {
             Some(i) => i,
         };
 
+        let config_guard = self.config.read().await;
+
         let company = command.options.get("company")
             .or_else(|| command.options.get("c"))
             .map(|v| v.as_str().unwrap())
-            .unwrap_or(self.default_company.as_str());
+            .unwrap_or(config_guard.default_company.as_str());
         if company.len() == 0 {
             return;
         }
-        let company_name = match self.company_to_definition.get(company) {
+        let company_name = match config_guard.company_to_definition.get(company) {
             Some(cd) => cd.name.as_str(),
             None => {
                 send_channel_message!(
@@ -1811,12 +1840,12 @@ impl BimPlugin {
             }
         };
 
-        let database = match self.load_bim_database(company) {
+        let database = match self.load_bim_database(&config_guard, company) {
             Some(db) => db,
             None => HashMap::new(), // work with an empty database
         };
 
-        let ride_conn = match self.connect_ride_db().await {
+        let ride_conn = match self.connect_ride_db(&config_guard).await {
             Ok(c) => c,
             Err(_) => {
                 send_channel_message!(
@@ -1934,6 +1963,8 @@ impl BimPlugin {
             Some(i) => i,
         };
 
+        let config_guard = self.config.read().await;
+
         // forbid anything trailing the command options
         if command.rest.trim().len() > 0 {
             return;
@@ -1960,7 +1991,7 @@ impl BimPlugin {
             .or_else(|| command.options.get("set-line"))
             .map(|cv| cv.as_str().unwrap());
 
-        let is_admin = self.admin_usernames.contains(sender_username);
+        let is_admin = config_guard.admin_usernames.contains(sender_username);
 
         // verify arguments
         if !is_admin {
@@ -2002,7 +2033,7 @@ impl BimPlugin {
         }
 
         if let Some(nc) = new_company {
-            if !self.company_to_definition.contains_key(nc) {
+            if !config_guard.company_to_definition.contains_key(nc) {
                 send_channel_message!(
                     interface,
                     &channel_message.channel.name,
@@ -2015,7 +2046,7 @@ impl BimPlugin {
         }
 
         // find the ride
-        let ride_conn = match self.connect_ride_db().await {
+        let ride_conn = match self.connect_ride_db(&config_guard).await {
             Ok(c) => c,
             Err(_) => {
                 send_channel_message!(
@@ -2072,10 +2103,10 @@ impl BimPlugin {
         let ride_timestamp: DateTime<Local> = ride_row.get(2);
 
         if !is_admin {
-            let max_edit_dur = Duration::seconds(self.max_edit_s);
+            let max_edit_dur = Duration::seconds(config_guard.max_edit_s);
             let now = Local::now();
             if now - ride_timestamp > max_edit_dur {
-                if self.max_edit_s > 0 {
+                if config_guard.max_edit_s > 0 {
                     send_channel_message!(
                         interface,
                         &channel_message.channel.name,
@@ -2162,6 +2193,8 @@ impl BimPlugin {
             Some(i) => i,
         };
 
+        let config_guard = self.config.read().await;
+
         let lookback_range = match Self::lookback_range_from_command(command) {
             Some(lr) => lr,
             None => {
@@ -2174,7 +2207,7 @@ impl BimPlugin {
             },
         };
 
-        let ride_conn = match self.connect_ride_db().await {
+        let ride_conn = match self.connect_ride_db(&config_guard).await {
             Ok(c) => c,
             Err(_) => {
                 send_channel_message!(
@@ -2234,7 +2267,7 @@ impl BimPlugin {
 
             max_rider_count_opt = Some(rider_count);
 
-            if company == self.default_company {
+            if company == config_guard.default_company {
                 default_company_widest_bims.insert(vehicle_number);
             } else {
                 company_to_widest_bims
@@ -2343,6 +2376,71 @@ impl BimPlugin {
             other => format!("{} times", other),
         }
     }
+
+    fn try_get_config(config: serde_json::Value) -> Result<Config, &'static str> {
+        let company_to_definition: HashMap<String, CompanyDefinition> = serde_json::from_value(config["company_to_definition"].clone())
+            .or_msg("failed to decode company definitions")?;
+        let default_company = config["default_company"]
+            .as_str().ok_or("default_company not a string")?
+            .to_owned();
+
+        let manufacturer_mapping = if config["manufacturer_mapping"].is_null() {
+            HashMap::new()
+        } else {
+            let mut mapping = HashMap::new();
+            let mapping_entries = config["manufacturer_mapping"]
+                .entries().ok_or("manufacturer_mapping not an object")?;
+            for (k, v) in mapping_entries {
+                let v_str = v.as_str()
+                    .ok_or("manufacturer_mapping value not a string")?;
+                mapping.insert(k.to_owned(), v_str.to_owned());
+            }
+            mapping
+        };
+
+        let ride_db_conn_string = config["ride_db_conn_string"]
+            .as_str().ok_or("ride_db_conn_string is not a string")?
+            .to_owned();
+
+        let allow_fixed_coupling_combos = if config["allow_fixed_coupling_combos"].is_null() {
+            false
+        } else {
+            config["allow_fixed_coupling_combos"]
+                .as_bool().ok_or("allow_fixed_coupling_combos not a boolean")?
+        };
+
+        let admin_usernames = if config["admin_usernames"].is_null() {
+            HashSet::new()
+        } else {
+            let admin_username_values = config["admin_usernames"]
+                .as_array().ok_or("admin_usernames not a list")?;
+            let mut admin_usernames = HashSet::new();
+            for admin_username_value in admin_username_values {
+                let username = admin_username_value
+                    .as_str().ok_or("admin_usernames entry not a string")?
+                    .to_owned();
+                admin_usernames.insert(username);
+            }
+            admin_usernames
+        };
+
+        let max_edit_s = if config["max_edit_s"].is_null() {
+            0
+        } else {
+            config["max_edit_s"]
+                .as_i64().ok_or("max_edit_s not an i64")?
+        };
+
+        Ok(Config {
+            company_to_definition,
+            default_company,
+            manufacturer_mapping,
+            ride_db_conn_string,
+            allow_fixed_coupling_combos,
+            admin_usernames,
+            max_edit_s,
+        })
+    }
 }
 #[async_trait]
 impl RocketBotPlugin for BimPlugin {
@@ -2352,54 +2450,12 @@ impl RocketBotPlugin for BimPlugin {
             Some(i) => i,
         };
 
-        let company_to_definition: HashMap<String, CompanyDefinition> = serde_json::from_value(config["company_to_definition"].clone())
-            .expect("failed to decode company definitions");
-        let default_company = config["default_company"]
-            .as_str().expect("default_company not a string")
-            .to_owned();
-
-        let manufacturer_mapping = if config["manufacturer_mapping"].is_null() {
-            HashMap::new()
-        } else {
-            let mut mapping = HashMap::new();
-            for (k, v) in config["manufacturer_mapping"].entries().expect("manufacturer_mapping not an object") {
-                let v_str = v.as_str().expect("manufacturer_mapping value not a string");
-                mapping.insert(k.to_owned(), v_str.to_owned());
-            }
-            mapping
-        };
-
-        let ride_db_conn_string = config["ride_db_conn_string"]
-            .as_str().expect("ride_db_conn_string is not a string")
-            .to_owned();
-
-        let allow_fixed_coupling_combos = if config["allow_fixed_coupling_combos"].is_null() {
-            false
-        } else {
-            config["allow_fixed_coupling_combos"]
-                .as_bool().expect("allow_fixed_coupling_combos not a boolean")
-        };
-
-        let admin_usernames = if config["admin_usernames"].is_null() {
-            HashSet::new()
-        } else {
-            config["admin_usernames"]
-                .as_array().expect("admin_usernames not a list")
-                .iter()
-                .map(|e|
-                    e
-                        .as_str().expect("admin_usernames entry not a string")
-                        .to_owned()
-                )
-                .collect()
-        };
-
-        let max_edit_s = if config["max_edit_s"].is_null() {
-            0
-        } else {
-            config["max_edit_s"]
-                .as_i64().expect("max_edit_s not an i64")
-        };
+        let config_object = Self::try_get_config(config)
+            .expect("failed to load configuration");
+        let config_lock = RwLock::new(
+            "BimPlugin::config",
+            config_object,
+        );
 
         my_interface.register_channel_command(
             &CommandDefinitionBuilder::new(
@@ -2556,13 +2612,7 @@ impl RocketBotPlugin for BimPlugin {
 
         Self {
             interface,
-            company_to_definition,
-            default_company,
-            manufacturer_mapping,
-            ride_db_conn_string,
-            allow_fixed_coupling_combos,
-            admin_usernames,
-            max_edit_s,
+            config: config_lock,
         }
     }
 
@@ -2629,6 +2679,20 @@ impl RocketBotPlugin for BimPlugin {
             Some(include_str!("../help/widestbims.md").to_owned())
         } else {
             None
+        }
+    }
+
+    async fn configuration_updated(&self, new_config: serde_json::Value) -> bool {
+        match Self::try_get_config(new_config) {
+            Ok(c) => {
+                let mut config_guard = self.config.write().await;
+                *config_guard = c;
+                true
+            },
+            Err(e) => {
+                error!("failed to reload configuration: {}", e);
+                false
+            },
         }
     }
 }

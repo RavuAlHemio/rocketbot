@@ -130,23 +130,27 @@ fn find_station<'a, 'b>(database: &'a StationDatabase, station_name_lower: &'b s
 }
 
 
-pub struct WienerLinienPlugin {
-    interface: Weak<dyn RocketBotInterface>,
-
+#[derive(Clone, Debug, Eq, Hash, PartialEq)]
+struct Config {
     stop_points_url: String,
     monitor_url_format: String,
     max_stations_age_min: u64,
+}
 
+
+pub struct WienerLinienPlugin {
+    interface: Weak<dyn RocketBotInterface>,
+    config: RwLock<Config>,
     station_database: RwLock<StationDatabase>,
     http_client: Mutex<reqwest::Client>,
 }
 impl WienerLinienPlugin {
-    async fn ensure_station_database_current(&self) {
+    async fn ensure_station_database_current(&self, config: &Config) {
         let mut database_guard = self.station_database
             .write().await;
         if let Some(instant) = database_guard.instant {
             let now = Instant::now();
-            if instant <= now && now - instant <= Duration::from_secs(self.max_stations_age_min * 60) {
+            if instant <= now && now - instant <= Duration::from_secs(config.max_stations_age_min * 60) {
                 // we are up to date
                 return;
             }
@@ -156,18 +160,18 @@ impl WienerLinienPlugin {
 
         let stations = {
             let client_guard = self.http_client.lock().await;
-            let request = client_guard.get(&self.stop_points_url);
+            let request = client_guard.get(&config.stop_points_url);
             let response = match request.send().await {
                 Ok(r) => r,
                 Err(e) => {
-                    error!("failed to send stations update request to {:?}: {}", self.stop_points_url, e);
+                    error!("failed to send stations update request to {:?}: {}", config.stop_points_url, e);
                     return;
                 },
             };
             let response_bytes = match response.bytes().await {
                 Ok(b) => b,
                 Err(e) => {
-                    error!("failed to obtain bytes of stations update to {:?}: {}", self.stop_points_url, e);
+                    error!("failed to obtain bytes of stations update to {:?}: {}", config.stop_points_url, e);
                     return;
                 },
             };
@@ -183,7 +187,7 @@ impl WienerLinienPlugin {
                 let station: StoppingPoint = match record_res {
                     Ok(r) => r,
                     Err(e) => {
-                        error!("failed to obtain a station entry from {:?}: {}", self.stop_points_url, e);
+                        error!("failed to obtain a station entry from {:?}: {}", config.stop_points_url, e);
                         return;
                     },
                 };
@@ -197,8 +201,8 @@ impl WienerLinienPlugin {
         database_guard.stations = stations;
     }
 
-    async fn get_departures(&self, station_id: u32, line_number: Option<&str>) -> Option<Vec<Vec<DepartureLine>>> {
-        let url = self.monitor_url_format
+    async fn get_departures(&self, config: &Config, station_id: u32, line_number: Option<&str>) -> Option<Vec<Vec<DepartureLine>>> {
+        let url = config.monitor_url_format
             .replace("{stopId}", &station_id.to_string());
 
         let client_guard = self.http_client.lock().await;
@@ -300,7 +304,9 @@ impl WienerLinienPlugin {
             Some(i) => i,
         };
 
-        self.ensure_station_database_current().await;
+        let config_guard = self.config.read().await;
+
+        self.ensure_station_database_current(&config_guard).await;
 
         let line = command.options.get("line")
             .or_else(|| command.options.get("l"))
@@ -326,6 +332,7 @@ impl WienerLinienPlugin {
 
         // obtain departure information
         let departures_opt = self.get_departures(
+            &config_guard,
             station.stop_id,
             line.as_deref(),
         ).await;
@@ -391,7 +398,9 @@ impl WienerLinienPlugin {
             Some(i) => i,
         };
 
-        self.ensure_station_database_current().await;
+        let config_guard = self.config.read().await;
+
+        self.ensure_station_database_current(&config_guard).await;
 
         let wanted_station_name_lower = command.rest.trim().to_lowercase();
 
@@ -455,6 +464,23 @@ impl WienerLinienPlugin {
             ).await;
         }
     }
+
+    fn try_get_config(config: serde_json::Value) -> Result<Config, &'static str> {
+        let stop_points_url = config["stop_points_url"]
+            .as_str().ok_or("stop_points_url not a string")?
+            .to_owned();
+        let monitor_url_format = config["monitor_url_format"]
+            .as_str().ok_or("monitor_url_format not a string")?
+            .to_owned();
+        let max_stations_age_min = config["max_stations_age_min"]
+            .as_u64().ok_or("max_stations_age_min not a u64")?;
+
+        Ok(Config {
+            stop_points_url,
+            monitor_url_format,
+            max_stations_age_min,
+        })
+    }
 }
 #[async_trait]
 impl RocketBotPlugin for WienerLinienPlugin {
@@ -464,14 +490,12 @@ impl RocketBotPlugin for WienerLinienPlugin {
             Some(i) => i,
         };
 
-        let stop_points_url = config["stop_points_url"]
-            .as_str().expect("stop_points_url not a string")
-            .to_owned();
-        let monitor_url_format = config["monitor_url_format"]
-            .as_str().expect("monitor_url_format not a string")
-            .to_owned();
-        let max_stations_age_min = config["max_stations_age_min"]
-            .as_u64().expect("max_stations_age_min not a u64");
+        let config_object = Self::try_get_config(config)
+            .expect("failed to load config");
+        let config_lock = RwLock::new(
+            "WienerLinienPlugin::config",
+            config_object,
+        );
 
         let station_database = RwLock::new(
             "WienerLinienPlugin::station_database",
@@ -507,9 +531,7 @@ impl RocketBotPlugin for WienerLinienPlugin {
 
         Self {
             interface,
-            stop_points_url,
-            monitor_url_format,
-            max_stations_age_min,
+            config: config_lock,
             station_database,
             http_client,
         }
@@ -534,6 +556,20 @@ impl RocketBotPlugin for WienerLinienPlugin {
             Some(include_str!("../help/stations.md").to_owned())
         } else {
             None
+        }
+    }
+
+    async fn configuration_updated(&self, new_config: serde_json::Value) -> bool {
+        match Self::try_get_config(new_config) {
+            Ok(c) => {
+                let mut config_guard = self.config.write().await;
+                *config_guard = c;
+                true
+            },
+            Err(e) => {
+                error!("failed to load new config: {}", e);
+                false
+            },
         }
     }
 }

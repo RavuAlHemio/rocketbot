@@ -2,19 +2,20 @@ use std::collections::{HashMap, HashSet};
 use std::sync::Weak;
 
 use async_trait::async_trait;
-use log::debug;
+use log::{debug, error};
 use rand::{Rng, SeedableRng};
 use rand::rngs::StdRng;
 use regex::{Match, Regex};
-use rocketbot_interface::{JsonValueExtensions, send_channel_message};
+use rocketbot_interface::{JsonValueExtensions, ResultExtensions, send_channel_message};
 use rocketbot_interface::commands::{CommandBehaviors, CommandDefinition, CommandInstance};
 use rocketbot_interface::interfaces::{RocketBotInterface, RocketBotPlugin};
 use rocketbot_interface::model::ChannelMessage;
-use rocketbot_interface::sync::Mutex;
+use rocketbot_interface::sync::{Mutex, RwLock};
 use rocketbot_regex_replace::ReplacerRegex;
 use serde_json;
 
 
+#[derive(Clone, Debug)]
 struct Replacement {
     regex: ReplacerRegex,
     skip_chance_percent: u8,
@@ -32,41 +33,44 @@ impl Replacement {
 }
 
 
+#[derive(Clone, Debug)]
+struct Config {
+    catchments: HashMap<String, Vec<Replacement>>,
+}
+
+
 pub struct CatchwordPlugin {
     interface: Weak<dyn RocketBotInterface>,
-    catchments: HashMap<String, Vec<Replacement>>,
+    config: RwLock<Config>,
     rng: Mutex<StdRng>,
 }
-#[async_trait]
-impl RocketBotPlugin for CatchwordPlugin {
-    async fn new(interface: Weak<dyn RocketBotInterface>, config: serde_json::Value) -> CatchwordPlugin {
-        let my_interface = match interface.upgrade() {
-            None => panic!("interface is gone"),
-            Some(i) => i,
-        };
-
+impl CatchwordPlugin {
+    fn try_get_config(config: serde_json::Value) -> Result<Config, &'static str> {
         let mut catchments = HashMap::new();
-
-        for (catch_name, catch_configs) in config["catchments"].entries().expect("catchments is not an object") {
+        let catchment_entries = config["catchments"]
+            .entries().ok_or("catchments is not an object")?;
+        for (catch_name, catch_configs) in catchment_entries {
             let mut replacements = Vec::new();
 
-            for repl_config in catch_configs.members().expect("catchments entry is not an array") {
+            let repl_configs = catch_configs
+                .members().ok_or("catchments entry is not an array")?;
+            for repl_config in repl_configs {
                 let regex_str = repl_config["regex_string"]
-                    .as_str().expect("regex missing or not a string");
+                    .as_str().ok_or("regex missing or not a string")?;
                 let regex = Regex::new(regex_str)
-                    .expect("failed to parse regex");
+                    .or_msg("failed to parse regex")?;
                 let replacement_string = repl_config["replacement_string"]
-                    .as_str().expect("replacement_string missing or not a string")
+                    .as_str().ok_or("replacement_string missing or not a string")?
                     .to_owned();
                 let skip_chance_percent = if repl_config.has_key("skip_chance_percent") {
                     repl_config["skip_chance_percent"]
-                        .as_u8().expect("skip_chance_percent missing or not representable as u8")
+                        .as_u8().ok_or("skip_chance_percent missing or not representable as u8")?
                 } else {
                     0
                 };
 
                 let replacer_regex = ReplacerRegex::compile_new(regex, replacement_string)
-                    .expect("failed to compile replacer regex");
+                    .or_msg("failed to compile replacer regex")?;
 
                 replacements.push(Replacement::new(
                     replacer_regex,
@@ -77,18 +81,42 @@ impl RocketBotPlugin for CatchwordPlugin {
             catchments.insert(catch_name.to_owned(), replacements);
         }
 
-        for catch_name in catchments.keys() {
-            my_interface.register_channel_command(&CommandDefinition::new(
-                catch_name.clone(),
-                "catchword".to_owned(),
-                Some(HashSet::new()),
-                HashMap::new(),
-                0,
-                CommandBehaviors::empty(),
-                format!("{{cpfx}}{} PHRASE", catch_name),
-                "Performs replacements in the PHRASE according to preconfigured rules.".to_owned(),
-            )).await;
+        Ok(Config {
+            catchments,
+        })
+    }
+
+    async fn register_catchword_command<I: RocketBotInterface + ?Sized>(interface: &I, catch_name: &str) {
+        interface.register_channel_command(&CommandDefinition::new(
+            catch_name.to_owned(),
+            "catchword".to_owned(),
+            Some(HashSet::new()),
+            HashMap::new(),
+            0,
+            CommandBehaviors::empty(),
+            format!("{{cpfx}}{} PHRASE", catch_name),
+            "Performs replacements in the PHRASE according to preconfigured rules.".to_owned(),
+        )).await;
+    }
+}
+#[async_trait]
+impl RocketBotPlugin for CatchwordPlugin {
+    async fn new(interface: Weak<dyn RocketBotInterface>, config: serde_json::Value) -> CatchwordPlugin {
+        let my_interface = match interface.upgrade() {
+            None => panic!("interface is gone"),
+            Some(i) => i,
+        };
+
+        let config_object = Self::try_get_config(config)
+            .expect("failed to load config");
+
+        for catch_name in config_object.catchments.keys() {
+            Self::register_catchword_command(my_interface.as_ref(), catch_name).await;
         }
+        let config_lock = RwLock::new(
+            "CatchwordPlugin::config",
+            config_object,
+        );
 
         let rng = Mutex::new(
             "CatchwordPlugin::rng",
@@ -97,7 +125,7 @@ impl RocketBotPlugin for CatchwordPlugin {
 
         CatchwordPlugin {
             interface,
-            catchments,
+            config: config_lock,
             rng,
         }
     }
@@ -112,7 +140,9 @@ impl RocketBotPlugin for CatchwordPlugin {
             Some(i) => i,
         };
 
-        let replacements = match self.catchments.get(&command.name) {
+        let config_guard = self.config.read().await;
+
+        let replacements = match config_guard.catchments.get(&command.name) {
             Some(rs) => rs,
             None => return,
         };
@@ -175,10 +205,43 @@ impl RocketBotPlugin for CatchwordPlugin {
     }
 
     async fn get_command_help(&self, command_name: &str) -> Option<String> {
-        if self.catchments.contains_key(command_name) {
+        let config_guard = self.config.read().await;
+        if config_guard.catchments.contains_key(command_name) {
             Some(include_str!("../help/catchment.md").to_owned())
         } else {
             None
+        }
+    }
+
+    async fn configuration_updated(&self, new_config: serde_json::Value) -> bool {
+        let interface = match self.interface.upgrade() {
+            None => return false,
+            Some(i) => i,
+        };
+
+        match Self::try_get_config(new_config) {
+            Ok(c) => {
+                let mut config_guard = self.config.write().await;
+
+                // unregister existing commands
+                for old_command in config_guard.catchments.keys() {
+                    interface.unregister_channel_command(old_command).await;
+                }
+
+                // store new config
+                *config_guard = c;
+
+                // register new commands
+                for catch_name in config_guard.catchments.keys() {
+                    Self::register_catchword_command(interface.as_ref(), catch_name).await;
+                }
+
+                true
+            },
+            Err(e) => {
+                error!("failed to load new config: {}", e);
+                false
+            },
         }
     }
 }

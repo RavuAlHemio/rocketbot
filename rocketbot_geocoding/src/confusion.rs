@@ -1,6 +1,7 @@
 use rand::{Rng, RngCore, SeedableRng};
 use rand::rngs::StdRng;
 use regex::Regex;
+use rocketbot_interface::ResultExtensions;
 use unicode_normalization::UnicodeNormalization;
 use unicode_normalization::char::is_combining_mark;
 
@@ -32,25 +33,25 @@ pub(crate) struct Confuser {
     confusions: Vec<ConfusionConfig>,
 }
 impl Confuser {
-    pub(crate) fn new(config: &serde_json::Value) -> Self {
+    pub(crate) fn new(config: &serde_json::Value) -> Result<Self, &'static str> {
         let confusions = if config["confusions"].is_null() {
             Vec::new()
         } else {
             let confusion_list = config["confusions"]
-                .as_array().expect("confusions is not an array");
+                .as_array().ok_or("confusions is not an array")?;
             let mut confusions = Vec::with_capacity(confusion_list.len());
             for confusion_config in confusion_list {
                 let detect_regex_str = confusion_config["detect_regex"]
-                    .as_str().expect("detect_regex is not a string");
+                    .as_str().ok_or("detect_regex is not a string")?;
                 let detect_regex = Regex::new(detect_regex_str)
-                    .expect("failed to parse detect_regex");
+                    .or_msg("failed to parse detect_regex")?;
                 let strip_diacritics_first = confusion_config["strip_diacritics_first"]
-                    .as_bool().expect("strip_diacritics_first missing or not a bool");
+                    .as_bool().ok_or("strip_diacritics_first missing or not a bool")?;
                 let replacement = confusion_config["replacement"]
-                    .as_str().expect("replacement missing or not a string")
+                    .as_str().ok_or("replacement missing or not a string")?
                     .to_owned();
                 let probability = confusion_config["probability"]
-                    .as_f64().expect("probability missing or not an f64");
+                    .as_f64().ok_or("probability missing or not an f64")?;
                 confusions.push(ConfusionConfig::new(
                     detect_regex,
                     strip_diacritics_first,
@@ -61,9 +62,9 @@ impl Confuser {
             confusions
         };
 
-        Self {
+        Ok(Self {
             confusions,
-        }
+        })
     }
 
     pub(crate) fn confuse_with_rng<R: RngCore>(&self, place: &str, mut rng: R) -> String {

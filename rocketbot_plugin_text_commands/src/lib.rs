@@ -2,63 +2,86 @@ use std::collections::{HashMap, HashSet};
 use std::sync::{Arc, Weak};
 
 use async_trait::async_trait;
+use log::error;
 use rand::{Rng, SeedableRng};
 use rand::rngs::StdRng;
 use rocketbot_interface::{JsonValueExtensions, send_channel_message};
 use rocketbot_interface::commands::{CommandBehaviors, CommandDefinition, CommandInstance};
 use rocketbot_interface::interfaces::{RocketBotInterface, RocketBotPlugin};
 use rocketbot_interface::model::ChannelMessage;
-use rocketbot_interface::sync::Mutex;
+use rocketbot_interface::sync::{Mutex, RwLock};
 use serde_json;
 
 
-pub struct TextCommandsPlugin {
-    interface: Weak<dyn RocketBotInterface>,
+#[derive(Clone, Debug, Eq, PartialEq)]
+struct Config {
     commands_responses: HashMap<String, Vec<String>>,
     nicknamable_commands_responses: HashMap<String, Vec<String>>,
+}
+
+pub struct TextCommandsPlugin {
+    interface: Weak<dyn RocketBotInterface>,
+    config: RwLock<Config>,
     rng: Mutex<StdRng>,
 }
 impl TextCommandsPlugin {
-    async fn collect_commands(my_interface: Arc<dyn RocketBotInterface>, config_dict: &serde_json::Value, nicknamable: bool) -> HashMap<String, Vec<String>> {
+    fn collect_commands(config_dict: &serde_json::Value) -> Result<HashMap<String, Vec<String>>, &'static str> {
         let mut commands_responses = HashMap::new();
-        for (command, variant) in config_dict.entries().expect("command structure is not a dict") {
-            let responses: Vec<String> = variant.members()
-                .expect("responses structure is not a list")
-                .map(|s|
-                    s.as_str()
-                        .expect("variant is not a string")
-                        .to_owned()
-                )
-                .collect();
+        for (command, variant) in config_dict.entries().ok_or("command structure is not a dict")? {
+            let response_values = variant.members()
+                .ok_or("responses structure is not a list")?;
+            let mut responses: Vec<String> = Vec::new();
+            for response_value in response_values {
+                let response = response_value
+                    .as_str().ok_or("variant is not a string")?
+                    .to_owned();
+                responses.push(response);
+            }
             if responses.len() == 0 {
                 continue;
             }
             let command_name = command.to_owned();
             commands_responses.insert(command_name.clone(), responses);
-
-            let mut random_flags = HashSet::new();
-            if nicknamable {
-                random_flags.insert("r".to_owned());
-                random_flags.insert("random".to_owned());
-            }
-
-            let command = CommandDefinition::new(
-                command_name.clone(),
-                "text_commands".to_owned(),
-                Some(random_flags),
-                HashMap::new(),
-                0,
-                CommandBehaviors::empty(),
-                if nicknamable { format!("{{cpfx}}{} [{{lopfx}}random|NICKNAME]", command_name) } else { format!("{{cpfx}}{}", command_name) },
-                if nicknamable {
-                    "Responds to the given text command, inserting a nickname at a predefined location.".to_owned()
-                } else {
-                    "Responds to the given text command.".to_owned()
-                },
-            );
-            my_interface.register_channel_command(&command).await;
         }
-        commands_responses
+        Ok(commands_responses)
+    }
+
+    async fn register_text_command(interface: Arc<dyn RocketBotInterface>, name: &str, nicknamable: bool) {
+        let mut random_flags = HashSet::new();
+        if nicknamable {
+            random_flags.insert("r".to_owned());
+            random_flags.insert("random".to_owned());
+        }
+
+        let command = CommandDefinition::new(
+            name.to_owned(),
+            "text_commands".to_owned(),
+            Some(random_flags),
+            HashMap::new(),
+            0,
+            CommandBehaviors::empty(),
+            if nicknamable { format!("{{cpfx}}{} [{{lopfx}}random|NICKNAME]", name) } else { format!("{{cpfx}}{}", name) },
+            if nicknamable {
+                "Responds to the given text command, inserting a nickname at a predefined location.".to_owned()
+            } else {
+                "Responds to the given text command.".to_owned()
+            },
+        );
+        interface.register_channel_command(&command).await;
+    }
+
+    fn try_get_config(config: serde_json::Value) -> Result<Config, &'static str> {
+        let commands_responses = Self::collect_commands(
+            &config["commands_responses"],
+        )?;
+        let nicknamable_commands_responses = Self::collect_commands(
+            &config["nicknamable_commands_responses"],
+        )?;
+
+        Ok(Config {
+            commands_responses,
+            nicknamable_commands_responses,
+        })
     }
 }
 #[async_trait]
@@ -69,17 +92,20 @@ impl RocketBotPlugin for TextCommandsPlugin {
             Some(i) => i,
         };
 
-        let commands_responses = TextCommandsPlugin::collect_commands(
-            Arc::clone(&my_interface),
-            &config["commands_responses"],
-            false,
-        ).await;
+        let config_object = Self::try_get_config(config)
+            .expect("failed to load config");
 
-        let nicknamable_commands_responses = TextCommandsPlugin::collect_commands(
-            Arc::clone(&my_interface),
-            &config["nicknamable_commands_responses"],
-            true,
-        ).await;
+        for command in config_object.commands_responses.keys() {
+            Self::register_text_command(Arc::clone(&my_interface), command, false).await;
+        }
+        for command in config_object.nicknamable_commands_responses.keys() {
+            Self::register_text_command(Arc::clone(&my_interface), command, true).await;
+        }
+
+        let config_lock = RwLock::new(
+            "TextCommandsPlugin::config",
+            config_object,
+        );
 
         let rng = Mutex::new(
             "TextCommandsPlugin::rng",
@@ -88,8 +114,7 @@ impl RocketBotPlugin for TextCommandsPlugin {
 
         TextCommandsPlugin {
             interface,
-            commands_responses,
-            nicknamable_commands_responses,
+            config: config_lock,
             rng,
         }
     }
@@ -104,7 +129,9 @@ impl RocketBotPlugin for TextCommandsPlugin {
             Some(i) => i,
         };
 
-        if let Some(responses) = self.commands_responses.get(&command.name) {
+        let config_guard = self.config.read().await;
+
+        if let Some(responses) = config_guard.commands_responses.get(&command.name) {
             if responses.len() == 0 {
                 return;
             }
@@ -120,7 +147,7 @@ impl RocketBotPlugin for TextCommandsPlugin {
                 &channel_message.channel.name,
                 &variant,
             ).await;
-        } else if let Some(nicknamable_responses) = self.nicknamable_commands_responses.get(&command.name) {
+        } else if let Some(nicknamable_responses) = config_guard.nicknamable_commands_responses.get(&command.name) {
             if nicknamable_responses.len() == 0 {
                 return;
             }
@@ -165,12 +192,54 @@ impl RocketBotPlugin for TextCommandsPlugin {
     }
 
     async fn get_command_help(&self, command_name: &str) -> Option<String> {
-        if self.commands_responses.contains_key(command_name) {
+        let config_guard = self.config.read().await;
+        if config_guard.commands_responses.contains_key(command_name) {
             Some(include_str!("../help/textcommand.md").to_owned())
-        } else if self.nicknamable_commands_responses.contains_key(command_name) {
+        } else if config_guard.nicknamable_commands_responses.contains_key(command_name) {
             Some(include_str!("../help/nicktextcommand.md").to_owned())
         } else {
             None
+        }
+    }
+
+    async fn configuration_updated(&self, new_config: serde_json::Value) -> bool {
+        let interface = match self.interface.upgrade() {
+            None => {
+                error!("interface is gone");
+                return false;
+            },
+            Some(i) => i,
+        };
+
+        match Self::try_get_config(new_config) {
+            Ok(c) => {
+                let mut config_guard = self.config.write().await;
+
+                // remove old commands
+                for command_name in config_guard.commands_responses.keys() {
+                    interface.unregister_channel_command(command_name).await;
+                }
+                for command_name in config_guard.nicknamable_commands_responses.keys() {
+                    interface.unregister_channel_command(command_name).await;
+                }
+
+                // replace config
+                *config_guard = c;
+
+                // register new commands
+                for command_name in config_guard.commands_responses.keys() {
+                    Self::register_text_command(Arc::clone(&interface), command_name, false).await;
+                }
+                for command_name in config_guard.nicknamable_commands_responses.keys() {
+                    Self::register_text_command(Arc::clone(&interface), command_name, true).await;
+                }
+
+                true
+            },
+            Err(e) => {
+                error!("failed to load new config: {}", e);
+                false
+            },
         }
     }
 }

@@ -9,13 +9,19 @@ use rocketbot_interface::send_channel_message;
 use rocketbot_interface::commands::{CommandDefinitionBuilder, CommandInstance};
 use rocketbot_interface::interfaces::{RocketBotPlugin, RocketBotInterface};
 use rocketbot_interface::model::ChannelMessage;
+use rocketbot_interface::sync::RwLock;
 use serde_json;
+
+
+struct Config {
+    geocoder: Geocoder,
+    default_location: Option<String>,
+}
 
 
 pub struct TimePlugin {
     interface: Weak<dyn RocketBotInterface>,
-    geocoder: Geocoder,
-    default_location: Option<String>,
+    config: RwLock<Config>,
 }
 impl TimePlugin {
     async fn channel_command_time(&self, channel_message: &ChannelMessage, command: &CommandInstance) {
@@ -24,9 +30,10 @@ impl TimePlugin {
             Some(i) => i,
         };
 
+        let config_guard = self.config.read().await;
         let mut location = command.rest.trim();
         if location.len() == 0 {
-            if let Some(dl) = &self.default_location {
+            if let Some(dl) = &config_guard.default_location {
                 location = dl.as_str();
             } else {
                 return;
@@ -34,7 +41,7 @@ impl TimePlugin {
         }
 
         // geocode the location
-        let loc = match self.geocoder.geocode(location).await {
+        let loc = match config_guard.geocoder.geocode(location).await {
             Ok(l) => l,
             Err(e) => {
                 for (i, provider_error) in e.iter().enumerate() {
@@ -44,7 +51,7 @@ impl TimePlugin {
             }
         };
 
-        let timezone_name = match self.geocoder.reverse_geocode_timezone(loc.coordinates).await {
+        let timezone_name = match config_guard.geocoder.reverse_geocode_timezone(loc.coordinates).await {
             Ok(tz) => tz,
             Err(e) => {
                 for (i, provider_error) in e.iter().enumerate() {
@@ -106,6 +113,28 @@ impl TimePlugin {
             &response,
         ).await;
     }
+
+    async fn try_get_config(config: serde_json::Value) -> Result<Config, &'static str> {
+        let default_location = if config["default_location"].is_null() {
+            None
+        } else {
+            Some(
+                config["default_location"]
+                    .as_str().ok_or("default_location not a string")?
+                    .to_owned()
+            )
+        };
+
+        let geocoder = Geocoder::new(&config["geocoding"]).await?;
+        if !geocoder.supports_timezones().await {
+            return Err("the configured geocoding provider does not support timezones");
+        }
+
+        Ok(Config {
+            default_location,
+            geocoder,
+        })
+    }
 }
 #[async_trait]
 impl RocketBotPlugin for TimePlugin {
@@ -115,16 +144,12 @@ impl RocketBotPlugin for TimePlugin {
             Some(i) => i,
         };
 
-        let default_location = if config["default_location"].is_null() {
-            None
-        } else {
-            Some(config["default_location"].as_str().expect("default_location not a string").to_owned())
-        };
-
-        let geocoder = Geocoder::new(&config["geocoding"]).await;
-        if !geocoder.supports_timezones().await {
-            panic!("the configured geocoding provider does not support timezones");
-        }
+        let config_object = Self::try_get_config(config).await
+            .expect("failed to load config");
+        let config_lock = RwLock::new(
+            "TimePlugin::config",
+            config_object,
+        );
 
         my_interface.register_channel_command(
             &CommandDefinitionBuilder::new(
@@ -140,8 +165,7 @@ impl RocketBotPlugin for TimePlugin {
 
         Self {
             interface,
-            geocoder,
-            default_location,
+            config: config_lock,
         }
     }
 
@@ -160,6 +184,20 @@ impl RocketBotPlugin for TimePlugin {
             Some(include_str!("../help/time.md").to_owned())
         } else {
             None
+        }
+    }
+
+    async fn configuration_updated(&self, new_config: serde_json::Value) -> bool {
+        match Self::try_get_config(new_config).await {
+            Ok(c) => {
+                let mut config_guard = self.config.write().await;
+                *config_guard = c;
+                true
+            },
+            Err(e) => {
+                error!("failed to load new config: {}", e);
+                false
+            },
         }
     }
 }
