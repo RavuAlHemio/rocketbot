@@ -24,6 +24,70 @@ pub struct SockpuppetPlugin {
     config: RwLock<Config>,
 }
 impl SockpuppetPlugin {
+    async fn private_command_chansend(&self, private_message: &PrivateMessage, command: &CommandInstance) {
+        let interface = match self.interface.upgrade() {
+            None => return,
+            Some(i) => i,
+        };
+
+        let config_guard = self.config.read().await;
+
+        if !config_guard.allowed_usernames.contains(&private_message.message.sender.username) {
+            return;
+        }
+
+        let channel_name = command.args[0].clone();
+        let message_body = command.rest.clone();
+
+        let impersonation = if let Some(imp_username_val) = command.options.get("impersonate") {
+            let imp_username = imp_username_val.as_str().expect("--impersonate value is string");
+
+            let channel_users_opt = interface.obtain_users_in_channel(&channel_name).await;
+            if let Some(channel_users) = channel_users_opt {
+                let target_user_opt = channel_users.iter()
+                    .filter(|u| u.username == imp_username)
+                    .nth(0);
+                if let Some(target_user) = target_user_opt {
+                    Some(ImpersonationInfo::new(
+                        format!("/avatar/{}", target_user.username),
+                        target_user.username.clone(),
+                    ))
+                } else {
+                    None
+                }
+            } else {
+                None
+            }
+        } else {
+            None
+        };
+
+        let outgoing_message = OutgoingMessage::new(
+            message_body,
+            impersonation,
+            None,
+        );
+        send_channel_message_advanced!(interface, &channel_name, outgoing_message).await;
+    }
+
+    async fn private_command_reload(&self, private_message: &PrivateMessage, _command: &CommandInstance) {
+        let interface = match self.interface.upgrade() {
+            None => return,
+            Some(i) => i,
+        };
+
+        // make sure to release lock; the config update will need it
+        {
+            let config_guard = self.config.read().await;
+
+            if !config_guard.allowed_usernames.contains(&private_message.message.sender.username) {
+                return;
+            }
+        }
+
+        interface.reload_configuration().await;
+    }
+
     fn try_get_config(config: serde_json::Value) -> Result<Config, &'static str> {
         let mut allowed_usernames = HashSet::new();
         for username_value in config["allowed_usernames"].members().ok_or("allowed_usernames not a list")? {
@@ -77,58 +141,18 @@ impl RocketBotPlugin for SockpuppetPlugin {
     }
 
     async fn private_command(&self, private_message: &PrivateMessage, command: &CommandInstance) {
-        let interface = match self.interface.upgrade() {
-            None => return,
-            Some(i) => i,
-        };
-
-        if command.name != "chansend" {
-            return;
+        if command.name == "chansend" {
+            self.private_command_chansend(private_message, command).await
+        } else if command.name == "reload" {
+            self.private_command_reload(private_message, command).await
         }
-
-        let config_guard = self.config.read().await;
-
-        if !config_guard.allowed_usernames.contains(&private_message.message.sender.username) {
-            return;
-        }
-
-        let channel_name = command.args[0].clone();
-        let message_body = command.rest.clone();
-
-        let impersonation = if let Some(imp_username_val) = command.options.get("impersonate") {
-            let imp_username = imp_username_val.as_str().expect("--impersonate value is string");
-
-            let channel_users_opt = interface.obtain_users_in_channel(&channel_name).await;
-            if let Some(channel_users) = channel_users_opt {
-                let target_user_opt = channel_users.iter()
-                    .filter(|u| u.username == imp_username)
-                    .nth(0);
-                if let Some(target_user) = target_user_opt {
-                    Some(ImpersonationInfo::new(
-                        format!("/avatar/{}", target_user.username),
-                        target_user.username.clone(),
-                    ))
-                } else {
-                    None
-                }
-            } else {
-                None
-            }
-        } else {
-            None
-        };
-
-        let outgoing_message = OutgoingMessage::new(
-            message_body,
-            impersonation,
-            None,
-        );
-        send_channel_message_advanced!(interface, &channel_name, outgoing_message).await;
     }
 
     async fn get_command_help(&self, command_name: &str) -> Option<String> {
         if command_name == "chansend" {
             Some(include_str!("../help/chansend.md").to_owned())
+        } else if command_name == "reload" {
+            Some(include_str!("../help/reload.md").to_owned())
         } else {
             None
         }
