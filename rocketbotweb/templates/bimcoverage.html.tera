@@ -55,7 +55,7 @@
 {% endif %}
 
 {% for vehicle in vehicles -%}
-<a href="bim-detail?company={{ company|urlencode|escape }}&amp;vehicle={{ vehicle.number_str|urlencode|escape }}"><div
+<a href="bim-detail?company={{ company|urlencode|escape }}&amp;vehicle={{ vehicle.full_number_str|urlencode|escape }}"><div
     class="vehicle floaty {% if vehicle.is_active %}active{% else %}inactive{% endif %} {% if vehicle.ride_count > 0 %}ridden{% else %}unridden{% endif %}" data-full-number="{{ vehicle.full_number_str|escape }}"
     {% if vehicle.ride_count > 0 %}style="background-color:{{ mix_color(min_value=0, max_value=max_ride_count, value=vehicle.ride_count, min_color="#eeffee", max_color="#00ff00") }}"{% endif %}
     data-ride-count="{{ vehicle.ride_count }}"
