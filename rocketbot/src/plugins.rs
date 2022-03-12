@@ -7,8 +7,14 @@ use serde_json;
 use crate::config::CONFIG;
 
 
-pub(crate) async fn load_plugins(iface: Weak<dyn RocketBotInterface>) -> Vec<Box<dyn RocketBotPlugin>> {
-    let mut plugins: Vec<Box<dyn RocketBotPlugin>> = Vec::new();
+pub(crate) struct Plugin {
+    pub name: String,
+    pub plugin: Box<dyn RocketBotPlugin>,
+}
+
+
+pub(crate) async fn load_plugins(iface: Weak<dyn RocketBotInterface>) -> Vec<Plugin> {
+    let mut plugins = Vec::new();
 
     {
         let config_guard = CONFIG
@@ -126,7 +132,10 @@ pub(crate) async fn load_plugins(iface: Weak<dyn RocketBotInterface>) -> Vec<Box
                 );
             }
 
-            plugins.push(plugin);
+            plugins.push(Plugin {
+                name: plugin_config.name.clone(),
+                plugin,
+            });
         }
 
         plugins

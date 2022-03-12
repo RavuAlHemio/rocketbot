@@ -155,6 +155,9 @@ pub trait RocketBotInterface : Send + Sync {
 
     /// Remove a behavior flag.
     async fn remove_behavior_flag(&self, key: &str);
+
+    /// Reload the bot's configuration.
+    async fn reload_configuration(&self);
 }
 
 

@@ -38,15 +38,19 @@ pub(crate) struct PluginConfig {
 }
 
 
-pub(crate) async fn load_config() -> Result<(), ConfigError> {
+pub(crate) async fn load_config() -> Result<Config, ConfigError> {
     let config_file_name = CONFIG_FILE_NAME
-        .get().expect("config file name set");
+        .get().expect("config file name not set");
 
     let file = File::open(config_file_name)
         .map_err(|e| ConfigError::OpeningFile(e))?;
     let config: Config = serde_json::from_reader(file)
         .map_err(|e| ConfigError::Loading(e))?;
 
+    Ok(config)
+}
+
+pub(crate) async fn set_config(config: Config) -> Result<(), ConfigError> {
     match CONFIG.get() {
         None => {
             // initial setting

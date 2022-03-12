@@ -15,14 +15,14 @@ use futures_util::{SinkExt, StreamExt};
 use hyper::StatusCode;
 use hyper::client::HttpConnector;
 use hyper_rustls::{HttpsConnector, HttpsConnectorBuilder};
-use log::{debug, error, warn};
+use log::{debug, error, info, warn};
 use rand::{Rng, SeedableRng};
 use rand::distributions::{Distribution, Uniform};
 use rand::rngs::StdRng;
 use rocketbot_interface::{JsonValueExtensions, rocketchat_timestamp_to_datetime};
 use rocketbot_interface::commands::{CommandBehaviors, CommandConfiguration, CommandDefinition};
 use rocketbot_interface::errors::HttpError;
-use rocketbot_interface::interfaces::{RocketBotInterface, RocketBotPlugin};
+use rocketbot_interface::interfaces::RocketBotInterface;
 use rocketbot_interface::message::MessageFragment;
 use rocketbot_interface::model::{
     Channel, ChannelMessage, ChannelTextType, ChannelType, EditInfo, Emoji, Message,
@@ -40,10 +40,10 @@ use tokio_tungstenite::tungstenite::Message as WebSocketMessage;
 use url::Url;
 
 use crate::commands::parse_command;
-use crate::config::CONFIG;
+use crate::config::{CONFIG, load_config, set_config};
 use crate::errors::WebSocketError;
 use crate::jsonage::parse_message;
-use crate::plugins::load_plugins;
+use crate::plugins::{load_plugins, Plugin};
 use crate::string_utils::{Token, tokenize};
 
 
@@ -189,7 +189,7 @@ impl ChannelDatabase {
 struct SharedConnectionState {
     outgoing_sender: mpsc::UnboundedSender<serde_json::Value>,
     exit_notify: Notify,
-    plugins: RwLock<Vec<Box<dyn RocketBotPlugin>>>,
+    plugins: RwLock<Vec<Plugin>>,
     subscribed_channels: RwLock<ChannelDatabase>,
     rng: Mutex<StdRng>,
     command_config: CommandConfiguration,
@@ -210,7 +210,7 @@ impl SharedConnectionState {
     fn new(
         outgoing_sender: mpsc::UnboundedSender<serde_json::Value>,
         exit_notify: Notify,
-        plugins: RwLock<Vec<Box<dyn RocketBotPlugin>>>,
+        plugins: RwLock<Vec<Plugin>>,
         subscribed_channels: RwLock<ChannelDatabase>,
         rng: Mutex<StdRng>,
         command_config: CommandConfiguration,
@@ -451,7 +451,7 @@ impl RocketBotInterface for ServerConnection {
                 .read().await;
             debug!("asking plugins to resolve username {:?}", username);
             for plugin in plugins.iter() {
-                if let Some(un) = plugin.username_resolution(username).await {
+                if let Some(un) = plugin.plugin.username_resolution(username).await {
                     return Some(un);
                 }
             }
@@ -542,12 +542,12 @@ impl RocketBotInterface for ServerConnection {
                 .read().await;
             for loaded_plugin in loaded_plugins.iter() {
                 if let Some(po) = plugin {
-                    let plugin_name = loaded_plugin.plugin_name().await;
+                    let plugin_name = loaded_plugin.plugin.plugin_name().await;
                     if po != plugin_name {
                         continue;
                     }
                 }
-                let mut commands_usages = loaded_plugin.get_additional_channel_commands_usages().await;
+                let mut commands_usages = loaded_plugin.plugin.get_additional_channel_commands_usages().await;
                 ret.extend(commands_usages.drain());
             }
         }
@@ -582,12 +582,12 @@ impl RocketBotInterface for ServerConnection {
                 .read().await;
             for loaded_plugin in loaded_plugins.iter() {
                 if let Some(po) = plugin {
-                    let plugin_name = loaded_plugin.plugin_name().await;
+                    let plugin_name = loaded_plugin.plugin.plugin_name().await;
                     if po != plugin_name {
                         continue;
                     }
                 }
-                let mut commands_usages = loaded_plugin.get_additional_private_message_commands_usages().await;
+                let mut commands_usages = loaded_plugin.plugin.get_additional_private_message_commands_usages().await;
                 ret.extend(commands_usages.drain());
             }
         }
@@ -601,7 +601,7 @@ impl RocketBotInterface for ServerConnection {
                 .read().await;
             debug!("asking plugins to return help for {:?}", name);
             for plugin in plugins.iter() {
-                if let Some(un) = plugin.get_command_help(name).await {
+                if let Some(un) = plugin.plugin.get_command_help(name).await {
                     return Some(un);
                 }
             }
@@ -624,7 +624,7 @@ impl RocketBotInterface for ServerConnection {
         debug!("asking plugins to return their names");
         let mut plugin_names = Vec::new();
         for plugin in plugins.iter() {
-            let name = plugin.plugin_name().await;
+            let name = plugin.plugin.plugin_name().await;
             plugin_names.push(name);
         }
         plugin_names
@@ -818,6 +818,48 @@ impl RocketBotInterface for ServerConnection {
             debug!("behavior flags after removing {:?}: {:?}", key, flags_guard.deref());
         }
     }
+
+    async fn reload_configuration(&self) {
+        // load new plugin configuration
+        let new_config = match load_config().await {
+            Ok(nc) => nc,
+            Err(e) => {
+                error!("error loading new config: {}", e);
+                return;
+            },
+        };
+
+        // verify if it's the same plugins
+        let plugins = self.shared_state.plugins
+            .read().await;
+        if plugins.len() != new_config.plugins.len() {
+            error!("plugins changed! {} currently loaded, {} newly configured", plugins.len(), new_config.plugins.len());
+            return;
+        }
+        for (i, (plugin, new_plugin_config)) in plugins.iter().zip(new_config.plugins.iter()).enumerate() {
+            if plugin.name != new_plugin_config.name {
+                error!("plugins changed! index {}: {:?} loaded, {:?} newly configured", i, plugin.name, new_plugin_config.name);
+                return;
+            }
+        }
+
+        // store config
+        set_config(new_config).await
+            .expect("failed to store config");
+
+        let config_guard = CONFIG
+            .get().expect("no config set")
+            .read().await;
+
+        info!("reloading plugin configuration");
+        for (i, (plugin, plugin_config)) in plugins.iter().zip(config_guard.plugins.iter()).enumerate() {
+            let success = plugin.plugin.configuration_updated(plugin_config.config.clone()).await;
+            if !success {
+                warn!("updating configuration of plugin at index {} ({:?}) failed", i, plugin_config.name);
+            }
+        }
+        info!("plugin configuration reloaded");
+    }
 }
 
 
@@ -952,7 +994,7 @@ pub(crate) async fn connect() -> Arc<ServerConnection> {
     let generic_conn: Arc<dyn RocketBotInterface> = second_conn;
 
     debug!("connect: loading plugins");
-    let mut loaded_plugins: Vec<Box<dyn RocketBotPlugin>> = load_plugins(Arc::downgrade(&generic_conn))
+    let mut loaded_plugins: Vec<Plugin> = load_plugins(Arc::downgrade(&generic_conn))
         .await;
     {
         let mut plugins_guard = state.shared_state.plugins
@@ -1275,7 +1317,7 @@ async fn do_send_channel_message(shared_state: &SharedConnectionState, channel: 
             .read().await;
         debug!("asking plugins to review a message");
         for plugin in plugins.iter() {
-            if !plugin.outgoing_channel_message(&channel, &message).await {
+            if !plugin.plugin.outgoing_channel_message(&channel, &message).await {
                 return;
             }
         }
@@ -1291,7 +1333,7 @@ async fn do_send_private_message(shared_state: &SharedConnectionState, convo: &P
             .read().await;
         debug!("asking plugins to review a message");
         for plugin in plugins.iter() {
-            if !plugin.outgoing_private_message(&convo, &message).await {
+            if !plugin.plugin.outgoing_private_message(&convo, &message).await {
                 return;
             }
         }
@@ -1307,7 +1349,7 @@ async fn do_send_channel_message_with_attachment(shared_state: &SharedConnection
             .read().await;
         debug!("asking plugins to review a message");
         for plugin in plugins.iter() {
-            if !plugin.outgoing_channel_message_with_attachment(&channel, &message).await {
+            if !plugin.plugin.outgoing_channel_message_with_attachment(&channel, &message).await {
                 return;
             }
         }
@@ -1323,7 +1365,7 @@ async fn do_send_private_message_with_attachment(shared_state: &SharedConnection
             .read().await;
         debug!("asking plugins to review a message");
         for plugin in plugins.iter() {
-            if !plugin.outgoing_private_message_with_attachment(&convo, &message).await {
+            if !plugin.plugin.outgoing_private_message_with_attachment(&convo, &message).await {
                 return;
             }
         }
@@ -1773,11 +1815,11 @@ async fn handle_received(body: &serde_json::Value, mut state: &mut ConnectionSta
                     debug!("distributing message among plugins");
                     for plugin in plugins.iter() {
                         if channel_message.message.edit_info.is_some() {
-                            plugin.channel_message_edited(&channel_message).await;
+                            plugin.plugin.channel_message_edited(&channel_message).await;
                         } else if sender_id == my_user_id {
-                            plugin.channel_message_delivered(&channel_message).await;
+                            plugin.plugin.channel_message_delivered(&channel_message).await;
                         } else {
-                            plugin.channel_message(&channel_message).await;
+                            plugin.plugin.channel_message(&channel_message).await;
                         }
                     }
                 }
@@ -1811,11 +1853,11 @@ async fn handle_received(body: &serde_json::Value, mut state: &mut ConnectionSta
                     debug!("distributing message among plugins");
                     for plugin in plugins.iter() {
                         if private_message.message.edit_info.is_some() {
-                            plugin.private_message_edited(&private_message).await;
+                            plugin.plugin.private_message_edited(&private_message).await;
                         } else if sender_id == my_user_id {
-                            plugin.private_message_delivered(&private_message).await;
+                            plugin.plugin.private_message_delivered(&private_message).await;
                         } else {
-                            plugin.private_message(&private_message).await;
+                            plugin.plugin.private_message(&private_message).await;
                         }
                     }
                 }
@@ -1956,7 +1998,7 @@ async fn handle_received(body: &serde_json::Value, mut state: &mut ConnectionSta
                     let plugins = state.shared_state.plugins
                         .read().await;
                     for plugin in plugins.iter() {
-                        plugin.user_typing_status_in_channel(&chan, &u, is_typing).await;
+                        plugin.plugin.user_typing_status_in_channel(&chan, &u, is_typing).await;
                     }
                 } else if let Some(convo) = private_convo {
                     // distribute as private convo
@@ -1964,7 +2006,7 @@ async fn handle_received(body: &serde_json::Value, mut state: &mut ConnectionSta
                     let plugins = state.shared_state.plugins
                         .read().await;
                     for plugin in plugins.iter() {
-                        plugin.user_typing_status_in_private_conversation(&convo, &u, is_typing).await;
+                        plugin.plugin.user_typing_status_in_private_conversation(&convo, &u, is_typing).await;
                     }
                 } else {
                     error!("found {:?} (where {:?} is typing) neither as channel nor as private conversation", convo_id, u.username);
@@ -2019,7 +2061,7 @@ async fn deliver_timer(info: &serde_json::Value, state: &ConnectionState) {
         .read().await;
     debug!("distributing timer {:?} among plugins", info);
     for plugin in plugins.iter() {
-        plugin.timer_elapsed(info).await;
+        plugin.plugin.timer_elapsed(info).await;
     }
 }
 
@@ -2219,7 +2261,7 @@ async fn distribute_channel_message_commands(channel_message: &ChannelMessage, s
             .read().await;
         debug!("asking plugins to execute channel command {:?}", instance.name);
         for plugin in plugins.iter() {
-            plugin.channel_command(&channel_message, &instance).await;
+            plugin.plugin.channel_command(&channel_message, &instance).await;
         }
     }
 }
@@ -2272,7 +2314,7 @@ async fn distribute_private_message_commands(private_message: &PrivateMessage, s
             .read().await;
         debug!("asking plugins to execute private message command {:?}", instance.name);
         for plugin in plugins.iter() {
-            plugin.private_command(&private_message, &instance).await;
+            plugin.plugin.private_command(&private_message, &instance).await;
         }
     }
 }
@@ -2503,7 +2545,7 @@ async fn obtain_users_in_room(state: &ConnectionState, channel: &Channel) {
         debug!("distributing {:?} user list among plugins", channel);
         for plugin in plugins.iter() {
             match channel.channel_type {
-                ChannelType::Channel => plugin.channel_user_list_updated(&channel).await,
+                ChannelType::Channel => plugin.plugin.channel_user_list_updated(&channel).await,
                 _ => {},
             };
         }
