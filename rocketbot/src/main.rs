@@ -13,7 +13,7 @@ use std::time::Duration;
 
 use tokio::time::sleep;
 
-use crate::config::{CONFIG_FILE_NAME, load_config};
+use crate::config::{CONFIG_FILE_NAME, load_config, set_config};
 use crate::errors::GeneralError;
 use crate::socketry::connect;
 
@@ -28,7 +28,8 @@ async fn run() -> Result<(), GeneralError> {
         None => PathBuf::from("config.json"),
     };
     CONFIG_FILE_NAME.set(config_path).expect("config path already set");
-    load_config().await?;
+    let config = load_config().await?;
+    set_config(config).await?;
 
     // connect to the server
     let _connection = connect().await;
