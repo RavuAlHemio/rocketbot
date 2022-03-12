@@ -82,7 +82,7 @@
     <td class="id">{{ ride.id }}</td>
     <td class="rider">{{ ride.rider_username|escape }}</td>
     <td class="timestamp">{{ ride.timestamp|escape }}</td>
-    <td class="line">{% if ride.line is string %}{{ ride.line|escape }}{% endif %}</td>
+    <td class="line">{% if ride.line is string %}<a href="bim-line-detail?company={{ company|urlencode|escape }}&amp;line={{ ride.line|urlencode|escape }}">{{ ride.line|escape }}</a>{% endif %}</td>
     <td class="spec-pos">{{ ride.spec_position }}</td>
     <td class="ride-type {% if ride.as_part_of_fixed_coupling %}coupled{% else %}explicit{% endif %}">{% if ride.as_part_of_fixed_coupling %}coupled{% else %}explicit{% endif %}</td>
     <td class="fixed-coupling-pos">{{ ride.fixed_coupling_position }}</td>

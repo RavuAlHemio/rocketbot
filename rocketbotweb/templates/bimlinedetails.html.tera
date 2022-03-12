@@ -1,0 +1,56 @@
+{% extends "base.html.tera" %}
+
+{% block title %}Public Transport Line{% endblock %}
+
+{% block content %}
+<main class="bim-details">
+
+<h1>Public Transport Line</h1>
+
+<section class="facts-figures">
+<h2>Facts &amp; Figures</h2>
+
+<table class="bim-line">
+  <tr class="company">
+    <th>Company</th>
+    <td>{{ company|escape }}</td>
+  </tr>
+  <tr class="line">
+    <th>Line</th>
+    <td>{{ line|escape }}</td>
+  </tr>
+</table>
+</section>
+
+<section class="rides">
+<h2>Rides</h2>
+
+<table class="bim-vehicle-rides">
+  <tr>
+    <th class="id">ID</th>
+    <th class="rider">rider</th>
+    <th class="timestamp">timestamp</th>
+    <th class="vehicle-number">vehicle</th>
+    <th class="spec-pos">spec position</th>
+    <th class="ride-type">ride type</th>
+    <th class="fixed-coupling-pos">fixed coupling position</th>
+  </tr>
+  {% for ride in rides %}
+  <tr>
+    <td class="id">{{ ride.id }}</td>
+    <td class="rider">{{ ride.rider_username|escape }}</td>
+    <td class="timestamp">{{ ride.timestamp|escape }}</td>
+    <td class="vehicle-number"><a href="bim-detail?company={{ company|urlencode|escape }}&amp;vehicle={{ ride.vehicle_number }}">{{ ride.vehicle_number }}</a></td>
+    <td class="spec-pos">{{ ride.spec_position }}</td>
+    <td class="ride-type {% if ride.as_part_of_fixed_coupling %}coupled{% else %}explicit{% endif %}">{% if ride.as_part_of_fixed_coupling %}coupled{% else %}explicit{% endif %}</td>
+    <td class="fixed-coupling-pos">{{ ride.fixed_coupling_position }}</td>
+  </tr>
+  {% endfor %}
+</table>
+
+<p><em>spec position:</em> position of the vehicle within the specification after the <code>!bimride</code> command</p>
+<p><em>fixed coupling position:</em> position of the vehicle within the fixed coupling as stored in the vehicle database</p>
+</section>
+
+</main>
+{% endblock %}

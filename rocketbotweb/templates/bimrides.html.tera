@@ -25,7 +25,7 @@
     {% endif %}
     <td class="vehicle-numbers">{% for vn in ride.vehicle_numbers %}{% if not loop.first %}+{% endif %}<a href="bim-detail?company={{ ride.company|urlencode|escape }}&amp;vehicle={{ vn }}">{{ vn }}</a>{% endfor %}</td>
     <td class="ride-count">{{ ride.ride_count }}</td>
-    <td class="line">{% set line = ride.last_line %}{% if line is string %}{{ line|escape }}{% endif %}</td>
+    <td class="line">{% set line = ride.last_line %}{% if line is string %}<a href="bim-line-detail?company={{ ride.company|urlencode|escape }}&amp;line={{ line|urlencode|escape }}">{{ line|escape }}</a>{% endif %}</td>
   </tr>
   {% endfor %}
 </table>

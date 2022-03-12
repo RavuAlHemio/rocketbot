@@ -1,5 +1,5 @@
-{% macro output_ride(ride, css_class) %}
+{% macro output_ride(company, ride, css_class) %}
 <td class="{{ css_class|escape }}-rider">{% if ride is defined and ride is object %}{{ ride.rider|maybe_escape }}{% endif %}</td>
 <td class="{{ css_class|escape }}-timestamp">{% if ride is defined and ride is object %}{{ ride.timestamp|maybe_escape }}{% endif %}</td>
-<td class="{{ css_class|escape }}-line">{% if ride is defined and ride is object %}{{ ride.line|maybe_escape }}{% endif %}</td>
+<td class="{{ css_class|escape }}-line">{% if ride is defined and ride is object %}{% set line = ride.line %}{% if line is string %}<a href="bim-line-detail?company={{ company|urlencode|escape }}&amp;line={{ line|urlencode|escape }}">{{ line|escape }}</a>{% endif %}{% endif %}</td>
 {% endmacro %}

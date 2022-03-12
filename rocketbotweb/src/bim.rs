@@ -1103,6 +1103,80 @@ pub(crate) async fn handle_bim_detail(request: &Request<Body>) -> Result<Respons
     render("bimdetails.html.tera", &query_pairs, ctx).await
 }
 
+pub(crate) async fn handle_bim_line_detail(request: &Request<Body>) -> Result<Response<Body>, Infallible> {
+    if request.method() != Method::GET {
+        return return_405().await;
+    }
+
+    let query_pairs = get_query_pairs(request);
+
+    let company = match query_pairs.get("company") {
+        Some(c) => c.to_owned().into_owned(),
+        None => return return_400("missing parameter \"company\"").await,
+    };
+    let line = match query_pairs.get("line") {
+        Some(l) => l,
+        None => return return_400("missing parameter \"line\"").await,
+    };
+
+    let db_conn = match connect_to_db().await {
+        Some(c) => c,
+        None => return return_500(),
+    };
+
+    // query rides
+    let ride_rows_res = db_conn.query(
+        "
+            SELECT
+                rav.id, rav.rider_username, rav.\"timestamp\", rav.vehicle_number,
+                rav.spec_position, rav.as_part_of_fixed_coupling, rav.fixed_coupling_position
+            FROM bim.rides_and_vehicles rav
+            WHERE rav.company = $1
+            AND rav.line = $2
+            ORDER BY rav.\"timestamp\" DESC, rav.id
+        ",
+        &[&company, &line],
+    ).await;
+    let ride_rows = match ride_rows_res {
+        Ok(rs) => rs,
+        Err(e) => {
+            error!("error querying vehicle rides: {}", e);
+            return return_500();
+        },
+    };
+
+    let mut rides_json = Vec::new();
+    for ride_row in ride_rows {
+        let ride_id: i64 = ride_row.get(0);
+        let rider_username: String = ride_row.get(1);
+        let timestamp: DateTime<Local> = ride_row.get(2);
+        let vehicle_number_i64: i64 = ride_row.get(3);
+        let spec_position: i64 = ride_row.get(4);
+        let as_part_of_fixed_coupling: bool = ride_row.get(5);
+        let fixed_coupling_position: i64 = ride_row.get(6);
+
+        let vehicle_number: VehicleNumber = vehicle_number_i64.try_into()
+            .expect("invalid vehicle number");
+
+        rides_json.push(serde_json::json!({
+            "id": ride_id,
+            "rider_username": rider_username,
+            "timestamp": timestamp.format("%Y-%m-%d %H:%M:%S").to_string(),
+            "vehicle_number": vehicle_number,
+            "spec_position": spec_position,
+            "as_part_of_fixed_coupling": as_part_of_fixed_coupling,
+            "fixed_coupling_position": fixed_coupling_position,
+        }));
+    }
+
+    let mut ctx = tera::Context::new();
+    ctx.insert("company", &company);
+    ctx.insert("line", &line);
+    ctx.insert("rides", &rides_json);
+
+    render("bimlinedetails.html.tera", &query_pairs, ctx).await
+}
+
 pub(crate) async fn handle_wide_bims(request: &Request<Body>) -> Result<Response<Body>, Infallible> {
     if request.method() != Method::GET {
         return return_405().await;

@@ -56,8 +56,8 @@
             <td class="rider ride-count" data-rider-name="{{ rider|escape }}">{{ profile.rider_to_ride_count|get(key=rider, default="") }}</td>
           {% endfor %}
         {% else %}
-          {{ macros::output_ride(ride=profile.first_ride, css_class="first") }}
-          {{ macros::output_ride(ride=profile.latest_ride, css_class="last") }}
+          {{ macros::output_ride(company=company, ride=profile.first_ride, css_class="first") }}
+          {{ macros::output_ride(company=company, ride=profile.latest_ride, css_class="last") }}
         {% endif %}
       </tr>
     {% endfor %}
