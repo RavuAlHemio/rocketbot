@@ -37,19 +37,28 @@ static SEPARATOR_REGEX: Lazy<Regex> = Lazy::new(|| Regex::new(
 
 #[derive(Clone, Debug, Deserialize, Eq, PartialEq, Serialize)]
 struct DiceConfig {
-    pub channels: HashSet<String>,
-    pub obstinate_answers: Vec<String>,
-    pub yes_no_answers: Vec<String>,
-    pub decision_splitters: Vec<String>,
-    pub special_decision_answers: Vec<String>,
-    pub cooldown_answers: Vec<String>,
-    pub special_decision_answer_percent: u8,
-    pub max_roll_count: usize,
-    pub max_dice_count: usize,
-    pub max_side_count: u64,
-    pub cooldown_per_command_usage: u64,
-    pub cooldown_upper_boundary: Option<u64>,
-    pub default_wikipedia_language: String,
+    #[serde(default)] pub channels: HashSet<String>,
+    #[serde(default)] pub obstinate_answers: Vec<String>,
+    #[serde(default)] pub yes_no_answers: Vec<String>,
+    #[serde(default)] pub decision_splitters: Vec<String>,
+    #[serde(default)] pub special_decision_answers: Vec<String>,
+    #[serde(default)] pub cooldown_answers: Vec<String>,
+    #[serde(default = "DiceConfig::default_special_decision_answer_percent")] pub special_decision_answer_percent: u8,
+    #[serde(default = "DiceConfig::default_max_roll_count")] pub max_roll_count: usize,
+    #[serde(default = "DiceConfig::default_max_dice_count")] pub max_dice_count: usize,
+    #[serde(default = "DiceConfig::default_max_side_count")] pub max_side_count: u64,
+    #[serde(default = "DiceConfig::default_cooldown_per_command_usage")] pub cooldown_per_command_usage: u64,
+    #[serde(default = "DiceConfig::default_cooldown_upper_boundary")] pub cooldown_upper_boundary: Option<u64>,
+    #[serde(default = "DiceConfig::default_default_wikipedia_language")] pub default_wikipedia_language: String,
+}
+impl DiceConfig {
+    fn default_special_decision_answer_percent() -> u8 { 10 }
+    fn default_max_roll_count() -> usize { 16 }
+    fn default_max_dice_count() -> usize { 1024 }
+    fn default_max_side_count() -> u64 { 1048576 }
+    fn default_cooldown_per_command_usage() -> u64 { 4 }
+    fn default_cooldown_upper_boundary() -> Option<u64> { Some(32) }
+    fn default_default_wikipedia_language() -> String { "en".to_owned() }
 }
 
 
