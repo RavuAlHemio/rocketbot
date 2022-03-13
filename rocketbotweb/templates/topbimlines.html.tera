@@ -1,0 +1,28 @@
+{% extends "base.html.tera" %}
+
+{% block title %}Most-Ridden Public Transport Lines{% endblock %}
+
+{% block content %}
+<main class="top-bim-lines">
+
+<h1>Most-Ridden Public Transport Lines</h1>
+
+{% for count_lines in counts_lines %}
+<section class="count" data-count="{{ count_lines.ride_count }}">
+
+<h2>{{ count_lines.ride_count }} {% if count_lines.ride_count == 1 %}ride{% else %}rides{% endif %}</h2>
+
+<p>
+    {%- for line in count_lines.lines -%}
+        {%- if not loop.first %}, {% endif -%}
+        <a href="bim-line-detail?company={{ line.company|urlencode|escape }}&amp;line={{ line.line|urlencode|escape }}"><span class="company">{{ line.company|escape }}</span>/<span class="line">{{ line.line|escape }}</span></a>
+    {%- endfor -%}
+</p>
+
+</section>
+
+{% endfor %}
+
+</main>
+
+{% endblock %}

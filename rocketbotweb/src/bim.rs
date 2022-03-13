@@ -1519,3 +1519,88 @@ pub(crate) async fn handle_bim_coverage_field(request: &Request<Body>) -> Result
         },
     }
 }
+
+pub(crate) async fn handle_top_bim_lines(request: &Request<Body>) -> Result<Response<Body>, Infallible> {
+    if request.method() != Method::GET {
+        return return_405().await;
+    }
+
+    let query_pairs = get_query_pairs(request);
+
+    let top_count: i64 = query_pairs.get("count")
+        .map(|c_str| c_str.parse().ok())
+        .flatten()
+        .filter(|tc| *tc > 0)
+        .unwrap_or(10);
+
+    let db_conn = match connect_to_db().await {
+        Some(c) => c,
+        None => return return_500(),
+    };
+
+    // query rides
+    let ride_rows_res = db_conn.query(
+        "
+            WITH ride_counts(company, line, ride_count) AS (
+                SELECT r.company, r.line, COUNT(*)
+                FROM bim.rides r
+                WHERE r.line IS NOT NULL
+                GROUP BY r.company, r.line
+            ),
+            top_ride_counts(ride_count) AS (
+                SELECT DISTINCT ride_count
+                FROM ride_counts
+                ORDER BY ride_count DESC
+                LIMIT $1
+            )
+            SELECT rc.company, rc.line, CAST(rc.ride_count AS bigint)
+            FROM ride_counts rc
+            WHERE EXISTS (
+                SELECT 1
+                FROM top_ride_counts trc
+                WHERE trc.ride_count = rc.ride_count
+            )
+        ",
+        &[&top_count],
+    ).await;
+    let ride_rows = match ride_rows_res {
+        Ok(rs) => rs,
+        Err(e) => {
+            error!("error querying vehicle rides: {}", e);
+            return return_500();
+        },
+    };
+
+    let mut count_to_lines: BTreeMap<i64, BTreeSet<(String, String)>> = BTreeMap::new();
+    for ride_row in ride_rows {
+        let company: String = ride_row.get(0);
+        let line: String = ride_row.get(1);
+        let ride_count: i64 = ride_row.get(2);
+
+        count_to_lines
+            .entry(ride_count)
+            .or_insert_with(|| BTreeSet::new())
+            .insert((company, line));
+    }
+
+    let counts_lines: Vec<serde_json::Value> = count_to_lines.iter()
+        .rev()
+        .map(|(count, vehicles)| {
+            let lines_json: Vec<serde_json::Value> = vehicles.iter()
+                .map(|(c, l)| serde_json::json!({
+                    "company": c,
+                    "line": l,
+                }))
+                .collect();
+            serde_json::json!({
+                "ride_count": *count,
+                "lines": lines_json,
+            })
+        })
+        .collect();
+
+    let mut ctx = tera::Context::new();
+    ctx.insert("counts_lines", &counts_lines);
+
+    render("topbimlines.html.tera", &query_pairs, ctx).await
+}

@@ -18,6 +18,7 @@
     <a href="bim-vehicles">Vehicles</a> (<a href="bim-vehicles?per-rider=1">per rider</a>),
     <a href="top-bims">Most-Ridden Vehicles</a>,
     <a href="wide-bims">Wide-Audience Vehicles</a>,
+    <a href="top-bim-lines">Most-Ridden Lines</a>,
     <a href="bim-coverage">Coverage</a>
   </li>
 </ul>
