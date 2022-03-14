@@ -18,9 +18,7 @@ use async_trait::async_trait;
 use chrono::{DateTime, TimeZone, Utc};
 use log::error;
 use num_bigint::BigUint;
-use rocketbot_interface::{
-    add_thousands_separators, JsonValueExtensions, ResultExtensions, send_channel_message,
-};
+use rocketbot_interface::{JsonValueExtensions, ResultExtensions, send_channel_message};
 use rocketbot_interface::commands::{
     CommandBehaviors, CommandDefinition, CommandDefinitionBuilder, CommandInstance,
 };
@@ -31,7 +29,7 @@ use serde_json;
 use toml;
 
 use crate::ast::{AstNode, SimplificationState};
-use crate::factor::PrimeCache;
+use crate::factor::{PrimeCache, PrimeFactors};
 use crate::grimoire::{get_canonical_constants, get_canonical_functions};
 use crate::parsing::parse_full_expression;
 use crate::units::{StoredUnitDatabase, UnitDatabase};
@@ -212,71 +210,51 @@ impl CalcPlugin {
             },
         };
 
-        // handle pathological cases with grace
-        let two = BigUint::from(2u8);
-        if number < two {
-            send_channel_message!(
-                interface,
-                &channel_message.channel.name,
-                &format!("\\[{0} = {0}\\]", number),
+        let factors = if let Some(pat) = PrimeFactors::pathological(&number) {
+            // handle pathological cases with grace
+            pat
+        } else {
+            let prime_cache_mutex = Arc::clone(&self.prime_cache);
+            let factors_tr = run_stoppable_task_timeout(
+                Duration::from_secs_f64(config_guard.timeout_seconds),
+                move |stopper| {
+                    let mut prime_cache_guard = prime_cache_mutex.blocking_lock();
+                    prime_cache_guard.factor_caching(&number, &stopper)
+                },
             ).await;
-            return;
-        }
 
-        let prime_cache_mutex = Arc::clone(&self.prime_cache);
-        let factors_tr = run_stoppable_task_timeout(
-            Duration::from_secs_f64(config_guard.timeout_seconds),
-            move |stopper| {
-                let mut prime_cache_guard = prime_cache_mutex.blocking_lock();
-                prime_cache_guard.factor_caching(&number, &stopper)
-            },
-        ).await;
-
-        let factors = match factors_tr {
-            StoppableTaskResult::ChannelBreakdown => {
-                error!("factoring result channel broke down");
-                return;
-            },
-            StoppableTaskResult::TaskPanicked(e) => {
-                error!("factoring task panicked: {}", e);
-                return;
-            },
-            StoppableTaskResult::Timeout => {
-                send_channel_message!(
-                    interface,
-                    &channel_message.channel.name,
-                    "That took too long.",
-                ).await;
-                return;
-            },
-            StoppableTaskResult::Success(fs) => fs,
+            match factors_tr {
+                StoppableTaskResult::ChannelBreakdown => {
+                    error!("factoring result channel broke down");
+                    return;
+                },
+                StoppableTaskResult::TaskPanicked(e) => {
+                    error!("factoring task panicked: {}", e);
+                    return;
+                },
+                StoppableTaskResult::Timeout => {
+                    send_channel_message!(
+                        interface,
+                        &channel_message.channel.name,
+                        "That took too long.",
+                    ).await;
+                    return;
+                },
+                StoppableTaskResult::Success(fs) => fs,
+            }
         };
 
-        let mut factor_strings = Vec::with_capacity(factors.len());
-        let one = BigUint::from(1u8);
-        let nine = BigUint::from(9u8);
-        for (factor, power) in &factors {
-            let mut factor_string = factor.to_string();
+        let output_as_code = command.flags.contains("c") || command.flags.contains("code");
+        let factor_string = if output_as_code {
+            factors.to_code_string()
+        } else {
+            factors.to_tex_string()
+        };
 
-            add_thousands_separators(&mut factor_string, "\\,");
-
-            if power == &one {
-                factor_strings.push(factor_string);
-            } else if power <= &nine {
-                factor_strings.push(format!("{}^{}", factor_string, power));
-            } else {
-                let mut power_string = power.to_string();
-                add_thousands_separators(&mut power_string, "\\,");
-
-                factor_strings.push(format!("{}^{}{}{}", factor_string, '{', power_string, '}'));
-            }
-        }
-
-        let factor_string = factor_strings.join("\\cdot ");
         send_channel_message!(
             interface,
             &channel_message.channel.name,
-            &format!("\\[{}\\]", factor_string),
+            &factor_string,
         ).await;
     }
 
@@ -374,6 +352,7 @@ impl RocketBotPlugin for CalcPlugin {
                 "{cpfx}factor NUMBER".to_owned(),
                 "Attempts to subdivide the given natural number into its prime factors.".to_owned(),
             )
+                .add_flag("c").add_flag("code")
                 .build()
         ).await;
 

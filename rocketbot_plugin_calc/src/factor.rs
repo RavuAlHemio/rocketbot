@@ -2,13 +2,141 @@ use std::collections::{BTreeMap, BTreeSet};
 use std::sync::atomic::{AtomicBool, Ordering};
 
 use num_bigint::BigUint;
+use rocketbot_interface::add_thousands_separators;
 
 
 #[derive(Clone, Debug, Eq, Hash, PartialEq)]
 pub(crate) enum FactorResult {
-    Factored(BTreeMap<BigUint, BigUint>),
+    Factored(PrimeFactors),
     Stuck(BigUint),
     Halted,
+}
+impl FactorResult {
+    #[allow(unused)]
+    pub fn as_factored(&self) -> Option<&PrimeFactors> {
+        match self {
+            Self::Factored(pf) => Some(pf),
+            _ => None,
+        }
+    }
+
+    #[allow(unused)]
+    pub fn as_stuck(&self) -> Option<&BigUint> {
+        match self {
+            Self::Stuck(s) => Some(s),
+            _ => None,
+        }
+    }
+
+    #[allow(unused)]
+    pub fn is_halted(&self) -> bool {
+        matches!(self, Self::Halted)
+    }
+}
+
+
+#[derive(Clone, Debug, Default, Eq, Hash, PartialEq)]
+pub(crate) struct PrimeFactors {
+    factor_to_power: BTreeMap<BigUint, BigUint>,
+}
+impl PrimeFactors {
+    #[allow(unused)] pub fn factor_to_power(&self) -> &BTreeMap<BigUint, BigUint> { &self.factor_to_power }
+
+    pub fn pathological(value: &BigUint) -> Option<PrimeFactors> {
+        let two = BigUint::from(2u8);
+        if value < &two {
+            let mut factor_to_power = BTreeMap::new();
+            factor_to_power.insert(value.clone(), BigUint::from(1u8));
+            Some(Self {
+                factor_to_power,
+            })
+        } else {
+            None
+        }
+    }
+
+    fn format_wrap_biguint(
+        number: &BigUint,
+        start: &str, end: &str, start_multidigit: &str, end_multidigit: &str,
+        thousands_separator: &str,
+    ) -> String {
+        let mut string = number.to_string();
+        add_thousands_separators(&mut string, thousands_separator);
+        let is_multidigit = string.chars().count() > 1;
+        if is_multidigit {
+            format!("{}{}{}", start_multidigit, string, end_multidigit)
+        } else {
+            format!("{}{}{}", start, string, end)
+        }
+    }
+
+    pub fn to_formatted_string(
+        &self,
+        start_wrapper: &str,
+        end_wrapper: &str,
+        start_base: &str,
+        end_base: &str,
+        start_base_multidigit: &str,
+        end_base_multidigit: &str,
+        base_thousands_separator: &str,
+        start_power: &str,
+        end_power: &str,
+        start_power_multidigit: &str,
+        end_power_multidigit: &str,
+        power_thousands_separator: &str,
+        power_operator: &str,
+        multiply_operator: &str,
+    ) -> String {
+        let one = BigUint::from(1u8);
+        let power_strings: Vec<String> = self.factor_to_power
+            .iter()
+            .map(|(base, power)| {
+                let base_wrapped = Self::format_wrap_biguint(
+                    base,
+                    start_base, end_base,
+                    start_base_multidigit, end_base_multidigit,
+                    base_thousands_separator,
+                );
+                if power == &one {
+                    base_wrapped
+                } else {
+                    let power_wrapped = Self::format_wrap_biguint(
+                        power,
+                        start_power, end_power,
+                        start_power_multidigit, end_power_multidigit,
+                        power_thousands_separator,
+                    );
+                    format!("{}{}{}", base_wrapped, power_operator, power_wrapped)
+                }
+            })
+            .collect();
+        let all_powers_string = power_strings.join(multiply_operator);
+        format!("{}{}{}", start_wrapper, all_powers_string, end_wrapper)
+    }
+
+    pub fn to_tex_string(&self) -> String {
+        self.to_formatted_string(
+            "\\[", "\\]",
+            "", "", "", "",
+            "\\,",
+            "", "", "{", "}",
+            "\\,",
+            "^",
+            "\\cdot ",
+        )
+    }
+
+    pub fn to_code_string(&self) -> String {
+        self.to_formatted_string(
+            "`", "`",
+            "", "", "", "",
+            "",
+            "", "", "", "",
+            "",
+            "**",
+            " * ",
+        )
+    }
 }
 
 
@@ -90,12 +218,12 @@ impl PrimeCache {
 
         // fast-path
         if number <= &one {
-            return FactorResult::Factored(BTreeMap::new());
+            return FactorResult::Factored(PrimeFactors::default());
         }
         if self.is_prime(number).unwrap_or(false) {
             let mut quick_ret = BTreeMap::new();
             quick_ret.insert(number.clone(), one);
-            return FactorResult::Factored(quick_ret);
+            return FactorResult::Factored(PrimeFactors { factor_to_power: quick_ret });
         }
 
         let mut ret = BTreeMap::new();
@@ -123,11 +251,11 @@ impl PrimeCache {
             FactorResult::Stuck(cur_number)
         } else {
             // provably prime!
-            FactorResult::Factored(ret)
+            FactorResult::Factored(PrimeFactors { factor_to_power: ret })
         }
     }
 
-    pub fn factor_caching(&mut self, number: &BigUint, stopper: &AtomicBool) -> Option<BTreeMap<BigUint, BigUint>> {
+    pub fn factor_caching(&mut self, number: &BigUint, stopper: &AtomicBool) -> Option<PrimeFactors> {
         loop {
             // try the standard factoring
             let stuck_number = match self.try_factor(number, stopper) {
@@ -204,13 +332,13 @@ mod tests {
         let too_large_factors = BigUint::from(too_large_factors_u32);
         let factors = cache.factor_caching(&too_large_factors, &stopper).unwrap();
 
-        fn factor_is(factors: &BTreeMap<BigUint, BigUint>, factor: u64, expected_power: u64) {
+        fn factor_is(factors: &PrimeFactors, factor: u64, expected_power: u64) {
             let factor_bu = BigUint::from(factor);
             let expected_power_bu = BigUint::from(expected_power);
-            assert_eq!(factors.get(&factor_bu), Some(&expected_power_bu));
+            assert_eq!(factors.factor_to_power().get(&factor_bu), Some(&expected_power_bu));
         }
 
-        assert_eq!(factors.len(), 4);
+        assert_eq!(factors.factor_to_power().len(), 4);
         factor_is(&factors, 2, 1);
         factor_is(&factors, 3, 1);
         factor_is(&factors, 109, 1);
@@ -218,5 +346,27 @@ mod tests {
 
         // extended by 101, 103, 107, 109, 113, 127
         assert_eq!(cache.primes().len(), 31);
+    }
+
+    #[test]
+    fn test_factor_formatting() {
+        let mut cache = PrimeCache::new();
+        let stopper = AtomicBool::new(false);
+        cache.extend_to(&BigUint::from(100u8), &stopper);
+
+        // 2**11 * 3 * 11**2 * 13 == 9_664_512
+        // contains:
+        // 1. single-digit base with multi-digit power
+        // 2. single-digit base with power 1
+        // 3. multi-digit base with single-digit power
+        // 4. multi-digit base with power 1
+        // and should therefore be a good test
+        let number = BigUint::from(9_664_512u32);
+        let number_factoring_result = cache.try_factor(&number, &stopper);
+        let number_factors = number_factoring_result
+            .as_factored().unwrap();
+
+        assert_eq!(number_factors.to_tex_string(), "\\[2^{11}\\cdot 3\\cdot 11^2\\cdot 13\\]");
+        assert_eq!(number_factors.to_code_string(), "`2**11 * 3 * 11**2 * 13`");
     }
 }
