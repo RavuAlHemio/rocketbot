@@ -245,6 +245,9 @@ pub fn phrase_join<S: AsRef<str>>(items: &[S], general_glue: &str, final_glue: &
 }
 
 pub fn add_thousands_separators(separate_me: &mut String, separator: &str) {
+    if separator.len() == 0 {
+        return;
+    }
     if separate_me.len() < 4 {
         return;
     }
