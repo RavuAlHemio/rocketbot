@@ -1,4 +1,4 @@
-{% extends "base.html.tera" %}
+{% extends "base.html" %}
 
 {% block title %}Public Transport Coverage{% endblock %}
 
@@ -37,27 +37,27 @@
 
 <label><input id="bim-coverage-hide-inactive" type="checkbox" /> hide inactive vehicles</label>
 
-{% for company, type_to_block_to_vehicles in company_to_type_to_block_to_vehicles %}
+{% for (company, type_to_block_to_vehicles) in company_to_type_to_block_to_vehicles %}
 <section class="company">
 <h2>{{ company|escape }}</h2>
 
-{% for type, block_to_vehicles in type_to_block_to_vehicles %}
+{% for (type, block_to_vehicles) in type_to_block_to_vehicles %}
 <section class="vehicle-type">
 {% if type != "" %}<h3 class="vehicle-type">{{ type|escape }}</h3>{% endif %}
 
-{% for blk, vehicles in block_to_vehicles %}
+{% for (blk, vehicles) in block_to_vehicles %}
 <section class="vehicle-block">
 
 <div class="vehicles-box">
 
-{% if blk|length > 0 %}
+{% if blk.len() > 0 %}
 <div class="block-name floaty">{{ blk|escape }}</div>
 {% endif %}
 
 {% for vehicle in vehicles -%}
 <a href="bim-detail?company={{ company|urlencode|escape }}&amp;vehicle={{ vehicle.full_number_str|urlencode|escape }}"><div
     class="vehicle floaty {% if vehicle.is_active %}active{% else %}inactive{% endif %} {% if vehicle.ride_count > 0 %}ridden{% else %}unridden{% endif %}" data-full-number="{{ vehicle.full_number_str|escape }}"
-    {% if vehicle.ride_count > 0 %}style="background-color:{{ mix_color(min_value=0, max_value=max_ride_count, value=vehicle.ride_count, min_color="#eeffee", max_color="#00ff00") }}"{% endif %}
+    {% if vehicle.has_ride() %}style="background-color:{{ vehicle.ride_count|mix_color(0, max_ride_count, "#eeffee", "#00ff00") }}"{% endif %}
     data-ride-count="{{ vehicle.ride_count }}"
 >{{ vehicle.number_str|escape }}</div></a>
 {%- endfor %}

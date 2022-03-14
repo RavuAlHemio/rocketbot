@@ -1,0 +1,43 @@
+{% extends "base.html" %}
+
+{% block title %}Thanks{% endblock %}
+
+{% block content %}
+<main>
+
+<h1>Thanks</h1>
+
+<table class="thanks-grid">
+  <tr>
+    <td class="top-left-spacer" colspan="2" rowspan="2"></td>
+    <td class="recipient-header" colspan="{{ users.len() }}"><div class="alibi-div">recipient</div></td>
+  </tr>
+  <tr>
+    {% for (r, recipient) in users.iter().enumerate() %}
+      <td class="recipient" data-recipient-index="{{ r }}"><div class="alibi-div">{{ recipient|escape }}</div></td>
+    {% endfor %}
+    <td class="recipient sum donor-sum" data-recipient-index="{{ users.len() }}"><div class="alibi-div">&#931; given</div></td>
+  </tr>
+  {% for (d, donor) in users.iter().enumerate() %}
+    <tr>
+      {% if d == 0 %}
+        <td class="donor-header" rowspan="{{ users.len() + 1 }}"><div class="alibi-div">donor</div></td>
+      {% endif %}
+      <td class="donor" data-donor-index="{{ d }}"><div class="alibi-div">{{ donor|escape }}</div></td>
+      {% for (r, recipient) in users.iter().enumerate() %}
+        <td class="thanks-count{% if d == r %} self{% endif %} {% if thanks_from_to[d][r]|unref|unref != 0 %}non{% endif %}zero" data-donor-index="{{ d }}" data-recipient-index="{{ r }}"><div class="alibi-div">{{ thanks_from_to[d][r] }}</div></td>
+      {% endfor %}
+      <td class="thanks-count sum donor-sum {% if total_given[d]|unref != 0 %}non{% endif %}zero" data-donor-index="{{ d }}" data-recipient-index="{{ users.len() }}"><div class="alibi-div">{{ total_given[d] }}</div></td>
+    </tr>
+  {% endfor %}
+  <tr>
+    <td class="donor sum recipient-sum" data-donor-index="{{ users.len() }}"><div class="alibi-div">&#931; received</div></td>
+    {% for (r, recipient) in users.iter().enumerate() %}
+      <td class="thanks-count sum recipient-sum {% if total_received[r]|unref != 0 %}non{% endif %}zero" data-donor-index="{{ users.len() }}" data-recipient-index="{{ r }}"><div class="alibi-div">{{ total_received[r] }}</div></td>
+    {% endfor %}
+    <td class="thanks-count sum donor-sum recipient-sum total-sum {% if total_count != 0 %}non{% endif %}zero" data-donor-index="{{ users.len() }}" data-recipient-index="{{ users.len() }}"><div class="alibi-div">{{ total_count }}</div></td>
+  </tr>
+</table>
+
+</main>
+{% endblock %}

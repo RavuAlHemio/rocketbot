@@ -1,4 +1,4 @@
-{% extends "base.html.tera" %}
+{% extends "base.html" %}
 
 {% block title %}Most-Ridden Public Transport Lines{% endblock %}
 
@@ -14,7 +14,7 @@
 
 <p>
     {%- for line in count_lines.lines -%}
-        {%- if not loop.first %}, {% endif -%}
+        {%- if !loop.first %}, {% endif -%}
         <a href="bim-line-detail?company={{ line.company|urlencode|escape }}&amp;line={{ line.line|urlencode|escape }}"><span class="company">{{ line.company|escape }}</span>/<span class="line">{{ line.line|escape }}</span></a>
     {%- endfor -%}
 </p>

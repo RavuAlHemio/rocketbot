@@ -3,8 +3,10 @@ use std::convert::{Infallible, TryInto};
 use std::fs::File;
 use std::borrow::Cow;
 
+use askama::Template;
 use chrono::{Datelike, DateTime, Local, NaiveDate, Weekday, TimeZone};
 use hyper::{Body, Method, Request, Response};
+use indexmap::IndexSet;
 use log::{error, warn};
 use png;
 use serde::{Deserialize, Serialize, Serializer};
@@ -12,9 +14,10 @@ use serde::ser::SerializeStruct;
 use tokio_postgres::types::ToSql;
 
 use crate::{
-    connect_to_db, get_bot_config, get_query_pairs, render_json, render_template, return_400,
-    return_405, return_500,
+    connect_to_db, get_bot_config, get_query_pairs, render_response, return_400, return_405,
+    return_500,
 };
+use crate::templating::filters;
 
 
 type VehicleNumber = u32;
@@ -80,6 +83,36 @@ impl TypeStats {
             rider_ridden_counts,
         }
     }
+
+    pub fn active_per_total(&self) -> f64 { (self.active_count as f64) / (self.total_count as f64) }
+    pub fn ridden_per_total(&self) -> f64 { (self.ridden_count as f64) / (self.total_count as f64) }
+    pub fn ridden_per_active(&self) -> Option<f64> {
+        if self.active_count > 0 {
+            Some((self.ridden_count as f64) / (self.active_count as f64))
+        } else {
+            None
+        }
+    }
+    pub fn rider_ridden_per_total(&self) -> BTreeMap<String, f64> {
+        let mut ret = BTreeMap::new();
+        for (rider, &rider_ridden_count) in &self.rider_ridden_counts {
+            let rpt = (rider_ridden_count as f64) / (self.total_count as f64);
+            ret.insert(rider.clone(), rpt);
+        }
+        ret
+    }
+    pub fn rider_ridden_per_active(&self) -> BTreeMap<String, Option<f64>> {
+        let mut ret = BTreeMap::new();
+        for (rider, &rider_ridden_count) in &self.rider_ridden_counts {
+            let rpa = if self.active_count > 0 {
+                Some((rider_ridden_count as f64) / (self.active_count as f64))
+            } else {
+                None
+            };
+            ret.insert(rider.clone(), rpa);
+        }
+        ret
+    }
 }
 impl Serialize for TypeStats {
     fn serialize<S: Serializer>(&self, serializer: S) -> Result<S::Ok, S::Error> {
@@ -90,36 +123,11 @@ impl Serialize for TypeStats {
         state.serialize_field("active_count", &self.active_count)?;
         state.serialize_field("ridden_count", &self.ridden_count)?;
         state.serialize_field("rider_ridden_counts", &self.rider_ridden_counts)?;
-
-        let active_per_total = (self.active_count as f64) / (self.total_count as f64);
-        state.serialize_field("active_per_total", &active_per_total)?;
-
-        let ridden_per_total = (self.ridden_count as f64) / (self.total_count as f64);
-        state.serialize_field("ridden_per_total", &ridden_per_total)?;
-
-        let ridden_per_active = if self.active_count > 0 {
-            Some((self.ridden_count as f64) / (self.active_count as f64))
-        } else {
-            None
-        };
-        state.serialize_field("ridden_per_active", &ridden_per_active)?;
-
-        let mut rider_ridden_per_total = BTreeMap::new();
-        let mut rider_ridden_per_active = BTreeMap::new();
-        for (rider, &rider_ridden_count) in &self.rider_ridden_counts {
-            let rpt = (rider_ridden_count as f64) / (self.total_count as f64);
-            rider_ridden_per_total.insert(rider.clone(), rpt);
-
-            let rpa = if self.active_count > 0 {
-                Some((rider_ridden_count as f64) / (self.active_count as f64))
-            } else {
-                None
-            };
-            rider_ridden_per_active.insert(rider.clone(), rpa);
-        }
-        state.serialize_field("rider_ridden_per_total", &rider_ridden_per_total)?;
-        state.serialize_field("rider_ridden_per_active", &rider_ridden_per_active)?;
-
+        state.serialize_field("active_per_total", &self.active_per_total())?;
+        state.serialize_field("ridden_per_total", &self.ridden_per_total())?;
+        state.serialize_field("ridden_per_active", &self.ridden_per_active())?;
+        state.serialize_field("rider_ridden_per_total", &self.rider_ridden_per_total())?;
+        state.serialize_field("rider_ridden_per_active", &self.rider_ridden_per_active())?;
         state.end()
     }
 }
@@ -215,6 +223,192 @@ struct VehicleProfile {
     pub first_ride: Option<RideInfo>,
     pub latest_ride: Option<RideInfo>,
 }
+impl VehicleProfile {
+    pub fn ride_count_text_for_rider(&self, rider: &str) -> String {
+        if let Some(r) = self.rider_to_ride_count.get(rider) {
+            r.to_string()
+        } else {
+            String::new()
+        }
+    }
+}
+
+
+#[derive(Clone, Debug, Deserialize, Eq, Hash, PartialEq, Serialize, Template)]
+#[template(path = "bimrides.html")]
+struct BimRidesTemplate {
+    pub has_any_vehicle_type: bool,
+    pub rides: Vec<RideRow>,
+}
+
+#[derive(Clone, Debug, Eq, Hash, PartialEq, Serialize, Template)]
+#[template(path = "bimtypes.html")]
+struct BimTypesTemplate {
+    pub company_to_stats: BTreeMap<String, CompanyTypeStats>,
+    pub all_riders: BTreeSet<String>,
+}
+
+#[derive(Clone, Debug, Eq, Hash, PartialEq, Serialize, Template)]
+#[template(path = "bimvehicles.html")]
+struct BimVehicleTemplate {
+    pub per_rider: bool,
+    pub all_riders: BTreeSet<String>,
+    pub company_to_vehicle_to_profile: BTreeMap<String, BTreeMap<VehicleNumber, VehicleProfile>>,
+}
+
+#[derive(Clone, Debug, Eq, Hash, PartialEq, Serialize, Template)]
+#[template(path = "bimcoverage.html")]
+struct BimCoverageTemplate {
+    pub max_ride_count: i64,
+    pub company_to_type_to_block_to_vehicles: BTreeMap<String, BTreeMap<String, BTreeMap<String, Vec<CoverageVehiclePart>>>>,
+}
+
+#[derive(Clone, Debug, Eq, Hash, PartialEq, Serialize)]
+struct CoverageVehiclePart {
+    pub block_str: String,
+    pub number_str: String,
+    pub type_code: String,
+    pub full_number_str: String,
+    pub is_active: bool,
+    pub ride_count: i64,
+}
+impl CoverageVehiclePart {
+    pub fn has_ride(&self) -> bool {
+        self.ride_count > 0
+    }
+}
+
+#[derive(Clone, Debug, Eq, Hash, PartialEq, Serialize, Template)]
+#[template(path = "bimcoverage-pickrider.html")]
+struct BimCoveragePickRiderTemplate {
+    pub riders: BTreeSet<String>,
+}
+
+#[derive(Clone, Debug, Eq, PartialEq, Serialize, Template)]
+#[template(path = "bimdetails.html")]
+struct BimDetailsTemplate {
+    pub company: String,
+    pub vehicle: Option<VehicleDetailsPart>,
+    pub rides: Vec<BimDetailsRidePart>,
+}
+
+#[derive(Clone, Debug, Eq, PartialEq, Serialize)]
+struct VehicleDetailsPart {
+    pub number: VehicleNumber,
+    pub type_code: String,
+    pub in_service_since: Option<String>,
+    pub out_of_service_since: Option<String>,
+    pub manufacturer: Option<String>,
+    pub other_data: BTreeMap<String, String>,
+    pub fixed_coupling: IndexSet<VehicleNumber>,
+}
+impl VehicleDetailsPart {
+    pub fn try_from_json(vehicle: &serde_json::Value) -> Option<Self> {
+        let number = vehicle["number"].as_u64()?.try_into().ok()?;
+        let type_code = vehicle["type_code"].as_str()?.to_owned();
+        let in_service_since = vehicle["in_service_since"]
+            .as_str().map(|s| s.to_owned());
+        let out_of_service_since = vehicle["out_of_service_since"]
+            .as_str().map(|s| s.to_owned());
+        let manufacturer = vehicle["manufacturer"]
+            .as_str().map(|s| s.to_owned());
+
+        let other_data_map = vehicle["other_data"]
+            .as_object()?;
+        let mut other_data = BTreeMap::new();
+        for (key, val_val) in other_data_map {
+            let val = val_val.as_str()?;
+            other_data.insert(key.clone(), val.to_owned());
+        }
+
+        let fixed_coupling_array = vehicle["fixed_coupling"]
+            .as_array()?;
+        let mut fixed_coupling = IndexSet::new();
+        for fc_value in fixed_coupling_array {
+            let fc_number = fc_value.as_u64()?.try_into().ok()?;
+            fixed_coupling.insert(fc_number);
+        }
+
+        Some(Self {
+            number,
+            type_code,
+            in_service_since,
+            out_of_service_since,
+            manufacturer,
+            other_data,
+            fixed_coupling,
+        })
+    }
+}
+
+#[derive(Clone, Debug, Eq, PartialEq, Serialize, Template)]
+#[template(path = "bimlinedetails.html")]
+struct BimLineDetailsTemplate {
+    pub company: String,
+    pub line: String,
+    pub rides: Vec<BimDetailsRidePart>,
+}
+
+#[derive(Clone, Debug, Eq, Hash, PartialEq, Serialize)]
+struct BimDetailsRidePart {
+    pub id: i64,
+    pub rider_username: String,
+    pub timestamp: String,
+    pub line: Option<String>,
+    pub vehicle_number: VehicleNumber,
+    pub spec_position: i64,
+    pub as_part_of_fixed_coupling: bool,
+    pub fixed_coupling_position: i64,
+}
+
+#[derive(Clone, Debug, Eq, Hash, PartialEq, Serialize, Template)]
+#[template(path = "widebims.html")]
+struct WideBimsTemplate {
+    pub rider_count: i64,
+    pub rider_groups: Vec<RiderGroupPart>,
+}
+
+#[derive(Clone, Debug, Eq, Hash, PartialEq, Serialize)]
+struct RiderGroupPart {
+    pub riders: BTreeSet<String>,
+    pub vehicles: BTreeSet<VehiclePart>,
+}
+
+#[derive(Clone, Debug, Eq, Hash, Ord, PartialEq, PartialOrd, Serialize)]
+struct VehiclePart {
+    pub company: String,
+    pub number: VehicleNumber,
+}
+
+#[derive(Clone, Debug, Eq, Hash, PartialEq, Serialize, Template)]
+#[template(path = "topbims.html")]
+struct TopBimsTemplate {
+    pub counts_vehicles: Vec<CountVehiclesPart>,
+}
+
+#[derive(Clone, Debug, Eq, Hash, PartialEq, Serialize)]
+struct CountVehiclesPart {
+    pub ride_count: i64,
+    pub vehicles: BTreeSet<VehiclePart>,
+}
+
+#[derive(Clone, Debug, Eq, Hash, PartialEq, Serialize, Template)]
+#[template(path = "topbimlines.html")]
+struct TopBimLinesTemplate {
+    pub counts_lines: Vec<CountLinesPart>,
+}
+
+#[derive(Clone, Debug, Eq, Hash, PartialEq, Serialize)]
+struct CountLinesPart {
+    pub ride_count: i64,
+    pub lines: BTreeSet<LinePart>,
+}
+
+#[derive(Clone, Debug, Eq, Hash, Ord, PartialEq, PartialOrd, Serialize)]
+struct LinePart {
+    pub company: String,
+    pub line: String,
+}
 
 
 #[inline]
@@ -222,22 +416,6 @@ fn cow_empty_to_none<'a, 'b>(val: Option<&'a Cow<'b, str>>) -> Option<&'a Cow<'b
     match val {
         None => None,
         Some(x) => if x.len() > 0 { Some(x) } else { None },
-    }
-}
-
-
-async fn render(template: &str, query_pairs: &HashMap<Cow<'_, str>, Cow<'_, str>>, ctx: tera::Context) -> Result<Response<Body>, Infallible> {
-    if query_pairs.get("format").map(|f| f == "json").unwrap_or(false) {
-        let ctx_json = ctx.into_json();
-        match render_json(&ctx_json, 200, vec![]).await {
-            Some(r) => Ok(r),
-            None => return_500(),
-        }
-    } else {
-        match render_template(template, &ctx, 200, vec![]).await {
-            Some(r) => Ok(r),
-            None => return_500(),
-        }
     }
 }
 
@@ -405,11 +583,11 @@ async fn obtain_vehicle_extract() -> VehicleDatabaseExtract {
 
 
 pub(crate) async fn handle_bim_rides(request: &Request<Body>) -> Result<Response<Body>, Infallible> {
-    if request.method() != Method::GET {
-        return return_405().await;
-    }
-
     let query_pairs = get_query_pairs(request);
+
+    if request.method() != Method::GET {
+        return return_405(&query_pairs).await;
+    }
 
     let db_conn = match connect_to_db().await {
         Some(c) => c,
@@ -478,31 +656,23 @@ pub(crate) async fn handle_bim_rides(request: &Request<Body>) -> Result<Response
 
     rides.sort_unstable_by_key(|entry| entry.sort_key());
 
-    if query_pairs.get("format").map(|f| f == "json").unwrap_or(false) {
-        let rides_json = serde_json::to_value(rides)
-            .expect("failed to JSON-serialize rides");
-        match render_json(&rides_json, 200, vec![]).await {
-            Some(r) => Ok(r),
-            None => return_500(),
-        }
-    } else {
-        let mut ctx = tera::Context::new();
-        ctx.insert("has_any_vehicle_type", &has_any_vehicle_type);
-        ctx.insert("rides", &rides);
-        match render_template("bimrides.html.tera", &ctx, 200, vec![]).await {
-            Some(r) => Ok(r),
-            None => return_500(),
-        }
+    let template = BimRidesTemplate {
+        has_any_vehicle_type,
+        rides,
+    };
+    match render_response(&template, &query_pairs, 200, vec![]).await {
+        Some(r) => Ok(r),
+        None => return_500(),
     }
 }
 
 
 pub(crate) async fn handle_bim_types(request: &Request<Body>) -> Result<Response<Body>, Infallible> {
-    if request.method() != Method::GET {
-        return return_405().await;
-    }
-
     let query_pairs = get_query_pairs(request);
+
+    if request.method() != Method::GET {
+        return return_405(&query_pairs).await;
+    }
 
     let db_conn = match connect_to_db().await {
         Some(c) => c,
@@ -600,20 +770,24 @@ pub(crate) async fn handle_bim_types(request: &Request<Body>) -> Result<Response
         company_to_stats.insert(company.clone(), stats);
     }
 
-    let mut ctx = tera::Context::new();
-    ctx.insert("company_to_stats", &company_to_stats);
-    ctx.insert("all_riders", &all_riders);
-
-    render("bimtypes.html.tera", &query_pairs, ctx).await
+    let template = BimTypesTemplate {
+        company_to_stats,
+        all_riders,
+    };
+    match render_response(&template, &query_pairs, 200, vec![]).await {
+        Some(r) => Ok(r),
+        None => return_500(),
+    }
 }
 
 
 pub(crate) async fn handle_bim_vehicles(request: &Request<Body>) -> Result<Response<Body>, Infallible> {
+    let query_pairs = get_query_pairs(request);
+
     if request.method() != Method::GET {
-        return return_405().await;
+        return return_405(&query_pairs).await;
     }
 
-    let query_pairs = get_query_pairs(request);
     let per_rider = query_pairs.get("per-rider").map(|pr| pr == "1").unwrap_or(false);
 
     let db_conn = match connect_to_db().await {
@@ -812,20 +986,23 @@ pub(crate) async fn handle_bim_vehicles(request: &Request<Body>) -> Result<Respo
         }
     }
 
-    let mut ctx = tera::Context::new();
-    ctx.insert("all_riders", &all_riders);
-    ctx.insert("company_to_vehicle_to_profile", &company_to_vehicle_to_profile);
-    ctx.insert("per_rider", &per_rider);
-
-    render("bimvehicles.html.tera", &query_pairs, ctx).await
+    let template = BimVehicleTemplate {
+        per_rider,
+        all_riders,
+        company_to_vehicle_to_profile,
+    };
+    match render_response(&template, &query_pairs, 200, vec![]).await {
+        Some(r) => Ok(r),
+        None => return_500(),
+    }
 }
 
 pub(crate) async fn handle_bim_coverage(request: &Request<Body>) -> Result<Response<Body>, Infallible> {
-    if request.method() != Method::GET {
-        return return_405().await;
-    }
-
     let query_pairs = get_query_pairs(request);
+
+    if request.method() != Method::GET {
+        return return_405(&query_pairs).await;
+    }
 
     let merge_types = query_pairs.get("merge-types")
         .map(|qp| qp == "1")
@@ -836,7 +1013,7 @@ pub(crate) async fn handle_bim_coverage(request: &Request<Body>) -> Result<Respo
         None => return return_500(),
     };
 
-    let (template, ctx) = if let Some(rider_name) = query_pairs.get("rider") {
+    if let Some(rider_name) = query_pairs.get("rider") {
         let mut conditions: Vec<String> = Vec::with_capacity(2);
         let mut params: Vec<&(dyn ToSql + Sync)> = Vec::with_capacity(2);
 
@@ -849,14 +1026,14 @@ pub(crate) async fn handle_bim_coverage(request: &Request<Body>) -> Result<Respo
         if let Some(date_str) = cow_empty_to_none(query_pairs.get("to-date")) {
             let input_date = match NaiveDate::parse_from_str(date_str, "%Y-%m-%d") {
                 Ok(d) => d,
-                Err(_) => return return_400("invalid date format, expected yyyy-mm-dd").await,
+                Err(_) => return return_400("invalid date format, expected yyyy-mm-dd", &query_pairs).await,
             };
 
             // end of that day is actually next day at 04:00
             let naive_timestamp = input_date.succ().and_hms(4, 0, 0);
             local_timestamp = match Local.from_local_datetime(&naive_timestamp).earliest() {
                 Some(lts) => lts,
-                None => return return_400("failed to convert timestamp to local time").await,
+                None => return return_400("failed to convert timestamp to local time", &query_pairs).await,
             };
 
             conditions.push(format!("\"timestamp\" <= ${}", conditions.len() + 1));
@@ -928,7 +1105,7 @@ pub(crate) async fn handle_bim_coverage(request: &Request<Body>) -> Result<Respo
             .collect();
 
         // run through vehicles
-        let mut company_to_type_to_block_to_vehicles: BTreeMap<String, BTreeMap<String, BTreeMap<String, Vec<serde_json::Value>>>> = BTreeMap::new();
+        let mut company_to_type_to_block_to_vehicles: BTreeMap<String, BTreeMap<String, BTreeMap<String, Vec<CoverageVehiclePart>>>> = BTreeMap::new();
         let no_ridden_vehicles = HashMap::new();
         for (company, number_to_vehicle) in &company_to_bim_database {
             let ridden_vehicles = company_to_vehicles_ridden.get(company)
@@ -936,12 +1113,12 @@ pub(crate) async fn handle_bim_coverage(request: &Request<Body>) -> Result<Respo
 
             let mut type_to_block_to_vehicles = BTreeMap::new();
             for (&number, vehicle) in number_to_vehicle {
-                let full_number_string = number.to_string();
-                let (block_str, number_str) = if full_number_string.len() >= 6 {
+                let full_number_str = number.to_string();
+                let (block_str, number_str) = if full_number_str.len() >= 6 {
                     // assume first four digits are block
-                    full_number_string.split_at(4)
+                    full_number_str.split_at(4)
                 } else {
-                    ("", full_number_string.as_str())
+                    ("", full_number_str.as_str())
                 };
 
                 let type_code = match vehicle["type_code"].as_str() {
@@ -960,14 +1137,14 @@ pub(crate) async fn handle_bim_coverage(request: &Request<Body>) -> Result<Respo
                 let is_active = from_known && !to_known;
                 let ride_count = ridden_vehicles.get(&number).map(|c| *c).unwrap_or(0);
 
-                let vehicle_data = serde_json::json!({
-                    "block_str": block_str,
-                    "number_str": number_str,
-                    "type_code": type_code,
-                    "full_number_str": full_number_string,
-                    "is_active": is_active,
-                    "ride_count": ride_count,
-                });
+                let vehicle_data = CoverageVehiclePart {
+                    block_str: block_str.to_owned(),
+                    number_str: number_str.to_owned(),
+                    type_code,
+                    full_number_str: full_number_str.clone(),
+                    is_active,
+                    ride_count,
+                };
                 type_to_block_to_vehicles
                     .entry(type_code_key)
                     .or_insert_with(|| BTreeMap::new())
@@ -979,11 +1156,14 @@ pub(crate) async fn handle_bim_coverage(request: &Request<Body>) -> Result<Respo
             company_to_type_to_block_to_vehicles.insert(company.clone(), type_to_block_to_vehicles);
         }
 
-        let mut ctx = tera::Context::new();
-        ctx.insert("company_to_type_to_block_to_vehicles", &company_to_type_to_block_to_vehicles);
-        ctx.insert("max_ride_count", &max_ride_count);
-
-        ("bimcoverage.html.tera", ctx)
+        let template = BimCoverageTemplate {
+            max_ride_count,
+            company_to_type_to_block_to_vehicles,
+        };
+        match render_response(&template, &query_pairs, 200, vec![]).await {
+            Some(r) => Ok(r),
+            None => return_500(),
+        }
     } else {
         // list riders
         let riders_res = db_conn.query("SELECT DISTINCT rider_username FROM bim.rides", &[]).await;
@@ -1000,33 +1180,34 @@ pub(crate) async fn handle_bim_coverage(request: &Request<Body>) -> Result<Respo
             riders.insert(rider);
         }
 
-        let mut ctx = tera::Context::new();
-        ctx.insert("riders", &riders);
-
-        ("bimcoverage-pickrider.html.tera", ctx)
-    };
-
-    render(template, &query_pairs, ctx).await
+        let template = BimCoveragePickRiderTemplate {
+            riders,
+        };
+        match render_response(&template, &query_pairs, 200, vec![]).await {
+            Some(r) => Ok(r),
+            None => return_500(),
+        }
+    }
 }
 
 pub(crate) async fn handle_bim_detail(request: &Request<Body>) -> Result<Response<Body>, Infallible> {
-    if request.method() != Method::GET {
-        return return_405().await;
-    }
-
     let query_pairs = get_query_pairs(request);
+
+    if request.method() != Method::GET {
+        return return_405(&query_pairs).await;
+    }
 
     let company = match query_pairs.get("company") {
         Some(c) => c.to_owned().into_owned(),
-        None => return return_400("missing parameter \"company\"").await,
+        None => return return_400("missing parameter \"company\"", &query_pairs).await,
     };
     let vehicle_number_str = match query_pairs.get("vehicle") {
         Some(v) => v,
-        None => return return_400("missing parameter \"vehicle\"").await,
+        None => return return_400("missing parameter \"vehicle\"", &query_pairs).await,
     };
     let vehicle_number: VehicleNumber = match vehicle_number_str.parse() {
         Ok(vn) => vn,
-        Err(_) => return return_400("invalid parameter value for \"vehicle\"").await,
+        Err(_) => return return_400("invalid parameter value for \"vehicle\"", &query_pairs).await,
     };
 
     let company_to_bim_database_opts = match obtain_company_to_bim_database().await {
@@ -1040,7 +1221,7 @@ pub(crate) async fn handle_bim_detail(request: &Request<Body>) -> Result<Respons
 
     let company_bim_database = match company_to_bim_database.get(&company) {
         Some(bd) => bd,
-        None => return return_400("unknown company").await,
+        None => return return_400("unknown company", &query_pairs).await,
     };
 
     let db_conn = match connect_to_db().await {
@@ -1048,17 +1229,17 @@ pub(crate) async fn handle_bim_detail(request: &Request<Body>) -> Result<Respons
         None => return return_500(),
     };
 
-    let vehicle_json = company_bim_database.get(&vehicle_number)
-        .map(|v| v.clone())
-        .unwrap_or(serde_json::Value::Null);
+    let vehicle = company_bim_database.get(&vehicle_number)
+        .map(|v| VehicleDetailsPart::try_from_json(v))
+        .flatten();
 
     // query rides
     let vehicle_number_i64: i64 = vehicle_number.into();
     let ride_rows_res = db_conn.query(
         "
             SELECT
-                rav.id, rav.rider_username, rav.\"timestamp\", rav.line, rav.spec_position,
-                rav.as_part_of_fixed_coupling, rav.fixed_coupling_position
+                rav.id, rav.rider_username, rav.\"timestamp\", rav.line, rav.vehicle_number,
+                rav.spec_position, rav.as_part_of_fixed_coupling, rav.fixed_coupling_position
             FROM bim.rides_and_vehicles rav
             WHERE rav.company = $1
             AND rav.vehicle_number = $2
@@ -1074,49 +1255,62 @@ pub(crate) async fn handle_bim_detail(request: &Request<Body>) -> Result<Respons
         },
     };
 
-    let mut rides_json = Vec::new();
+    let mut rides = Vec::new();
     for ride_row in ride_rows {
         let ride_id: i64 = ride_row.get(0);
         let rider_username: String = ride_row.get(1);
         let timestamp: DateTime<Local> = ride_row.get(2);
         let line: Option<String> = ride_row.get(3);
-        let spec_position: i64 = ride_row.get(4);
-        let as_part_of_fixed_coupling: bool = ride_row.get(5);
-        let fixed_coupling_position: i64 = ride_row.get(6);
+        let vehicle_number_i64: i64 = ride_row.get(4);
+        let spec_position: i64 = ride_row.get(5);
+        let as_part_of_fixed_coupling: bool = ride_row.get(6);
+        let fixed_coupling_position: i64 = ride_row.get(7);
 
-        rides_json.push(serde_json::json!({
-            "id": ride_id,
-            "rider_username": rider_username,
-            "timestamp": timestamp.format("%Y-%m-%d %H:%M:%S").to_string(),
-            "line": line,
-            "spec_position": spec_position,
-            "as_part_of_fixed_coupling": as_part_of_fixed_coupling,
-            "fixed_coupling_position": fixed_coupling_position,
-        }));
+        let vehicle_number: VehicleNumber = match vehicle_number_i64.try_into() {
+            Ok(vn) => vn,
+            Err(e) => {
+                error!("cannot convert vehicle number {}: {}", vehicle_number_i64, e);
+                continue;
+            },
+        };
+
+        rides.push(BimDetailsRidePart {
+            id: ride_id,
+            rider_username,
+            timestamp: timestamp.format("%Y-%m-%d %H:%M:%S").to_string(),
+            line,
+            vehicle_number,
+            spec_position,
+            as_part_of_fixed_coupling,
+            fixed_coupling_position,
+        });
     }
 
-    let mut ctx = tera::Context::new();
-    ctx.insert("company", &company);
-    ctx.insert("vehicle", &vehicle_json);
-    ctx.insert("rides", &rides_json);
-
-    render("bimdetails.html.tera", &query_pairs, ctx).await
+    let template = BimDetailsTemplate {
+        company,
+        vehicle,
+        rides,
+    };
+    match render_response(&template, &query_pairs, 200, vec![]).await {
+        Some(r) => Ok(r),
+        None => return_500(),
+    }
 }
 
 pub(crate) async fn handle_bim_line_detail(request: &Request<Body>) -> Result<Response<Body>, Infallible> {
-    if request.method() != Method::GET {
-        return return_405().await;
-    }
-
     let query_pairs = get_query_pairs(request);
+
+    if request.method() != Method::GET {
+        return return_405(&query_pairs).await;
+    }
 
     let company = match query_pairs.get("company") {
         Some(c) => c.to_owned().into_owned(),
-        None => return return_400("missing parameter \"company\"").await,
+        None => return return_400("missing parameter \"company\"", &query_pairs).await,
     };
     let line = match query_pairs.get("line") {
         Some(l) => l,
-        None => return return_400("missing parameter \"line\"").await,
+        None => return return_400("missing parameter \"line\"", &query_pairs).await,
     };
 
     let db_conn = match connect_to_db().await {
@@ -1128,7 +1322,7 @@ pub(crate) async fn handle_bim_line_detail(request: &Request<Body>) -> Result<Re
     let ride_rows_res = db_conn.query(
         "
             SELECT
-                rav.id, rav.rider_username, rav.\"timestamp\", rav.vehicle_number,
+                rav.id, rav.rider_username, rav.\"timestamp\", rav.line, rav.vehicle_number,
                 rav.spec_position, rav.as_part_of_fixed_coupling, rav.fixed_coupling_position
             FROM bim.rides_and_vehicles rav
             WHERE rav.company = $1
@@ -1145,44 +1339,54 @@ pub(crate) async fn handle_bim_line_detail(request: &Request<Body>) -> Result<Re
         },
     };
 
-    let mut rides_json = Vec::new();
+    let mut rides = Vec::new();
     for ride_row in ride_rows {
         let ride_id: i64 = ride_row.get(0);
         let rider_username: String = ride_row.get(1);
         let timestamp: DateTime<Local> = ride_row.get(2);
-        let vehicle_number_i64: i64 = ride_row.get(3);
-        let spec_position: i64 = ride_row.get(4);
-        let as_part_of_fixed_coupling: bool = ride_row.get(5);
-        let fixed_coupling_position: i64 = ride_row.get(6);
+        let line: Option<String> = ride_row.get(3);
+        let vehicle_number_i64: i64 = ride_row.get(4);
+        let spec_position: i64 = ride_row.get(5);
+        let as_part_of_fixed_coupling: bool = ride_row.get(6);
+        let fixed_coupling_position: i64 = ride_row.get(7);
 
-        let vehicle_number: VehicleNumber = vehicle_number_i64.try_into()
-            .expect("invalid vehicle number");
+        let vehicle_number: VehicleNumber = match vehicle_number_i64.try_into() {
+            Ok(vn) => vn,
+            Err(e) => {
+                error!("cannot convert vehicle number {}: {}", vehicle_number_i64, e);
+                continue;
+            },
+        };
 
-        rides_json.push(serde_json::json!({
-            "id": ride_id,
-            "rider_username": rider_username,
-            "timestamp": timestamp.format("%Y-%m-%d %H:%M:%S").to_string(),
-            "vehicle_number": vehicle_number,
-            "spec_position": spec_position,
-            "as_part_of_fixed_coupling": as_part_of_fixed_coupling,
-            "fixed_coupling_position": fixed_coupling_position,
-        }));
+        rides.push(BimDetailsRidePart {
+            id: ride_id,
+            rider_username,
+            timestamp: timestamp.format("%Y-%m-%d %H:%M:%S").to_string(),
+            line,
+            vehicle_number,
+            spec_position,
+            as_part_of_fixed_coupling,
+            fixed_coupling_position,
+        });
     }
 
-    let mut ctx = tera::Context::new();
-    ctx.insert("company", &company);
-    ctx.insert("line", &line);
-    ctx.insert("rides", &rides_json);
-
-    render("bimlinedetails.html.tera", &query_pairs, ctx).await
+    let template = BimLineDetailsTemplate {
+        company,
+        line: line.clone().into_owned(),
+        rides,
+    };
+    match render_response(&template, &query_pairs, 200, vec![]).await {
+        Some(r) => Ok(r),
+        None => return_500(),
+    }
 }
 
 pub(crate) async fn handle_wide_bims(request: &Request<Body>) -> Result<Response<Body>, Infallible> {
-    if request.method() != Method::GET {
-        return return_405().await;
-    }
-
     let query_pairs = get_query_pairs(request);
+
+    if request.method() != Method::GET {
+        return return_405(&query_pairs).await;
+    }
 
     let count_opt: Option<i64> = query_pairs.get("count")
         .map(|c_str| c_str.parse().ok())
@@ -1260,42 +1464,40 @@ pub(crate) async fn handle_wide_bims(request: &Request<Body>) -> Result<Response
             .insert(rider_username);
     }
 
-    let mut rider_groups_to_rides: BTreeMap<BTreeSet<String>, BTreeSet<(String, VehicleNumber)>> = BTreeMap::new();
+    let mut rider_groups_to_rides: BTreeMap<BTreeSet<String>, BTreeSet<VehiclePart>> = BTreeMap::new();
     for ((company, vehicle_number), riders) in vehicle_to_riders.drain() {
         rider_groups_to_rides
             .entry(riders)
             .or_insert_with(|| BTreeSet::new())
-            .insert((company, vehicle_number));
+            .insert(VehiclePart {
+                company,
+                number: vehicle_number,
+            });
     }
 
-    let rider_groups: Vec<serde_json::Value> = rider_groups_to_rides.iter()
-        .map(|(riders, rides)| {
-            let vehicles_json: Vec<serde_json::Value> = rides.iter()
-                .map(|(c, vn)| serde_json::json!({
-                    "company": c,
-                    "number": vn,
-                }))
-                .collect();
-            serde_json::json!({
-                "riders": riders,
-                "vehicles": vehicles_json,
-            })
+    let rider_groups: Vec<RiderGroupPart> = rider_groups_to_rides.iter()
+        .map(|(riders, rides)| RiderGroupPart {
+            riders: riders.clone(),
+            vehicles: rides.clone(),
         })
         .collect();
 
-    let mut ctx = tera::Context::new();
-    ctx.insert("rider_count", &rider_count);
-    ctx.insert("rider_groups", &rider_groups);
-
-    render("widebims.html.tera", &query_pairs, ctx).await
+    let template = WideBimsTemplate {
+        rider_count,
+        rider_groups,
+    };
+    match render_response(&template, &query_pairs, 200, vec![]).await {
+        Some(r) => Ok(r),
+        None => return_500(),
+    }
 }
 
 pub(crate) async fn handle_top_bims(request: &Request<Body>) -> Result<Response<Body>, Infallible> {
-    if request.method() != Method::GET {
-        return return_405().await;
-    }
-
     let query_pairs = get_query_pairs(request);
+
+    if request.method() != Method::GET {
+        return return_405(&query_pairs).await;
+    }
 
     let top_count: i64 = query_pairs.get("count")
         .map(|c_str| c_str.parse().ok())
@@ -1355,41 +1557,44 @@ pub(crate) async fn handle_top_bims(request: &Request<Body>) -> Result<Response<
             .insert((company, vehicle_number));
     }
 
-    let counts_vehicles: Vec<serde_json::Value> = count_to_vehicles.iter()
+    let counts_vehicles: Vec<CountVehiclesPart> = count_to_vehicles.iter()
         .rev()
         .map(|(count, vehicles)| {
-            let vehicles_json: Vec<serde_json::Value> = vehicles.iter()
-                .map(|(c, vn)| serde_json::json!({
-                    "company": c,
-                    "number": vn,
-                }))
+            let vehicle_parts = vehicles.iter()
+                .map(|(c, vn)| VehiclePart {
+                    company: c.clone(),
+                    number: *vn,
+                })
                 .collect();
-            serde_json::json!({
-                "ride_count": *count,
-                "vehicles": vehicles_json,
-            })
+            CountVehiclesPart {
+                ride_count: *count,
+                vehicles: vehicle_parts,
+            }
         })
         .collect();
 
-    let mut ctx = tera::Context::new();
-    ctx.insert("counts_vehicles", &counts_vehicles);
-
-    render("topbims.html.tera", &query_pairs, ctx).await
+    let template = TopBimsTemplate {
+        counts_vehicles,
+    };
+    match render_response(&template, &query_pairs, 200, vec![]).await {
+        Some(r) => Ok(r),
+        None => return_500(),
+    }
 }
 
 pub(crate) async fn handle_bim_coverage_field(request: &Request<Body>) -> Result<Response<Body>, Infallible> {
-    if request.method() != Method::GET {
-        return return_405().await;
-    }
-
     let query_pairs = get_query_pairs(request);
+
+    if request.method() != Method::GET {
+        return return_405(&query_pairs).await;
+    }
 
     let rider_opt = query_pairs.get("rider");
 
     let company_opt = query_pairs.get("company");
     let company = match company_opt {
         Some(c) => c,
-        _ => return return_400("GET parameter \"company\" is required").await,
+        _ => return return_400("GET parameter \"company\" is required", &query_pairs).await,
     };
 
     let company_to_bim_database_opts = match obtain_company_to_bim_database().await {
@@ -1405,7 +1610,7 @@ pub(crate) async fn handle_bim_coverage_field(request: &Request<Body>) -> Result
 
     let bim_database = match company_to_bim_database.get(company.as_ref()) {
         Some(bd) => bd,
-        None => return return_400("company does not exist or does not have a vehicle database").await,
+        None => return return_400("company does not exist or does not have a vehicle database", &query_pairs).await,
     };
 
     let db_conn = match connect_to_db().await {
@@ -1521,11 +1726,11 @@ pub(crate) async fn handle_bim_coverage_field(request: &Request<Body>) -> Result
 }
 
 pub(crate) async fn handle_top_bim_lines(request: &Request<Body>) -> Result<Response<Body>, Infallible> {
-    if request.method() != Method::GET {
-        return return_405().await;
-    }
-
     let query_pairs = get_query_pairs(request);
+
+    if request.method() != Method::GET {
+        return return_405(&query_pairs).await;
+    }
 
     let top_count: i64 = query_pairs.get("count")
         .map(|c_str| c_str.parse().ok())
@@ -1583,24 +1788,27 @@ pub(crate) async fn handle_top_bim_lines(request: &Request<Body>) -> Result<Resp
             .insert((company, line));
     }
 
-    let counts_lines: Vec<serde_json::Value> = count_to_lines.iter()
+    let counts_lines: Vec<CountLinesPart> = count_to_lines.iter()
         .rev()
         .map(|(count, vehicles)| {
-            let lines_json: Vec<serde_json::Value> = vehicles.iter()
-                .map(|(c, l)| serde_json::json!({
-                    "company": c,
-                    "line": l,
-                }))
+            let line_parts: BTreeSet<LinePart> = vehicles.iter()
+                .map(|(c, l)| LinePart {
+                    company: c.clone(),
+                    line: l.clone(),
+                })
                 .collect();
-            serde_json::json!({
-                "ride_count": *count,
-                "lines": lines_json,
-            })
+            CountLinesPart {
+                ride_count: *count,
+                lines: line_parts,
+            }
         })
         .collect();
 
-    let mut ctx = tera::Context::new();
-    ctx.insert("counts_lines", &counts_lines);
-
-    render("topbimlines.html.tera", &query_pairs, ctx).await
+    let template = TopBimLinesTemplate {
+        counts_lines,
+    };
+    match render_response(&template, &query_pairs, 200, vec![]).await {
+        Some(r) => Ok(r),
+        None => return_500(),
+    }
 }

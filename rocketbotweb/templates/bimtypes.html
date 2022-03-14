@@ -1,4 +1,4 @@
-{% extends "base.html.tera" %}
+{% extends "base.html" %}
 
 {% block title %}Public Transport Vehicle Types{% endblock %}
 
@@ -18,8 +18,8 @@
       <th class="single-rider ridden">{{ rider|escape }}</th>
     {% endfor %}
   </tr>
-  {% for company, stats in company_to_stats %}
-    {% for type, stats in stats.type_to_stats %}
+  {% for (company, stats) in company_to_stats %}
+    {% for (type, stats) in stats.type_to_stats %}
       <tr class="known-type">
         <td class="company">{{ company|escape }}</td>
         <td class="vehicle-type">{{ type|escape }}</td>
@@ -27,26 +27,24 @@
         <td class="total active">
           <span class="absolute">{{ stats.active_count }}</span>
           {% if stats.active_count > 0 %}
-            <br/><span class="percent-of-total">{{ stats.active_per_total|percentify }}</span>
+            <br/><span class="percent-of-total">{{ stats.active_per_total()|percentify }}</span>
           {% endif %}
         </td>
         <td class="total ridden">
           <span class="absolute">{{ stats.ridden_count }}</span>
           {% if stats.ridden_count > 0 %}
-            <br/><span class="percent-of-total">{{ stats.ridden_per_total|percentify }}</span>&#931;
-            {% if stats.ridden_per_active is number %}
-              <br/><span class="percent-of-active">{{ stats.ridden_per_active|percentify }}</span>A
+            <br/><span class="percent-of-total">{{ stats.ridden_per_total()|percentify }}</span>&#931;
+            {% if let Some(ridden_per_active) = stats.ridden_per_active() %}
+              <br/><span class="percent-of-active">{{ ridden_per_active|percentify }}</span>A
             {% endif %}
           {% endif %}
         </td>
         {% for rider in all_riders %}
-          {# rider name may contain dots, so use |get() instead of [] #}
           <td class="single-rider ridden" data-rider-name="{{ rider|escape }}">
-            {% if stats.rider_ridden_counts|get(key=rider) > 0 %}
-              <span class="absolute">{{ stats.rider_ridden_counts|get(key=rider) }}</span>
-              <br/><span class="percent-of-total">{{ stats.rider_ridden_per_total|get(key=rider)|percentify }}&#931;
-              {% set rrpa = stats.rider_ridden_per_active|get(key=rider) %}
-              {% if rrpa is number %}
+            {% if stats.rider_ridden_counts[rider]|unref > 0 %}
+              <span class="absolute">{{ stats.rider_ridden_counts[rider] }}</span>
+              <br/><span class="percent-of-total">{{ stats.rider_ridden_per_total()[rider]|percentify }}&#931;
+              {% if let Some(rrpa) = stats.rider_ridden_per_active()[rider] %}
                 <br/><span class="percent-of-active">{{ rrpa|percentify }}</span>A
               {% endif %}
             {% endif %}
@@ -63,8 +61,8 @@
         <td class="total ridden">{{ stats.unknown_type_count }}</td>
         {% for rider in all_riders %}
           <td class="single-rider ridden" data-rider-name="{{ rider|escape }}">
-            {% if stats.rider_to_unknown_type_count|get(key=rider) > 0 %}
-              {{ stats.rider_to_unknown_type_count|get(key=rider) }}
+            {% if stats.rider_to_unknown_type_count[rider]|unref > 0 %}
+              {{ stats.rider_to_unknown_type_count[rider] }}
             {% endif %}
           </td>
         {% endfor %}

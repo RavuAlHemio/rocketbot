@@ -9,6 +9,5 @@ pub struct WebConfig {
     pub listen: SocketAddr,
     pub db_conn_string: String,
     pub bot_config_path: PathBuf,
-    pub template_glob: String,
     pub static_path: PathBuf,
 }

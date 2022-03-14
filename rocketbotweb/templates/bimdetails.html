@@ -1,4 +1,4 @@
-{% extends "base.html.tera" %}
+{% extends "base.html" %}
 
 {% block title %}Public Transport Rides{% endblock %}
 
@@ -7,36 +7,36 @@
 
 <h1>Public Transport Vehicle</h1>
 
-{% if vehicle is object %}
+{% if let Some(veh) = vehicle %}
 <section class="facts-figures">
 <h2>Facts &amp; Figures</h2>
 
 <table class="bim-vehicle">
   <tr class="type">
     <th>Type</th>
-    <td>{{ vehicle.type_code|escape }}</td>
+    <td>{{ veh.type_code|escape }}</td>
   </tr>
-  {% if vehicle.manufacturer is string %}
+  {% if let Some(manufacturer) = veh.manufacturer %}
     <tr class="type">
       <th>Manufacturer</th>
-      <td>{{ vehicle.manufacturer|escape }}</td>
+      <td>{{ manufacturer|escape }}</td>
     </tr>
   {% endif %}
-  {% if vehicle.in_service_since is string or vehicle.out_of_service_since is string %}
+  {% if veh.in_service_since.is_some() || veh.out_of_service_since.is_some() %}
     <tr class="dates-active">
       <th>Dates active</th>
       <td>
-        {%- if vehicle.in_service_since is string -%}
-          <span class="since">{{ vehicle.in_service_since|escape }}</span>
+        {%- if let Some(in_service_since) = veh.in_service_since -%}
+          <span class="since">{{ in_service_since|escape }}</span>
         {%- endif -%}
         &#8212;
-        {%- if vehicle.out_of_service_since is string -%}
-          <span class="until">{{ vehicle.out_of_service_since|escape }}</span>
+        {%- if let Some(out_of_service_since) = veh.out_of_service_since -%}
+          <span class="until">{{ out_of_service_since|escape }}</span>
         {%- endif -%}
       </td>
     </tr>
   {% endif %}
-  {% for other_key, other_value in vehicle.other_data %}
+  {% for (other_key, other_value) in veh.other_data %}
     <tr class="other-data">
       <th>{{ other_key|escape }}</th>
       <td>{{ other_value|escape }}</td>
@@ -44,15 +44,15 @@
   {% endfor %}
 </table>
 
-{% if vehicle.fixed_coupling|length > 0 %}
+{% if veh.fixed_coupling.len() > 0 %}
   <p class="fixed-coupling">
     part of fixed coupling:
     <span class="fixed-coupling">
-      {%- for fcvn in vehicle.fixed_coupling -%}
-        {%- if not loop.first -%}
+      {%- for fcvn in veh.fixed_coupling -%}
+        {%- if !loop.first -%}
           +
         {%- endif -%}
-        {%- if fcvn == vehicle.number -%}
+        {%- if fcvn|unref == veh.number -%}
           <strong class="this-vehicle">{{ fcvn }}</strong>
         {%- else -%}
           <a class="other-vehicle" href="?company={{ company|urlencode|escape }}&amp;vehicle={{ fcvn }}">{{ fcvn }}</a>
@@ -82,7 +82,7 @@
     <td class="id">{{ ride.id }}</td>
     <td class="rider">{{ ride.rider_username|escape }}</td>
     <td class="timestamp">{{ ride.timestamp|escape }}</td>
-    <td class="line">{% if ride.line is string %}<a href="bim-line-detail?company={{ company|urlencode|escape }}&amp;line={{ ride.line|urlencode|escape }}">{{ ride.line|escape }}</a>{% endif %}</td>
+    <td class="line">{% if let Some(line) = ride.line %}<a href="bim-line-detail?company={{ company|urlencode|escape }}&amp;line={{ line|urlencode|escape }}">{{ line|escape }}</a>{% endif %}</td>
     <td class="spec-pos">{{ ride.spec_position }}</td>
     <td class="ride-type {% if ride.as_part_of_fixed_coupling %}coupled{% else %}explicit{% endif %}">{% if ride.as_part_of_fixed_coupling %}coupled{% else %}explicit{% endif %}</td>
     <td class="fixed-coupling-pos">{{ ride.fixed_coupling_position }}</td>

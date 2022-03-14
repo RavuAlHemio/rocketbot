@@ -1,5 +1,10 @@
-{% extends "base.html.tera" %}
-{% import "bimvehicles-macros.html.tera" as macros %}
+{% extends "base.html" %}
+
+{% macro output_ride(company, ride, css_class) %}
+<td class="{{ css_class|escape }}-rider">{% if let Some(r) = ride %}{{ r.rider|escape }}{% endif %}</td>
+<td class="{{ css_class|escape }}-timestamp">{% if let Some(r) = ride %}{{ r.timestamp|escape }}{% endif %}</td>
+<td class="{{ css_class|escape }}-line">{% if let Some(r) = ride %}{% if let Some(line) = r.line %}<a href="bim-line-detail?company={{ company|urlencode|escape }}&amp;line={{ line|urlencode|escape }}">{{ line|escape }}</a>{% endif %}{% endif %}</td>
+{% endmacro %}
 
 {% block title %}Public Transport Vehicles{% endblock %}
 
@@ -14,7 +19,7 @@
     <th class="active" colspan="2">active</th>
     <th class="spacer"></th>
     {% if per_rider %}
-      <th class="spacer" colspan="{{ all_riders|length }}">rider</th>
+      <th class="spacer" colspan="{{ all_riders.len() }}">rider</th>
     {% else %}
       <th class="first-ride" colspan="3">first ride</th>
       <th class="latest-ride" colspan="3">latest ride</th>
@@ -41,23 +46,23 @@
       <th class="latest-line">line</th>
     {% endif %}
   </tr>
-  {% for company, vehicle_to_profile in company_to_vehicle_to_profile %}
-    {% for vehicle, profile in vehicle_to_profile %}
+  {% for (company, vehicle_to_profile) in company_to_vehicle_to_profile %}
+    {% for (vehicle, profile) in vehicle_to_profile %}
       <tr>
         <td class="company">{{ company|escape }}</td>
         <td class="vehicle-number"><a href="bim-detail?company={{ company|urlencode|escape }}&amp;vehicle={{ vehicle|urlencode|escape }}">{{ vehicle }}</a></td>
-        <td class="type-code">{{ profile.type_code|maybe_escape }}</td>
-        <td class="manufacturer">{{ profile.manufacturer|maybe_escape }}</td>
-        <td class="active-from">{{ profile.active_from|maybe_escape }}</td>
-        <td class="active-to">{{ profile.active_to|maybe_escape }}</td>
+        <td class="type-code">{{ profile.type_code|or_empty|escape }}</td>
+        <td class="manufacturer">{{ profile.manufacturer|or_empty|escape }}</td>
+        <td class="active-from">{{ profile.active_from|or_empty|escape }}</td>
+        <td class="active-to">{{ profile.active_to|or_empty|escape }}</td>
         <td class="ride-count">{{ profile.ride_count }}</td>
         {% if per_rider %}
           {% for rider in all_riders %}
-            <td class="rider ride-count" data-rider-name="{{ rider|escape }}">{{ profile.rider_to_ride_count|get(key=rider, default="") }}</td>
+            <td class="rider ride-count" data-rider-name="{{ rider|escape }}">{{ profile.ride_count_text_for_rider(rider) }}</td>
           {% endfor %}
         {% else %}
-          {{ macros::output_ride(company=company, ride=profile.first_ride, css_class="first") }}
-          {{ macros::output_ride(company=company, ride=profile.latest_ride, css_class="last") }}
+          {% call output_ride(company, profile.first_ride, "first") %}
+          {% call output_ride(company, profile.latest_ride, "last") %}
         {% endif %}
       </tr>
     {% endfor %}

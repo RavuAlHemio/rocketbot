@@ -1,4 +1,4 @@
-{% extends "base.html.tera" %}
+{% extends "base.html" %}
 
 {% block title %}Quotes and Votes{% endblock %}
 
@@ -18,7 +18,7 @@
             <li class="vote">
               {%- if vote.value == 1 -%}
                 <span class="sigil positive">+</span>
-              {%- elif vote.value == -1 -%}
+              {%- else if vote.value == -1 -%}
                 <span class="sigil negative">&#8722;</span>
               {%- else -%}
                 <span class="sigil unknown">?</span>

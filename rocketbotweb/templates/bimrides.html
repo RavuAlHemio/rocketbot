@@ -1,4 +1,4 @@
-{% extends "base.html.tera" %}
+{% extends "base.html" %}
 
 {% block title %}Public Transport Rides{% endblock %}
 
@@ -21,11 +21,11 @@
   <tr>
     <td class="company">{{ ride.company|escape }}</td>
     {% if has_any_vehicle_type %}
-      <td class="vehicle-type">{% if ride.vehicle_type_opt is string %}{{ ride.vehicle_type_opt|escape }}{% endif %}</td>
+      <td class="vehicle-type">{% if let Some(vehicle_type) = ride.vehicle_type_opt %}{{ vehicle_type|escape }}{% endif %}</td>
     {% endif %}
-    <td class="vehicle-numbers">{% for vn in ride.vehicle_numbers %}{% if not loop.first %}+{% endif %}<a href="bim-detail?company={{ ride.company|urlencode|escape }}&amp;vehicle={{ vn }}">{{ vn }}</a>{% endfor %}</td>
+    <td class="vehicle-numbers">{% for vn in ride.vehicle_numbers %}{% if !loop.first %}+{% endif %}<a href="bim-detail?company={{ ride.company|urlencode|escape }}&amp;vehicle={{ vn }}">{{ vn }}</a>{% endfor %}</td>
     <td class="ride-count">{{ ride.ride_count }}</td>
-    <td class="line">{% set line = ride.last_line %}{% if line is string %}<a href="bim-line-detail?company={{ ride.company|urlencode|escape }}&amp;line={{ line|urlencode|escape }}">{{ line|escape }}</a>{% endif %}</td>
+    <td class="line">{% if let Some(last_line) = ride.last_line %}<a href="bim-line-detail?company={{ ride.company|urlencode|escape }}&amp;line={{ last_line|urlencode|escape }}">{{ last_line|escape }}</a>{% endif %}</td>
   </tr>
   {% endfor %}
 </table>

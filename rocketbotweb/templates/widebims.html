@@ -1,4 +1,4 @@
-{% extends "base.html.tera" %}
+{% extends "base.html" %}
 
 {% block title %}Wide-Audience Public Transport Vehicles{% endblock %}
 
@@ -14,14 +14,14 @@
 
 <h2>
     {%- for rider in group.riders -%}
-        {%- if not loop.first %}, {% endif -%}
+        {%- if !loop.first %}, {% endif -%}
         <span class="rider">{{- rider|escape -}}</span>
     {%- endfor -%}
 </h2>
 
 <p>
     {%- for vehicle in group.vehicles -%}
-        {%- if not loop.first %}, {% endif -%}
+        {%- if !loop.first %}, {% endif -%}
         <a href="bim-detail?company={{ vehicle.company|urlencode|escape }}&amp;vehicle={{ vehicle.number }}"><span class="company">{{ vehicle.company|escape }}</span>/<span class="number">{{ vehicle.number }}</span></a>
     {%- endfor -%}
 </p>
