@@ -202,6 +202,7 @@ struct SharedConnectionState {
     username_to_initial_private_message: Mutex<HashMap<String, OutgoingMessage>>,
     username_to_initial_private_message_with_attachment: Mutex<HashMap<String, OutgoingMessageWithAttachment>>,
     new_timer_sender: mpsc::UnboundedSender<(DateTime<Utc>, serde_json::Value)>,
+    reload_config_sender: mpsc::Sender<()>,
     channel_id_to_texts: RwLock<HashMap<(String, ChannelTextType), String>>,
     emoji: RwLock<Vec<Emoji>>,
     active_behavior_flags: RwLock<serde_json::Map<String, serde_json::Value>>,
@@ -223,6 +224,7 @@ impl SharedConnectionState {
         username_to_initial_private_message: Mutex<HashMap<String, OutgoingMessage>>,
         username_to_initial_private_message_with_attachment: Mutex<HashMap<String, OutgoingMessageWithAttachment>>,
         new_timer_sender: mpsc::UnboundedSender<(DateTime<Utc>, serde_json::Value)>,
+        reload_config_sender: mpsc::Sender<()>,
         channel_id_to_texts: RwLock<HashMap<(String, ChannelTextType), String>>,
         emoji: RwLock<Vec<Emoji>>,
         active_behavior_flags: RwLock<serde_json::Map<String, serde_json::Value>>,
@@ -243,6 +245,7 @@ impl SharedConnectionState {
             username_to_initial_private_message,
             username_to_initial_private_message_with_attachment,
             new_timer_sender,
+            reload_config_sender,
             channel_id_to_texts,
             emoji,
             active_behavior_flags,
@@ -256,6 +259,7 @@ struct ConnectionState {
     outgoing_receiver: mpsc::UnboundedReceiver<serde_json::Value>,
     timers: Vec<(DateTime<Utc>, serde_json::Value)>,
     new_timer_receiver: mpsc::UnboundedReceiver<(DateTime<Utc>, serde_json::Value)>,
+    reload_config_receiver: mpsc::Receiver<()>,
     last_seen_message_timestamp: DateTime<Utc>,
 }
 impl ConnectionState {
@@ -264,6 +268,7 @@ impl ConnectionState {
         outgoing_receiver: mpsc::UnboundedReceiver<serde_json::Value>,
         timers: Vec<(DateTime<Utc>, serde_json::Value)>,
         new_timer_receiver: mpsc::UnboundedReceiver<(DateTime<Utc>, serde_json::Value)>,
+        reload_config_receiver: mpsc::Receiver<()>,
         last_seen_message_timestamp: DateTime<Utc>,
     ) -> ConnectionState {
         ConnectionState {
@@ -271,6 +276,7 @@ impl ConnectionState {
             outgoing_receiver,
             timers,
             new_timer_receiver,
+            reload_config_receiver,
             last_seen_message_timestamp,
         }
     }
@@ -820,45 +826,9 @@ impl RocketBotInterface for ServerConnection {
     }
 
     async fn reload_configuration(&self) {
-        // load new plugin configuration
-        let new_config = match load_config().await {
-            Ok(nc) => nc,
-            Err(e) => {
-                error!("error loading new config: {}", e);
-                return;
-            },
-        };
-
-        // verify if it's the same plugins
-        let plugins = self.shared_state.plugins
-            .read().await;
-        if plugins.len() != new_config.plugins.len() {
-            error!("plugins changed! {} currently loaded, {} newly configured", plugins.len(), new_config.plugins.len());
-            return;
+        if let Err(e) = self.shared_state.reload_config_sender.try_send(()) {
+            error!("failed to trigger configuration reload: {}", e);
         }
-        for (i, (plugin, new_plugin_config)) in plugins.iter().zip(new_config.plugins.iter()).enumerate() {
-            if plugin.name != new_plugin_config.name {
-                error!("plugins changed! index {}: {:?} loaded, {:?} newly configured", i, plugin.name, new_plugin_config.name);
-                return;
-            }
-        }
-
-        // store config
-        set_config(new_config).await
-            .expect("failed to store config");
-
-        let config_guard = CONFIG
-            .get().expect("no config set")
-            .read().await;
-
-        info!("reloading plugin configuration");
-        for (i, (plugin, plugin_config)) in plugins.iter().zip(config_guard.plugins.iter()).enumerate() {
-            let success = plugin.plugin.configuration_updated(plugin_config.config.clone()).await;
-            if !success {
-                warn!("updating configuration of plugin at index {} ({:?}) failed", i, plugin_config.name);
-            }
-        }
-        info!("plugin configuration reloaded");
     }
 }
 
@@ -944,6 +914,7 @@ pub(crate) async fn connect() -> Arc<ServerConnection> {
         HashMap::new(),
     );
     let (new_timer_sender, new_timer_receiver) = mpsc::unbounded_channel();
+    let (reload_config_sender, reload_config_receiver) = mpsc::channel(1);
     let channel_id_to_texts = RwLock::new(
         "SharedConnectionState::channel_id_to_texts",
         HashMap::new(),
@@ -973,6 +944,7 @@ pub(crate) async fn connect() -> Arc<ServerConnection> {
         username_to_initial_private_message,
         username_to_initial_private_message_with_attachment,
         new_timer_sender,
+        reload_config_sender,
         channel_id_to_texts,
         emoji,
         active_behavior_flags,
@@ -986,6 +958,7 @@ pub(crate) async fn connect() -> Arc<ServerConnection> {
         outgoing_receiver,
         Vec::new(),
         new_timer_receiver,
+        reload_config_receiver,
         Utc
             .ymd(1969, 1, 1)
             .and_hms(0, 0, 0),
@@ -1155,6 +1128,9 @@ async fn run_connection(mut state: &mut ConnectionState) -> Result<(), WebSocket
                     // break out, lest we loop infinitely, receiving None every time
                     break;
                 }
+            },
+            _ = state.reload_config_receiver.recv() => {
+                do_config_reload(&mut state).await;
             },
         };
     }
@@ -2630,4 +2606,46 @@ async fn obtain_builtin_emoji(state: &ConnectionState) -> Vec<Emoji> {
     }
 
     emoji
+}
+
+async fn do_config_reload(state: &mut ConnectionState) {
+    info!("reloading configuration");
+    // load new plugin configuration
+    let new_config = match load_config().await {
+        Ok(nc) => nc,
+        Err(e) => {
+            error!("error loading new config: {}", e);
+            return;
+        },
+    };
+
+    // verify if it's the same plugins
+    let plugins = state.shared_state.plugins
+        .read().await;
+    if plugins.len() != new_config.plugins.len() {
+        error!("plugins changed! {} currently loaded, {} newly configured", plugins.len(), new_config.plugins.len());
+        return;
+    }
+    for (i, (plugin, new_plugin_config)) in plugins.iter().zip(new_config.plugins.iter()).enumerate() {
+        if plugin.name != new_plugin_config.name {
+            error!("plugins changed! index {}: {:?} loaded, {:?} newly configured", i, plugin.name, new_plugin_config.name);
+            return;
+        }
+    }
+
+    // store config
+    set_config(new_config).await
+        .expect("failed to store config");
+
+    let config_guard = CONFIG
+        .get().expect("no config set")
+        .read().await;
+
+    for (i, (plugin, plugin_config)) in plugins.iter().zip(config_guard.plugins.iter()).enumerate() {
+        let success = plugin.plugin.configuration_updated(plugin_config.config.clone()).await;
+        if !success {
+            warn!("updating configuration of plugin at index {} ({:?}) failed", i, plugin_config.name);
+        }
+    }
+    info!("plugin configuration reloaded");
 }
