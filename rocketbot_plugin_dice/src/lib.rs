@@ -548,6 +548,26 @@ impl DicePlugin {
                     break;
                 }
 
+                // tweak for realism's sake:
+                // a "two misplaced, none wrong" situation is followed by instant victory
+                // (the player is generally smart enough to just swap the two misplaced positions)
+                {
+                    let none_wrong = current_guess.iter()
+                        .all(|g| *g != WordleRating::Wrong);
+                    if none_wrong {
+                        let misplaced_indexes: Vec<usize> = current_guess.iter().enumerate()
+                            .filter(|(_i, g)| **g == WordleRating::Misplaced)
+                            .map(|(i, _g)| i)
+                            .collect();
+                        if misplaced_indexes.len() == 2 {
+                            current_guess[misplaced_indexes[0]] = WordleRating::Correct;
+                            current_guess[misplaced_indexes[1]] = WordleRating::Correct;
+                            guesses.push(current_guess.clone());
+                            break;
+                        }
+                    }
+                }
+
                 // improve the guess at random
                 let mut victory = false;
                 while rng_guard.sample(&three_quarters_boolean) {
