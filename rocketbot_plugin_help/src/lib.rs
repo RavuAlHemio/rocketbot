@@ -191,7 +191,7 @@ macro_rules! handle_command_func {
                     $respond_func_name(
                         Arc::clone(&interface),
                         $message_name,
-                        &format!("The command `{}` is offered by `{}`.", target_command_name, command_plugins[0]),
+                        &format!("The command `{}` is offered by {}.", target_command_name, command_plugins[0]),
                     ).await;
                 } else {
                     let mut response = format!("The command `{}` is offered by:", target_command_name);
