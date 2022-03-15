@@ -4,7 +4,8 @@ use std::sync::{Arc, Weak};
 use async_trait::async_trait;
 use rocketbot_interface::{send_channel_message, send_private_message};
 use rocketbot_interface::commands::{
-    CommandBehaviors, CommandConfiguration, CommandDefinition, CommandInstance,
+    CommandBehaviors, CommandConfiguration, CommandDefinition, CommandDefinitionBuilder,
+    CommandInstance,
 };
 use rocketbot_interface::interfaces::{RocketBotInterface, RocketBotPlugin};
 use rocketbot_interface::model::{ChannelMessage, PrivateMessage};
@@ -167,6 +168,43 @@ macro_rules! handle_command_func {
                         &format!("`{}` \u{2013} {}", usage.unwrap(), description.unwrap()),
                     ).await;
                 }
+            } else if command.name == "whichplugin" {
+                let putative_command_name = command.rest.trim();
+                let target_command_name = putative_command_name
+                    .strip_prefix(&command_config.command_prefix)
+                    .unwrap_or(putative_command_name);
+
+                let mut command_plugins = Vec::with_capacity(1);
+                for defn in interface.$get_def_cmds_func_name(None).await {
+                    if defn.name == target_command_name {
+                        command_plugins.push(
+                            match defn.plugin_name {
+                                Some(p) => format!("`{}`", p),
+                                None => "an unknown plugin".to_owned(),
+                            }
+                        );
+                    }
+                }
+                command_plugins.sort_unstable();
+
+                if command_plugins.len() == 1 {
+                    $respond_func_name(
+                        Arc::clone(&interface),
+                        $message_name,
+                        &format!("The command `{}` is offered by `{}`.", target_command_name, command_plugins[0]),
+                    ).await;
+                } else {
+                    let mut response = format!("The command `{}` is offered by:", target_command_name);
+                    for plugin in &command_plugins {
+                        response.push_str("\n* ");
+                        response.push_str(&plugin);
+                    }
+                    $respond_func_name(
+                        Arc::clone(&interface),
+                        $message_name,
+                        &response,
+                    ).await;
+                }
             }
         }
     };
@@ -241,6 +279,16 @@ impl RocketBotPlugin for HelpPlugin {
         my_interface.register_channel_command(&usage_command).await;
         my_interface.register_private_message_command(&usage_command).await;
 
+        let whichplugin_command = CommandDefinitionBuilder::new(
+            "whichplugin".to_owned(),
+            "help".to_owned(),
+            "{cpfx}whichplugin COMMAND".to_owned(),
+            "Shows usage information for the given command.".to_owned(),
+        )
+            .build();
+        my_interface.register_channel_command(&whichplugin_command).await;
+        my_interface.register_private_message_command(&whichplugin_command).await;
+
         HelpPlugin {
             interface,
         }
@@ -263,6 +311,8 @@ impl RocketBotPlugin for HelpPlugin {
             Some(include_str!("../help/help.md").to_owned())
         } else if command_name == "usage" {
             Some(include_str!("../help/usage.md").to_owned())
+        } else if command_name == "whichplugin" {
+            Some(include_str!("../help/whichplugin.md").to_owned())
         } else {
             None
         }
