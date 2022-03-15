@@ -1,4 +1,5 @@
 use std::collections::{HashMap, HashSet};
+use std::ops::DerefMut;
 use std::sync::Weak;
 
 use async_trait::async_trait;
@@ -7,12 +8,14 @@ use log::error;
 use num_bigint::BigInt;
 use once_cell::sync::Lazy;
 use rand::{Rng, SeedableRng};
+use rand::distributions::Bernoulli;
 use rand::seq::SliceRandom;
 use rand::rngs::StdRng;
 use regex::{Captures, Regex};
 use rocketbot_interface::{ResultExtensions, send_channel_message};
 use rocketbot_interface::commands::{
-    CommandBehaviors, CommandDefinition, CommandInstance, CommandValueType,
+    CommandBehaviors, CommandDefinition, CommandDefinitionBuilder, CommandInstance,
+    CommandValueType,
 };
 use rocketbot_interface::interfaces::{RocketBotInterface, RocketBotPlugin};
 use rocketbot_interface::model::ChannelMessage;
@@ -98,6 +101,25 @@ impl DiceGroup {
             side_count,
             multiply_value,
             add_value,
+        }
+    }
+}
+
+#[derive(Clone, Copy, Debug, Eq, Hash, Ord, PartialEq, PartialOrd)]
+enum WordleRating {
+    Wrong,
+    Misplaced,
+    Correct,
+}
+impl Default for WordleRating {
+    fn default() -> Self { Self::Wrong }
+}
+impl WordleRating {
+    pub fn as_char(&self, dark: bool, purple: bool) -> char {
+        match self {
+            Self::Wrong => if dark { '\u{2B1B}' } else { '\u{2B1C}' }, // black square, white square
+            Self::Misplaced => if purple { '\u{1F7EA}' } else { '\u{1F7E8}' }, // purple square, yellow square
+            Self::Correct => '\u{1F7E9}', // green square
         }
     }
 }
@@ -470,6 +492,143 @@ impl DicePlugin {
         ).await;
     }
 
+    async fn handle_randwordle(&self, channel_message: &ChannelMessage, command: &CommandInstance) {
+        let interface = match self.interface.upgrade() {
+            None => return,
+            Some(i) => i,
+        };
+
+        let dark_mode = command.flags.contains("d") || command.flags.contains("dark");
+        let purple_mode = command.flags.contains("p") || command.flags.contains("purple");
+        let square_count_i64 = command.options.get("squares")
+            .or_else(|| command.options.get("s"))
+            .map(|opt| opt.as_i64().unwrap())
+            .unwrap_or(5);
+        let max_length_i64 = command.options.get("length")
+            .or_else(|| command.options.get("l"))
+            .map(|opt| opt.as_i64().unwrap())
+            .unwrap_or(6);
+
+        let square_count: usize = match square_count_i64.try_into() {
+            Ok(n) => n,
+            Err(_) => return,
+        };
+        let max_length: usize = match max_length_i64.try_into() {
+            Ok(n) => n,
+            Err(_) => return,
+        };
+
+        let mut guesses: Vec<Vec<WordleRating>> = Vec::with_capacity(max_length);
+
+        {
+            let mut rng_guard = self.rng.lock().await;
+            let half_boolean = Bernoulli::new(0.5)
+                .expect("failed to create half Bernoulli distribution");
+            let quarter_boolean = Bernoulli::new(0.25)
+                .expect("failed to create quarter Bernoulli distribution");
+            let three_quarters_boolean = Bernoulli::new(0.75)
+                .expect("failed to create three-quarters Bernoulli distribution");
+
+            // start with a pretty shitty first guess
+            let mut current_guess = vec![WordleRating::Wrong; square_count];
+            while rng_guard.sample(&half_boolean) {
+                let square_index = rng_guard.gen_range(0..square_count);
+                let make_correct = rng_guard.sample(&quarter_boolean);
+                current_guess[square_index] = if make_correct { WordleRating::Correct } else { WordleRating::Misplaced };
+            }
+            guesses.push(current_guess.clone());
+
+            loop {
+                if guesses.len() >= max_length {
+                    break;
+                }
+
+                if current_guess.iter().all(|g| *g == WordleRating::Correct) {
+                    // we won!
+                    break;
+                }
+
+                // improve the guess
+                let mut victory = false;
+                while rng_guard.sample(&three_quarters_boolean) {
+                    // pick a wrong or misplaced guess
+                    let imperfect_guesses: Vec<usize> = current_guess.iter().enumerate()
+                        .filter(|(_i, g)| **g != WordleRating::Correct)
+                        .map(|(i, _g)| i)
+                        .collect();
+                    let imperfect_index = *imperfect_guesses.choose(rng_guard.deref_mut())
+                        .expect("no imperfect guess found");
+
+                    // decide on its improvement
+                    if current_guess[imperfect_index] == WordleRating::Misplaced {
+                        // improve misplaced to correct
+                        current_guess[imperfect_index] = WordleRating::Correct;
+                    } else {
+                        // improve wrong to either misplaced (more likely) or correct (less likely)
+                        assert_eq!(current_guess[imperfect_index], WordleRating::Wrong);
+                        let make_correct = rng_guard.sample(&quarter_boolean);
+                        current_guess[imperfect_index] = if make_correct { WordleRating::Correct } else { WordleRating::Misplaced };
+                    }
+
+                    if current_guess.iter().all(|g| *g == WordleRating::Correct) {
+                        // we won!
+                        guesses.push(current_guess.clone());
+                        victory = true;
+                        break;
+                    }
+                }
+
+                if victory {
+                    break;
+                }
+
+                // shuffle some squares around
+                while rng_guard.sample(&half_boolean) {
+                    let from_square = rng_guard.gen_range(0..current_guess.len());
+                    let to_square = rng_guard.gen_range(0..current_guess.len());
+                    if from_square != to_square {
+                        current_guess.swap(from_square, to_square);
+                    }
+                }
+
+                // protect against absurd "one misplaced, all others correct" constellation
+                // by just turning it green
+                // (this also protects from "misplaced" when we only have one square per guess)
+                let none_wrong = current_guess.iter()
+                    .all(|g| *g != WordleRating::Wrong);
+                if none_wrong {
+                    let misplaced_indexes: Vec<usize> = current_guess.iter().enumerate()
+                        .filter(|(_i, g)| **g == WordleRating::Misplaced)
+                        .map(|(i, _g)| i)
+                        .collect();
+                    if misplaced_indexes.len() == 1 {
+                        current_guess[misplaced_indexes[0]] = WordleRating::Correct;
+                    }
+                }
+
+                // remember this
+                guesses.push(current_guess.clone());
+            }
+        }
+
+        // output the guesses
+        let mut output = String::new();
+        for guess in &guesses {
+            if output.len() > 0 {
+                output.push('\n');
+            }
+            for rating in guess {
+                output.push(rating.as_char(dark_mode, purple_mode));
+            }
+        }
+
+        send_channel_message!(
+            interface,
+            &channel_message.channel.name,
+            &output,
+        ).await;
+    }
+
     fn try_get_config(config: serde_json::Value) -> Result<DiceConfig, &'static str> {
         serde_json::from_value(config)
             .or_msg("failed to load config")
@@ -562,6 +721,22 @@ impl RocketBotPlugin for DicePlugin {
         );
         my_interface.register_channel_command(&some_year_command).await;
 
+        my_interface.register_channel_command(
+            &CommandDefinitionBuilder::new(
+                "randwordle".to_owned(),
+                "dice".to_owned(),
+                "{cpfx}randwordle [OPTIONS]".to_owned(),
+                "Generates a random Wordle solution pattern.".to_owned(),
+            )
+                .add_option("s", CommandValueType::Integer)
+                .add_option("squares", CommandValueType::Integer)
+                .add_option("l", CommandValueType::Integer)
+                .add_option("length", CommandValueType::Integer)
+                .add_flag("d").add_flag("dark")
+                .add_flag("p").add_flag("purple")
+                .build()
+        ).await;
+
         DicePlugin {
             interface,
             config: config_lock,
@@ -607,6 +782,8 @@ impl RocketBotPlugin for DicePlugin {
             self.handle_shuffle(channel_message, command).await;
         } else if command.name == "someyear" {
             self.handle_some_year(channel_message, command).await;
+        } else if command.name == "randwordle" {
+            self.handle_randwordle(channel_message, command).await;
         }
     }
 
@@ -637,6 +814,8 @@ impl RocketBotPlugin for DicePlugin {
                 include_str!("../help/someyear.md")
                     .replace("{defwiki}", &config_guard.default_wikipedia_language)
             )
+        } else if command_name == "randwordle" {
+            Some(include_str!("../help/randwordle.md").to_owned())
         } else {
             None
         }
