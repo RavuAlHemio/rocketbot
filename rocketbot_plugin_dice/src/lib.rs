@@ -548,7 +548,7 @@ impl DicePlugin {
                     break;
                 }
 
-                // improve the guess
+                // improve the guess at random
                 let mut victory = false;
                 while rng_guard.sample(&three_quarters_boolean) {
                     // pick a wrong or misplaced guess
@@ -591,20 +591,25 @@ impl DicePlugin {
                     }
                 }
 
-                // protect against absurd "one misplaced, all others correct" constellation
-                // by just turning it green
-                // (this also protects from "misplaced" when we only have one square per guess)
-                let none_wrong = current_guess.iter()
-                    .all(|g| *g != WordleRating::Wrong);
-                if none_wrong {
-                    let misplaced_indexes: Vec<usize> = current_guess.iter().enumerate()
-                        .filter(|(_i, g)| **g == WordleRating::Misplaced)
-                        .map(|(i, _g)| i)
-                        .collect();
-                    if misplaced_indexes.len() == 1 {
-                        current_guess[misplaced_indexes[0]] = WordleRating::Correct;
+                // tweak for realism's sake:
+                // the "one misplaced, none wrong" situation (=> either all others are correct
+                // or there is only one position) is absurd
+                // => just change the misplaced position into correct
+                {
+                    let none_wrong = current_guess.iter()
+                        .all(|g| *g != WordleRating::Wrong);
+                    if none_wrong {
+                        let misplaced_indexes: Vec<usize> = current_guess.iter().enumerate()
+                            .filter(|(_i, g)| **g == WordleRating::Misplaced)
+                            .map(|(i, _g)| i)
+                            .collect();
+                        if misplaced_indexes.len() == 1 {
+                            current_guess[misplaced_indexes[0]] = WordleRating::Correct;
+                        }
                     }
                 }
+
+                // no victory check here; it will be performed at the beginning of the loop
 
                 // remember this
                 guesses.push(current_guess.clone());
