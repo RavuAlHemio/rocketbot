@@ -1,9 +1,12 @@
 use std::sync::Arc;
+use std::time::Duration;
 
 use async_trait::async_trait;
 use bytes::Buf;
+use log::warn;
 use rand::{RngCore, Rng};
 use regex::Regex;
+use reqwest;
 use rocketbot_interface::serde::serde_regex;
 use rocketbot_interface::sync::Mutex;
 use percent_encoding::{AsciiSet, NON_ALPHANUMERIC, percent_encode};
@@ -24,14 +27,11 @@ pub const MEDIAWIKI_URL_SAFE: &AsciiSet = &NON_ALPHANUMERIC
 #[derive(Clone, Debug, Deserialize, Serialize)]
 struct Config {
     pub prefix_text: Option<String>,
-    #[serde(with = "serde_url")]
-    pub source_uri: Url,
-    #[serde(with = "serde_url")]
-    pub wikitext_link_base_uri: Url,
-    #[serde(with = "serde_regex")]
-    pub start_strip_regex: Regex,
-    #[serde(with = "serde_regex")]
-    pub end_strip_regex: Regex,
+    #[serde(with = "serde_url")] pub source_uri: Url,
+    #[serde(default, with = "serde_opt_url")] pub fallback_uri: Option<Url>,
+    #[serde(with = "serde_url")] pub wikitext_link_base_uri: Url,
+    #[serde(with = "serde_regex")] pub start_strip_regex: Regex,
+    #[serde(with = "serde_regex")] pub end_strip_regex: Regex,
 }
 
 mod serde_url {
@@ -46,6 +46,27 @@ mod serde_url {
         let string = String::deserialize(deserializer)?;
         Url::parse(&string)
             .map_err(|e| serde::de::Error::custom(e))
+    }
+}
+
+mod serde_opt_url {
+    use serde::{Deserialize, Deserializer, Serialize, Serializer};
+    use url::Url;
+
+    pub fn serialize<S: Serializer>(url: &Option<Url>, serializer: S) -> Result<S::Ok, S::Error> {
+        let url_as_str = url.as_ref().map(|u| u.as_str());
+        url_as_str.serialize(serializer)
+    }
+
+    pub fn deserialize<'de, D: Deserializer<'de>>(deserializer: D) -> Result<Option<Url>, D::Error> {
+        let string: Option<&str> = Option::deserialize(deserializer)?;
+        if let Some(s) = string {
+            let uri = Url::parse(s)
+                .map_err(|e| serde::de::Error::custom(e))?;
+            Ok(Some(uri))
+        } else {
+            Ok(None)
+        }
     }
 }
 
@@ -149,6 +170,34 @@ pub(crate) struct UncyclopediaProvider {
     facts: Vec<String>,
 }
 impl UncyclopediaProvider {
+    async fn get_or_timeout(uri: Url) -> Result<reqwest::Response, reqwest::Error> {
+        reqwest::Client::builder()
+            .build()?
+            .get(uri)
+            .timeout(Duration::from_secs(5))
+            .send().await
+    }
+
+    async fn get_source_or_fallback(config: &Config) -> Result<reqwest::Response, reqwest::Error> {
+        match Self::get_or_timeout(config.source_uri.clone()).await {
+            Ok(r) => Ok(r),
+            Err(e) => {
+                if e.is_timeout() {
+                    if let Some(uri) = &config.fallback_uri {
+                        warn!(
+                            "failed to fetch facts from {:?}; trying fallback {:?}",
+                            config.source_uri, uri,
+                        );
+                        Self::get_or_timeout(uri.clone()).await
+                    } else {
+                        Err(e)
+                    }
+                } else {
+                    Err(e)
+                }
+            },
+        }
+    }
 }
 #[async_trait]
 impl FactProvider for UncyclopediaProvider {
@@ -161,29 +210,21 @@ impl FactProvider for UncyclopediaProvider {
         };
 
         // obtain data from the URI and parse it as JSON
-        let data = match reqwest::get(config.source_uri.clone()).await {
+        let data = match Self::get_source_or_fallback(&config).await {
             Ok(r) => r,
-            Err(e) => {
-                panic!("failed to fetch facts: {}", e);
-            },
+            Err(e) => panic!("failed to fetch facts: {}", e),
         };
         let data_bytes = match data.bytes().await {
             Ok(b) => b,
-            Err(e) => {
-                panic!("failed to fetch response bytes: {}", e);
-            },
+            Err(e) => panic!("failed to fetch response bytes: {}", e),
         };
         let page_data: serde_json::Value = match serde_json::from_reader(data_bytes.reader()) {
             Ok(v) => v,
-            Err(e) => {
-                panic!("failed to parse response: {}", e);
-            },
+            Err(e) => panic!("failed to parse response: {}", e),
         };
         let page_wikitext = match page_data["query"]["pages"][0]["revisions"][0]["slots"]["main"]["content"].as_str() {
             Some(v) => v,
-            None => {
-                panic!("failed to obtain wikitext from page");
-            },
+            None => panic!("failed to obtain wikitext from page"),
         };
 
         let mut facts = Vec::new();
