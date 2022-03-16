@@ -40,7 +40,7 @@ use tokio_tungstenite::tungstenite::Message as WebSocketMessage;
 use url::Url;
 
 use crate::commands::parse_command;
-use crate::config::{CONFIG, load_config, set_config};
+use crate::config::{CONFIG, load_config, PluginConfig, set_config};
 use crate::errors::WebSocketError;
 use crate::jsonage::parse_message;
 use crate::plugins::{load_plugins, Plugin};
@@ -2618,15 +2618,18 @@ async fn do_config_reload(state: &mut ConnectionState) {
             return;
         },
     };
+    let new_enabled_plugins: Vec<&PluginConfig> = new_config.plugins.iter()
+        .filter(|p| p.enabled)
+        .collect();
 
     // verify if it's the same plugins
     let plugins = state.shared_state.plugins
         .read().await;
-    if plugins.len() != new_config.plugins.len() {
-        error!("plugins changed! {} currently loaded, {} newly configured", plugins.len(), new_config.plugins.len());
+    if plugins.len() != new_enabled_plugins.len() {
+        error!("plugins changed! {} currently loaded, {} newly configured", plugins.len(), new_enabled_plugins.len());
         return;
     }
-    for (i, (plugin, new_plugin_config)) in plugins.iter().zip(new_config.plugins.iter()).enumerate() {
+    for (i, (plugin, new_plugin_config)) in plugins.iter().zip(new_enabled_plugins.iter()).enumerate() {
         if plugin.name != new_plugin_config.name {
             error!("plugins changed! index {}: {:?} loaded, {:?} newly configured", i, plugin.name, new_plugin_config.name);
             return;
