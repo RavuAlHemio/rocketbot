@@ -8,7 +8,7 @@ use std::sync::Weak;
 
 use async_trait::async_trait;
 use log::error;
-use rocketbot_interface::send_channel_message;
+use rocketbot_interface::{ResultExtensions, send_channel_message};
 use rocketbot_interface::commands::{CommandDefinitionBuilder, CommandInstance};
 use rocketbot_interface::interfaces::{RocketBotInterface, RocketBotPlugin};
 use rocketbot_interface::model::ChannelMessage;
@@ -102,15 +102,17 @@ impl NumberwordPlugin {
 
     fn try_get_config(config: serde_json::Value) -> Result<Config, &'static str> {
         let mut words = StringPseudotrie::new();
-        for entry in config["wordlists"].as_array().expect("wordlists is not an array") {
-            let file_name = entry.as_str().expect("wordlists entry is not a string");
-            let file = File::open(file_name).expect("failed to open wordlist file");
+        for entry in config["wordlists"].as_array().ok_or("wordlists is not an array")? {
+            let file_name = entry.as_str().ok_or("wordlists entry is not a string")?;
+            let file = File::open(file_name)
+                .or_msg("failed to open wordlist file")?;
             let mut reader = BufReader::new(file);
 
             let mut line = String::new();
             loop {
                 line.clear();
-                let read = reader.read_line(&mut line).expect("failed to read line from wordlist file");
+                let read = reader.read_line(&mut line)
+                    .or_msg("failed to read line from wordlist file")?;
                 if read == 0 {
                     break;
                 }
