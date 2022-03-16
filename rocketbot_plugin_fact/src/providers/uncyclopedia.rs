@@ -54,13 +54,13 @@ mod serde_opt_url {
     use url::Url;
 
     pub fn serialize<S: Serializer>(url: &Option<Url>, serializer: S) -> Result<S::Ok, S::Error> {
-        let url_as_str = url.as_ref().map(|u| u.as_str());
+        let url_as_str = url.as_ref().map(|u| u.as_str().to_string());
         url_as_str.serialize(serializer)
     }
 
     pub fn deserialize<'de, D: Deserializer<'de>>(deserializer: D) -> Result<Option<Url>, D::Error> {
-        let string: Option<&str> = Option::deserialize(deserializer)?;
-        if let Some(s) = string {
+        let string: Option<String> = Option::deserialize(deserializer)?;
+        if let Some(s) = &string {
             let uri = Url::parse(s)
                 .map_err(|e| serde::de::Error::custom(e))?;
             Ok(Some(uri))
