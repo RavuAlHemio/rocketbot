@@ -86,10 +86,10 @@ impl RocketBotPlugin for TextPlugin {
 
         my_interface.register_channel_command(
             &CommandDefinitionBuilder::new(
-                "compare".to_owned(),
-                "text".to_owned(),
-                "{cpfx}compare STRING1 STRING2".to_owned(),
-                "Outputs information about how much two strings differ.".to_owned(),
+                "compare",
+                "text",
+                "{cpfx}compare STRING1 STRING2",
+                "Outputs information about how much two strings differ.",
             )
                 .arg_count(2)
                 .build()

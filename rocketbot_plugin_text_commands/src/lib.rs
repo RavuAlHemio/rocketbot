@@ -6,7 +6,7 @@ use log::error;
 use rand::{Rng, SeedableRng};
 use rand::rngs::StdRng;
 use rocketbot_interface::{JsonValueExtensions, send_channel_message};
-use rocketbot_interface::commands::{CommandBehaviors, CommandDefinition, CommandInstance};
+use rocketbot_interface::commands::{CommandDefinitionBuilder, CommandInstance};
 use rocketbot_interface::interfaces::{RocketBotInterface, RocketBotPlugin};
 use rocketbot_interface::model::ChannelMessage;
 use rocketbot_interface::sync::{Mutex, RwLock};
@@ -48,25 +48,28 @@ impl TextCommandsPlugin {
 
     async fn register_text_command(interface: Arc<dyn RocketBotInterface>, name: &str, nicknamable: bool) {
         let mut random_flags = HashSet::new();
-        if nicknamable {
+        let (usage, description) = if nicknamable {
             random_flags.insert("r".to_owned());
             random_flags.insert("random".to_owned());
-        }
+            (
+                format!("{{cpfx}}{} [{{lopfx}}random|NICKNAME]", name),
+                "Responds to the given text command, inserting a nickname at a predefined location.",
+            )
+        } else {
+            (
+                format!("{{cpfx}}{}", name),
+                "Responds to the given text command.",
+            )
+        };
 
-        let command = CommandDefinition::new(
-            name.to_owned(),
-            "text_commands".to_owned(),
-            Some(random_flags),
-            HashMap::new(),
-            0,
-            CommandBehaviors::empty(),
-            if nicknamable { format!("{{cpfx}}{} [{{lopfx}}random|NICKNAME]", name) } else { format!("{{cpfx}}{}", name) },
-            if nicknamable {
-                "Responds to the given text command, inserting a nickname at a predefined location.".to_owned()
-            } else {
-                "Responds to the given text command.".to_owned()
-            },
-        );
+        let command = CommandDefinitionBuilder::new(
+            name,
+            "text_commands",
+            usage,
+            description,
+        )
+            .flags(Some(random_flags))
+            .build();
         interface.register_channel_command(&command).await;
     }
 

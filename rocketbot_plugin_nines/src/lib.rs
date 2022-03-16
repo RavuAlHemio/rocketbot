@@ -1,4 +1,3 @@
-use std::collections::{HashMap, HashSet};
 use std::ops::Deref;
 use std::str::FromStr;
 use std::sync::Weak;
@@ -9,7 +8,7 @@ use log::error;
 use once_cell::sync::Lazy;
 use regex::Regex;
 use rocketbot_interface::send_channel_message;
-use rocketbot_interface::commands::{CommandBehaviors, CommandDefinition, CommandInstance};
+use rocketbot_interface::commands::{CommandDefinitionBuilder, CommandInstance};
 use rocketbot_interface::interfaces::{RocketBotInterface, RocketBotPlugin};
 use rocketbot_interface::model::ChannelMessage;
 
@@ -77,16 +76,15 @@ impl RocketBotPlugin for NinesPlugin {
             Some(i) => i,
         };
 
-        my_interface.register_channel_command(&CommandDefinition::new(
-            "nines".to_owned(),
-            "nines".to_owned(),
-            Some(HashSet::new()),
-            HashMap::new(),
-            0,
-            CommandBehaviors::empty(),
-            "{cpfx}nines NUMBER|NUMBER NUMBERs|NUMBER%".to_owned(),
-            "Calculates allowed downtime for an uptime expressed as a number of nines.".to_owned(),
-        )).await;
+        my_interface.register_channel_command(
+            &CommandDefinitionBuilder::new(
+                "nines",
+                "nines",
+                "{cpfx}nines NUMBER|NUMBER NUMBERs|NUMBER%",
+                "Calculates allowed downtime for an uptime expressed as a number of nines.",
+            )
+                .build()
+        ).await;
 
         NinesPlugin {
             interface,

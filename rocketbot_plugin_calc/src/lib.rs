@@ -8,7 +8,6 @@ mod parsing;
 mod units;
 
 
-use std::collections::{HashMap, HashSet};
 use std::fs::File;
 use std::io::Read;
 use std::sync::{Arc, Weak};
@@ -19,9 +18,7 @@ use chrono::{DateTime, TimeZone, Utc};
 use log::error;
 use num_bigint::BigUint;
 use rocketbot_interface::{JsonValueExtensions, ResultExtensions, send_channel_message};
-use rocketbot_interface::commands::{
-    CommandBehaviors, CommandDefinition, CommandDefinitionBuilder, CommandInstance,
-};
+use rocketbot_interface::commands::{CommandBehaviors, CommandDefinitionBuilder, CommandInstance};
 use rocketbot_interface::interfaces::{RocketBotInterface, RocketBotPlugin};
 use rocketbot_interface::model::ChannelMessage;
 use rocketbot_interface::sync::{Mutex, run_stoppable_task_timeout, RwLock, StoppableTaskResult};
@@ -317,40 +314,40 @@ impl RocketBotPlugin for CalcPlugin {
             PrimeCache::new(),
         ));
 
-        my_interface.register_channel_command(&CommandDefinition::new(
-            "calc".to_owned(),
-            "calc".to_owned(),
-            Some(HashSet::new()),
-            HashMap::new(),
-            0,
-            CommandBehaviors::NO_ARGUMENT_PARSING,
-            "{cpfx}calc EXPRESSION".to_owned(),
-            "Calculates the given mathematical expression and outputs the result.".to_owned(),
-        )).await;
         my_interface.register_channel_command(
             &CommandDefinitionBuilder::new(
-                "calcconst".to_owned(),
-                "calc".to_owned(),
-                "{cpfx}calcconst".to_owned(),
-                "Lists available calculator constants.".to_owned(),
+                "calc",
+                "calc",
+                "{cpfx}calc EXPRESSION",
+                "Calculates the given mathematical expression and outputs the result.",
+            )
+                .behaviors(CommandBehaviors::NO_ARGUMENT_PARSING)
+                .build()
+        ).await;
+        my_interface.register_channel_command(
+            &CommandDefinitionBuilder::new(
+                "calcconst",
+                "calc",
+                "{cpfx}calcconst",
+                "Lists available calculator constants.",
             )
                 .build()
         ).await;
         my_interface.register_channel_command(
             &CommandDefinitionBuilder::new(
-                "calcfunc".to_owned(),
-                "calc".to_owned(),
-                "{cpfx}calcfunc".to_owned(),
-                "Lists available calculator functions.".to_owned(),
+                "calcfunc",
+                "calc",
+                "{cpfx}calcfunc",
+                "Lists available calculator functions.",
             )
                 .build()
         ).await;
         my_interface.register_channel_command(
             &CommandDefinitionBuilder::new(
-                "factor".to_owned(),
-                "calc".to_owned(),
-                "{cpfx}factor NUMBER".to_owned(),
-                "Attempts to subdivide the given natural number into its prime factors.".to_owned(),
+                "factor",
+                "calc",
+                "{cpfx}factor NUMBER",
+                "Attempts to subdivide the given natural number into its prime factors.",
             )
                 .add_flag("c").add_flag("code")
                 .build()

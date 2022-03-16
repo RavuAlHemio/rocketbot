@@ -176,10 +176,10 @@ impl RocketBotPlugin for SloganPlugin {
         );
 
         let slogan_command = CommandDefinitionBuilder::new(
-            "slogan".to_owned(),
-            "slogan".to_owned(),
-            "{cpfx}slogan [SUBJECT]".to_owned(),
-            "Generates and outputs a generic marketing slogan about SUBJECT.".to_owned(),
+            "slogan",
+            "slogan",
+            "{cpfx}slogan [SUBJECT]",
+            "Generates and outputs a generic marketing slogan about SUBJECT.",
         )
             .build();
         my_interface.register_channel_command(&slogan_command).await;

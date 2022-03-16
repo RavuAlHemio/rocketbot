@@ -65,10 +65,10 @@ impl RocketBotPlugin for ProgressPlugin {
 
         my_interface.register_channel_command(
             &CommandDefinitionBuilder::new(
-                "progress".to_owned(),
-                "progress".to_owned(),
-                "{cpfx}progress TEXT".to_owned(),
-                "Annotates percentages in the text with progress bars.".to_owned(),
+                "progress",
+                "progress",
+                "{cpfx}progress TEXT",
+                "Annotates percentages in the text with progress bars.",
             )
                 .add_option("f", CommandValueType::String)
                 .add_option("foreground", CommandValueType::String)

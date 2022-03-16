@@ -71,19 +71,19 @@ impl RocketBotPlugin for RomanNumPlugin {
 
         my_interface.register_channel_command(
             &CommandDefinitionBuilder::new(
-                "roman".to_owned(),
-                "roman_num".to_owned(),
-                "{cpfx}roman NUMBER".to_owned(),
-                "Converts the given number, given in Arabic digits, into Roman numerals.".to_owned(),
+                "roman",
+                "roman_num",
+                "{cpfx}roman NUMBER",
+                "Converts the given number, given in Arabic digits, into Roman numerals.",
             )
                 .build()
         ).await;
         my_interface.register_channel_command(
             &CommandDefinitionBuilder::new(
-                "unroman".to_owned(),
-                "roman_num".to_owned(),
-                "{cpfx}unroman ROMAN".to_owned(),
-                "Converts the given number, given in Roman numerals, into Arabic digits.".to_owned(),
+                "unroman",
+                "roman_num",
+                "{cpfx}unroman ROMAN",
+                "Converts the given number, given in Roman numerals, into Arabic digits.",
             )
                 .build()
         ).await;

@@ -302,8 +302,8 @@ impl TransliteratePlugin {
             interface.register_channel_command(
                 &CommandDefinitionBuilder::new(
                     command.clone(),
-                    "transliterate".to_owned(),
-                    "{cpfx}{cmd} PHRASE".to_owned(),
+                    "transliterate",
+                    "{cpfx}{cmd} PHRASE",
                     format!(
                         "Transliterates text from {} to {}.",
                         source_lang.name, dest_lang.name,
@@ -327,29 +327,29 @@ impl RocketBotPlugin for TransliteratePlugin {
 
         my_interface.register_channel_command(
             &CommandDefinitionBuilder::new(
-                "languages".to_owned(),
-                "transliterate".to_owned(),
-                "{cpfx}languages".to_owned(),
-                "Transliterates text from a specific language to the intermediate language.".to_owned(),
+                "languages",
+                "transliterate",
+                "{cpfx}languages",
+                "Transliterates text from a specific language to the intermediate language.",
             )
                 .build(),
         ).await;
         my_interface.register_channel_command(
             &CommandDefinitionBuilder::new(
-                "detransliterate".to_owned(),
-                "transliterate".to_owned(),
-                "{cpfx}detransliterate LANG PHRASE".to_owned(),
-                "Transliterates text from a specific language to the intermediate language.".to_owned(),
+                "detransliterate",
+                "transliterate",
+                "{cpfx}detransliterate LANG PHRASE",
+                "Transliterates text from a specific language to the intermediate language.",
             )
                 .arg_count(1)
                 .build(),
         ).await;
         my_interface.register_channel_command(
             &CommandDefinitionBuilder::new(
-                "entransliterate".to_owned(),
-                "transliterate".to_owned(),
-                "{cpfx}entransliterate LANG PHRASE".to_owned(),
-                "Transliterates text from the intermediate language to a specific language.".to_owned(),
+                "entransliterate",
+                "transliterate",
+                "{cpfx}entransliterate LANG PHRASE",
+                "Transliterates text from the intermediate language to a specific language.",
             )
                 .arg_count(1)
                 .build(),

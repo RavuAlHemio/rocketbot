@@ -72,21 +72,26 @@ pub struct CommandDefinitionBuilder {
     definition: CommandDefinition,
 }
 impl CommandDefinitionBuilder {
-    pub fn new(
-        name: String,
-        plugin_name: String,
-        usage: String,
-        description: String,
-    ) -> Self {
+    pub fn new<N, P, U, D>(
+        name: N,
+        plugin_name: P,
+        usage: U,
+        description: D,
+    ) -> Self
+            where
+                N: Into<String>,
+                P: Into<String>,
+                U: Into<String>,
+                D: Into<String> {
         let definition = CommandDefinition::new(
-            name,
-            plugin_name,
+            name.into(),
+            plugin_name.into(),
             Some(HashSet::new()),
             HashMap::new(),
             0,
             CommandBehaviors::empty(),
-            usage,
-            description,
+            usage.into(),
+            description.into(),
         );
         Self {
             definition,
@@ -103,9 +108,9 @@ impl CommandDefinitionBuilder {
         self
     }
 
-    pub fn add_flag(mut self, new_flag: &str) -> Self {
+    pub fn add_flag<N: Into<String>>(mut self, new_flag: N) -> Self {
         if let Some(flags) = &mut self.definition.flags {
-            flags.insert(new_flag.to_owned());
+            flags.insert(new_flag.into());
         }
         self
     }
@@ -115,8 +120,8 @@ impl CommandDefinitionBuilder {
         self
     }
 
-    pub fn add_option(mut self, new_option: &str, new_type: CommandValueType) -> Self {
-        self.definition.options.insert(new_option.to_owned(), new_type);
+    pub fn add_option<N: Into<String>>(mut self, new_option: N, new_type: CommandValueType) -> Self {
+        self.definition.options.insert(new_option.into(), new_type);
         self
     }
 

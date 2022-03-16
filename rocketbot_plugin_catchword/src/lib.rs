@@ -1,4 +1,4 @@
-use std::collections::{HashMap, HashSet};
+use std::collections::HashMap;
 use std::sync::Weak;
 
 use async_trait::async_trait;
@@ -7,7 +7,7 @@ use rand::{Rng, SeedableRng};
 use rand::rngs::StdRng;
 use regex::{Match, Regex};
 use rocketbot_interface::{JsonValueExtensions, ResultExtensions, send_channel_message};
-use rocketbot_interface::commands::{CommandBehaviors, CommandDefinition, CommandInstance};
+use rocketbot_interface::commands::{CommandDefinitionBuilder, CommandInstance};
 use rocketbot_interface::interfaces::{RocketBotInterface, RocketBotPlugin};
 use rocketbot_interface::model::ChannelMessage;
 use rocketbot_interface::sync::{Mutex, RwLock};
@@ -87,16 +87,15 @@ impl CatchwordPlugin {
     }
 
     async fn register_catchword_command<I: RocketBotInterface + ?Sized>(interface: &I, catch_name: &str) {
-        interface.register_channel_command(&CommandDefinition::new(
-            catch_name.to_owned(),
-            "catchword".to_owned(),
-            Some(HashSet::new()),
-            HashMap::new(),
-            0,
-            CommandBehaviors::empty(),
-            format!("{{cpfx}}{} PHRASE", catch_name),
-            "Performs replacements in the PHRASE according to preconfigured rules.".to_owned(),
-        )).await;
+        interface.register_channel_command(
+            &CommandDefinitionBuilder::new(
+                catch_name,
+                "catchword",
+                format!("{{cpfx}}{} PHRASE", catch_name),
+                "Performs replacements in the PHRASE according to preconfigured rules.",
+            )
+                .build()
+        ).await;
     }
 }
 #[async_trait]

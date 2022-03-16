@@ -1,4 +1,3 @@
-use std::collections::{HashMap, HashSet};
 use std::convert::TryInto;
 use std::sync::Weak;
 
@@ -6,7 +5,7 @@ use async_trait::async_trait;
 use chrono::Utc;
 use log::{error, info};
 use rocketbot_interface::{JsonValueExtensions, send_channel_message};
-use rocketbot_interface::commands::{CommandBehaviors, CommandDefinition, CommandInstance};
+use rocketbot_interface::commands::{CommandDefinitionBuilder, CommandInstance};
 use rocketbot_interface::interfaces::{RocketBotInterface, RocketBotPlugin};
 use rocketbot_interface::model::ChannelMessage;
 use rocketbot_interface::sync::RwLock;
@@ -455,65 +454,53 @@ impl RocketBotPlugin for ThanksPlugin {
             config_object,
         );
 
-        let thanks_command = CommandDefinition::new(
-            "thanks".to_owned(),
-            "thanks".to_owned(),
-            Some(HashSet::new()),
-            HashMap::new(),
-            1,
-            CommandBehaviors::empty(),
-            "{cpfx}thanks|{cpfx}thank|{cpfx}thx USERNAME [REASON]".to_owned(),
-            "Thanks a user.".to_owned(),
-        );
+        let thanks_command = CommandDefinitionBuilder::new(
+            "thanks",
+            "thanks",
+            "{cpfx}thanks|{cpfx}thank|{cpfx}thx USERNAME [REASON]",
+            "Thanks a user.",
+        )
+            .arg_count(1)
+            .build();
         let thank_command = thanks_command.copy_named("thank");
         let thx_command = thanks_command.copy_named("thx");
         my_interface.register_channel_command(&thanks_command).await;
         my_interface.register_channel_command(&thank_command).await;
         my_interface.register_channel_command(&thx_command).await;
 
-        let thanked_command = CommandDefinition::new(
-            "thanked".to_owned(),
-            "thanks".to_owned(),
-            Some(HashSet::new()),
-            HashMap::new(),
-            1,
-            CommandBehaviors::empty(),
-            "{cpfx}thanked USERNAME".to_owned(),
-            "Displays how often the given user has been thanked.".to_owned(),
-        );
-        let grateful_command = CommandDefinition::new(
-            "grateful".to_owned(),
-            "thanks".to_owned(),
-            Some(HashSet::new()),
-            HashMap::new(),
-            1,
-            CommandBehaviors::empty(),
-            "{cpfx}grateful USERNAME".to_owned(),
-            "Displays how often the given user has thanked others.".to_owned(),
-        );
+        let thanked_command = CommandDefinitionBuilder::new(
+            "thanked",
+            "thanks",
+            "{cpfx}thanked USERNAME",
+            "Displays how often the given user has been thanked.",
+        )
+            .arg_count(1)
+            .build();
+        let grateful_command = CommandDefinitionBuilder::new(
+            "grateful",
+            "thanks",
+            "{cpfx}grateful USERNAME",
+            "Displays how often the given user has thanked others.",
+        )
+            .arg_count(1)
+            .build();
         my_interface.register_channel_command(&thanked_command).await;
         my_interface.register_channel_command(&grateful_command).await;
 
-        let topthanked_command = CommandDefinition::new(
-            "topthanked".to_owned(),
-            "thanks".to_owned(),
-            Some(HashSet::new()),
-            HashMap::new(),
-            0,
-            CommandBehaviors::empty(),
-            "{cpfx}topthanked".to_owned(),
-            "Displays the top thanked users to the knowledge of this bot.".to_owned(),
-        );
-        let topgrateful_command = CommandDefinition::new(
-            "topgrateful".to_owned(),
-            "thanks".to_owned(),
-            Some(HashSet::new()),
-            HashMap::new(),
-            0,
-            CommandBehaviors::empty(),
-            "{cpfx}topgrateful".to_owned(),
-            "Displays the top grateful users to the knowledge of this bot.".to_owned(),
-        );
+        let topthanked_command = CommandDefinitionBuilder::new(
+            "topthanked",
+            "thanks",
+            "{cpfx}topthanked",
+            "Displays the top thanked users to the knowledge of this bot.",
+        )
+            .build();
+        let topgrateful_command = CommandDefinitionBuilder::new(
+            "topgrateful",
+            "thanks",
+            "{cpfx}topgrateful",
+            "Displays the top grateful users to the knowledge of this bot.",
+        )
+            .build();
         my_interface.register_channel_command(&topthanked_command).await;
         my_interface.register_channel_command(&topgrateful_command).await;
 

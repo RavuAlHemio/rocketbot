@@ -1,4 +1,4 @@
-use std::collections::{HashMap, HashSet};
+use std::collections::HashMap;
 use std::fs::File;
 use std::io::Read;
 use std::path::Path;
@@ -9,7 +9,7 @@ use log::error;
 use rand::{Rng, SeedableRng};
 use rand::rngs::StdRng;
 use rocketbot_interface::{JsonValueExtensions, ResultExtensions, send_channel_message};
-use rocketbot_interface::commands::{CommandBehaviors, CommandDefinition, CommandInstance};
+use rocketbot_interface::commands::{CommandDefinitionBuilder, CommandInstance};
 use rocketbot_interface::interfaces::{RocketBotInterface, RocketBotPlugin};
 use rocketbot_interface::model::ChannelMessage;
 use rocketbot_interface::sync::{Mutex, RwLock};
@@ -76,16 +76,13 @@ impl RocketBotPlugin for FortunePlugin {
             config_object,
         );
 
-        let fortune_command = CommandDefinition::new(
-            "fortune".to_owned(),
-            "fortune".to_owned(),
-            Some(HashSet::new()),
-            HashMap::new(),
-            0,
-            CommandBehaviors::empty(),
-            "{cpfx}fortune [GROUP]".to_owned(),
-            "Selects and displays a random fortune, optionally from a specific group.".to_owned(),
-        );
+        let fortune_command = CommandDefinitionBuilder::new(
+            "fortune",
+            "fortune",
+            "{cpfx}fortune [GROUP]",
+            "Selects and displays a random fortune, optionally from a specific group.",
+        )
+            .build();
         my_interface.register_channel_command(&fortune_command).await;
 
         let rng = Mutex::new(

@@ -152,10 +152,10 @@ impl RocketBotPlugin for NumberwordPlugin {
 
         my_interface.register_channel_command(
             &CommandDefinitionBuilder::new(
-                "unkeypad".to_owned(),
-                "numberword".to_owned(),
-                "{cpfx}unkeypad NUMBER".to_owned(),
-                "Attempts to guess the word described by the phone-keypad number.".to_owned(),
+                "unkeypad",
+                "numberword",
+                "{cpfx}unkeypad NUMBER",
+                "Attempts to guess the word described by the phone-keypad number.",
             )
                 .build()
         ).await;

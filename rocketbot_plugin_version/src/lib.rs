@@ -1,10 +1,9 @@
-use std::collections::{HashMap, HashSet};
 use std::sync::Weak;
 
 use async_trait::async_trait;
 use log::warn;
 use rocketbot_interface::{send_channel_message, send_private_message};
-use rocketbot_interface::commands::{CommandBehaviors, CommandDefinition, CommandInstance};
+use rocketbot_interface::commands::{CommandDefinitionBuilder, CommandInstance};
 use rocketbot_interface::interfaces::{RocketBotInterface, RocketBotPlugin};
 use rocketbot_interface::model::{ChannelMessage, PrivateMessage};
 use serde_json;
@@ -26,16 +25,13 @@ impl RocketBotPlugin for VersionPlugin {
             Some(i) => i,
         };
 
-        let version_command = CommandDefinition::new(
-            "version".to_owned(),
-            "version".to_owned(),
-            Some(HashSet::new()),
-            HashMap::new(),
-            0,
-            CommandBehaviors::empty(),
-            "{cpfx}version".to_owned(),
-            "Outputs the currently running version of the bot.".to_owned(),
-        );
+        let version_command = CommandDefinitionBuilder::new(
+            "version",
+            "version",
+            "{cpfx}version",
+            "Outputs the currently running version of the bot.",
+        )
+            .build();
         my_interface.register_channel_command(&version_command).await;
         my_interface.register_private_message_command(&version_command).await;
 

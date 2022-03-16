@@ -153,10 +153,10 @@ impl RocketBotPlugin for TimePlugin {
 
         my_interface.register_channel_command(
             &CommandDefinitionBuilder::new(
-                "time".to_owned(),
-                "time".to_owned(),
-                "{cpfx}time [-r] LOCATION".to_owned(),
-                "Shows the current time at the given location.".to_owned(),
+                "time",
+                "time",
+                "{cpfx}time [-r] LOCATION",
+                "Shows the current time at the given location.",
             )
                 .add_flag("not")
                 .add_flag("n")

@@ -353,19 +353,19 @@ impl RocketBotPlugin for BarcodePlugin {
 
         my_interface.register_channel_command(
             &CommandDefinitionBuilder::new(
-                "datamatrix".to_owned(),
-                "barcode".to_owned(),
-                "{cpfx}datamatrix TEXT".to_owned(),
-                "Encodes the given text into a Data Matrix barcode.".to_owned(),
+                "datamatrix",
+                "barcode",
+                "{cpfx}datamatrix TEXT",
+                "Encodes the given text into a Data Matrix barcode.",
             )
                 .build()
         ).await;
         my_interface.register_channel_command(
             &CommandDefinitionBuilder::new(
-                "vaxcert".to_owned(),
-                "barcode".to_owned(),
-                "{cpfx}vaxcert OPTIONS".to_owned(),
-                "Generates a vaccination certificate QR code.".to_owned(),
+                "vaxcert",
+                "barcode",
+                "{cpfx}vaxcert OPTIONS",
+                "Generates a vaccination certificate QR code.",
             )
                 // flags
                 .add_flag("p")

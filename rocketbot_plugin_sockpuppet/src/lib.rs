@@ -1,12 +1,10 @@
-use std::collections::{HashMap, HashSet};
+use std::collections::HashSet;
 use std::sync::Weak;
 
 use async_trait::async_trait;
 use log::error;
 use rocketbot_interface::{JsonValueExtensions, send_channel_message_advanced};
-use rocketbot_interface::commands::{
-    CommandBehaviors, CommandDefinition, CommandInstance, CommandValueType,
-};
+use rocketbot_interface::commands::{CommandDefinitionBuilder, CommandInstance, CommandValueType};
 use rocketbot_interface::interfaces::{RocketBotInterface, RocketBotPlugin};
 use rocketbot_interface::model::{ImpersonationInfo, OutgoingMessage, PrivateMessage};
 use rocketbot_interface::sync::RwLock;
@@ -116,18 +114,15 @@ impl RocketBotPlugin for SockpuppetPlugin {
             config_object,
         );
 
-        let mut chansend_options = HashMap::new();
-        chansend_options.insert("impersonate".to_owned(), CommandValueType::String);
-        let chansend_command = CommandDefinition::new(
-            "chansend".to_owned(),
-            "sockpuppet".to_owned(),
-            Some(HashSet::new()),
-            chansend_options,
-            1,
-            CommandBehaviors::empty(),
-            "{cpfx}chansend [{lopfx}impersonate USERNAME] CHANNEL MESSAGE".to_owned(),
-            "Sends a message, pretending to be the bot or someone else.".to_owned(),
-        );
+        let chansend_command = CommandDefinitionBuilder::new(
+            "chansend",
+            "sockpuppet",
+            "{cpfx}chansend [{lopfx}impersonate USERNAME] CHANNEL MESSAGE",
+            "Sends a message, pretending to be the bot or someone else.",
+        )
+            .add_option("impersonate", CommandValueType::String)
+            .arg_count(1)
+            .build();
         my_interface.register_private_message_command(&chansend_command).await;
 
         SockpuppetPlugin {

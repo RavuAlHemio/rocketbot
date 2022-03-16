@@ -324,10 +324,10 @@ mod tests {
     #[test]
     fn test_quoting() {
         let command = CommandDefinitionBuilder::new(
-            "bloop".into(),
-            "bloop".to_owned(),
-            "{cpfx}bloop [STUFF]".to_owned(),
-            "Bloops.".to_owned(),
+            "bloop",
+            "bloop",
+            "{cpfx}bloop [STUFF]",
+            "Bloops.",
         )
             .arg_count(2)
             .build();

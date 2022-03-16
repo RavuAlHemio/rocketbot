@@ -1,11 +1,10 @@
-use std::collections::{BTreeMap, HashMap, HashSet};
+use std::collections::{BTreeMap, HashMap};
 use std::sync::{Arc, Weak};
 
 use async_trait::async_trait;
 use rocketbot_interface::{send_channel_message, send_private_message};
 use rocketbot_interface::commands::{
-    CommandBehaviors, CommandConfiguration, CommandDefinition, CommandDefinitionBuilder,
-    CommandInstance,
+    CommandConfiguration, CommandDefinition, CommandDefinitionBuilder, CommandInstance,
 };
 use rocketbot_interface::interfaces::{RocketBotInterface, RocketBotPlugin};
 use rocketbot_interface::model::{ChannelMessage, PrivateMessage};
@@ -240,50 +239,41 @@ impl RocketBotPlugin for HelpPlugin {
             Some(i) => i,
         };
 
-        let help_command = CommandDefinition::new(
-            "help".to_owned(),
-            "help".to_owned(),
-            Some(HashSet::new()),
-            HashMap::new(),
-            0,
-            CommandBehaviors::empty(),
-            "{cpfx}help [COMMAND]".to_owned(),
-            "Shows help about the given command, or lists all available commands.".to_owned(),
-        );
+        let help_command = CommandDefinitionBuilder::new(
+            "help",
+            "help",
+            "{cpfx}help [COMMAND]",
+            "Shows help about the given command, or lists all available commands.",
+        )
+            .build();
         my_interface.register_channel_command(&help_command).await;
         my_interface.register_private_message_command(&help_command).await;
 
-        let helpplug_command = CommandDefinition::new(
-            "helpplug".to_owned(),
-            "help".to_owned(),
-            Some(HashSet::new()),
-            HashMap::new(),
-            0,
-            CommandBehaviors::empty(),
-            "{cpfx}helpplug PLUGIN".to_owned(),
-            "Lists all available commands, including usage information, provided by the given plugin.".to_owned(),
-        );
+        let helpplug_command = CommandDefinitionBuilder::new(
+            "helpplug",
+            "help",
+            "{cpfx}helpplug PLUGIN",
+            "Lists all available commands, including usage information, provided by the given plugin.",
+        )
+            .build();
         my_interface.register_channel_command(&helpplug_command).await;
         my_interface.register_private_message_command(&helpplug_command).await;
 
-        let usage_command = CommandDefinition::new(
-            "usage".to_owned(),
-            "help".to_owned(),
-            Some(HashSet::new()),
-            HashMap::new(),
-            0,
-            CommandBehaviors::empty(),
-            "{cpfx}usage COMMAND".to_owned(),
-            "Shows usage information for the given command.".to_owned(),
-        );
+        let usage_command = CommandDefinitionBuilder::new(
+            "usage",
+            "help",
+            "{cpfx}usage COMMAND",
+            "Shows usage information for the given command.",
+        )
+            .build();
         my_interface.register_channel_command(&usage_command).await;
         my_interface.register_private_message_command(&usage_command).await;
 
         let whichplugin_command = CommandDefinitionBuilder::new(
-            "whichplugin".to_owned(),
-            "help".to_owned(),
-            "{cpfx}whichplugin COMMAND".to_owned(),
-            "Displays which plugin provides the given command.".to_owned(),
+            "whichplugin",
+            "help",
+            "{cpfx}whichplugin COMMAND",
+            "Displays which plugin provides the given command.",
         )
             .build();
         my_interface.register_channel_command(&whichplugin_command).await;

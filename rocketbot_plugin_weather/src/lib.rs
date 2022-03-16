@@ -2,7 +2,7 @@ pub mod interface;
 pub mod providers;
 
 
-use std::collections::{HashMap, HashSet};
+use std::collections::HashMap;
 use std::sync::Weak;
 
 use async_trait::async_trait;
@@ -11,7 +11,7 @@ use once_cell::sync::Lazy;
 use regex::Regex;
 use rocketbot_geocoding::{Geocoder, GeoCoordinates};
 use rocketbot_interface::{JsonValueExtensions, send_channel_message};
-use rocketbot_interface::commands::{CommandBehaviors, CommandDefinition, CommandInstance};
+use rocketbot_interface::commands::{CommandDefinitionBuilder, CommandInstance};
 use rocketbot_interface::interfaces::{RocketBotInterface, RocketBotPlugin};
 use rocketbot_interface::model::ChannelMessage;
 use rocketbot_interface::sync::RwLock;
@@ -208,16 +208,13 @@ impl RocketBotPlugin for WeatherPlugin {
             config_object,
         );
 
-        let weather_command = CommandDefinition::new(
-            "weather".to_owned(),
-            "weather".to_owned(),
-            Some(HashSet::new()),
-            HashMap::new(),
-            0,
-            CommandBehaviors::empty(),
-            "{cpfx}weather|{cpfx}lweather [LOCATION]".to_owned(),
-            "Displays the current weather as well as a forecast for the given location.".to_owned(),
-        );
+        let weather_command = CommandDefinitionBuilder::new(
+            "weather",
+            "weather",
+            "{cpfx}weather|{cpfx}lweather [LOCATION]",
+            "Displays the current weather as well as a forecast for the given location.",
+        )
+            .build();
         let lweather_command = weather_command.copy_named("lweather");
         let wetter_command = weather_command.copy_named("wetter");
         let owetter_command = weather_command.copy_named("owetter");

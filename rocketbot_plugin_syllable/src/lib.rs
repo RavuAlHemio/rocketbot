@@ -145,10 +145,10 @@ impl RocketBotPlugin for SyllablePlugin {
 
         my_interface.register_channel_command(
             &CommandDefinitionBuilder::new(
-                "syl".to_owned(),
-                "syllable".to_owned(),
-                "{cpfx}syl TEXT".to_owned(),
-                "Calculates the number of syllables in a text.".to_owned(),
+                "syl",
+                "syllable",
+                "{cpfx}syl TEXT",
+                "Calculates the number of syllables in a text.",
             )
                 .build()
         ).await;

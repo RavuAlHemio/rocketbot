@@ -2,7 +2,6 @@ pub mod interface;
 pub mod providers;
 
 
-use std::collections::{HashMap, HashSet};
 use std::sync::{Arc, Weak};
 
 use async_trait::async_trait;
@@ -10,7 +9,7 @@ use log::error;
 use rand::{Rng, RngCore, SeedableRng};
 use rand::rngs::StdRng;
 use rocketbot_interface::{JsonValueExtensions, send_channel_message};
-use rocketbot_interface::commands::{CommandBehaviors, CommandDefinition, CommandInstance};
+use rocketbot_interface::commands::{CommandDefinitionBuilder, CommandInstance};
 use rocketbot_interface::interfaces::{RocketBotInterface, RocketBotPlugin};
 use rocketbot_interface::model::ChannelMessage;
 use rocketbot_interface::sync::{Mutex, RwLock};
@@ -102,16 +101,13 @@ impl RocketBotPlugin for FactPlugin {
             Box::new(StdRng::from_entropy()) as Box<dyn RngCore + Send>,
         ));
 
-        let fact_command = CommandDefinition::new(
-            "fact".to_owned(),
-            "fact".to_owned(),
-            Some(HashSet::new()),
-            HashMap::new(),
-            0,
-            CommandBehaviors::empty(),
-            "{cpfx}fact".to_owned(),
-            "Obtains and displays a random fact.".to_owned(),
-        );
+        let fact_command = CommandDefinitionBuilder::new(
+            "fact",
+            "fact",
+            "{cpfx}fact",
+            "Obtains and displays a random fact.",
+        )
+            .build();
         my_interface.register_channel_command(&fact_command).await;
 
         FactPlugin {

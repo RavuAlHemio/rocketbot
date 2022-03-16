@@ -180,10 +180,10 @@ impl RocketBotPlugin for AllographPlugin {
 
         my_interface.register_private_message_command(
             &CommandDefinitionBuilder::new(
-                "allocool".into(),
-                "allograph".to_owned(),
-                "{cpfx}allocool CHANNEL".to_owned(),
-                "Outputs current Allograph cooldowns in the given channel.".to_owned(),
+                "allocool",
+                "allograph",
+                "{cpfx}allocool CHANNEL",
+                "Outputs current Allograph cooldowns in the given channel.",
             )
                 .build()
         ).await;

@@ -12,7 +12,7 @@ use rand::{Rng, SeedableRng};
 use rand::rngs::StdRng;
 use rand::seq::SliceRandom;
 use rocketbot_interface::{JsonValueExtensions, send_channel_message};
-use rocketbot_interface::commands::{CommandBehaviors, CommandDefinition, CommandInstance};
+use rocketbot_interface::commands::{CommandDefinitionBuilder, CommandInstance};
 use rocketbot_interface::interfaces::{RocketBotInterface, RocketBotPlugin};
 use rocketbot_interface::model::ChannelMessage;
 use rocketbot_interface::sync::{Mutex, RwLock};
@@ -792,28 +792,23 @@ impl RocketBotPlugin for QuotesPlugin {
             ),
         );
 
-        let addquote_command = CommandDefinition::new(
+        let addquote_command = CommandDefinitionBuilder::new(
             format!("{}addquote", config_object.command_prefix),
-            "quotes".to_owned(),
-            Some(HashSet::new()),
-            HashMap::new(),
-            0,
-            CommandBehaviors::empty(),
+            "quotes",
             format!("{{cpfx}}{}addquote QUOTE", config_object.command_prefix),
-            "Adds the given quote to the quote database.".to_owned(),
-        );
+            "Adds the given quote to the quote database.",
+        )
+            .build();
         my_interface.register_channel_command(&addquote_command).await;
 
-        let remember_command = CommandDefinition::new(
+        let remember_command = CommandDefinitionBuilder::new(
             format!("{}remember", config_object.command_prefix),
-            "quotes".to_owned(),
-            Some(HashSet::new()),
-            HashMap::new(),
-            1,
-            CommandBehaviors::empty(),
+            "quotes",
             format!("{{cpfx}}{}remember USERNAME SUBSTRING", config_object.command_prefix),
-            "Adds a recent utterance of the given user to the quote database.".to_owned(),
-        );
+            "Adds a recent utterance of the given user to the quote database.",
+        )
+            .arg_count(1)
+            .build();
         my_interface.register_channel_command(&remember_command).await;
 
         let mut quote_flags = HashSet::new();
@@ -824,52 +819,45 @@ impl RocketBotPlugin for QuotesPlugin {
         let mut quote_case_flags = quote_flags.clone();
         quote_case_flags.insert("c".to_owned());
 
-        let quote_command = CommandDefinition::new(
+        let quote_command = CommandDefinitionBuilder::new(
             format!("{}quote", config_object.command_prefix),
-            "quotes".to_owned(),
-            Some(quote_case_flags.clone()),
-            HashMap::new(),
-            0,
-            CommandBehaviors::empty(),
+            "quotes",
             format!("{{cpfx}}{}quote [{{lopfx}}any|{{lopfx}}bad] [{{sopfx}}r] [{{sopfx}}c] [SUBSTRING]", config_object.command_prefix),
-            "Outputs a random quote containing the given substring.".to_owned(),
-        );
+            "Outputs a random quote containing the given substring.",
+        )
+            .flags(Some(quote_case_flags.clone()))
+            .build();
         my_interface.register_channel_command(&quote_command).await;
 
-        let quoteuser_command = CommandDefinition::new(
+        let quoteuser_command = CommandDefinitionBuilder::new(
             format!("{}quoteuser", config_object.command_prefix),
-            "quotes".to_owned(),
-            Some(quote_case_flags.clone()),
-            HashMap::new(),
-            1,
-            CommandBehaviors::empty(),
+            "quotes",
             format!("{{cpfx}}{}quoteuser [{{lopfx}}any|{{lopfx}}bad] [{{sopfx}}r] [{{sopfx}}c] USERNAME [SUBSTRING]", config_object.command_prefix),
-            "Outputs a random quote from the given user containing the given substring.".to_owned(),
-        );
+            "Outputs a random quote from the given user containing the given substring.",
+        )
+            .flags(Some(quote_case_flags.clone()))
+            .arg_count(1)
+            .build();
         my_interface.register_channel_command(&quoteuser_command).await;
 
-        let nextquote_command = CommandDefinition::new(
+        let nextquote_command = CommandDefinitionBuilder::new(
             format!("{}nextquote", config_object.command_prefix),
-            "quotes".to_owned(),
-            Some(quote_flags.clone()),
-            HashMap::new(),
-            0,
-            CommandBehaviors::empty(),
+            "quotes",
             format!("{{cpfx}}{}nextquote [{{lopfx}}any|{{lopfx}}bad] [{{sopfx}}r]", config_object.command_prefix),
-            "Displays the next quote from a pre-shuffled list of quotes.".to_owned(),
-        );
+            "Displays the next quote from a pre-shuffled list of quotes.",
+        )
+            .flags(Some(quote_flags.clone()))
+            .build();
         my_interface.register_channel_command(&nextquote_command).await;
 
-        let upquote_command = CommandDefinition::new(
+        let upquote_command = CommandDefinitionBuilder::new(
             format!("{}upquote", config_object.command_prefix),
-            "quotes".to_owned(),
-            Some(quote_flags.clone()),
-            HashMap::new(),
-            0,
-            CommandBehaviors::empty(),
+            "quotes",
             format!("{{cpfx}}{0}uq|{{cpfx}}{0}upquote|{{cpfx}}{0}dq|{{cpfx}}{0}downquote", config_object.command_prefix),
-            "Updates the most recently added or displayed quote with a positive or a negative vote from you.".to_owned(),
-        );
+            "Updates the most recently added or displayed quote with a positive or a negative vote from you.",
+        )
+            .flags(Some(quote_flags.clone()))
+            .build();
         let uq_command = upquote_command.copy_named(&format!("{}uq", config_object.command_prefix));
         let downquote_command = upquote_command.copy_named(&format!("{}downquote", config_object.command_prefix));
         let dq_command = upquote_command.copy_named(&format!("{}dq", config_object.command_prefix));

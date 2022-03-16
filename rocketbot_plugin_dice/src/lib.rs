@@ -13,10 +13,7 @@ use rand::seq::SliceRandom;
 use rand::rngs::StdRng;
 use regex::{Captures, Regex};
 use rocketbot_interface::{ResultExtensions, send_channel_message};
-use rocketbot_interface::commands::{
-    CommandBehaviors, CommandDefinition, CommandDefinitionBuilder, CommandInstance,
-    CommandValueType,
-};
+use rocketbot_interface::commands::{CommandDefinitionBuilder, CommandInstance,CommandValueType};
 use rocketbot_interface::interfaces::{RocketBotInterface, RocketBotPlugin};
 use rocketbot_interface::model::ChannelMessage;
 use rocketbot_interface::sync::{Mutex, RwLock};
@@ -683,75 +680,59 @@ impl RocketBotPlugin for DicePlugin {
             HashMap::new(),
         );
 
-        let roll_command = CommandDefinition::new(
-            "roll".to_string(),
-            "dice".to_owned(),
-            Some(HashSet::new()),
-            HashMap::new(),
-            0,
-            CommandBehaviors::empty(),
-            "{cpfx}roll DICE [DICE ...]".to_owned(),
-            "Rolls one or more dice.".to_owned(),
-        );
+        let roll_command = CommandDefinitionBuilder::new(
+            "roll",
+            "dice",
+            "{cpfx}roll DICE [DICE ...]",
+            "Rolls one or more dice.",
+        )
+            .build();
         my_interface.register_channel_command(&roll_command).await;
 
-        let yn_command = CommandDefinition::new(
-            "yn".to_string(),
-            "dice".to_owned(),
-            Some(HashSet::new()),
-            HashMap::new(),
-            0,
-            CommandBehaviors::empty(),
-            "{cpfx}yn [QUESTION]".to_owned(),
-            "Helps you make a decision (or not) by answering a yes/no question.".to_owned(),
-        );
+        let yn_command = CommandDefinitionBuilder::new(
+            "yn",
+            "dice",
+            "{cpfx}yn [QUESTION]",
+            "Helps you make a decision (or not) by answering a yes/no question.",
+        )
+            .build();
         my_interface.register_channel_command(&yn_command).await;
 
-        let decide_command = CommandDefinition::new(
-            "decide".to_string(),
-            "dice".to_owned(),
-            Some(HashSet::new()),
-            HashMap::new(),
-            0,
-            CommandBehaviors::empty(),
-            "{cpfx}decide OPTION or OPTION [or OPTION...]".to_owned(),
-            "Helps you make a decision (or not) by choosing one of multiple options.".to_owned(),
-        );
+        let decide_command = CommandDefinitionBuilder::new(
+            "decide",
+            "dice",
+            "{cpfx}decide OPTION or OPTION [or OPTION...]",
+            "Helps you make a decision (or not) by choosing one of multiple options.",
+        )
+            .build();
         my_interface.register_channel_command(&decide_command).await;
 
-        let shuffle_command = CommandDefinition::new(
-            "shuffle".to_string(),
-            "dice".to_owned(),
-            Some(HashSet::new()),
-            HashMap::new(),
-            0,
-            CommandBehaviors::empty(),
-            "{cpfx}shuffle OPTION or OPTION [or OPTION...]".to_owned(),
-            "Helps you prioritize by shuffling the options.".to_owned(),
-        );
+        let shuffle_command = CommandDefinitionBuilder::new(
+            "shuffle",
+            "dice",
+            "{cpfx}shuffle OPTION or OPTION [or OPTION...]",
+            "Helps you prioritize by shuffling the options.",
+        )
+            .build();
         my_interface.register_channel_command(&shuffle_command).await;
 
-        let mut wikipedia_options = HashMap::new();
-        wikipedia_options.insert("w".to_string(), CommandValueType::String);
-        wikipedia_options.insert("wikipedia".to_string(), CommandValueType::String);
-        let some_year_command = CommandDefinition::new(
-            "someyear".to_string(),
-            "dice".to_owned(),
-            Some(HashSet::new()),
-            wikipedia_options,
-            0,
-            CommandBehaviors::empty(),
-            "{cpfx}someyear [{lopfx}wikipedia WP]".to_owned(),
-            "Selects a random year and links to its Wikipedia article.".to_owned(),
-        );
+        let some_year_command = CommandDefinitionBuilder::new(
+            "someyear",
+            "dice",
+            "{cpfx}someyear [{lopfx}wikipedia WP]",
+            "Selects a random year and links to its Wikipedia article.",
+        )
+            .add_option("w", CommandValueType::String)
+            .add_option("wikipedia", CommandValueType::String)
+            .build();
         my_interface.register_channel_command(&some_year_command).await;
 
         my_interface.register_channel_command(
             &CommandDefinitionBuilder::new(
-                "randwordle".to_owned(),
-                "dice".to_owned(),
-                "{cpfx}randwordle [OPTIONS]".to_owned(),
-                "Generates a random Wordle solution pattern.".to_owned(),
+                "randwordle",
+                "dice",
+                "{cpfx}randwordle [OPTIONS]",
+                "Generates a random Wordle solution pattern.",
             )
                 .add_option("s", CommandValueType::Integer)
                 .add_option("squares", CommandValueType::Integer)

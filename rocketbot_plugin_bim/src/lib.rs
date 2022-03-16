@@ -2459,10 +2459,10 @@ impl RocketBotPlugin for BimPlugin {
 
         my_interface.register_channel_command(
             &CommandDefinitionBuilder::new(
-                "bim".to_owned(),
-                "bim".to_owned(),
-                "{cpfx}bim NUMBER".to_owned(),
-                "Obtains information about the public transport vehicle with the given number.".to_owned(),
+                "bim",
+                "bim",
+                "{cpfx}bim NUMBER",
+                "Obtains information about the public transport vehicle with the given number.",
             )
                 .add_option("company", CommandValueType::String)
                 .add_option("c", CommandValueType::String)
@@ -2470,10 +2470,10 @@ impl RocketBotPlugin for BimPlugin {
         ).await;
         my_interface.register_channel_command(
             &CommandDefinitionBuilder::new(
-                "bimride".to_owned(),
-                "bim".to_owned(),
-                "{cpfx}bimride VEHICLE[+VEHICLE...][/LINE]".to_owned(),
-                "Registers a ride with the given vehicle(s) on the given line.".to_owned(),
+                "bimride",
+                "bim",
+                "{cpfx}bimride VEHICLE[+VEHICLE...][/LINE]",
+                "Registers a ride with the given vehicle(s) on the given line.",
             )
                 .add_option("company", CommandValueType::String)
                 .add_option("c", CommandValueType::String)
@@ -2481,10 +2481,10 @@ impl RocketBotPlugin for BimPlugin {
         ).await;
         my_interface.register_channel_command(
             &CommandDefinitionBuilder::new(
-                "topbims".to_owned(),
-                "bim".to_owned(),
-                "{cpfx}topbims".to_owned(),
-                "Returns the most-ridden vehicle(s).".to_owned(),
+                "topbims",
+                "bim",
+                "{cpfx}topbims",
+                "Returns the most-ridden vehicle(s).",
             )
                 .add_option("company", CommandValueType::String)
                 .add_option("c", CommandValueType::String)
@@ -2493,49 +2493,49 @@ impl RocketBotPlugin for BimPlugin {
         ).await;
         my_interface.register_channel_command(
             &CommandDefinitionBuilder::new(
-                "topriders".to_owned(),
-                "bim".to_owned(),
-                "{cpfx}topriders".to_owned(),
-                "Returns the most active rider(s).".to_owned(),
+                "topriders",
+                "bim",
+                "{cpfx}topriders",
+                "Returns the most active rider(s).",
             )
                 .add_lookback_flags()
                 .build()
         ).await;
         my_interface.register_channel_command(
             &CommandDefinitionBuilder::new(
-                "bimcompanies".to_owned(),
-                "bim".to_owned(),
-                "{cpfx}bimcompanies".to_owned(),
-                "Returns known public-transport operators.".to_owned(),
+                "bimcompanies",
+                "bim",
+                "{cpfx}bimcompanies",
+                "Returns known public-transport operators.",
             )
                 .build()
         ).await;
         my_interface.register_channel_command(
             &CommandDefinitionBuilder::new(
-                "favbims".to_owned(),
-                "bim".to_owned(),
-                "{cpfx}favbims".to_owned(),
-                "Returns each rider's most-ridden vehicle.".to_owned(),
-            )
-                .add_lookback_flags()
-                .build()
-        ).await;
-        my_interface.register_channel_command(
-            &CommandDefinitionBuilder::new(
-                "topbimdays".to_owned(),
-                "bim".to_owned(),
-                "{cpfx}topbimdays".to_owned(),
-                "Returns the days with the most vehicle rides.".to_owned(),
+                "favbims",
+                "bim",
+                "{cpfx}favbims",
+                "Returns each rider's most-ridden vehicle.",
             )
                 .add_lookback_flags()
                 .build()
         ).await;
         my_interface.register_channel_command(
             &CommandDefinitionBuilder::new(
-                "bimridertypes".to_owned(),
-                "bim".to_owned(),
-                "{cpfx}bimridertypes [-n] USERNAME".to_owned(),
-                "Returns the types of vehicles ridden by a rider.".to_owned(),
+                "topbimdays",
+                "bim",
+                "{cpfx}topbimdays",
+                "Returns the days with the most vehicle rides.",
+            )
+                .add_lookback_flags()
+                .build()
+        ).await;
+        my_interface.register_channel_command(
+            &CommandDefinitionBuilder::new(
+                "bimridertypes",
+                "bim",
+                "{cpfx}bimridertypes [-n] USERNAME",
+                "Returns the types of vehicles ridden by a rider.",
             )
                 .add_flag("n")
                 .add_flag("sort-by-number")
@@ -2544,10 +2544,10 @@ impl RocketBotPlugin for BimPlugin {
         ).await;
         my_interface.register_channel_command(
             &CommandDefinitionBuilder::new(
-                "bimriderlines".to_owned(),
-                "bim".to_owned(),
-                "{cpfx}bimriderlines [-n] USERNAME".to_owned(),
-                "Returns the lines ridden by a rider.".to_owned(),
+                "bimriderlines",
+                "bim",
+                "{cpfx}bimriderlines [-n] USERNAME",
+                "Returns the lines ridden by a rider.",
             )
                 .add_flag("n")
                 .add_flag("sort-by-number")
@@ -2556,10 +2556,10 @@ impl RocketBotPlugin for BimPlugin {
         ).await;
         my_interface.register_channel_command(
             &CommandDefinitionBuilder::new(
-                "bimranges".to_owned(),
-                "bim".to_owned(),
-                "{cpfx}bimranges [-p] [-c COMPANY]".to_owned(),
-                "Returns the number ranges of each vehicle type.".to_owned(),
+                "bimranges",
+                "bim",
+                "{cpfx}bimranges [-p] [-c COMPANY]",
+                "Returns the number ranges of each vehicle type.",
             )
                 .add_flag("precise")
                 .add_flag("p")
@@ -2569,10 +2569,10 @@ impl RocketBotPlugin for BimPlugin {
         ).await;
         my_interface.register_channel_command(
             &CommandDefinitionBuilder::new(
-                "bimtypes".to_owned(),
-                "bim".to_owned(),
-                "{cpfx}bimtypes [-c COMPANY] [USERNAME]".to_owned(),
-                "Returns statistics about vehicle types.".to_owned(),
+                "bimtypes",
+                "bim",
+                "{cpfx}bimtypes [-c COMPANY] [USERNAME]",
+                "Returns statistics about vehicle types.",
             )
                 .add_option("company", CommandValueType::String)
                 .add_option("c", CommandValueType::String)
@@ -2580,10 +2580,10 @@ impl RocketBotPlugin for BimPlugin {
         ).await;
         my_interface.register_channel_command(
             &CommandDefinitionBuilder::new(
-                "fixbimride".to_owned(),
-                "bim".to_owned(),
-                "{cpfx}fixbimride OPTIONS".to_owned(),
-                "Fix some data in a bim ride.".to_owned(),
+                "fixbimride",
+                "bim",
+                "{cpfx}fixbimride OPTIONS",
+                "Fix some data in a bim ride.",
             )
                 .add_flag("d")
                 .add_flag("delete")
@@ -2601,10 +2601,10 @@ impl RocketBotPlugin for BimPlugin {
         ).await;
         my_interface.register_channel_command(
             &CommandDefinitionBuilder::new(
-                "widestbims".to_owned(),
-                "bim".to_owned(),
-                "{cpfx}widestbims".to_owned(),
-                "Lists vehicles that have served the widest selection of riders.".to_owned(),
+                "widestbims",
+                "bim",
+                "{cpfx}widestbims",
+                "Lists vehicles that have served the widest selection of riders.",
             )
                 .add_lookback_flags()
                 .build()

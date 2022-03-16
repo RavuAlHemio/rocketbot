@@ -2,13 +2,13 @@ mod interface;
 mod readers;
 
 
-use std::collections::{HashMap, HashSet};
+use std::collections::HashMap;
 use std::sync::Weak;
 
 use async_trait::async_trait;
 use log::error;
 use rocketbot_interface::{JsonValueExtensions, send_channel_message};
-use rocketbot_interface::commands::{CommandBehaviors, CommandDefinition, CommandInstance};
+use rocketbot_interface::commands::{CommandDefinitionBuilder, CommandInstance};
 use rocketbot_interface::interfaces::{RocketBotInterface, RocketBotPlugin};
 use rocketbot_interface::model::ChannelMessage;
 use rocketbot_interface::sync::RwLock;
@@ -164,26 +164,24 @@ impl RocketBotPlugin for VitalsPlugin {
             config_object,
         );
 
-        my_interface.register_channel_command(&CommandDefinition::new(
-            "vitals".to_owned(),
-            "vitals".to_owned(),
-            Some(HashSet::new()),
-            HashMap::new(),
-            0,
-            CommandBehaviors::empty(),
-            "{cpfx}vitals [TARGET]".to_owned(),
-            "Obtains health-related information about the given target.".to_owned(),
-        )).await;
-        my_interface.register_channel_command(&CommandDefinition::new(
-            "vitallist".to_owned(),
-            "vitals".to_owned(),
-            Some(HashSet::new()),
-            HashMap::new(),
-            0,
-            CommandBehaviors::empty(),
-            "{cpfx}vitallist".to_owned(),
-            "Lists the available vitals targets.".to_owned(),
-        )).await;
+        my_interface.register_channel_command(
+            &CommandDefinitionBuilder::new(
+                "vitals",
+                "vitals",
+                "{cpfx}vitals [TARGET]",
+                "Obtains health-related information about the given target.",
+            )
+                .build()
+        ).await;
+        my_interface.register_channel_command(
+            &CommandDefinitionBuilder::new(
+                "vitallist",
+                "vitals",
+                "{cpfx}vitallist",
+                "Lists the available vitals targets.",
+            )
+                .build()
+        ).await;
 
         VitalsPlugin {
             interface,

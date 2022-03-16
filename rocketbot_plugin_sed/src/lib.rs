@@ -234,30 +234,30 @@ impl RocketBotPlugin for SedPlugin {
 
         my_interface.register_channel_command(
             &CommandDefinitionBuilder::new(
-                "sedparse".to_owned(),
-                "sed".to_owned(),
-                "{cpfx}sedparse SEDCOMMANDS".to_owned(),
-                "Attempts to parse one or more sed commands and pinpoint issues.".to_owned(),
+                "sedparse",
+                "sed",
+                "{cpfx}sedparse SEDCOMMANDS",
+                "Attempts to parse one or more sed commands and pinpoint issues.",
             )
                 .behaviors(CommandBehaviors::NO_ARGUMENT_PARSING)
                 .build()
         ).await;
         my_interface.register_channel_command(
             &CommandDefinitionBuilder::new(
-                "sedany".to_owned(),
-                "sed".to_owned(),
-                "{cpfx}sedany SEDCOMMANDS".to_owned(),
-                "Performs the given sed command(s) on the most recent message where at least one command matches.".to_owned(),
+                "sedany",
+                "sed",
+                "{cpfx}sedany SEDCOMMANDS",
+                "Performs the given sed command(s) on the most recent message where at least one command matches.",
             )
                 .behaviors(CommandBehaviors::NO_ARGUMENT_PARSING)
                 .build()
         ).await;
         my_interface.register_channel_command(
             &CommandDefinitionBuilder::new(
-                "sedall".to_owned(),
-                "sed".to_owned(),
-                "{cpfx}sedall SEDCOMMANDS".to_owned(),
-                "Performs the given sed command(s) on the most recent message where all commands match.".to_owned(),
+                "sedall",
+                "sed",
+                "{cpfx}sedall SEDCOMMANDS",
+                "Performs the given sed command(s) on the most recent message where all commands match.",
             )
                 .behaviors(CommandBehaviors::NO_ARGUMENT_PARSING)
                 .build()

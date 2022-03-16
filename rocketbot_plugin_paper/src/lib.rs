@@ -1,4 +1,3 @@
-use std::collections::{HashMap, HashSet};
 use std::convert::{TryFrom, TryInto};
 use std::fmt::Write;
 use std::ops::Deref;
@@ -12,7 +11,7 @@ use num_traits::{FromPrimitive, One, Zero};
 use once_cell::sync::Lazy;
 use regex::Regex;
 use rocketbot_interface::{ResultExtensions, send_channel_message};
-use rocketbot_interface::commands::{CommandBehaviors, CommandDefinition, CommandInstance};
+use rocketbot_interface::commands::{CommandDefinitionBuilder, CommandInstance};
 use rocketbot_interface::interfaces::{RocketBotInterface, RocketBotPlugin};
 use rocketbot_interface::model::ChannelMessage;
 use rocketbot_interface::sync::RwLock;
@@ -291,16 +290,15 @@ impl RocketBotPlugin for PaperPlugin {
             config_object,
         );
 
-        my_interface.register_channel_command(&CommandDefinition::new(
-            "paper".to_owned(),
-            "paper".to_owned(),
-            Some(HashSet::new()),
-            HashMap::new(),
-            0,
-            CommandBehaviors::empty(),
-            "{cpfx}paper PAPER".to_owned(),
-            "Displays the size of the given ISO 216-like paper.".to_owned(),
-        )).await;
+        my_interface.register_channel_command(
+            &CommandDefinitionBuilder::new(
+                "paper",
+                "paper",
+                "{cpfx}paper PAPER",
+                "Displays the size of the given ISO 216-like paper.",
+            )
+                .build()
+        ).await;
 
         PaperPlugin {
             interface,

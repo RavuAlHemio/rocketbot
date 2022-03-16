@@ -13,7 +13,7 @@ use log::error;
 use rand::{Rng, SeedableRng};
 use rand::rngs::StdRng;
 use rocketbot_interface::{JsonValueExtensions, ResultExtensions, send_channel_message};
-use rocketbot_interface::commands::{CommandBehaviors, CommandDefinition, CommandInstance};
+use rocketbot_interface::commands::{CommandDefinitionBuilder, CommandInstance};
 use rocketbot_interface::interfaces::{RocketBotInterface, RocketBotPlugin};
 use rocketbot_interface::model::ChannelMessage;
 use rocketbot_interface::sync::RwLock;
@@ -101,16 +101,16 @@ impl GrammarGenPlugin {
     }
 
     async fn register_grammar_command<I: RocketBotInterface + ?Sized>(interface: &I, grammar_name: &str) {
-        interface.register_channel_command(&CommandDefinition::new(
-            grammar_name.to_owned(),
-            "grammargen".to_owned(),
-            None,
-            HashMap::new(),
-            0,
-            CommandBehaviors::empty(),
-            format!("{{cpfx}}{} [NICKNAME]", grammar_name),
-            "Produces a phrase from the given grammar.".to_owned(),
-        )).await;
+        interface.register_channel_command(
+            &CommandDefinitionBuilder::new(
+                grammar_name,
+                "grammargen",
+                format!("{{cpfx}}{} [NICKNAME]", grammar_name),
+                "Produces a phrase from the given grammar.",
+            )
+                .any_flags()
+                .build()
+        ).await;
     }
 }
 #[async_trait]

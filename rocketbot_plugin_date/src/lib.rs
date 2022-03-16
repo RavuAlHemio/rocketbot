@@ -131,20 +131,20 @@ impl RocketBotPlugin for DatePlugin {
 
         my_interface.register_channel_command(
             &CommandDefinitionBuilder::new(
-                "weekday".to_string(),
-                "date".to_owned(),
-                "{cpfx}weekday DATE".to_owned(),
-                "Reports the weekday of the specified date.".to_owned(),
+                "weekday",
+                "date",
+                "{cpfx}weekday DATE",
+                "Reports the weekday of the specified date.",
             )
                 .build()
         ).await;
 
         my_interface.register_channel_command(
             &CommandDefinitionBuilder::new(
-                "days".to_string(),
-                "date".to_owned(),
-                "{cpfx}days DATE".to_owned(),
-                "Reports the difference, in days, between today and the specified date.".to_owned(),
+                "days",
+                "date",
+                "{cpfx}days DATE",
+                "Reports the difference, in days, between today and the specified date.",
             )
                 .build()
         ).await;

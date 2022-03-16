@@ -22,20 +22,20 @@ impl RocketBotPlugin for SeriousModePlugin {
 
         my_interface.register_channel_command(
             &CommandDefinitionBuilder::new(
-                "srs".to_owned(),
-                "serious_mode".to_owned(),
-                "{cpfx}srs".to_owned(),
-                "Activates Serious Mode for some amount of time.".to_owned(),
+                "srs",
+                "serious_mode",
+                "{cpfx}srs",
+                "Activates Serious Mode for some amount of time.",
             )
                 .build()
         ).await;
 
         my_interface.register_channel_command(
             &CommandDefinitionBuilder::new(
-                "unsrs".to_owned(),
-                "serious_mode".to_owned(),
-                "{cpfx}unsrs".to_owned(),
-                "Deactivates Serious Mode.".to_owned(),
+                "unsrs",
+                "serious_mode",
+                "{cpfx}unsrs",
+                "Deactivates Serious Mode.",
             )
                 .build()
         ).await;

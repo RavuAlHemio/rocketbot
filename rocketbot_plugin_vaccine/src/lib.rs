@@ -1,7 +1,7 @@
 mod database;
 
 
-use std::collections::{HashMap, HashSet};
+use std::collections::HashMap;
 use std::sync::Weak;
 
 use async_trait::async_trait;
@@ -10,7 +10,7 @@ use log::error;
 use num_bigint::{BigInt, BigUint};
 use num_traits::ToPrimitive;
 use rocketbot_interface::send_channel_message;
-use rocketbot_interface::commands::{CommandBehaviors, CommandDefinition, CommandInstance};
+use rocketbot_interface::commands::{CommandDefinitionBuilder, CommandInstance};
 use rocketbot_interface::interfaces::{RocketBotInterface, RocketBotPlugin};
 use rocketbot_interface::model::ChannelMessage;
 use rocketbot_interface::sync::RwLock;
@@ -134,16 +134,13 @@ impl RocketBotPlugin for VaccinePlugin {
             config_object,
         );
 
-        let vaccine_command = CommandDefinition::new(
-            "vaccine".to_owned(),
-            "vaccine".to_owned(),
-            Some(HashSet::new()),
-            HashMap::new(),
-            0,
-            CommandBehaviors::empty(),
-            "{cpfx}vaccine [STATE]".to_owned(),
-            "Displays the number of vaccinated people in the given Austrian state or for all of Austria.".to_owned(),
-        );
+        let vaccine_command = CommandDefinitionBuilder::new(
+            "vaccine",
+            "vaccine",
+            "{cpfx}vaccine [STATE]",
+            "Displays the number of vaccinated people in the given Austrian state or for all of Austria.",
+        )
+            .build();
         my_interface.register_channel_command(&vaccine_command).await;
 
         VaccinePlugin {

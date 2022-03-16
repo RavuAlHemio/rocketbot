@@ -508,10 +508,10 @@ impl RocketBotPlugin for WienerLinienPlugin {
 
         my_interface.register_channel_command(
             &CommandDefinitionBuilder::new(
-                "dep".to_owned(),
-                "wienerlinien".to_owned(),
-                "{cpfx}dep [-l LINE] STATION".to_owned(),
-                "Shows public transport departures from a given station.".to_owned(),
+                "dep",
+                "wienerlinien",
+                "{cpfx}dep [-l LINE] STATION",
+                "Shows public transport departures from a given station.",
             )
                 .add_flag("s")
                 .add_flag("search")
@@ -521,10 +521,10 @@ impl RocketBotPlugin for WienerLinienPlugin {
         ).await;
         my_interface.register_channel_command(
             &CommandDefinitionBuilder::new(
-                "stations".to_owned(),
-                "wienerlinien".to_owned(),
-                "{cpfx}stations TEXT".to_owned(),
-                "Find station names containing or similar to the given name.".to_owned(),
+                "stations",
+                "wienerlinien",
+                "{cpfx}stations TEXT",
+                "Find station names containing or similar to the given name.",
             )
                 .build()
         ).await;
