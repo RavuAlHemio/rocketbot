@@ -283,7 +283,7 @@ impl RocketBotPlugin for HelpPlugin {
             "whichplugin".to_owned(),
             "help".to_owned(),
             "{cpfx}whichplugin COMMAND".to_owned(),
-            "Shows usage information for the given command.".to_owned(),
+            "Displays which plugin provides the given command.".to_owned(),
         )
             .build();
         my_interface.register_channel_command(&whichplugin_command).await;
