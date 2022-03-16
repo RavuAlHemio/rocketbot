@@ -64,7 +64,8 @@ pub(crate) async fn handle_top_quotes(request: &Request<Body>) -> Result<Respons
         GROUP BY
             q.quote_id, q.author, q.message_type, q.body
         ORDER BY
-            vote_sum DESC
+            -- on vote tie, prefer newer quotes
+            vote_sum DESC, quote_id DESC
     ", &[]).await;
     let rows = match query_res {
         Ok(r) => r,
