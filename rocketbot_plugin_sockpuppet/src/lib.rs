@@ -125,6 +125,16 @@ impl RocketBotPlugin for SockpuppetPlugin {
             .build();
         my_interface.register_private_message_command(&chansend_command).await;
 
+        my_interface.register_private_message_command(
+            &CommandDefinitionBuilder::new(
+                "reload",
+                "sockpuppet",
+                "{cpfx}reload",
+                "Reloads the bot's configuration.",
+            )
+                .build()
+        ).await;
+
         SockpuppetPlugin {
             interface,
             config: config_lock,
