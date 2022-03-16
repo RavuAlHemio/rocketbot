@@ -2637,14 +2637,10 @@ async fn do_config_reload(state: &mut ConnectionState) {
     }
 
     // store config
-    set_config(new_config).await
+    set_config(new_config.clone()).await
         .expect("failed to store config");
 
-    let config_guard = CONFIG
-        .get().expect("no config set")
-        .read().await;
-
-    for (i, (plugin, plugin_config)) in plugins.iter().zip(config_guard.plugins.iter()).enumerate() {
+    for (i, (plugin, plugin_config)) in plugins.iter().zip(new_enabled_plugins.iter()).enumerate() {
         let success = plugin.plugin.configuration_updated(plugin_config.config.clone()).await;
         if !success {
             warn!("updating configuration of plugin at index {} ({:?}) failed", i, plugin_config.name);
