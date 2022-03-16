@@ -20,7 +20,7 @@ jobs:
       - name: fetch dependencies
         run: sh ./cicd/cargo_fetch.sh
       - name: run release build
-        run: cargo build --release
+        run: cargo build --all-targets --release
       - name: run release tests
         run: cargo test --release
       - name: build obtain_bim
