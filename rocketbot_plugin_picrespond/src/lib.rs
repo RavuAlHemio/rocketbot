@@ -184,7 +184,7 @@ impl RocketBotPlugin for PicRespondPlugin {
                 }
 
                 // pick the next response
-                let path = &response.response_paths[my_shuffle.progress];
+                let path = &response.response_paths[my_shuffle.shuffled_indexes[my_shuffle.progress]];
 
                 // increment for next time
                 my_shuffle.progress += 1;
