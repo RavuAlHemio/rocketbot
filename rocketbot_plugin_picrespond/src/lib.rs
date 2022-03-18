@@ -31,10 +31,18 @@ struct Config {
 }
 
 
+#[derive(Clone, Debug, Eq, Hash, PartialEq)]
+struct ShuffleState {
+    pub shuffled_indexes: Vec<usize>,
+    pub progress: usize,
+}
+
+
 pub struct PicRespondPlugin {
     interface: Weak<dyn RocketBotInterface>,
     rng: Arc<Mutex<Box<dyn RngCore + Send>>>,
     config: RwLock<Config>,
+    shuffle_states: Mutex<Vec<ShuffleState>>,
 }
 impl PicRespondPlugin {
     fn try_get_config(config: serde_json::Value) -> Result<Config, &'static str> {
@@ -75,27 +83,50 @@ impl PicRespondPlugin {
             responses,
         })
     }
+
+    fn get_shuffle_states(responses: &[Response]) -> Vec<ShuffleState> {
+        let mut ret = Vec::with_capacity(responses.len());
+        for response in responses {
+            let shuffled_indexes: Vec<usize> = (0..response.response_paths.len()).collect();
+            ret.push(ShuffleState {
+                shuffled_indexes,
+                progress: 0,
+            });
+        }
+        ret
+    }
 }
 #[async_trait]
 impl RocketBotPlugin for PicRespondPlugin {
     async fn new(interface: Weak<dyn RocketBotInterface>, config: serde_json::Value) -> Self {
-        let rng_box: Box<dyn RngCore + Send> = Box::new(StdRng::from_entropy());
+        let mut rng_box: Box<dyn RngCore + Send> = Box::new(StdRng::from_entropy());
+
+        let config_object = Self::try_get_config(config)
+            .expect("failed to load config");
+
+        let mut shuffle_states = Self::get_shuffle_states(&config_object.responses);
+        for shuffle_state in &mut shuffle_states {
+            shuffle_state.shuffled_indexes.shuffle(&mut rng_box);
+        }
+
         let rng = Arc::new(Mutex::new(
             "PicRespondPlugin::rng",
             rng_box,
         ));
-
-        let config_object = Self::try_get_config(config)
-            .expect("failed to load config");
         let config_lock = RwLock::new(
             "PicRespondPlugin::config",
             config_object,
+        );
+        let shuffle_states_lock = Mutex::new(
+            "PicRespondPlugin::shuffle_states",
+            shuffle_states,
         );
 
         Self {
             interface,
             rng,
             config: config_lock,
+            shuffle_states: shuffle_states_lock,
         }
     }
 
@@ -124,7 +155,7 @@ impl RocketBotPlugin for PicRespondPlugin {
 
         let config_guard = self.config.read().await;
 
-        for response in &config_guard.responses {
+        for (i, response) in config_guard.responses.iter().enumerate() {
             if !response.regex.is_match(raw_message) {
                 continue;
             }
@@ -139,9 +170,26 @@ impl RocketBotPlugin for PicRespondPlugin {
                     return;
                 }
 
-                // pick a response at random
-                response.response_paths
-                    .choose(rng_guard.deref_mut()).expect("at least one response path is available")
+                // what's our index?
+                let mut shuffle_guard = self.shuffle_states.lock().await;
+                let my_shuffle = &mut shuffle_guard[i];
+                if my_shuffle.progress >= response.response_paths.len() {
+                    // re-shuffle
+                    my_shuffle.shuffled_indexes.shuffle(rng_guard.deref_mut());
+                    my_shuffle.progress = 0;
+                }
+                if my_shuffle.progress >= response.response_paths.len() {
+                    // sigh, there are no entries
+                    continue;
+                }
+
+                // pick the next response
+                let path = &response.response_paths[my_shuffle.progress];
+
+                // increment for next time
+                my_shuffle.progress += 1;
+
+                path
             };
 
             // open and read it
@@ -184,7 +232,27 @@ impl RocketBotPlugin for PicRespondPlugin {
         match Self::try_get_config(new_config) {
             Ok(c) => {
                 let mut config_guard = self.config.write().await;
+
+                // obtain fresh shuffle states
+                let mut new_shuffle_states = Self::get_shuffle_states(&c.responses);
+
+                // perform initial shuffle
+                {
+                    let mut rng_guard = self.rng.lock().await;
+                    for shuffle_state in &mut new_shuffle_states {
+                        shuffle_state.shuffled_indexes.shuffle(rng_guard.deref_mut());
+                    }
+                }
+
+                // update shuffle states
+                {
+                    let mut shuffle_states_guard = self.shuffle_states.lock().await;
+                    *shuffle_states_guard = new_shuffle_states;
+                }
+
+                // update config
                 *config_guard = c;
+
                 true
             },
             Err(e) => {
