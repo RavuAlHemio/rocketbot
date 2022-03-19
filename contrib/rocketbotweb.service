@@ -1,0 +1,39 @@
+[Unit]
+Description=Rocketbot Web
+After=network.target postgresql.service
+Requires=network.target postgresql.service
+
+[Service]
+ExecStart=/var/lib/rocketbot/web/rocketbotweb
+WorkingDirectory=/var/lib/rocketbot/web
+Environment=RUST_LOG=info,rocketbot=debug
+Environment=RUST_BACKTRACE=1
+User=rocketbot
+PrivateNetwork=no
+PrivateDevices=yes
+PrivateUsers=yes
+ProtectClock=yes
+ProtectControlGroups=yes
+ProtectHome=yes
+ProtectHostname=yes
+ProtectKernelLogs=yes
+ProtectKernelModules=yes
+ProtectKernelTunables=yes
+ProtectProc=invisible
+CapabilityBoundingSet=
+RestrictAddressFamilies=AF_INET AF_INET6
+RestrictNamespaces=yes
+RestrictRealtime=yes
+DeviceAllow=
+DevicePolicy=closed
+SystemCallArchitectures=native
+SystemCallFilter=@system-service
+LockPersonality=yes
+MemoryDenyWriteExecute=yes
+ProcSubset=pid
+StandardInput=null
+StandardOutput=journal
+StandardError=journal
+
+[Install]
+WantedBy=multi-user.target
