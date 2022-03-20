@@ -50,5 +50,6 @@ members = [
     "rocketbot_plugin_weather",
     "rocketbot_plugin_wienerlinien",
     "rocketbot_regex_replace",
+    "rocketbot_spelling",
     "rocketbotweb",
 ]
