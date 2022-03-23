@@ -4,6 +4,7 @@ mod decoders;
 use std::sync::{Arc, Weak};
 
 use async_trait::async_trait;
+use chrono::Local;
 use log::error;
 use once_cell::sync::Lazy;
 use regex::{Captures, Regex};
@@ -50,6 +51,14 @@ impl RocketBotPlugin for DeobfuscatePlugin {
             None => return,
         };
         let raw_message_clone = raw_message.clone();
+
+        // don't trigger if Serious Mode is active
+        let behavior_flags = serde_json::Value::Object(interface.obtain_behavior_flags().await);
+        if let Some(serious_mode_until) = behavior_flags["srs"][&channel_message.channel.id].as_i64() {
+            if serious_mode_until > Local::now().timestamp() {
+                return;
+            }
+        }
 
         let spelling_engine_mutex = Arc::clone(&self.spelling_engine);
 
