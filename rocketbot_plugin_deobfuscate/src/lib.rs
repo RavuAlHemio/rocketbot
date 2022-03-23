@@ -8,7 +8,7 @@ use chrono::Local;
 use log::error;
 use once_cell::sync::Lazy;
 use regex::{Captures, Regex};
-use rocketbot_interface::send_channel_message;
+use rocketbot_interface::{ResultExtensions, send_channel_message};
 use rocketbot_interface::model::ChannelMessage;
 use rocketbot_interface::interfaces::{RocketBotInterface, RocketBotPlugin};
 use rocketbot_interface::sync::Mutex;
@@ -20,23 +20,57 @@ use crate::decoders::rot13;
 static WORD_CHARS_RE: Lazy<Regex> = Lazy::new(|| Regex::new("\\w+").unwrap());
 
 
+struct Config {
+    ignore_regexes: Vec<Regex>,
+    spelling_engine: Box<dyn SpellingEngine + Send>,
+}
+
+
 pub struct DeobfuscatePlugin {
     interface: Weak<dyn RocketBotInterface>,
-    spelling_engine: Arc<Mutex<Box<dyn SpellingEngine + Send>>>,
+    config: Arc<Mutex<Config>>,
+}
+impl DeobfuscatePlugin {
+    fn try_get_config(config: &serde_json::Value) -> Result<Config, &'static str> {
+        let spelling_engine = HunspellEngine::new(config["spelling"].clone())
+            .ok_or("failed to create spelling engine")?;
+
+        let ignore_regexes_config = &config["ignore_regexes"];
+        let ignore_regexes = if ignore_regexes_config.is_null() {
+            Vec::new()
+        } else {
+            let ignore_regex_values = ignore_regexes_config
+                .as_array().ok_or("ignore_regexes not an array")?;
+            let mut ignore_regexes = Vec::with_capacity(ignore_regex_values.len());
+            for ignore_regex_value in ignore_regex_values {
+                let ignore_regex_str = ignore_regex_value
+                    .as_str().ok_or("ignore_regexes element not a string")?;
+                let ignore_regex = Regex::new(ignore_regex_str)
+                    .or_msg("failed to parse ignore_regexes element as a regex")?;
+                ignore_regexes.push(ignore_regex);
+            }
+            ignore_regexes
+        };
+
+        Ok(Config {
+            ignore_regexes,
+            spelling_engine: Box::new(spelling_engine),
+        })
+    }
 }
 #[async_trait]
 impl RocketBotPlugin for DeobfuscatePlugin {
     async fn new(interface: Weak<dyn RocketBotInterface>, config: serde_json::Value) -> Self {
-        let spelling_engine_inner = HunspellEngine::new(config["spelling"].clone())
-            .expect("failed to create spelling engine");
-        let spelling_engine = Arc::new(Mutex::new(
-            "DeobfuscatePlugin::spelling_engine",
-            Box::new(spelling_engine_inner) as Box<dyn SpellingEngine + Send>,
+        let config = Self::try_get_config(&config)
+            .expect("failed to obtain initial config");
+        let config_lock = Arc::new(Mutex::new(
+            "DeobfuscatePlugin::config",
+            config,
         ));
 
         Self {
             interface,
-            spelling_engine,
+            config: config_lock,
         }
     }
 
@@ -60,16 +94,25 @@ impl RocketBotPlugin for DeobfuscatePlugin {
             }
         }
 
-        let spelling_engine_mutex = Arc::clone(&self.spelling_engine);
+        // ignore this message?
+        {
+            let config_guard = self.config.lock().await;
+            if config_guard.ignore_regexes.iter().any(|ir| ir.is_match(raw_message)) {
+                // yes, ignore it
+                return;
+            }
+        }
+
+        let config_mutex = Arc::clone(&self.config);
 
         let replaced = tokio::task::spawn_blocking(move || {
             WORD_CHARS_RE.replace_all(&raw_message_clone, |caps: &Captures| {
                 let match_str = caps.get(0).unwrap().as_str();
-                let spelling_engine_guard = spelling_engine_mutex.blocking_lock();
-                if !spelling_engine_guard.is_correct(match_str) {
+                let config_guard = config_mutex.blocking_lock();
+                if !config_guard.spelling_engine.is_correct(match_str) {
                     // try rot13
                     let rot13d = rot13(match_str);
-                    if spelling_engine_guard.is_correct(&rot13d) {
+                    if config_guard.spelling_engine.is_correct(&rot13d) {
                         return rot13d;
                     }
 
@@ -93,18 +136,18 @@ impl RocketBotPlugin for DeobfuscatePlugin {
     }
 
     async fn configuration_updated(&self, new_config: serde_json::Value) -> bool {
-        // try obtaining a new spelling engine
-        let new_spelling_engine_inner = match HunspellEngine::new(new_config["spelling"].clone()) {
-            Some(e) => e,
-            None => {
-                error!("failed to load new config: failed to create new Hunspell engine");
+        // try obtaining updated config
+        let new_config = match Self::try_get_config(&new_config) {
+            Ok(nc) => nc,
+            Err(e) => {
+                error!("failed to load new config: {}", e);
                 return false;
             },
         };
 
         {
-            let mut spelling_engine_guard = self.spelling_engine.lock().await;
-            *spelling_engine_guard = Box::new(new_spelling_engine_inner) as Box<dyn SpellingEngine + Send>;
+            let mut config_guard = self.config.lock().await;
+            *config_guard = new_config;
         }
 
         true
