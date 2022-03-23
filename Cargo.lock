@@ -1796,6 +1796,7 @@ dependencies = [
  "rocketbot_plugin_catchword",
  "rocketbot_plugin_config_user_alias",
  "rocketbot_plugin_date",
+ "rocketbot_plugin_deobfuscate",
  "rocketbot_plugin_dice",
  "rocketbot_plugin_exiftell",
  "rocketbot_plugin_fact",
@@ -2017,6 +2018,20 @@ dependencies = [
  "regex",
  "rocketbot_interface",
  "serde_json",
+]
+
+[[package]]
+name = "rocketbot_plugin_deobfuscate"
+version = "0.1.0"
+dependencies = [
+ "async-trait",
+ "log",
+ "once_cell",
+ "regex",
+ "rocketbot_interface",
+ "rocketbot_spelling",
+ "serde_json",
+ "tokio",
 ]
 
 [[package]]

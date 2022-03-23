@@ -24,6 +24,7 @@ rocketbot_plugin_calc = { path = "../rocketbot_plugin_calc" }
 rocketbot_plugin_catchword = { path = "../rocketbot_plugin_catchword" }
 rocketbot_plugin_config_user_alias = { path = "../rocketbot_plugin_config_user_alias" }
 rocketbot_plugin_date = { path = "../rocketbot_plugin_date" }
+rocketbot_plugin_deobfuscate = { path = "../rocketbot_plugin_deobfuscate" }
 rocketbot_plugin_dice = { path = "../rocketbot_plugin_dice" }
 rocketbot_plugin_exiftell = { path = "../rocketbot_plugin_exiftell" }
 rocketbot_plugin_fact = { path = "../rocketbot_plugin_fact" }
