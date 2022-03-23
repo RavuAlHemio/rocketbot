@@ -9,8 +9,8 @@ use serde::{Deserialize, Serialize};
 use crate::hunspell::HunspellDictionary;
 
 
-pub trait SpellingEngine : Sized {
-    fn new(config: serde_json::Value) -> Option<Self>;
+pub trait SpellingEngine {
+    fn new(config: serde_json::Value) -> Option<Self> where Self : Sized;
     fn is_correct(&self, word: &str) -> bool;
     fn suggest(&self, word: &str) -> Vec<String>;
 }

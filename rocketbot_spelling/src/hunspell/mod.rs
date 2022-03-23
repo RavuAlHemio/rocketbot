@@ -172,6 +172,8 @@ impl HunspellDictionary {
         Ok(suggestions)
     }
 }
+unsafe impl Send for HunspellDictionary {
+}
 impl Drop for HunspellDictionary {
     fn drop(&mut self) {
         unsafe {
