@@ -8,7 +8,7 @@ use chrono::Local;
 use log::error;
 use once_cell::sync::Lazy;
 use regex::{Captures, Regex};
-use rocketbot_interface::{ResultExtensions, send_channel_message};
+use rocketbot_interface::{JsonValueExtensions, ResultExtensions, send_channel_message};
 use rocketbot_interface::model::ChannelMessage;
 use rocketbot_interface::interfaces::{RocketBotInterface, RocketBotPlugin};
 use rocketbot_interface::sync::Mutex;
@@ -23,6 +23,7 @@ static WORD_CHARS_RE: Lazy<Regex> = Lazy::new(|| Regex::new("\\w+").unwrap());
 struct Config {
     ignore_regexes: Vec<Regex>,
     spelling_engine: Box<dyn SpellingEngine + Send>,
+    min_different: usize,
 }
 
 
@@ -52,8 +53,17 @@ impl DeobfuscatePlugin {
             ignore_regexes
         };
 
+        let min_different_config = &config["min_different"];
+        let min_different = if min_different_config.is_null() {
+            0
+        } else {
+            min_different_config
+                .as_usize().ok_or("min_different not a usize")?
+        };
+
         Ok(Config {
             ignore_regexes,
+            min_different,
             spelling_engine: Box::new(spelling_engine),
         })
     }
@@ -122,13 +132,25 @@ impl RocketBotPlugin for DeobfuscatePlugin {
             }).into_owned()
         }).await.expect("regex replacement panicked");
 
-        if raw_message != &replaced {
-            send_channel_message!(
-                interface,
-                &channel_message.channel.name,
-                &replaced,
-            ).await;
+        // minimum difference count met?
+        // FIXME: better metric for if original and replaced do not match in length (e.g. base64)
+        let diff_count = raw_message.chars()
+            .zip(replaced.chars())
+            .filter(|(o, r)| o != r)
+            .count();
+        {
+            let config_guard = self.config.lock().await;
+            if diff_count <= config_guard.min_different {
+                // too similar; ignore
+                return;
+            }
         }
+
+        send_channel_message!(
+            interface,
+            &channel_message.channel.name,
+            &replaced,
+        ).await;
     }
 
     async fn plugin_name(&self) -> String {
