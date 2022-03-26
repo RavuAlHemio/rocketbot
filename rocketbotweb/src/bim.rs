@@ -1007,6 +1007,9 @@ pub(crate) async fn handle_bim_coverage(request: &Request<Body>) -> Result<Respo
     let merge_types = query_pairs.get("merge-types")
         .map(|qp| qp == "1")
         .unwrap_or(false);
+    let hide_inactive = query_pairs.get("hide-inactive")
+        .map(|qp| qp == "1")
+        .unwrap_or(false);
 
     let db_conn = match connect_to_db().await {
         Some(c) => c,
@@ -1136,6 +1139,10 @@ pub(crate) async fn handle_bim_coverage(request: &Request<Body>) -> Result<Respo
                 let to_known = vehicle["out_of_service_since"].is_string();
                 let is_active = from_known && !to_known;
                 let ride_count = ridden_vehicles.get(&number).map(|c| *c).unwrap_or(0);
+
+                if hide_inactive && !is_active && ride_count == 0 {
+                    continue;
+                }
 
                 let vehicle_data = CoverageVehiclePart {
                     block_str: block_str.to_owned(),

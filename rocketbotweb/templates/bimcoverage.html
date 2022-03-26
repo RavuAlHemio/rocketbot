@@ -2,40 +2,10 @@
 
 {% block title %}Public Transport Coverage{% endblock %}
 
-{% block scripts %}
-<script type="text/javascript">
-    //<![CDATA[
-    document.addEventListener("DOMContentLoaded", function () {
-        var bchi = document.getElementById("bim-coverage-hide-inactive");
-        bchi.addEventListener("change", function () {
-            var vehicle_boxes = document.querySelectorAll("main.bim-coverage .vehicles-box");
-            for (var i = 0; i < vehicle_boxes.length; i++) {
-                // are any vehicles active or ridden?
-                var active_vehicles = vehicle_boxes[i].querySelectorAll(".vehicle.active");
-                var ridden_vehicles = vehicle_boxes[i].querySelectorAll(".vehicle.ridden");
-                if (active_vehicles.length + ridden_vehicles.length === 0) {
-                    // hide the whole box
-                    vehicle_boxes[i].style.display = bchi.checked ? "none" : "";
-                    continue;
-                }
-
-                var inactive_vehicles = vehicle_boxes[i].querySelectorAll(".vehicle.inactive.unridden");
-                for (var j = 0; j < inactive_vehicles.length; j++) {
-                    inactive_vehicles[j].style.display = bchi.checked ? "none" : "";
-                }
-            }
-        });
-    });
-    //]]>
-</script>
-{% endblock %}
-
 {% block content %}
 <main class="bim-coverage">
 
 <h1>Public Transport Coverage</h1>
-
-<label><input id="bim-coverage-hide-inactive" type="checkbox" /> hide inactive vehicles</label>
 
 {% for (company, type_to_block_to_vehicles) in company_to_type_to_block_to_vehicles %}
 <section class="company">
