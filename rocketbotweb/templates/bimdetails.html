@@ -12,6 +12,14 @@
 <h2>Facts &amp; Figures</h2>
 
 <table class="bim-vehicle">
+  <tr class="vehicle-number">
+    <th>Vehicle number</th>
+    <td>{{ veh.number }}</td>
+  </tr>
+  <tr class="company">
+    <th>Company</th>
+    <td>{{ company|escape }}</td>
+  </tr>
   <tr class="type">
     <th>Type</th>
     <td>{{ veh.type_code|escape }}</td>
