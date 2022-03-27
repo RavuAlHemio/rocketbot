@@ -162,8 +162,8 @@ mod tests {
     fn test_slugify() {
         ts("", "");
         ts("abcdef", "abcdef");
-        ts("T1F", "t1f");
+        ts("T1F", "T1F");
         ts("4023/4024/4124", "4023-4024-4124");
-        ts("MAN (Lion's City) NL273 T2", "man--lion-s-city--nl273-t2");
+        ts("MAN (Lion's City) NL273 T2", "MAN--Lion-s-City--NL273-T2");
     }
 }
