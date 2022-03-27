@@ -1,6 +1,7 @@
 use std::fmt;
 
 use askama;
+use unicode_normalization::char::{decompose_compatible, is_combining_mark};
 
 
 pub(crate) trait Copifiable<T> {
@@ -129,4 +130,40 @@ pub(crate) fn or_empty<'a>(string: &'a Option<String>) -> askama::Result<&'a str
             .map(|s| s.as_str())
             .unwrap_or("")
     )
+}
+
+pub(crate) fn slugify(string: &str) -> askama::Result<String> {
+    let mut ret = String::new();
+    for c in string.chars() {
+        if c.is_alphanumeric() {
+            decompose_compatible(c, |dc| {
+                if !is_combining_mark(dc) {
+                    ret.push(dc);
+                }
+            });
+        } else {
+            ret.push('-');
+        }
+    }
+    Ok(ret)
+}
+
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn ts(input: &str, slug: &str) {
+        let slugified = slugify(input).unwrap();
+        assert_eq!(&slugified, slug);
+    }
+
+    #[test]
+    fn test_slugify() {
+        ts("", "");
+        ts("abcdef", "abcdef");
+        ts("T1F", "t1f");
+        ts("4023/4024/4124", "4023-4024-4124");
+        ts("MAN (Lion's City) NL273 T2", "man--lion-s-city--nl273-t2");
+    }
 }

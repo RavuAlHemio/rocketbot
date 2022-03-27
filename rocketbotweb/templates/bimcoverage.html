@@ -7,12 +7,26 @@
 
 <h1>Public Transport Coverage</h1>
 
+<section class="skiplinks">
+  {% for (company, type_to_block_to_vehicles) in company_to_type_to_block_to_vehicles -%}
+  <p>
+    <span class="company">{{ company|escape }}</span>:
+    {% for (type, block_to_vehicles) in type_to_block_to_vehicles -%}
+      {% if !loop.first -%}
+      &middot;
+      {% endif -%}
+      <a href="#c-{{ company|slugify }}-t-{{ type|slugify }}">{{ type|escape }}</a>
+    {% endfor -%}
+  </p>
+  {% endfor -%}
+</section>
+
 {% for (company, type_to_block_to_vehicles) in company_to_type_to_block_to_vehicles %}
 <section class="company">
 <h2>{{ company|escape }}</h2>
 
 {% for (type, block_to_vehicles) in type_to_block_to_vehicles %}
-<section class="vehicle-type">
+<section class="vehicle-type" id="c-{{ company|slugify }}-t-{{ type|slugify }}">
 {% if type != "" %}<h3 class="vehicle-type">{{ type|escape }}</h3>{% endif %}
 
 {% for (blk, vehicles) in block_to_vehicles %}

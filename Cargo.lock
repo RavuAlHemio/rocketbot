@@ -2548,6 +2548,7 @@ dependencies = [
  "tokio",
  "tokio-postgres",
  "toml",
+ "unicode-normalization",
 ]
 
 [[package]]
