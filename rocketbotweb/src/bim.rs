@@ -261,6 +261,7 @@ struct BimVehicleTemplate {
 struct BimCoverageTemplate {
     pub max_ride_count: i64,
     pub company_to_type_to_block_to_vehicles: BTreeMap<String, BTreeMap<String, BTreeMap<String, Vec<CoverageVehiclePart>>>>,
+    pub merge_types: bool,
 }
 
 #[derive(Clone, Debug, Eq, Hash, PartialEq, Serialize)]
@@ -1166,6 +1167,7 @@ pub(crate) async fn handle_bim_coverage(request: &Request<Body>) -> Result<Respo
         let template = BimCoverageTemplate {
             max_ride_count,
             company_to_type_to_block_to_vehicles,
+            merge_types,
         };
         match render_response(&template, &query_pairs, 200, vec![]).await {
             Some(r) => Ok(r),
