@@ -1,6 +1,6 @@
-*Usage:* `{cpfx}topbimdays [-y|--last-year|-m|--last-month|-w|--last-week|-d|--last-day] [RIDER]`
+*Usage:* `{cpfx}topbimlines [-y|--last-year|-m|--last-month|-w|--last-week|-d|--last-day] [RIDER]`
 
-Returns the days with the most vehicles ridden. If a `RIDER` is given, only considers rides by that rider.
+Returns the lines with the most vehicles ridden. If a `RIDER` is given, only considers rides by that rider.
 
 Normally considers all rides "since the beginning of time". This can be limited:
 * With `-y` or `--last-year`, only considers rides in the last 366 days.

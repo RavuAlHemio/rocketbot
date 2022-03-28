@@ -1452,6 +1452,148 @@ impl BimPlugin {
         ).await;
     }
 
+    async fn channel_command_topbimlines(&self, channel_message: &ChannelMessage, command: &CommandInstance) {
+        let interface = match self.interface.upgrade() {
+            None => return,
+            Some(i) => i,
+        };
+
+        let config_guard = self.config.read().await;
+
+        let lookback_range = match Self::lookback_range_from_command(command) {
+            Some(lr) => lr,
+            None => {
+                send_channel_message!(
+                    interface,
+                    &channel_message.channel.name,
+                    "Hey, no mixing options that mean different time ranges!",
+                ).await;
+                return;
+            },
+        };
+        let rider_username_input = command.rest.trim();
+        let rider_username_opt = if rider_username_input.len() == 0 {
+            None
+        } else {
+            match interface.resolve_username(rider_username_input).await {
+                Some(ru) => Some(ru),
+                None => Some(rider_username_input.to_owned()),
+            }
+        };
+
+        let ride_conn = match self.connect_ride_db(&config_guard).await {
+            Ok(c) => c,
+            Err(_) => {
+                send_channel_message!(
+                    interface,
+                    &channel_message.channel.name,
+                    "Failed to open database connection. :disappointed:",
+                ).await;
+                return;
+            },
+        };
+
+        let query_template = "
+            WITH ride_counts(company, line, ride_count) AS (
+                SELECT r.company, r.line, COUNT(*)
+                FROM bim.rides r
+                WHERE r.line IS NOT NULL
+                {USERNAME_CRITERION}
+                {LOOKBACK_TIMESTAMP}
+                GROUP BY r.company, r.line
+            ),
+            top_ride_counts(ride_count) AS (
+                SELECT DISTINCT ride_count
+                FROM ride_counts
+                ORDER BY ride_count DESC
+                LIMIT 6
+            )
+            SELECT rc.company, rc.line, CAST(rc.ride_count AS bigint)
+            FROM ride_counts rc
+            WHERE EXISTS (
+                SELECT 1
+                FROM top_ride_counts trc
+                WHERE trc.ride_count = rc.ride_count
+            )
+        ";
+        let rows_res = if let Some(ru) = &rider_username_opt {
+            let query = query_template.replace("{USERNAME_CRITERION}", "AND LOWER(r.rider_username) = LOWER($1)");
+            Self::timestamp_query(
+                &ride_conn,
+                &query,
+                "AND r.\"timestamp\" >= $2",
+                "",
+                lookback_range,
+                &[&ru],
+            ).await
+        } else {
+            let query = query_template.replace("{USERNAME_CRITERION}", "");
+            Self::timestamp_query(
+                &ride_conn,
+                &query,
+                "AND r.\"timestamp\" >= $1",
+                "",
+                lookback_range,
+                &[],
+            ).await
+        };
+        let rows = match rows_res {
+            Ok(r) => r,
+            Err(e) => {
+                error!("failed to query lines with most rides: {}", e);
+                send_channel_message!(
+                    interface,
+                    &channel_message.channel.name,
+                    "Failed to query database. :disappointed:",
+                ).await;
+                return;
+            },
+        };
+
+        let mut count_to_lines: BTreeMap<i64, BTreeSet<(String, String)>> = BTreeMap::new();
+        for row in rows {
+            let company: String = row.get(0);
+            let line: String = row.get(1);
+            let ride_count: i64 = row.get(2);
+
+            count_to_lines.entry(ride_count)
+                .or_insert_with(|| BTreeSet::new())
+                .insert((company, line));
+        }
+        let mut max_counts: Vec<i64> = count_to_lines.keys()
+            .map(|c| *c)
+            .collect();
+        max_counts.reverse();
+
+        let mut top_text = if max_counts.len() == 0 {
+            "No top lines."
+        } else if max_counts.len() >= 6 {
+            max_counts.drain(5..);
+            "Top 5 lines:"
+        } else {
+            "Top lines:"
+        }.to_owned();
+
+        for &count in &max_counts {
+            write!(&mut top_text, "\n{} rides: ", count).unwrap();
+            let mut first = true;
+            for (company, line) in count_to_lines.get(&count).unwrap() {
+                if first {
+                    first = false;
+                } else {
+                    top_text.push_str(", ");
+                }
+                write!(&mut top_text, "{}/{}", company, line).unwrap();
+            }
+        }
+
+        send_channel_message!(
+            interface,
+            &channel_message.channel.name,
+            &top_text,
+        ).await;
+    }
+
     async fn channel_command_bimridertypes(&self, channel_message: &ChannelMessage, command: &CommandInstance) {
         let interface = match self.interface.upgrade() {
             None => return,
@@ -2532,6 +2674,16 @@ impl RocketBotPlugin for BimPlugin {
         ).await;
         my_interface.register_channel_command(
             &CommandDefinitionBuilder::new(
+                "topbimlines",
+                "bim",
+                "{cpfx}topbimlines",
+                "Returns the lines with the most vehicle rides.",
+            )
+                .add_lookback_flags()
+                .build()
+        ).await;
+        my_interface.register_channel_command(
+            &CommandDefinitionBuilder::new(
                 "bimridertypes",
                 "bim",
                 "{cpfx}bimridertypes [-n] USERNAME",
@@ -2631,6 +2783,8 @@ impl RocketBotPlugin for BimPlugin {
             self.channel_command_favbims(channel_message, command).await
         } else if command.name == "topbimdays" {
             self.channel_command_topbimdays(channel_message, command).await
+        } else if command.name == "topbimlines" {
+            self.channel_command_topbimlines(channel_message, command).await
         } else if command.name == "bimridertypes" {
             self.channel_command_bimridertypes(channel_message, command).await
         } else if command.name == "bimriderlines" {
@@ -2665,6 +2819,8 @@ impl RocketBotPlugin for BimPlugin {
             Some(include_str!("../help/favbims.md").to_owned())
         } else if command_name == "topbimdays" {
             Some(include_str!("../help/topbimdays.md").to_owned())
+        } else if command_name == "topbimlines" {
+            Some(include_str!("../help/topbimlines.md").to_owned())
         } else if command_name == "bimridertypes" {
             Some(include_str!("../help/bimridertypes.md").to_owned())
         } else if command_name == "bimriderlines" {
