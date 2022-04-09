@@ -5,6 +5,10 @@ rules = [
     # disqualify commands
     { find = "^\\s*!", disqualify = true },
 
+    # special case: "Steve" is only one syllable, but "Steven" is two
+    { find = "(?i)steven", adjust_count = 2 },
+    { find = "(?i)steve" },
+
     # in "zuerst" etc., "ue" is not a dipththong
     { find = "(?i)zue", replace = "e" },
 
