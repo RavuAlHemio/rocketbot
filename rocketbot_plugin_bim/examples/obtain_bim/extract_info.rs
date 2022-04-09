@@ -86,8 +86,11 @@ pub(crate) fn row_data_to_trams(page_config: &PageConfig, row_data: Vec<(String,
     let mut vehicles = Vec::new();
     let mut vehicle = VehicleInfo::new(0, page_config.type_code.clone());
 
+    let all_rows = page_config.common_props.iter()
+        .chain(row_data.iter().map(|(k, v)| (k, v)));
+
     let mut numbers_types: Vec<(VehicleNumber, String)> = Vec::new();
-    for (key, val) in &row_data {
+    for (key, val) in all_rows {
         if val.len() == 0 {
             continue;
         }

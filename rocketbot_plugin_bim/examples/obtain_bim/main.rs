@@ -7,6 +7,7 @@ use std::env::args_os;
 use std::fs::File;
 use std::path::PathBuf;
 
+use indexmap::IndexMap;
 use regex::Regex;
 use rocketbot_interface::serde::{serde_opt_regex, serde_regex};
 use serde::{Deserialize, Serialize};
@@ -37,6 +38,7 @@ pub(crate) struct PageConfig {
     #[serde(default)] pub in_service_since_matcher: Option<MatcherTransformerConfig>,
     #[serde(default)] pub out_of_service_since_matcher: Option<MatcherTransformerConfig>,
     #[serde(default)] pub manufacturer_matcher: Option<MatcherTransformerConfig>,
+    #[serde(default)] pub common_props: IndexMap<String, String>,
 }
 
 #[derive(Clone, Debug, Deserialize, Serialize)]
