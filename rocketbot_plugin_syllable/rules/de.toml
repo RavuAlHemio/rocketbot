@@ -9,8 +9,11 @@ rules = [
     { find = "(?i)steven", adjust_count = 2 },
     { find = "(?i)steve" },
 
-    # in "zuerst" etc., "ue" is not a dipththong
+    # in "zuerst" etc., "ue" is not a diphthong
     { find = "(?i)zue", replace = "e" },
+
+    # neither is "io" in "mio"
+    { find = "(?i)mio", replace = "mi" },
 
     # approximation of syllabizing -xl (where x is a consonant)
     { find = "(?i)[bdfgkmnpqstvwxz]l\\b" },
