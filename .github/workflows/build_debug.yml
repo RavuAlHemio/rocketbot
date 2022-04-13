@@ -9,6 +9,8 @@ jobs:
         run: pacman -Syu --noconfirm
       - name: install packages
         run: pacman -S --needed --noconfirm cargo git python-toml
+      - name: trust repo directory
+        run: git config --global --add safe.directory /__w/rocketbot/rocketbot
       - name: check out repository code
         uses: actions/checkout@v2
       - name: verify no plugin omissions
