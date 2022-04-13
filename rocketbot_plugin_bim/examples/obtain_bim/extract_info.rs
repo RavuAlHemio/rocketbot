@@ -1,3 +1,4 @@
+use std::collections::BTreeMap;
 use std::io::Read;
 use std::fs::File;
 
@@ -82,8 +83,8 @@ fn parse_vehicle_numbers(text_value: &str, number_separator_regex: &Option<Regex
 }
 
 
-pub(crate) fn row_data_to_trams(page_config: &PageConfig, row_data: Vec<(String, String)>) -> Vec<VehicleInfo> {
-    let mut vehicles = Vec::new();
+pub(crate) fn row_data_to_trams(page_config: &PageConfig, row_data: Vec<(String, String)>) -> BTreeMap<VehicleNumber, VehicleInfo> {
+    let mut vehicles = BTreeMap::new();
     let mut vehicle = VehicleInfo::new(0, page_config.type_code.clone());
 
     let all_rows = page_config.common_props.iter()
@@ -167,15 +168,15 @@ pub(crate) fn row_data_to_trams(page_config: &PageConfig, row_data: Vec<(String,
 
         vehicle.fixed_coupling = fixed_coupling_partners.clone();
 
-        vehicles.push(vehicle.clone());
+        vehicles.insert(vehicle.number, vehicle.clone());
     }
 
     vehicles
 }
 
 
-pub(crate) fn process_table<F>(vehicles: &mut Vec<VehicleInfo>, table: Element, page_config: &PageConfig, mut row_data_to_vehicles: F)
-    where F: FnMut(&PageConfig, Vec<(String, String)>) -> Vec<VehicleInfo>
+pub(crate) fn process_table<F>(vehicles: &mut BTreeMap<VehicleNumber, VehicleInfo>, table: Element, page_config: &PageConfig, mut row_data_to_vehicles: F)
+    where F: FnMut(&PageConfig, Vec<(String, String)>) -> BTreeMap<VehicleNumber, VehicleInfo>
 {
     let xpath_factory = sxd_xpath::Factory::new();
     let table_head_xpath = compile_xpath(&xpath_factory, ".//th");
@@ -218,10 +219,10 @@ pub(crate) fn process_table<F>(vehicles: &mut Vec<VehicleInfo>, table: Element, 
 }
 
 
-pub(crate) async fn process_page<F, G>(page_url_pattern: &str, page_config: &PageConfig, parser: &mut WikiParser, mut process_table: F, row_data_to_vehicles: G) -> Vec<VehicleInfo>
+pub(crate) async fn process_page<F, G>(page_url_pattern: &str, page_config: &PageConfig, parser: &mut WikiParser, mut process_table: F, row_data_to_vehicles: G) -> BTreeMap<VehicleNumber, VehicleInfo>
     where
-        F : FnMut(&mut Vec<VehicleInfo>, Element, &PageConfig, G),
-        G : FnMut(&PageConfig, Vec<(String, String)>) -> Vec<VehicleInfo> + Copy,
+        F : FnMut(&mut BTreeMap<VehicleNumber, VehicleInfo>, Element, &PageConfig, G),
+        G : FnMut(&PageConfig, Vec<(String, String)>) -> BTreeMap<VehicleNumber, VehicleInfo> + Copy,
 {
     let page_json = obtain_content(page_url_pattern, &page_config.title).await;
 
@@ -255,7 +256,7 @@ pub(crate) async fn process_page<F, G>(page_url_pattern: &str, page_config: &Pag
     let tables = tables_xpath.evaluate(&context, xml.root())
         .expect("failed to execute tables XPath");
 
-    let mut vehicles = Vec::new();
+    let mut vehicles = BTreeMap::new();
     if let sxd_xpath::Value::Nodeset(table_nodes) = tables {
         for table_node in table_nodes {
             let table_elem = table_node.element().expect("table node is not an element");

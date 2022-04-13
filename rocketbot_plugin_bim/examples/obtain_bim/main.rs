@@ -3,6 +3,7 @@ mod extract_info;
 mod wiki_parsing;
 
 
+use std::collections::BTreeMap;
 use std::env::args_os;
 use std::fs::File;
 use std::path::PathBuf;
@@ -10,6 +11,7 @@ use std::path::PathBuf;
 use indexmap::IndexMap;
 use regex::Regex;
 use rocketbot_interface::serde::{serde_opt_regex, serde_regex};
+use rocketbot_plugin_bim::VehicleInfo;
 use serde::{Deserialize, Serialize};
 use serde_json;
 
@@ -76,7 +78,7 @@ async fn main() {
 
     let php_command = config.php_path.as_deref().unwrap_or("php");
 
-    let mut all_vehicles = Vec::new();
+    let mut all_vehicles = BTreeMap::new();
 
     {
         let mut parser = if config.parser_already_running {
@@ -101,11 +103,13 @@ async fn main() {
             .expect("error signalling end of parsing");
     }
 
+    let all_vehicles_vec: Vec<&VehicleInfo> = all_vehicles.values().collect();
+
     // output
     {
         let f = File::create(config.output_path)
             .expect("failed to open output file");
-        serde_json::to_writer_pretty(f, &all_vehicles)
+        serde_json::to_writer_pretty(f, &all_vehicles_vec)
             .expect("failed to write vehicles");
     }
 }
