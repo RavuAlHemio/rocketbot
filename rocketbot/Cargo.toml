@@ -55,6 +55,7 @@ rocketbot_plugin_topic_timer = { path = "../rocketbot_plugin_topic_timer" }
 rocketbot_plugin_thanks = { path = "../rocketbot_plugin_thanks" }
 rocketbot_plugin_time = { path = "../rocketbot_plugin_time" }
 rocketbot_plugin_transliterate = { path = "../rocketbot_plugin_transliterate" }
+rocketbot_plugin_url = { path = "../rocketbot_plugin_url" }
 rocketbot_plugin_user_list_message = { path = "../rocketbot_plugin_user_list_message" }
 rocketbot_plugin_vaccine = { path = "../rocketbot_plugin_vaccine" }
 rocketbot_plugin_version = { path = "../rocketbot_plugin_version" }
