@@ -68,7 +68,7 @@ async fn main() {
     let config: Config = {
         let config_path = match args_os().nth(1) {
             Some(cp) => PathBuf::from(cp),
-            None => PathBuf::from("obtain_bim.json"),
+            None => PathBuf::from("obtain_bim_mw.json"),
         };
         let f = File::open(config_path)
             .expect("failed to open config file");
