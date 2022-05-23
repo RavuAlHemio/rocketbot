@@ -27,6 +27,8 @@ jobs:
         run: cargo test
       - name: build obtain_bim_mw
         run: cargo build --example obtain_bim_mw
+      - name: build obtain_bim_sa
+        run: cargo build --example obtain_bim_sa
       - name: generate CountryCodes.json
         run: cargo run --example countrycodes
       - name: upload debug binary
@@ -37,6 +39,7 @@ jobs:
             target/debug/rocketbot
             target/debug/rocketbotweb
             target/debug/examples/obtain_bim_mw
+            target/debug/examples/obtain_bim_sa
             rocketbot_plugin_calc/data/unitdb.toml
             rocketbot_plugin_grammargen/grammars/*.grammar
             rocketbot_plugin_syllable/rules/*.toml

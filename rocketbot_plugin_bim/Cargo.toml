@@ -20,6 +20,7 @@ tokio-postgres = { version = "0.7", features = ["with-chrono-0_4"] }
 [dev-dependencies]
 form_urlencoded = { version = "1.0" }
 reqwest = { version = "0.11", features = ["rustls-tls"] }
+scraper = { version = "0.13" }
 sxd-document = { version = "0.3" }
 sxd-xpath = { version = "0.4" }
 tokio = { version = "1.17", features = ["macros", "rt-multi-thread"] }
