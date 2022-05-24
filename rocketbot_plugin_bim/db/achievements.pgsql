@@ -95,7 +95,7 @@ AS $$
     SELECT 3, MIN("timestamp")
     FROM bim.rides_and_vehicles rav3
     WHERE rav3.rider_username = rider
-    AND rav3.line = CAST(rav3.vehicle_number AS varchar)
+    AND rav3.line = CAST(rav3.vehicle_number AS character varying)
 
     UNION ALL
 
@@ -142,7 +142,7 @@ AS $$
     SELECT 8, MIN("timestamp")
     FROM bim.rides_and_vehicles rav8
     WHERE rav8.rider_username = rider
-    AND REVERSE(rav8.line) = CAST(rav8.vehicle_number AS varchar)
+    AND REVERSE(rav8.line) = CAST(rav8.vehicle_number AS character varying)
 
     UNION ALL
 
