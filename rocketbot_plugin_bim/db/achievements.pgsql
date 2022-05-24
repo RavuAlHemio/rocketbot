@@ -164,6 +164,6 @@ AS $$
         ON rav10b.vehicle_number = rav10a.vehicle_number
         AND rav10b.rider_username = rav10a.rider_username
         AND rav10b.company <> rav10a.company
-        AND rav10b.id > rav10a.id
+        AND rav10b."timestamp" > rav10a."timestamp"
     WHERE rav10b.rider_username = rider
 $$;
