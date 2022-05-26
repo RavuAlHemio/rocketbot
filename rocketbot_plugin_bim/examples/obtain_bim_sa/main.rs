@@ -154,7 +154,7 @@ async fn main() {
   
                     // number is first text child of number span
                     // (sometimes there is a "<sup>IV</sup>" or similar after it)
-                    let number_opt = None;
+                    let mut number_opt = None;
                     for child in number_span.children() {
                         if let Node::Text(t) = child.value() {
                             number_opt = Some(t.trim());
