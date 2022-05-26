@@ -151,7 +151,20 @@ async fn main() {
                         None => continue,
                         Some(ns) => ns,
                     };
-                    let number: String = number_span.text().collect();
+  
+                    // number is first text child of number span
+                    // (sometimes there is a "<sup>IV</sup>" or similar after it)
+                    let number_opt = None;
+                    for child in number_span.children() {
+                        if let Node::Text(t) = child.value() {
+                            number_opt = Some(t.trim());
+                            break;
+                        }
+                    }
+                    let number = match number_opt {
+                        Some(n) => n,
+                        None => continue,
+                    };
                     let number_u32: u32 = match number.parse() {
                         Ok(n) => n,
                         Err(_) => continue,
