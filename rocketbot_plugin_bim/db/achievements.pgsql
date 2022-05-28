@@ -64,6 +64,118 @@ AS $$
     END;
 $$;
 
+CREATE OR REPLACE FUNCTION bim.longest_sequence_of
+( rider character varying
+, max_timestamp timestamp with time zone
+) RETURNS bigint
+LANGUAGE plpgsql
+STABLE
+AS $$
+    DECLARE
+        longest_sequence bigint NOT NULL := 0;
+        current_sequence bigint NOT NULL := 1;
+        comp character varying;
+        vehicle_num bigint;
+        last_vehicle bigint;
+    BEGIN
+        IF rider IS NULL THEN RETURN NULL; END IF;
+        FOR comp IN
+            SELECT DISTINCT company
+            FROM bim.rides
+            WHERE rider_username = rider
+            AND (
+                max_timestamp IS NULL
+                OR max_timestamp >= "timestamp"
+            )
+        LOOP
+            current_sequence := 1;
+            last_vehicle := -2;
+            FOR vehicle_num IN
+                SELECT DISTINCT vehicle_number
+                FROM bim.rides_and_vehicles
+                WHERE company = comp
+                AND rider_username = rider
+                AND (
+                    max_timestamp IS NULL
+                    OR max_timestamp >= "timestamp"
+                )
+                ORDER BY vehicle_number
+            LOOP
+                IF last_vehicle + 1 = vehicle_num THEN
+                    current_sequence := current_sequence + 1;
+                ELSE
+                    IF longest_sequence < current_sequence THEN
+                        longest_sequence := current_sequence;
+                    END IF;
+                    current_sequence := 1;
+                END IF;
+                last_vehicle := vehicle_num;
+            END LOOP;
+            IF longest_sequence < current_sequence THEN
+                longest_sequence := current_sequence;
+            END IF;
+        END LOOP;
+        RETURN longest_sequence;
+    END;
+$$;
+
+CREATE OR REPLACE FUNCTION bim.sequence_of_reached
+( rider character varying
+, sequence_length bigint
+) RETURNS timestamp with time zone
+LANGUAGE plpgsql
+STABLE STRICT
+AS $$
+    DECLARE
+        current_sequence bigint NOT NULL := 1;
+        comp character varying;
+        vehicle_num bigint;
+        last_vehicle bigint;
+        ts timestamp with time zone;
+        last_timestamps timestamp with time zone[];
+        temp_ts timestamp with time zone;
+        max_timestamps timestamp with time zone[];
+    BEGIN
+        IF rider IS NULL THEN RETURN NULL; END IF;
+        IF sequence_length IS NULL THEN RETURN NULL; END IF;
+        FOR comp IN
+            SELECT DISTINCT company
+            FROM bim.rides
+            WHERE rider_username = rider
+        LOOP
+            current_sequence := 1;
+            last_vehicle := -2;
+            last_timestamps := CAST(ARRAY[] AS timestamp with time zone[]);
+            FOR vehicle_num, ts IN
+                SELECT vehicle_number, MIN("timestamp")
+                FROM bim.rides_and_vehicles
+                WHERE company = comp
+                AND rider_username = rider
+                GROUP BY vehicle_number
+                ORDER BY vehicle_number
+            LOOP
+                IF last_vehicle + 1 = vehicle_num THEN
+                    current_sequence := current_sequence + 1;
+                    last_timestamps := ARRAY_APPEND(last_timestamps, ts);
+                    IF ARRAY_LENGTH(last_timestamps, 1) > sequence_length THEN
+                        last_timestamps := last_timestamps[ARRAY_LENGTH(last_timestamps, 1) - sequence_length + 1:];
+                    END IF;
+                ELSE
+                    current_sequence := 1;
+                    last_timestamps := ARRAY[ts];
+                END IF;
+                IF current_sequence >= sequence_length THEN
+                    SELECT MAX(tstamp) INTO temp_ts FROM UNNEST(last_timestamps) tstamp;
+                    max_timestamps := ARRAY_APPEND(max_timestamps, temp_ts);
+                END IF;
+                last_vehicle := vehicle_num;
+            END LOOP;
+        END LOOP;
+        SELECT MIN(tstamp) INTO temp_ts FROM UNNEST(max_timestamps) tstamp;
+        RETURN temp_ts;
+    END;
+$$;
+
 CREATE OR REPLACE FUNCTION bim.achievements_of
 ( rider character varying(256)
 ) RETURNS TABLE
@@ -166,4 +278,98 @@ AS $$
         AND rav10b.company <> rav10a.company
         AND rav10b."timestamp" > rav10a."timestamp"
     WHERE rav10b.rider_username = rider
+
+    UNION ALL
+
+    -- Monthiversary
+    -- Ride the same vehicle on the same day of two consecutive months.
+    SELECT 11, MIN(rav11b."timestamp")
+    FROM bim.rides_and_vehicles rav11a
+    INNER JOIN bim.rides_and_vehicles rav11b
+        ON rav11b.rider_username = rav11a.rider_username
+        AND rav11b.vehicle_number = rav11a.vehicle_number
+        AND rav11b.company = rav11a.company
+        AND CAST(rav11b."timestamp" AS date) = CAST((rav11a."timestamp" + CAST('P1M' AS interval)) AS date)
+        -- days beyond the end of the month are saturated (2022-01-31 + P1M = 2022-02-28)
+        -- counteract this
+        AND EXTRACT(DAY FROM rav11b."timestamp") = EXTRACT(DAY FROM rav11a."timestamp")
+    WHERE rav11a.rider_username = rider
+
+    UNION ALL
+
+    -- Anniversary
+    -- Ride the same vehicle on the same day of two consecutive years.
+    SELECT 12, MIN(rav12b."timestamp")
+    FROM bim.rides_and_vehicles rav12a
+    INNER JOIN bim.rides_and_vehicles rav12b
+        ON rav12b.rider_username = rav12a.rider_username
+        AND rav12b.vehicle_number = rav12a.vehicle_number
+        AND rav12b.company = rav12a.company
+        AND CAST(rav12b."timestamp" AS date) = CAST((rav12a."timestamp" + CAST('P1Y' AS interval)) AS date)
+        -- days beyond the end of the month are saturated (2004-02-29 + P1Y = 2005-02-28)
+        -- counteract this
+        AND EXTRACT(DAY FROM rav12b."timestamp") = EXTRACT(DAY FROM rav12a."timestamp")
+        AND EXTRACT(MONTH FROM rav12b."timestamp") = EXTRACT(MONTH FROM rav12a."timestamp")
+    WHERE rav12a.rider_username = rider
+
+    UNION ALL
+
+    -- Same Time Next Week
+    -- Ride the same vehicle on the same weekday of two consecutive weeks.
+    SELECT 13, MIN(rav13b."timestamp")
+    FROM bim.rides_and_vehicles rav13a
+    INNER JOIN bim.rides_and_vehicles rav13b
+        ON rav13b.rider_username = rav13a.rider_username
+        AND rav13b.vehicle_number = rav13a.vehicle_number
+        AND rav13b.company = rav13a.company
+        AND CAST(rav13b."timestamp" AS date) = CAST((rav13a."timestamp" + CAST('P7D' AS interval)) AS date)
+    WHERE rav13a.rider_username = rider
+
+    UNION ALL
+
+    -- Five Sweep
+    -- Collect rides with five vehicles of the same company with consecutive numbers.
+    SELECT 14, bim.sequence_of_reached(rider, 5)
+
+    UNION ALL
+
+    -- Ten Sweep
+    -- Collect rides with ten vehicles of the same company with consecutive numbers.
+    SELECT 15, bim.sequence_of_reached(rider, 10)
+
+    UNION ALL
+
+    -- Twenty Sweep
+    -- Collect rides with twenty vehicles of the same company with consecutive numbers.
+    SELECT 16, bim.sequence_of_reached(rider, 20)
+
+    UNION ALL
+
+    -- Thirty Sweep
+    -- Collect rides with thirty vehicles of the same company with consecutive numbers.
+    SELECT 17, bim.sequence_of_reached(rider, 30)
+
+    UNION ALL
+
+    -- Forty Sweep
+    -- Collect rides with forty vehicles of the same company with consecutive numbers.
+    SELECT 18, bim.sequence_of_reached(rider, 40)
+
+    UNION ALL
+
+    -- Half-Century Sweep
+    -- Collect rides with fifty vehicles of the same company with consecutive numbers.
+    SELECT 19, bim.sequence_of_reached(rider, 50)
+
+    UNION ALL
+
+    -- Nice Sweep
+    -- Collect rides with sixty-nine vehicles of the same company with consecutive numbers.
+    SELECT 20, bim.sequence_of_reached(rider, 69)
+
+    UNION ALL
+
+    -- Century Sweep
+    -- Collect rides with one hundred vehicles of the same company with consecutive numbers.
+    SELECT 21, bim.sequence_of_reached(rider, 100)
 $$;
