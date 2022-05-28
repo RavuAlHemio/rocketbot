@@ -60,6 +60,7 @@ struct Config {
 struct TypeInfo {
     pub type_code: String,
     pub manufacturer: Option<String>,
+    #[serde(default)] pub other_data: BTreeMap<String, String>,
 }
 
 struct VehicleInfoBuilder {
@@ -117,6 +118,20 @@ impl VehicleInfoBuilder {
     pub fn fixed_coupling<C: IntoIterator<Item = VehicleNumber>>(&mut self, coupling: C) -> &mut Self {
         self.fixed_coupling = coupling.into_iter().collect();
         self
+    }
+
+    pub fn modify_with_type_mapping(&mut self, type_mapping: &HashMap<String, TypeInfo>) {
+        if let Some(type_code) = &self.type_code {
+            if let Some(tc) = type_mapping.get(type_code) {
+                self.manufacturer = tc.manufacturer.clone();
+                self.type_code = Some(tc.type_code.clone());
+                for (k, v) in &tc.other_data {
+                    self.other_data
+                        .entry(k.clone())
+                        .or_insert_with(|| v.clone());
+                }
+            }
+        }
     }
 
     pub fn try_build(self) -> Result<VehicleInfo, Self> {
@@ -212,7 +227,7 @@ async fn main() {
                 let tr_classes: HashSet<&str> = car_line.value().classes().collect();
                 if tr_classes.contains("first-line") {
                     // new vehicle!
-
+                    current_vehicle.modify_with_type_mapping(&config.type_mapping);
                     if let Ok(veh) = current_vehicle.try_build() {
                         vehicles.push(veh);
                     }
@@ -315,6 +330,7 @@ async fn main() {
             }
 
             // construct final vehicle
+            current_vehicle.modify_with_type_mapping(&config.type_mapping);
             if let Ok(veh) = current_vehicle.try_build() {
                 vehicles.push(veh);
             }
