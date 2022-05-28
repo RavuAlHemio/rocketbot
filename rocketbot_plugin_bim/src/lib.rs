@@ -9,7 +9,9 @@ use std::num::ParseIntError;
 use std::sync::Weak;
 
 use async_trait::async_trait;
-use chrono::{Datelike, DateTime, Duration, Local, NaiveDate, TimeZone, Weekday};
+use chrono::{
+    Datelike, DateTime, Duration, Local, LocalResult, NaiveDate, NaiveDateTime, TimeZone, Weekday,
+};
 use indexmap::IndexSet;
 use log::error;
 use once_cell::sync::OnceCell;
@@ -30,6 +32,7 @@ use crate::range_set::RangeSet;
 
 
 const INVISIBLE_JOINER: &str = "\u{2060}"; // WORD JOINER
+const TIMESTAMP_INPUT_FORMAT: &str = "%Y-%m-%d %H:%M:%S%.f";
 
 
 #[derive(Clone, Copy, Debug, Eq, Hash, Ord, PartialEq, PartialOrd)]
@@ -2115,6 +2118,7 @@ impl BimPlugin {
         let sender_username = channel_message.message.sender.username.as_str();
 
         let delete = command.flags.contains("d") || command.flags.contains("delete");
+        let utc_time = command.flags.contains("u") || command.flags.contains("utc");
         let ride_id = command.options.get("i")
             .or_else(|| command.options.get("id"))
             .map(|cv| cv.as_i64().unwrap());
@@ -2131,6 +2135,9 @@ impl BimPlugin {
             .map(|cv| cv.as_str().unwrap());
         let new_line = command.options.get("l")
             .or_else(|| command.options.get("set-line"))
+            .map(|cv| cv.as_str().unwrap());
+        let new_timestamp_str = command.options.get("t")
+            .or_else(|| command.options.get("set-timestamp"))
             .map(|cv| cv.as_str().unwrap());
 
         let is_admin = config_guard.admin_usernames.contains(sender_username);
@@ -2154,9 +2161,18 @@ impl BimPlugin {
                 ).await;
                 return;
             }
+
+            if new_timestamp_str.is_some() {
+                send_channel_message!(
+                    interface,
+                    &channel_message.channel.name,
+                    "Only `bim` admins can modify a ride's timestamp.",
+                ).await;
+                return;
+            }
         }
 
-        if delete && (new_rider.is_some() || new_company.is_some() || new_line.is_some()) {
+        if delete && (new_rider.is_some() || new_company.is_some() || new_line.is_some() || new_timestamp_str.is_some()) {
             send_channel_message!(
                 interface,
                 &channel_message.channel.name,
@@ -2165,7 +2181,7 @@ impl BimPlugin {
             return;
         }
 
-        if !delete && new_rider.is_none() && new_company.is_none() && new_line.is_none() {
+        if !delete && new_rider.is_none() && new_company.is_none() && new_line.is_none() && new_timestamp_str.is_none() {
             send_channel_message!(
                 interface,
                 &channel_message.channel.name,
@@ -2186,6 +2202,46 @@ impl BimPlugin {
 
             // FIXME: verify vehicle and line numbers against company-specific regexes?
         }
+
+        let new_timestamp_opt = if let Some(nts) = new_timestamp_str {
+            let ndt = match NaiveDateTime::parse_from_str(nts, TIMESTAMP_INPUT_FORMAT) {
+                Ok(ndt) => ndt,
+                Err(_) => {
+                    send_channel_message!(
+                        interface,
+                        &channel_message.channel.name,
+                        &format!("Failed to parse timestamp; expected format `{}`.", TIMESTAMP_INPUT_FORMAT),
+                    ).await;
+                    return;
+                },
+            };
+            let dt = if utc_time {
+                Local.from_utc_datetime(&ndt)
+            } else {
+                match Local.from_local_datetime(&ndt) {
+                    LocalResult::None => {
+                        send_channel_message!(
+                            interface,
+                            &channel_message.channel.name,
+                            "That local time does not exist. You may wish to use the -u/--utc option.",
+                        ).await;
+                        return;
+                    },
+                    LocalResult::Ambiguous(_, _) => {
+                        send_channel_message!(
+                            interface,
+                            &channel_message.channel.name,
+                            "That local time is ambiguous. Please specify it in UTC using the -u/--utc option.",
+                        ).await;
+                        return;
+                    },
+                    LocalResult::Single(t) => t,
+                }
+            };
+            Some(dt)
+        } else {
+            None
+        };
 
         // find the ride
         let ride_conn = match self.connect_ride_db(&config_guard).await {
@@ -2294,7 +2350,7 @@ impl BimPlugin {
         let mut props: Vec<String> = Vec::new();
         let mut values: Vec<&(dyn ToSql + Sync)> = Vec::new();
 
-        let (remember_new_rider, remember_new_company, remember_new_line);
+        let (remember_new_rider, remember_new_company, remember_new_line, remember_new_timestamp);
         if let Some(nr) = new_rider {
             remember_new_rider = nr.to_owned();
             props.push(format!("rider_username = ${}", props.len() + 1));
@@ -2309,6 +2365,11 @@ impl BimPlugin {
             remember_new_line = nl.to_owned();
             props.push(format!("line = ${}", props.len() + 1));
             values.push(&remember_new_line);
+        }
+        if let Some(nts) = new_timestamp_opt {
+            remember_new_timestamp = nts.clone();
+            props.push(format!("\"timestamp\" = ${}", props.len() + 1));
+            values.push(&remember_new_timestamp);
         }
 
         let props_string = props.join(", ");
@@ -2739,6 +2800,8 @@ impl RocketBotPlugin for BimPlugin {
             )
                 .add_flag("d")
                 .add_flag("delete")
+                .add_flag("u")
+                .add_flag("utc")
                 .add_option("i", CommandValueType::Integer)
                 .add_option("id", CommandValueType::Integer)
                 .add_option("r", CommandValueType::String)
@@ -2749,6 +2812,8 @@ impl RocketBotPlugin for BimPlugin {
                 .add_option("set-company", CommandValueType::String)
                 .add_option("l", CommandValueType::String)
                 .add_option("set-line", CommandValueType::String)
+                .add_option("t", CommandValueType::String)
+                .add_option("set-timestamp", CommandValueType::String)
                 .build()
         ).await;
         my_interface.register_channel_command(
