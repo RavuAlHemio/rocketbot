@@ -1,14 +1,52 @@
-use std::collections::HashMap;
+use std::collections::{BTreeMap, HashMap, HashSet};
 use std::env::args_os;
 use std::fs::File;
 use std::io::Read;
 use std::path::PathBuf;
+use std::str::FromStr;
 
+use indexmap::IndexSet;
+use once_cell::sync::Lazy;
+use regex::Regex;
 use reqwest;
-use rocketbot_plugin_bim::VehicleInfo;
+use rocketbot_plugin_bim::{VehicleInfo, VehicleNumber};
 use scraper::{Html, Node, Selector};
 use serde::{Deserialize, Serialize};
 use serde_json;
+
+
+static DATE_RANGE_RE: Lazy<Regex> = Lazy::new(|| Regex::new(concat!(
+    "^",
+    "\\s*",
+    "\\(",
+        "(?:",
+            "od ",
+            "(?P<date_from>.+)",
+        "|",
+            "(?P<range_from>.+)",
+            " - ",
+            "(?P<range_to>.+)",
+        ")",
+    "\\)",
+    "\\s*",
+    "$",
+)).expect("failed to parse date range regex"));
+static FIXED_COUPLING_RE: Lazy<Regex> = Lazy::new(|| Regex::new(concat!(
+    "\\{",
+        "(?P<coupling>",
+            "[0-9]+",
+            "(?:",
+                "\\+",
+                "[0-9]+",
+            ")*",
+        ")",
+    "\\}",
+    "\\s*",
+    "$",
+)).expect("failed to parse fixed coupling regex"));
+static WHITESPACE_RE: Lazy<Regex> = Lazy::new(|| Regex::new(concat!(
+    "\\s+",
+)).expect("failed to parse whitespace regex"));
 
 
 #[derive(Clone, Debug, Deserialize, Eq, Serialize, PartialEq)]
@@ -22,6 +60,84 @@ struct Config {
 struct TypeInfo {
     pub type_code: String,
     pub manufacturer: Option<String>,
+}
+
+struct VehicleInfoBuilder {
+    number: Option<VehicleNumber>,
+    type_code: Option<String>,
+    in_service_since: Option<String>,
+    out_of_service_since: Option<String>,
+    manufacturer: Option<String>,
+    other_data: BTreeMap<String, String>,
+    fixed_coupling: IndexSet<VehicleNumber>,
+}
+impl VehicleInfoBuilder {
+    pub fn new() -> Self {
+        Self {
+            number: None,
+            type_code: None,
+            in_service_since: None,
+            out_of_service_since: None,
+            manufacturer: None,
+            other_data: BTreeMap::new(),
+            fixed_coupling: IndexSet::new(),
+        }
+    }
+
+    pub fn number(&mut self, number: VehicleNumber) -> &mut Self {
+        self.number = Some(number);
+        self
+    }
+
+    pub fn type_code<T: Into<String>>(&mut self, type_code: T) -> &mut Self {
+        self.type_code = Some(type_code.into());
+        self
+    }
+
+    pub fn in_service_since<S: Into<String>>(&mut self, since: S) -> &mut Self {
+        self.in_service_since = Some(since.into());
+        self
+    }
+
+    pub fn out_of_service_since<S: Into<String>>(&mut self, since: S) -> &mut Self {
+        self.out_of_service_since = Some(since.into());
+        self
+    }
+
+    pub fn manufacturer<M: Into<String>>(&mut self, manuf: M) -> &mut Self {
+        self.manufacturer = Some(manuf.into());
+        self
+    }
+
+    pub fn other_data<K: Into<String>, V: Into<String>>(&mut self, key: K, value: V) -> &mut Self {
+        self.other_data.insert(key.into(), value.into());
+        self
+    }
+
+    pub fn fixed_coupling<C: IntoIterator<Item = VehicleNumber>>(&mut self, coupling: C) -> &mut Self {
+        self.fixed_coupling = coupling.into_iter().collect();
+        self
+    }
+
+    pub fn try_build(self) -> Result<VehicleInfo, Self> {
+        let number = match self.number {
+            Some(n) => n,
+            None => return Err(self),
+        };
+        let type_code = match self.type_code {
+            Some(tc) => tc,
+            None => return Err(self),
+        };
+        Ok(VehicleInfo {
+            number,
+            type_code,
+            in_service_since: self.in_service_since,
+            out_of_service_since: self.out_of_service_since,
+            manufacturer: self.manufacturer,
+            other_data: self.other_data,
+            fixed_coupling: self.fixed_coupling,
+        })
+    }
 }
 
 
@@ -44,6 +160,12 @@ async fn obtain_page_bytes(url: &str) -> Vec<u8> {
 }
 
 
+fn trim_text(s: &str) -> String {
+    let replaced = WHITESPACE_RE.replace_all(s, " ");
+    replaced.trim().to_owned()
+}
+
+
 #[tokio::main]
 async fn main() {
     // load config
@@ -58,125 +180,153 @@ async fn main() {
             .expect("failed to parse config file")
     };
 
-    let row_wrapper_sel = Selector::parse("div.row-wrapper")
-        .expect("failed to parse row-wrapper selector");
-    let a_sel = Selector::parse("a")
-        .expect("failed to parse a selector");
-    let car_sel = Selector::parse("a.car")
-        .expect("failed to parse car selector");
-    let number_sel = Selector::parse("span.number")
-        .expect("failed to parse number selector");
+    let car_line_sel = Selector::parse("table.cars-table tr.car-line")
+        .expect("failed to parse car-line selector");
+    let td_sel = Selector::parse("td")
+        .expect("failed to parse td selector");
+    let b_sel = Selector::parse("b")
+        .expect("failed to parse b selector");
+    let dates_span_sel = Selector::parse("span.dates")
+        .expect("failed to parse dates-span selector");
+    let last_number_span_sel = Selector::parse("span.\\000031.number")
+        .expect("failed to parse last-number-span selector");
+    let next_link_sel = Selector::parse(".next-link")
+        .expect("failed to parse next-link selector");
 
     let mut vehicles = Vec::new();
     for page_url in &config.pages {
-        let page_bytes = obtain_page_bytes(page_url).await;
-        let page_string = String::from_utf8(page_bytes)
-            .expect("failed to decode page as UTF-8");
-        let html = Html::parse_document(&page_string);
+        let mut page_number: usize = 1;
+        loop {
+            let mut page_page_url = reqwest::Url::parse(&page_url)
+                .expect("failed to parse page URL");
+            page_page_url.query_pairs_mut()
+                .append_pair("page", &page_number.to_string());
 
-        // go through row wrappers
-        let mut current_type = None;
-        for row_wrapper in html.select(&row_wrapper_sel) {
-            if row_wrapper.value().classes().any(|c| c == "type") {
-                // new type!
-                let type_link = match row_wrapper.select(&a_sel).nth(0) {
-                    None => continue,
-                    Some(tl) => tl,
-                };
+            let page_bytes = obtain_page_bytes(page_page_url.as_str()).await;
+            let page_string = String::from_utf8(page_bytes)
+                .expect("failed to decode page as UTF-8");
+            let html = Html::parse_document(&page_string);
 
-                // its first text child is the type
-                let mut new_type = None;
-                for child in type_link.children() {
-                    if let Node::Text(t) = child.value() {
-                        new_type = Some(t.trim());
-                        break;
+            let mut current_vehicle = VehicleInfoBuilder::new();
+            for car_line in html.root_element().select(&car_line_sel) {
+                let tr_classes: HashSet<&str> = car_line.value().classes().collect();
+                if tr_classes.contains("first-line") {
+                    // new vehicle!
+
+                    if let Ok(veh) = current_vehicle.try_build() {
+                        vehicles.push(veh);
                     }
+                    current_vehicle = VehicleInfoBuilder::new();
                 }
 
-                if let Some(nt) = new_type {
-                    // is it mapped?
-                    if let Some(mapped) = config.type_mapping.get(nt) {
-                        // yes; use that
-                        current_type = Some(mapped.clone());
-                    } else {
-                        // no; improvise
-                        current_type = Some(TypeInfo {
-                            type_code: nt.to_owned(),
-                            manufacturer: None,
-                        });
-                    }
-                }
-            } else if row_wrapper.value().classes().any(|c| c == "clearfix") {
-                let cur_type = match current_type.as_ref() {
-                    Some(ct) => ct,
-                    None => continue, // no vehicles without a type
-                };
+                for td in car_line.select(&td_sel) {
+                    let td_classes: HashSet<&str> = td.value().classes().collect();
+                    if td_classes.contains("manufacturer-type") {
+                        // first text child is the manufacturer
+                        let mut manuf = None;
+                        for child in td.children() {
+                            if let Node::Text(text_child) = child.value() {
+                                manuf = Some(text_child.to_string());
+                                break;
+                            }
+                        }
+                        if let Some(m) = manuf {
+                            current_vehicle.manufacturer(trim_text(&m));
+                        }
 
-                // car row
-                for car in row_wrapper.select(&car_sel) {
-                    // classes of trams that we care about:
-                    // * nzr = nezařazen = not in service
-                    // * zar = zařazen = in regular service
-                    // * dilny = dílny = in workshop/repair
-                    // * doco = dočasně odstaven = out of service temporarily
-                    // * sluz = služební = maintenance (non-passenger) vehicle
+                        // last <b> child's text is the current type code
+                        let last_b_child = td.select(&b_sel).last();
+                        if let Some(lbc) = last_b_child {
+                            let text: String = lbc.text().collect();
+                            current_vehicle.type_code(text);
+                        }
 
-                    // classes of trams that we do not care about:
-                    // * zrus = zrušen = scrapped
-                    // * prod = prodán = sold
-                    // * muz = muzeum = in museum
-                    // * ods = odstaven = out of service long-term
-                    // * vrak = vrak = total hull loss
-                    // * nez = neznámý = unknown
+                        // next two columns are date built and date scrapped; skip these
+                        // as we are more interested in "entered service" and "left service" with company
+                    } else if td_classes.contains("note") {
+                        let mut note: String = td.text().collect();
+                        // do we have a fixed-coupling specification at the end of the note?
+                        if let Some(caps) = FIXED_COUPLING_RE.captures(&note) {
+                            let mut fixed_coupling = IndexSet::new();
+                            let couple_strs = caps
+                                .name("coupling").expect("coupling not captured")
+                                .as_str()
+                                .split("+");
+                            let mut failed = false;
+                            for couple_str in couple_strs {
+                                if let Ok(couple) = VehicleNumber::from_str(couple_str) {
+                                    fixed_coupling.insert(couple);
+                                } else {
+                                    failed = true;
+                                    break;
+                                }
+                            }
+                            if !failed {
+                                current_vehicle.fixed_coupling(fixed_coupling);
 
-                    let car_is_interesting = car.value().classes().any(|c|
-                        c == "nzr" || c == "zar" || c == "dilny" || c == "doco" || c == "sluz"
-                    );
-                    let car_is_not_interesting = car.value().classes().any(|c|
-                        c == "zrus" || c == "prod" || c == "muz" || c == "ods" || c == "vrak"
-                        || c == "nez"
-                    );
-
-                    if car_is_not_interesting {
-                        continue;
-                    }
-                    if !car_is_interesting {
-                        // car is neither interesting nor not interesting
-                        let classes: Vec<&str> = car.value().classes().collect();
-                        eprintln!("warning: car of unknown interest; has classes: {:?}", classes);
-                        continue;
-                    }
-
-                    let number_span = match car.select(&number_sel).nth(0) {
-                        None => continue,
-                        Some(ns) => ns,
-                    };
-  
-                    // number is first text child of number span
-                    // (sometimes there is a "<sup>IV</sup>" or similar after it)
-                    let mut number_opt = None;
-                    for child in number_span.children() {
-                        if let Node::Text(t) = child.value() {
-                            number_opt = Some(t.trim());
-                            break;
+                                // remove the fixed coupling info from the note
+                                let caps_range = caps.get(0).unwrap().range();
+                                std::mem::drop(caps);
+                                note.replace_range(caps_range, "");
+                            }
+                        }
+                        current_vehicle.other_data("Anmerkung", trim_text(&note));
+                    } else if td_classes.contains("numbers") {
+                        let latest_num_span = td.select(&last_number_span_sel).nth(0);
+                        if let Some(lns) = latest_num_span {
+                            // take text from first text child
+                            // (this ignores Roman numerals in <sup> tags)
+                            let mut lns_text = None;
+                            for lns_child in lns.children() {
+                                if let Node::Text(tc) = lns_child.value() {
+                                    lns_text = Some(tc.to_string());
+                                }
+                            }
+                            if let Some(t) = lns_text {
+                                if let Ok(lns_number) = VehicleNumber::from_str(&t) {
+                                    current_vehicle.number(lns_number);
+                                }
+                            }
+                        }
+                    } else if td_classes.contains("current-operator") {
+                        let dates_span = td.select(&dates_span_sel).nth(0);
+                        if let Some(ds) = dates_span {
+                            let ds_text: String = ds.text().collect();
+                            if let Some(caps) = DATE_RANGE_RE.captures(&ds_text) {
+                                if let Some(df) = caps.name("date_from") {
+                                    current_vehicle.in_service_since(df.as_str());
+                                } else if let Some(rf) = caps.name("range_from") {
+                                    let range_to = caps.name("range_to").expect("captured range_from but not range_to");
+                                    current_vehicle.in_service_since(rf.as_str());
+                                    current_vehicle.out_of_service_since(range_to.as_str());
+                                }
+                                // there doesn't appear to be a "until only" format
+                            }
+                        }
+                    } else if td_classes.contains("depots") {
+                        // first <b> child's text is the depot abbreviation
+                        let depot_b = td.select(&b_sel).nth(0);
+                        if let Some(db) = depot_b {
+                            let db_text: String = db.text().collect();
+                            current_vehicle.other_data("Remise", db_text);
                         }
                     }
-                    let number = match number_opt {
-                        Some(n) => n,
-                        None => continue,
-                    };
-                    let number_u32: u32 = match number.parse() {
-                        Ok(n) => n,
-                        Err(_) => continue,
-                    };
-
-                    let mut vehicle = VehicleInfo::new(number_u32, cur_type.type_code.clone());
-                    if let Some(manuf) = cur_type.manufacturer.as_ref() {
-                        vehicle.manufacturer = Some(manuf.clone());
-                    }
-                    vehicles.push(vehicle);
                 }
             }
+
+            // construct final vehicle
+            if let Ok(veh) = current_vehicle.try_build() {
+                vehicles.push(veh);
+            }
+
+            // does another page await us?
+            if !html.root_element().select(&next_link_sel).any(|_| true) {
+                // no
+                break;
+            }
+
+            // yes; increase the current page number
+            page_number += 1;
         }
     }
 
