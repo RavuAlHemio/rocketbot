@@ -366,7 +366,7 @@ async fn main() {
                                 .split("+");
                             let mut failed = false;
                             for couple_str in couple_strs {
-                                let couple_str_no_asterisk = couple_str.trim_end_matches('*');
+                                let couple_str_no_asterisk = couple_str.trim_end_matches([' ', '*']);
                                 if let Ok(couple) = VehicleNumber::from_str(couple_str_no_asterisk) {
                                     fixed_coupling.insert(couple);
                                 } else {
