@@ -1,3 +1,4 @@
+use std::cmp::Ordering;
 use std::collections::{BTreeMap, HashMap, HashSet};
 use std::env::args_os;
 use std::fs::File;
@@ -10,7 +11,7 @@ use once_cell::sync::Lazy;
 use regex::Regex;
 use reqwest;
 use rocketbot_plugin_bim::{VehicleInfo, VehicleNumber};
-use scraper::{Html, Node, Selector};
+use scraper::{ElementRef, Html, Node, Selector};
 use serde::{Deserialize, Serialize};
 use serde_json;
 
@@ -47,6 +48,18 @@ static FIXED_COUPLING_RE: Lazy<Regex> = Lazy::new(|| Regex::new(concat!(
 static WHITESPACE_RE: Lazy<Regex> = Lazy::new(|| Regex::new(concat!(
     "\\s+",
 )).expect("failed to parse whitespace regex"));
+static DATE_RE: Lazy<Regex> = Lazy::new(|| Regex::new(concat!(
+    "(?P<first>[0-9]+)",
+    "(?:",
+        "\\.",
+        "(?P<a_month>[0-9]+)",
+        "\\.",
+        "(?P<a_year>[0-9]+)",
+    "|",
+        "/",
+        "(?P<b_year>[0-9]+)",
+    ")?",
+)).expect("failed to parse date regex"));
 
 
 #[derive(Clone, Debug, Deserialize, Eq, Serialize, PartialEq)]
@@ -181,6 +194,91 @@ fn trim_text(s: &str) -> String {
 }
 
 
+fn text_of_first_text_child(n: &ElementRef) -> Option<String> {
+    for child in n.children() {
+        if let Node::Text(text_child) = child.value() {
+            return Some(text_child.to_string());
+        }
+    }
+    None
+}
+
+
+fn date_tuple(s: &str) -> Option<(u64, u64, u64)> {
+    if let Some(caps) = DATE_RE.captures(s) {
+        let first_m = caps.name("first").expect("first not captured");
+        let first = match first_m.as_str().parse() {
+            Ok(f) => f,
+            Err(_) => return None,
+        };
+
+        if let Some(a_month_m) = caps.name("a_month") {
+            let a_year_m = caps.name("a_year").expect("a_month captured but a_year not");
+
+            let a_month = match a_month_m.as_str().parse() {
+                Ok(m) => m,
+                Err(_) => return None,
+            };
+            let a_year = match a_year_m.as_str().parse() {
+                Ok(y) => y,
+                Err(_) => return None,
+            };
+            Some((a_year, a_month, first))
+        } else if let Some(b_year_m) = caps.name("b_year") {
+            let b_year = match b_year_m.as_str().parse() {
+                Ok(y) => y,
+                Err(_) => return None,
+            };
+            Some((b_year, first, 0))
+        } else if first >= 1000 {
+            Some((first, 0, 0))
+        } else {
+            None
+        }
+    } else {
+        None
+    }
+}
+
+
+fn compare_date_strings(left: Option<&str>, right: Option<&str>) -> Ordering {
+    match (left, right) {
+        (None, Some(_)) => Ordering::Greater,
+        (Some(_), None) => Ordering::Less,
+        (Some(l), Some(r)) => {
+            // if one is a question mark, assume it to be older
+            if l == "?" && r != "?" {
+                return Ordering::Less;
+            } else if l != "?" && r == "?" {
+                return Ordering::Greater;
+            }
+
+            // try to interpret them as dates
+            let l_tuple = date_tuple(l);
+            let r_tuple = date_tuple(r);
+            if let Some(l_date) = l_tuple {
+                if let Some(r_date) = r_tuple {
+                    return l_date.cmp(&r_date);
+                }
+            }
+
+            // naive string comparison
+            l.cmp(r)
+        },
+        (None, None) => Ordering::Equal,
+    }
+
+}
+
+
+fn compare_age(left: &VehicleInfo, right: &VehicleInfo) -> Ordering {
+    compare_date_strings(
+        left.out_of_service_since.as_ref().map(|o| o.as_str()),
+        right.out_of_service_since.as_ref().map(|o| o.as_str()),
+    )
+}
+
+
 #[tokio::main]
 async fn main() {
     // load config
@@ -203,6 +301,8 @@ async fn main() {
         .expect("failed to parse b selector");
     let dates_span_sel = Selector::parse("span.dates")
         .expect("failed to parse dates-span selector");
+    let last_plate_span_sel = Selector::parse("span.\\000031")
+        .expect("failed to parse last-plate-span selector");
     let last_number_span_sel = Selector::parse("span.\\000031.number")
         .expect("failed to parse last-number-span selector");
     let next_link_sel = Selector::parse(".next-link")
@@ -216,6 +316,7 @@ async fn main() {
                 .expect("failed to parse page URL");
             page_page_url.query_pairs_mut()
                 .append_pair("page", &page_number.to_string());
+            eprintln!("fetching {}", page_page_url);
 
             let page_bytes = obtain_page_bytes(page_page_url.as_str()).await;
             let page_string = String::from_utf8(page_bytes)
@@ -238,13 +339,7 @@ async fn main() {
                     let td_classes: HashSet<&str> = td.value().classes().collect();
                     if td_classes.contains("manufacturer-type") {
                         // first text child is the manufacturer
-                        let mut manuf = None;
-                        for child in td.children() {
-                            if let Node::Text(text_child) = child.value() {
-                                manuf = Some(text_child.to_string());
-                                break;
-                            }
-                        }
+                        let manuf = text_of_first_text_child(&td);
                         if let Some(m) = manuf {
                             current_vehicle.manufacturer(trim_text(&m));
                         }
@@ -286,17 +381,20 @@ async fn main() {
                             }
                         }
                         current_vehicle.other_data("Anmerkung", trim_text(&note));
+                    } else if td_classes.contains("plates") {
+                        let latest_plate_span = td.select(&last_plate_span_sel).nth(0);
+                        if let Some(lps) = latest_plate_span {
+                            let lps_text = text_of_first_text_child(&lps);
+                            if let Some(t) = lps_text {
+                                current_vehicle.other_data("Kennzeichen", t);
+                            }
+                        }
                     } else if td_classes.contains("numbers") {
                         let latest_num_span = td.select(&last_number_span_sel).nth(0);
                         if let Some(lns) = latest_num_span {
                             // take text from first text child
                             // (this ignores Roman numerals in <sup> tags)
-                            let mut lns_text = None;
-                            for lns_child in lns.children() {
-                                if let Node::Text(tc) = lns_child.value() {
-                                    lns_text = Some(tc.to_string());
-                                }
-                            }
+                            let lns_text = text_of_first_text_child(&lns);
                             if let Some(t) = lns_text {
                                 if let Ok(lns_number) = VehicleNumber::from_str(&t) {
                                     current_vehicle.number(lns_number);
@@ -347,6 +445,31 @@ async fn main() {
     }
 
     vehicles.sort_unstable_by_key(|v| v.number);
+
+    // clear out duplicates
+    let mut i = 1;
+    while i < vehicles.len() {
+        let left = &vehicles[i-1];
+        let right = &vehicles[i];
+        if left == right {
+            vehicles.remove(i);
+            continue;
+        }
+
+        if left.number == right.number {
+            // remove the older one
+            match compare_age(left, right) {
+                Ordering::Less|Ordering::Equal => {
+                    vehicles.remove(i - 1);
+                },
+                Ordering::Greater => {
+                    vehicles.remove(i);
+                },
+            }
+        } else {
+            i += 1;
+        }
+    }
 
     // output
     {
