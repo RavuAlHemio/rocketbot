@@ -36,16 +36,14 @@ static FIXED_COUPLING_RE: Lazy<Regex> = Lazy::new(|| Regex::new(concat!(
     "\\{",
         "(?P<coupling>",
             "[0-9]+",
-            "[ *]*",
+            "[ *\\t]*",
             "(?:",
                 "\\+",
                 "[0-9]+",
-                "[ *]*",
+                "[ *\\t]*",
             ")*",
         ")",
     "\\}",
-    "\\s*",
-    "$",
 )).expect("failed to parse fixed coupling regex"));
 static WHITESPACE_RE: Lazy<Regex> = Lazy::new(|| Regex::new(concat!(
     "\\s+",
@@ -357,7 +355,7 @@ async fn main() {
                         // as we are more interested in "entered service" and "left service" with company
                     } else if td_classes.contains("note") {
                         let mut note: String = td.text().collect();
-                        // do we have a fixed-coupling specification at the end of the note?
+                        // do we have a fixed-coupling specification in the note?
                         if let Some(caps) = FIXED_COUPLING_RE.captures(&note) {
                             let mut fixed_coupling = IndexSet::new();
                             let couple_strs = caps
@@ -366,7 +364,7 @@ async fn main() {
                                 .split("+");
                             let mut failed = false;
                             for couple_str in couple_strs {
-                                let couple_str_no_asterisk = couple_str.trim_end_matches([' ', '*']);
+                                let couple_str_no_asterisk = couple_str.trim_end_matches([' ', '*', '\t']);
                                 if let Ok(couple) = VehicleNumber::from_str(couple_str_no_asterisk) {
                                     fixed_coupling.insert(couple);
                                 } else {
