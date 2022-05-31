@@ -232,7 +232,7 @@ impl RocketBotPlugin for UrlPlugin {
         my_interface.register_channel_command(
             &CommandDefinitionBuilder::new(
                 "fixurls",
-                "fixurls",
+                "url",
                 "{cpfx}fixurls URL",
                 "Re-outputs the given message with its URLs fixed.",
             )
