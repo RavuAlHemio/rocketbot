@@ -18,6 +18,7 @@ use log::{error, info, warn};
 use once_cell::sync::OnceCell;
 use rand::{Rng, thread_rng};
 use regex::Regex;
+use rocketbot_bim_achievements::ACHIEVEMENT_DEFINITIONS;
 use rocketbot_interface::{JsonValueExtensions, phrase_join, ResultExtensions, send_channel_message};
 use rocketbot_interface::commands::{CommandDefinitionBuilder, CommandInstance, CommandValueType};
 use rocketbot_interface::interfaces::{RocketBotInterface, RocketBotPlugin};
@@ -29,7 +30,7 @@ use serde_json;
 use tokio_postgres::NoTls;
 use tokio_postgres::types::ToSql;
 
-use crate::achievements::{ACHIEVEMENT_DEFINITIONS, get_achievements_for};
+use crate::achievements::get_achievements_for;
 use crate::range_set::RangeSet;
 
 

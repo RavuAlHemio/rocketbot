@@ -4,11 +4,13 @@ use std::fs::File;
 use std::borrow::Cow;
 
 use askama::Template;
-use chrono::{Datelike, DateTime, Local, NaiveDate, Weekday, TimeZone};
+use chrono::{DateTime, Local, NaiveDate, TimeZone};
 use hyper::{Body, Method, Request, Response};
 use indexmap::IndexSet;
 use log::{error, warn};
 use png;
+use rocketbot_bim_achievements::{AchievementDef, ACHIEVEMENT_DEFINITIONS};
+use rocketbot_date_time::DateTimeLocalWithWeekday;
 use serde::{Deserialize, Serialize, Serializer};
 use serde::ser::SerializeStruct;
 use tokio_postgres::types::ToSql;
@@ -181,34 +183,11 @@ impl Default for VehicleDatabaseExtract {
 }
 
 
-#[derive(Clone, Debug, Eq, Hash, PartialEq)]
+#[derive(Clone, Debug, Eq, Hash, PartialEq, Serialize)]
 struct RideInfo {
     pub rider: String,
-    pub timestamp: DateTime<Local>,
+    pub timestamp: DateTimeLocalWithWeekday,
     pub line: Option<String>,
-}
-impl Serialize for RideInfo {
-    fn serialize<S: Serializer>(&self, serializer: S) -> Result<S::Ok, S::Error> {
-        let weekday = match self.timestamp.weekday() {
-            Weekday::Mon => "Mo",
-            Weekday::Tue => "Tu",
-            Weekday::Wed => "We",
-            Weekday::Thu => "Th",
-            Weekday::Fri => "Fr",
-            Weekday::Sat => "Sa",
-            Weekday::Sun => "Su",
-        };
-        let timestamp = format!(
-            "{} {}",
-            weekday, self.timestamp.format("%Y-%m-%d %H:%M:%S"),
-        );
-
-        let mut state = serializer.serialize_struct("RideInfo", 3)?;
-        state.serialize_field("rider", &self.rider)?;
-        state.serialize_field("timestamp", &timestamp)?;
-        state.serialize_field("line", &self.line)?;
-        state.end()
-    }
 }
 
 #[derive(Clone, Debug, Eq, Hash, PartialEq, Serialize)]
@@ -291,6 +270,14 @@ struct BimDetailsTemplate {
     pub company: String,
     pub vehicle: Option<VehicleDetailsPart>,
     pub rides: Vec<BimDetailsRidePart>,
+}
+
+#[derive(Clone, Debug, Eq, PartialEq, Serialize, Template)]
+#[template(path = "bimachievements.html")]
+struct BimAchievementsTemplate {
+    pub achievement_to_rider_to_timestamp: HashMap<i64, HashMap<String, DateTimeLocalWithWeekday>>,
+    pub all_achievements: Vec<AchievementDef>,
+    pub all_riders: BTreeSet<String>,
 }
 
 #[derive(Clone, Debug, Eq, PartialEq, Serialize)]
@@ -863,12 +850,12 @@ pub(crate) async fn handle_bim_vehicles(request: &Request<Body>) -> Result<Respo
         let ride_count: i64 = vehicle_row.get(2);
         let first_ride = RideInfo {
             rider: vehicle_row.get(3),
-            timestamp: vehicle_row.get(4),
+            timestamp: DateTimeLocalWithWeekday(vehicle_row.get(4)),
             line: vehicle_row.get(5),
         };
         let latest_ride = RideInfo {
             rider: vehicle_row.get(6),
-            timestamp: vehicle_row.get(7),
+            timestamp: DateTimeLocalWithWeekday(vehicle_row.get(7)),
             line: vehicle_row.get(8),
         };
 
@@ -1815,6 +1802,72 @@ pub(crate) async fn handle_top_bim_lines(request: &Request<Body>) -> Result<Resp
 
     let template = TopBimLinesTemplate {
         counts_lines,
+    };
+    match render_response(&template, &query_pairs, 200, vec![]).await {
+        Some(r) => Ok(r),
+        None => return_500(),
+    }
+}
+
+pub(crate) async fn handle_bim_achievements(request: &Request<Body>) -> Result<Response<Body>, Infallible> {
+    let query_pairs = get_query_pairs(request);
+
+    if request.method() != Method::GET {
+        return return_405(&query_pairs).await;
+    }
+
+    let db_conn = match connect_to_db().await {
+        Some(c) => c,
+        None => return return_500(),
+    };
+
+    // query achievements
+    let ach_rows_res = db_conn.query(
+        "
+            SELECT r.rider_username, ach.achievement_id, ach.achieved_on
+            FROM
+                bim.rides r
+                CROSS JOIN LATERAL bim.achievements_of(r.rider_username) ach
+            ORDER BY
+                r.rider_username, ach.achievement_id
+        ",
+        &[],
+    ).await;
+    let ach_rows = match ach_rows_res {
+        Ok(rs) => rs,
+        Err(e) => {
+            error!("error querying vehicle rides: {}", e);
+            return return_500();
+        },
+    };
+
+    let all_achievements = ACHIEVEMENT_DEFINITIONS.iter()
+        .map(|ad| ad.clone())
+        .collect();
+
+    let mut all_riders = BTreeSet::new();
+    let mut achievement_to_rider_to_timestamp = HashMap::new();
+    for ach in ach_rows {
+        let rider: String = ach.get(0);
+        let achievement_id: i64 = ach.get(1);
+        let achieved_on_odtl: Option<DateTime<Local>> = ach.get(2);
+
+        let achieved_on = match achieved_on_odtl {
+            Some(dtl) => DateTimeLocalWithWeekday(dtl),
+            None => continue,
+        };
+
+        all_riders.insert(rider.clone());
+        achievement_to_rider_to_timestamp
+            .entry(achievement_id)
+            .or_insert_with(|| HashMap::new())
+            .insert(rider, achieved_on);
+    }
+
+    let template = BimAchievementsTemplate {
+        achievement_to_rider_to_timestamp,
+        all_riders,
+        all_achievements,
     };
     match render_response(&template, &query_pairs, 200, vec![]).await {
         Some(r) => Ok(r),

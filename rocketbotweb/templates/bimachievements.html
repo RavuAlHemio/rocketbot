@@ -1,0 +1,42 @@
+{% extends "base.html" %}
+
+{% block title %}Public Transport Achievements{% endblock %}
+
+{% block content %}
+<main class="bim-achievements">
+
+<h1>Public Transport Achievements</h1>
+
+<table class="bim-achievements">
+
+<tr>
+    <th class="achievement">Achievement</th>
+    {%- for rider in all_riders %}
+        <th class="rider" data-rider-username="{{ rider|escape }}">{{ rider|escape }}</th>
+    {%- endfor %}
+</tr>
+
+{%- for achievement in all_achievements %}
+    <tr class="achievement" data-achievement-id="{{ achievement.id }}">
+        <th class="achievement">{{ achievement.name|escape }}</th>
+        {%- if let Some(rider_to_timestamp) = achievement_to_rider_to_timestamp.get(achievement.id) %}
+            {%- for rider in all_riders %}
+                {%- if let Some(timestamp) = rider_to_timestamp.get(rider.as_str()) %}
+                    <td class="rider achieved" data-rider-username="{{ rider|escape }}" data-timestamp="{{ timestamp|escape }}">{{ timestamp }}</td>
+                {%- else %}
+                    <td class="rider pending" data-rider-username="{{ rider|escape }}"></td>
+                {%- endif %}
+            {%- endfor %}
+        {%- else %}
+            {%- for rider in all_riders %}
+                <td class="rider pending" data-rider-username="{{ rider|escape }}"></td>
+            {%- endfor %}
+        {%- endif %}
+    </tr>
+{%- endfor %}
+
+</table>
+
+</main>
+
+{% endblock %}

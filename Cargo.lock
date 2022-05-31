@@ -2132,6 +2132,22 @@ dependencies = [
 ]
 
 [[package]]
+name = "rocketbot_bim_achievements"
+version = "0.1.0"
+dependencies = [
+ "rocketbot_date_time",
+ "serde",
+]
+
+[[package]]
+name = "rocketbot_date_time"
+version = "0.1.0"
+dependencies = [
+ "chrono",
+ "serde",
+]
+
+[[package]]
 name = "rocketbot_geocoding"
 version = "0.1.0"
 dependencies = [
@@ -2236,6 +2252,7 @@ dependencies = [
  "rand 0.8.5",
  "regex",
  "reqwest",
+ "rocketbot_bim_achievements",
  "rocketbot_interface",
  "scraper",
  "serde",
@@ -2837,6 +2854,8 @@ dependencies = [
  "log",
  "once_cell",
  "png 0.17.5",
+ "rocketbot_bim_achievements",
+ "rocketbot_date_time",
  "serde",
  "serde_json",
  "tokio",

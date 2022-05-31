@@ -1,0 +1,8 @@
+[package]
+name = "rocketbot_bim_achievements"
+version = "0.1.0"
+edition = "2021"
+
+[dependencies]
+rocketbot_date_time = { path = "../rocketbot_date_time" }
+serde = { version = "1.0", features = ["derive"] }
