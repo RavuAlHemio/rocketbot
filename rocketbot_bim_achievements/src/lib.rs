@@ -2,7 +2,7 @@ use rocketbot_date_time::DateTimeLocalWithWeekday;
 use serde::Serialize;
 
 
-pub static ACHIEVEMENT_DEFINITIONS: [AchievementDef; 29] = [
+pub static ACHIEVEMENT_DEFINITIONS: [AchievementDef; 31] = [
     // special vehicle numbers
     AchievementDef::new(1, "Beastly", "Ride a vehicle (of any company) with number 666."),
     AchievementDef::new(22, "Kinda Beastly", "Ride a vehicle (of any company) whose number contains \"666\" (but isn't 666)."),
@@ -17,6 +17,8 @@ pub static ACHIEVEMENT_DEFINITIONS: [AchievementDef; 29] = [
     AchievementDef::new(27, "Prim and Proper", "Ride a vehicle (of any company) whose vehicle number is a three-digit prime."),
     AchievementDef::new(28, "Primate Representative", "Ride a vehicle (of any company) whose vehicle number is a two-digit prime."),
     AchievementDef::new(29, "Primus Inter Pares", "Ride a vehicle (of any company) whose vehicle number is a single-digit prime."),
+    AchievementDef::new(30, "It Gets Better", "Ride a vehicle (of any company) whose at least three-digit number's decimal digits are in ascending order."),
+    AchievementDef::new(31, "Downward Spiral", "Ride a vehicle (of any company) whose at least three-digit number's decimal digits are in descending order."),
 
     // vehicle numbers in relation to line numbers
     AchievementDef::new(3, "Home Line", "Ride a vehicle (of any company) where the vehicle number and the line are the same."),

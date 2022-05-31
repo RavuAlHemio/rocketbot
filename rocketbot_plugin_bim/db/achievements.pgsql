@@ -118,6 +118,40 @@ AS $$
     SELECT bim.smallest_factor(val) = val
 $$;
 
+CREATE OR REPLACE FUNCTION bim.is_in_sequence
+( val bigint
+, downward boolean
+) RETURNS boolean
+LANGUAGE plpgsql
+IMMUTABLE LEAKPROOF STRICT
+PARALLEL SAFE
+AS $$
+    DECLARE
+        last_digit bigint;
+        current_digit bigint;
+    BEGIN
+        IF val IS NULL OR downward IS NULL THEN
+            RETURN NULL;
+        END IF;
+        IF val < 0 THEN
+            val := -val;
+        END IF;
+        last_digit := MOD(val, 10);
+        val := DIV(val, 10);
+        WHILE val > 0 LOOP
+            current_digit := MOD(val, 10);
+            IF downward AND current_digit <> last_digit + 1 THEN
+                RETURN FALSE;
+            ELSIF NOT downward AND current_digit <> last_digit - 1 THEN
+                RETURN FALSE;
+            END IF;
+            last_digit := current_digit;
+            val := DIV(val, 10);
+        END LOOP;
+        RETURN TRUE;
+    END;
+$$;
+
 CREATE OR REPLACE FUNCTION bim.longest_sequence_of
 ( rider character varying
 , max_timestamp timestamp with time zone
@@ -506,4 +540,24 @@ AS $$
     WHERE rav29.rider_username = rider
     AND rav29.vehicle_number BETWEEN 1 AND 9
     AND bim.is_prime(rav29.vehicle_number)
+
+    UNION ALL
+
+    -- It Gets Better
+    -- Ride a vehicle (of any company) whose at least three-digit number's decimal digits are in ascending order.
+    SELECT 30, MIN(rav30."timestamp")
+    FROM bim.rides_and_vehicles rav30
+    WHERE rav30.rider_username = rider
+    AND rav30.vehicle_number > 99
+    AND bim.is_in_sequence(rav30.vehicle_number, TRUE)
+
+    UNION ALL
+
+    -- Downward Spiral
+    -- Ride a vehicle (of any company) whose at least three-digit number's decimal digits are in descending order.
+    SELECT 31, MIN(rav31."timestamp")
+    FROM bim.rides_and_vehicles rav31
+    WHERE rav31.rider_username = rider
+    AND rav31.vehicle_number > 99
+    AND bim.is_in_sequence(rav31.vehicle_number, FALSE)
 $$;
