@@ -82,6 +82,42 @@ AS $$
     END;
 $$;
 
+CREATE OR REPLACE FUNCTION bim.smallest_factor
+( val bigint
+) RETURNS bigint
+LANGUAGE plpgsql
+IMMUTABLE LEAKPROOF STRICT
+PARALLEL SAFE
+AS $$
+    DECLARE
+        test_num bigint NOT NULL := 2;
+    BEGIN
+        IF val IS NULL THEN
+            RETURN NULL;
+        END IF;
+        IF val < 2 THEN
+            RETURN val;
+        END IF;
+        WHILE val > test_num LOOP
+            IF MOD(val, test_num) = 0 THEN
+                RETURN test_num;
+            END IF;
+            test_num := test_num + 1;
+        END LOOP;
+        RETURN val;
+    END;
+$$;
+
+CREATE OR REPLACE FUNCTION bim.is_prime
+( val bigint
+) RETURNS boolean
+LANGUAGE sql
+IMMUTABLE LEAKPROOF STRICT
+PARALLEL SAFE
+AS $$
+    SELECT bim.smallest_factor(val) = val
+$$;
+
 CREATE OR REPLACE FUNCTION bim.longest_sequence_of
 ( rider character varying
 , max_timestamp timestamp with time zone
@@ -390,4 +426,84 @@ AS $$
     -- Century Sweep
     -- Collect rides with one hundred vehicles of the same company with consecutive numbers.
     SELECT 21, bim.sequence_of_reached(rider, 100)
+
+    UNION ALL
+
+    -- Kinda Beastly
+    -- Ride a vehicle (of any company) whose number contains "666" (but isn't 666).
+    SELECT 22, MIN(rav22."timestamp")
+    FROM bim.rides_and_vehicles rav22
+    WHERE rav22.rider_username = rider
+    AND rav22.vehicle_number <> 666
+    AND POSITION('666' IN CAST(rav22.vehicle_number AS character varying)) > 0
+
+    UNION ALL
+
+    -- Rather Nice
+    -- Ride a vehicle (of any company) whose number contains "69" (but isn't 69).
+    SELECT 23, MIN(rav23."timestamp")
+    FROM bim.rides_and_vehicles rav23
+    WHERE rav23.rider_username = rider
+    AND rav23.vehicle_number <> 69
+    AND POSITION('69' IN CAST(rav23.vehicle_number AS character varying)) > 0
+
+    UNION ALL
+
+    -- Indivisibiliter
+    -- Ride a vehicle (of any company) whose vehicle number is divisible by (but not equal to) its line number.
+    SELECT 24, MIN(rav24."timestamp")
+    FROM bim.rides_and_vehicles rav24
+    WHERE rav24.rider_username = rider
+    AND rav24.vehicle_number > bim.char_to_bigint_or_null(rav24.line)
+    AND MOD(rav24.vehicle_number, bim.char_to_bigint_or_null(rav24.line)) = 0
+
+    UNION ALL
+
+    -- Inseparabiliter
+    -- Ride a vehicle (of any company) on a line whose number is divisible by (but not equal to) the vehicle's number.
+    SELECT 25, MIN(rav25."timestamp")
+    FROM bim.rides_and_vehicles rav25
+    WHERE rav25.rider_username = rider
+    AND bim.char_to_bigint_or_null(rav25.line) > rav25.vehicle_number
+    AND MOD(bim.char_to_bigint_or_null(rav25.line), rav25.vehicle_number) = 0
+
+    UNION ALL
+
+    -- Priming the Pump
+    -- Ride a vehicle (of any company) whose vehicle number is a four-digit prime.
+    SELECT 26, MIN(rav26."timestamp")
+    FROM bim.rides_and_vehicles rav26
+    WHERE rav26.rider_username = rider
+    AND rav26.vehicle_number BETWEEN 1000 AND 9999
+    AND bim.is_prime(rav26.vehicle_number)
+
+    UNION ALL
+
+    -- Prim and Proper
+    -- Ride a vehicle (of any company) whose vehicle number is a three-digit prime.
+    SELECT 27, MIN(rav27."timestamp")
+    FROM bim.rides_and_vehicles rav27
+    WHERE rav27.rider_username = rider
+    AND rav27.vehicle_number BETWEEN 100 AND 999
+    AND bim.is_prime(rav27.vehicle_number)
+
+    UNION ALL
+
+    -- Primate Representative
+    -- Ride a vehicle (of any company) whose vehicle number is a two-digit prime.
+    SELECT 28, MIN(rav28."timestamp")
+    FROM bim.rides_and_vehicles rav28
+    WHERE rav28.rider_username = rider
+    AND rav28.vehicle_number BETWEEN 10 AND 99
+    AND bim.is_prime(rav28.vehicle_number)
+
+    UNION ALL
+
+    -- Primus Inter Pares
+    -- Ride a vehicle (of any company) whose vehicle number is a single-digit prime.
+    SELECT 29, MIN(rav29."timestamp")
+    FROM bim.rides_and_vehicles rav29
+    WHERE rav29.rider_username = rider
+    AND rav29.vehicle_number BETWEEN 1 AND 9
+    AND bim.is_prime(rav29.vehicle_number)
 $$;
