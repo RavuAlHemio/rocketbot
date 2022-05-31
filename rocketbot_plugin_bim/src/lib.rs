@@ -1,3 +1,4 @@
+mod achievements;
 mod range_set;
 
 
@@ -13,7 +14,7 @@ use chrono::{
     Datelike, DateTime, Duration, Local, LocalResult, NaiveDate, NaiveDateTime, TimeZone, Weekday,
 };
 use indexmap::IndexSet;
-use log::error;
+use log::{error, info, warn};
 use once_cell::sync::OnceCell;
 use rand::{Rng, thread_rng};
 use regex::Regex;
@@ -28,6 +29,7 @@ use serde_json;
 use tokio_postgres::NoTls;
 use tokio_postgres::types::ToSql;
 
+use crate::achievements::{ACHIEVEMENT_DEFINITIONS, get_achievements_for};
 use crate::range_set::RangeSet;
 
 
@@ -282,6 +284,7 @@ struct Config {
     allow_fixed_coupling_combos: bool,
     admin_usernames: HashSet<String>,
     max_edit_s: i64,
+    achievements_active: bool,
 }
 
 
@@ -595,6 +598,20 @@ impl BimPlugin {
             },
         };
 
+        let prev_achievements = if config_guard.achievements_active {
+            let prev_ach = get_achievements_for(
+                    &ride_conn,
+                    &channel_message.message.sender.username,
+                ).await
+                    .unwrap_or_else(|e| {
+                        error!("failed to obtain previous achievements: {}", e);
+                        BTreeMap::new()
+                    });
+            Some(prev_ach)
+        } else {
+            None
+        };
+
         let increment_res = increment_rides_by_spec(
             &mut ride_conn,
             bim_database_opt.as_ref(),
@@ -793,6 +810,75 @@ impl BimPlugin {
             &channel_message.channel.name,
             &response_str,
         ).await;
+
+        if let Some(prev_ach) = prev_achievements {
+            let new_achievements = get_achievements_for(
+                &ride_conn,
+                &channel_message.message.sender.username,
+            ).await
+                .unwrap_or_else(|e| {
+                    error!("failed to obtain new achievements: {}", e);
+                    BTreeMap::new()
+                });
+
+            for (ach_id, old_achievement) in &prev_ach {
+                let new_achievement = match new_achievements.get(ach_id) {
+                    Some(na) => na,
+                    None => continue,
+                };
+
+                match (old_achievement.timestamp, new_achievement.timestamp) {
+                    (None, None) => {
+                        // achievement not unlocked
+                    },
+                    (None, Some(new_ts)) => {
+                        // achievement unlocked!
+                        info!(
+                            "achievement unlocked! rider {:?} unlocked achievement {} at {}",
+                            channel_message.message.sender.username,
+                            ach_id,
+                            new_ts,
+                        );
+
+                        let ach_def_opt = ACHIEVEMENT_DEFINITIONS
+                            .iter()
+                            .filter(|ad| ad.id == *ach_id)
+                            .nth(0);
+                        if let Some(ach_def) = ach_def_opt {
+                            send_channel_message!(
+                                interface,
+                                &channel_message.channel.name,
+                                &format!(
+                                    "Achievement unlocked! {} unlocked *{}* ({})",
+                                    channel_message.message.sender.username,
+                                    ach_def.name,
+                                    ach_def.description,
+                                ),
+                            ).await;
+                        }
+                    },
+                    (Some(old_ts), Some(new_ts)) => {
+                        if old_ts != new_ts {
+                            warn!(
+                                "achievement timestamp changed! rider {:?} achievement {} from {} to {}",
+                                channel_message.message.sender.username,
+                                ach_id,
+                                old_ts,
+                                new_ts,
+                            );
+                        }
+                    },
+                    (Some(old_ts), None) => {
+                        warn!(
+                            "achievement disappeared! rider {:?} achievement {} previously at {}",
+                            channel_message.message.sender.username,
+                            ach_id,
+                            old_ts,
+                        );
+                    },
+                }
+            }
+        }
     }
 
     async fn channel_command_topbims(&self, channel_message: &ChannelMessage, command: &CommandInstance) {
@@ -2634,6 +2720,13 @@ impl BimPlugin {
                 .as_i64().ok_or("max_edit_s not an i64")?
         };
 
+        let achievements_active = if config["achievements_active"].is_null() {
+            false
+        } else {
+            config["achievements_active"]
+                .as_bool().ok_or("achievements_active not a bool")?
+        };
+
         Ok(Config {
             company_to_definition,
             default_company,
@@ -2642,6 +2735,7 @@ impl BimPlugin {
             allow_fixed_coupling_combos,
             admin_usernames,
             max_edit_s,
+            achievements_active,
         })
     }
 }

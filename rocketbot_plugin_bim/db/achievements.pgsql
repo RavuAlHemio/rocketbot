@@ -31,6 +31,24 @@ AS $$
     END;
 $$;
 
+CREATE OR REPLACE FUNCTION bim.char_to_bigint_or_null
+( val character varying
+) RETURNS bigint
+LANGUAGE plpgsql
+IMMUTABLE LEAKPROOF STRICT
+PARALLEL SAFE
+AS $$
+    BEGIN
+        IF val IS NULL THEN
+            RETURN NULL;
+        END IF;
+        RETURN CAST(val AS bigint);
+    EXCEPTION
+        WHEN invalid_text_representation OR numeric_value_out_of_range THEN
+            RETURN NULL;
+    END;
+$$;
+
 CREATE OR REPLACE FUNCTION bim.same_digits
 ( val bigint
 , min_length bigint
