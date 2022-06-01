@@ -841,153 +841,153 @@ AS $$
 
     -- NAME: Journeyman
     -- DESCR: Collect five rides in a day.
-    -- ORDER: 5,1 over time
+    -- ORDER: 6,1 over time
     SELECT 49, bim.rider_rides_per_timespan_reached(rider, 'P1D', 5)
 
     UNION ALL
 
     -- NAME: Hopper
     -- DESCR: Collect ten rides in a day.
-    -- ORDER: 5,2 over time
+    -- ORDER: 6,2 over time
     SELECT 50, bim.rider_rides_per_timespan_reached(rider, 'P1D', 10)
 
     UNION ALL
 
     -- NAME: Serial Tripper
     -- DESCR: Collect twenty rides in a day.
-    -- ORDER: 5,3 over time
+    -- ORDER: 6,3 over time
     SELECT 51, bim.rider_rides_per_timespan_reached(rider, 'P1D', 20)
 
     UNION ALL
 
     -- NAME: Single-Stop Vehicle Skipper
     -- DESCR: Collect thirty rides in a day.
-    -- ORDER: 5,4 over time
+    -- ORDER: 6,4 over time
     SELECT 52, bim.rider_rides_per_timespan_reached(rider, 'P1D', 30)
 
     UNION ALL
 
     -- NAME: Too Much Spare Time
     -- DESCR: Collect fifty rides in a day.
-    -- ORDER: 5,5 over time
+    -- ORDER: 6,5 over time
     SELECT 53, bim.rider_rides_per_timespan_reached(rider, 'P1D', 50)
 
     UNION ALL
 
     -- NAME: Commuter
     -- DESCR: Collect ten rides in a week.
-    -- ORDER: 5,6 over time
+    -- ORDER: 6,6 over time
     SELECT 54, bim.rider_rides_per_timespan_reached(rider, 'P7D', 10)
 
     UNION ALL
 
     -- NAME: Passenger
     -- DESCR: Collect twenty rides in a week.
-    -- ORDER: 5,7 over time
+    -- ORDER: 6,7 over time
     SELECT 55, bim.rider_rides_per_timespan_reached(rider, 'P7D', 20)
 
     UNION ALL
 
     -- NAME: Enthusiast
     -- DESCR: Collect thirty rides in a week.
-    -- ORDER: 5,8 over time
+    -- ORDER: 6,8 over time
     SELECT 56, bim.rider_rides_per_timespan_reached(rider, 'P7D', 30)
 
     UNION ALL
 
     -- NAME: Trainspotter
     -- DESCR: Collect fifty rides in a week.
-    -- ORDER: 5,9 over time
+    -- ORDER: 6,9 over time
     SELECT 57, bim.rider_rides_per_timespan_reached(rider, 'P7D', 50)
 
     UNION ALL
 
     -- NAME: Nice Rider
     -- DESCR: Collect sixty-nine rides in a week.
-    -- ORDER: 5,10 over time
+    -- ORDER: 6,10 over time
     SELECT 58, bim.rider_rides_per_timespan_reached(rider, 'P7D', 69)
 
     UNION ALL
 
     -- NAME: Trainstopper
     -- DESCR: Collect one hundred rides in a week.
-    -- ORDER: 5,11 over time
+    -- ORDER: 6,11 over time
     SELECT 59, bim.rider_rides_per_timespan_reached(rider, 'P7D', 100)
 
     UNION ALL
 
     -- NAME: Two Pow Seven
     -- DESCR: Collect one hundred and twenty-eight rides in a week.
-    -- ORDER: 5,12 over time
+    -- ORDER: 6,12 over time
     SELECT 60, bim.rider_rides_per_timespan_reached(rider, 'P7D', 128)
 
     UNION ALL
 
     -- NAME: Pokedex
     -- DESCR: Collect one hundred and fifty-one rides in a week.
-    -- ORDER: 5,13 over time
+    -- ORDER: 6,13 over time
     SELECT 61, bim.rider_rides_per_timespan_reached(rider, 'P7D', 151)
 
     UNION ALL
 
     -- NAME: Consistency
     -- DESCR: Collect one hundred rides in thirty days.
-    -- ORDER: 5,14 over time
+    -- ORDER: 6,14 over time
     SELECT 62, bim.rider_rides_per_timespan_reached(rider, 'P30D', 100)
 
     UNION ALL
 
     -- NAME: Perseverance
     -- DESCR: Collect two hundred rides in thirty days.
-    -- ORDER: 5,15 over time
+    -- ORDER: 6,15 over time
     SELECT 63, bim.rider_rides_per_timespan_reached(rider, 'P30D', 200)
 
     UNION ALL
 
     -- NAME: Frequent Flyer
     -- DESCR: Collect three hundred rides in thirty days.
-    -- ORDER: 5,16 over time
+    -- ORDER: 6,16 over time
     SELECT 64, bim.rider_rides_per_timespan_reached(rider, 'P30D', 300)
 
     UNION ALL
 
     -- NAME: No House Required
     -- DESCR: Collect five hundred rides in thirty days.
-    -- ORDER: 5,17 over time
+    -- ORDER: 6,17 over time
     SELECT 65, bim.rider_rides_per_timespan_reached(rider, 'P30D', 500)
 
     UNION ALL
 
     -- NAME: Boomer
     -- DESCR: Collect two hundred rides in 365 days.
-    -- ORDER: 5,18 over time
+    -- ORDER: 6,18 over time
     SELECT 66, bim.rider_rides_per_timespan_reached(rider, 'P365D', 200)
 
     UNION ALL
 
     -- NAME: GenX
     -- DESCR: Collect five hundred rides in 365 days.
-    -- ORDER: 5,19 over time
+    -- ORDER: 6,19 over time
     SELECT 67, bim.rider_rides_per_timespan_reached(rider, 'P365D', 500)
 
     UNION ALL
 
     -- NAME: Millennial
     -- DESCR: Collect one thousand rides in 365 days.
-    -- ORDER: 5,20 over time
+    -- ORDER: 6,20 over time
     SELECT 68, bim.rider_rides_per_timespan_reached(rider, 'P365D', 1000)
 
     UNION ALL
 
     -- NAME: GenZ
     -- DESCR: Collect 1500 rides in 365 days.
-    -- ORDER: 5,21 over time
+    -- ORDER: 6,21 over time
     SELECT 69, bim.rider_rides_per_timespan_reached(rider, 'P365D', 1500)
 
     UNION ALL
 
     -- NAME: GenAlpha
     -- DESCR: Collect 2000 rides in 365 days.
-    -- ORDER: 5,22 over time
+    -- ORDER: 6,22 over time
     SELECT 70, bim.rider_rides_per_timespan_reached(rider, 'P365D', 2000)
 $$;
