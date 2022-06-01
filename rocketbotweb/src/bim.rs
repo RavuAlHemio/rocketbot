@@ -284,6 +284,7 @@ struct BimAchievementsTemplate {
 struct VehicleDetailsPart {
     pub number: VehicleNumber,
     pub type_code: String,
+    pub vehicle_class: String,
     pub in_service_since: Option<String>,
     pub out_of_service_since: Option<String>,
     pub manufacturer: Option<String>,
@@ -294,6 +295,7 @@ impl VehicleDetailsPart {
     pub fn try_from_json(vehicle: &serde_json::Value) -> Option<Self> {
         let number = vehicle["number"].as_u64()?.try_into().ok()?;
         let type_code = vehicle["type_code"].as_str()?.to_owned();
+        let vehicle_class = vehicle["vehicle_class"].as_str()?.to_owned();
         let in_service_since = vehicle["in_service_since"]
             .as_str().map(|s| s.to_owned());
         let out_of_service_since = vehicle["out_of_service_since"]
@@ -320,6 +322,7 @@ impl VehicleDetailsPart {
         Some(Self {
             number,
             type_code,
+            vehicle_class,
             in_service_since,
             out_of_service_since,
             manufacturer,

@@ -24,6 +24,10 @@
     <th>Type</th>
     <td>{{ veh.type_code|escape }}</td>
   </tr>
+  <tr class="vehicle-class">
+    <th>Class</th>
+    <td>{{ veh.vehicle_class }}</td>
+  </tr>
   {% if let Some(manufacturer) = veh.manufacturer %}
     <tr class="manufacturer">
       <th>Manufacturer</th>

@@ -85,7 +85,7 @@ fn parse_vehicle_numbers(text_value: &str, number_separator_regex: &Option<Regex
 
 pub(crate) fn row_data_to_trams(page_config: &PageConfig, row_data: Vec<(String, String)>) -> BTreeMap<VehicleNumber, VehicleInfo> {
     let mut vehicles = BTreeMap::new();
-    let mut vehicle = VehicleInfo::new(0, page_config.type_code.clone());
+    let mut vehicle = VehicleInfo::new(0, page_config.vehicle_class, page_config.type_code.clone());
 
     let all_rows = page_config.common_props.iter()
         .chain(row_data.iter().map(|(k, v)| (k, v)));

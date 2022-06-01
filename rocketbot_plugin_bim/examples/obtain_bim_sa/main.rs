@@ -10,7 +10,7 @@ use indexmap::IndexSet;
 use once_cell::sync::Lazy;
 use regex::Regex;
 use reqwest;
-use rocketbot_plugin_bim::{VehicleInfo, VehicleNumber};
+use rocketbot_plugin_bim::{VehicleClass, VehicleInfo, VehicleNumber};
 use scraper::{ElementRef, Html, Node, Selector};
 use serde::{Deserialize, Serialize};
 use serde_json;
@@ -73,12 +73,14 @@ struct Config {
 struct TypeInfo {
     pub type_code: String,
     pub manufacturer: Option<String>,
+    pub vehicle_class: VehicleClass,
     #[serde(default)] pub other_data: BTreeMap<String, String>,
 }
 
 struct VehicleInfoBuilder {
     number: Option<VehicleNumber>,
     type_code: Option<String>,
+    vehicle_class: Option<VehicleClass>,
     in_service_since: Option<String>,
     out_of_service_since: Option<String>,
     manufacturer: Option<String>,
@@ -90,6 +92,7 @@ impl VehicleInfoBuilder {
         Self {
             number: None,
             type_code: None,
+            vehicle_class: None,
             in_service_since: None,
             out_of_service_since: None,
             manufacturer: None,
@@ -105,6 +108,11 @@ impl VehicleInfoBuilder {
 
     pub fn type_code<T: Into<String>>(&mut self, type_code: T) -> &mut Self {
         self.type_code = Some(type_code.into());
+        self
+    }
+
+    pub fn vehicle_class(&mut self, vehicle_class: VehicleClass) -> &mut Self {
+        self.vehicle_class = Some(vehicle_class);
         self
     }
 
@@ -138,6 +146,7 @@ impl VehicleInfoBuilder {
             if let Some(tc) = type_mapping.get(type_code) {
                 self.manufacturer = tc.manufacturer.clone();
                 self.type_code = Some(tc.type_code.clone());
+                self.vehicle_class(tc.vehicle_class);
                 for (k, v) in &tc.other_data {
                     self.other_data
                         .entry(k.clone())
@@ -152,6 +161,10 @@ impl VehicleInfoBuilder {
             Some(n) => n,
             None => return Err(self),
         };
+        let vehicle_class = match self.vehicle_class {
+            Some(vc) => vc,
+            None => return Err(self),
+        };
         let type_code = match self.type_code {
             Some(tc) => tc,
             None => return Err(self),
@@ -159,6 +172,7 @@ impl VehicleInfoBuilder {
         Ok(VehicleInfo {
             number,
             type_code,
+            vehicle_class,
             in_service_since: self.in_service_since,
             out_of_service_since: self.out_of_service_since,
             manufacturer: self.manufacturer,

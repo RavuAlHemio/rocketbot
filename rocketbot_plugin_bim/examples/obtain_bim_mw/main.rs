@@ -11,7 +11,7 @@ use std::path::PathBuf;
 use indexmap::IndexMap;
 use regex::Regex;
 use rocketbot_interface::serde::{serde_opt_regex, serde_regex};
-use rocketbot_plugin_bim::VehicleInfo;
+use rocketbot_plugin_bim::{VehicleClass, VehicleInfo};
 use serde::{Deserialize, Serialize};
 use serde_json;
 
@@ -33,6 +33,7 @@ struct Config {
 pub(crate) struct PageConfig {
     pub title: String,
     pub type_code: String,
+    pub vehicle_class: VehicleClass,
     #[serde(default)] pub fixed_couplings: bool,
     #[serde(default)] pub number_matcher: Option<MatcherTransformerConfig>,
     #[serde(default, with = "serde_opt_regex")] pub number_separator_regex: Option<Regex>,
