@@ -18,7 +18,7 @@
 
 {%- for achievement in all_achievements %}
     <tr class="achievement" data-achievement-id="{{ achievement.id }}">
-        <th class="achievement">{{ achievement.name|escape }}</th>
+        <th class="achievement" title="{{ achievement.description|escape }}">{{ achievement.name|escape }}</th>
         {%- if let Some(rider_to_timestamp) = achievement_to_rider_to_timestamp.get(achievement.id) %}
             {%- for rider in all_riders %}
                 {%- if let Some(timestamp) = rider_to_timestamp.get(rider.as_str()) %}
