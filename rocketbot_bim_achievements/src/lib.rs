@@ -31,7 +31,7 @@ pub static ACHIEVEMENT_DEFINITIONS: [AchievementDef; 31] = [
 
     // same vehicle after some time
     AchievementDef::new(11, "Monthiversary", "Ride the same vehicle on the same day of two consecutive months."),
-    AchievementDef::new(12, "Anniversary", "Ride the same vehicle on the same day of two consecutive months."),
+    AchievementDef::new(12, "Anniversary", "Ride the same vehicle on the same day of two consecutive years."),
     AchievementDef::new(13, "Same Time Next Week", "Ride the same vehicle on the same weekday of two consecutive weeks."),
 
     // consecutive numbers
