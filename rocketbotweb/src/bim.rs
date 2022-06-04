@@ -1939,14 +1939,6 @@ pub(crate) async fn handle_bim_ride_by_id(request: &Request<Body>) -> Result<Res
                 Some(c) => c,
                 None => return return_500(),
             };
-            let company_to_bim_database_opts = match obtain_company_to_bim_database().await {
-                Some(ctbdb) => ctbdb,
-                None => return return_500(),
-            };
-            let mut company_to_bim_database: BTreeMap<String, BTreeMap<VehicleNumber, serde_json::Value>> = BTreeMap::new();
-            for (company, bim_database_opt) in company_to_bim_database_opts.into_iter() {
-                company_to_bim_database.insert(company, bim_database_opt.unwrap_or_else(|| BTreeMap::new()));
-            }
 
             let ride_res = db_conn.query(
                 "
