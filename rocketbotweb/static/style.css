@@ -259,3 +259,7 @@ main.bim-details td.spec-pos,
 main.bim-details td.fixed-coupling-pos {
   text-align: right;
 }
+
+td.numeric-field {
+  text-align: right;
+}

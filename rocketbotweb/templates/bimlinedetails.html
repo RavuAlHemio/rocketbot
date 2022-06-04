@@ -37,7 +37,7 @@
   </tr>
   {% for ride in rides %}
   <tr>
-    <td class="id">{{ ride.id }}</td>
+    <td class="id"><a href="bim-ride-by-id?id={{ ride.id }}">{{ ride.id }}</a></td>
     <td class="rider">{{ ride.rider_username|escape }}</td>
     <td class="timestamp">{{ ride.timestamp|escape }}</td>
     <td class="vehicle-number"><a href="bim-detail?company={{ company|urlencode|escape }}&amp;vehicle={{ ride.vehicle_number }}">{{ ride.vehicle_number }}</a></td>
@@ -48,8 +48,7 @@
   {% endfor %}
 </table>
 
-<p><em>spec position:</em> position of the vehicle within the specification after the <code>!bimride</code> command</p>
-<p><em>fixed coupling position:</em> position of the vehicle within the fixed coupling as stored in the vehicle database</p>
+{%- include "parts/bim_position_explanation.html" %}
 </section>
 
 </main>

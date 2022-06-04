@@ -1,0 +1,87 @@
+{% extends "base.html" %}
+
+{% block title %}Public Transport Ride{% endblock %}
+
+{% block content %}
+<main>
+
+<h1>Public Transport Ride</h1>
+
+<form action="" method="get">
+  <p>
+    <label>
+      ID:
+      <input type="number" name="id" min="0" step="1" value="{{ id_param|escape }}" />
+    </label>
+    <input type="submit" value="lookup" />
+  </p>
+</form>
+
+{%- if let RideInfoState::NotFound = ride_state %}
+
+  <p class="ride-not-found">Ride not found.</p>
+
+{%- elseif let RideInfoState::Invalid = ride_state %}
+
+  <p class="ride-id-invalid">Invalid ride ID.</p>
+
+{%- elseif let RideInfoState::Found(ride) = ride_state %}
+
+  <table class="bim-ride-general booktable">
+
+    <tr class="id">
+      <th>ID</th>
+      <td>{{ ride.id }}</td>
+    </tr>
+    <tr class="rider">
+      <th>rider</th>
+      <td>{{ ride.rider_username|escape }}</td>
+    </tr>
+    <tr class="timestamp">
+      <th>timestamp</th>
+      <td>{{ ride.timestamp|escape }}</td>
+    </tr>
+    {%- if let Some(line) = ride.line %}
+    <tr class="line">
+      <th>line</th>
+      <td><a href="bim-line-detail?company={{ ride.company|urlencode|escape }}&amp;line={{ line|urlencode|escape }}"><span class="company">{{ ride.company|escape }}</span>/<span class="line">{{ line|escape }}</span></a></td>
+    </tr>
+    {%- else %}
+    <tr class="company">
+      <th>company</th>
+      <td>{{ ride.company|escape }}</td>
+    </tr>
+    {%- endif %}
+
+  </table>
+
+  <h2>Vehicles</h2>
+
+  <table class="bim-ride-vehicles booktable">
+
+    <tr>
+      <th class="vehicle-number">vehicle number</th>
+      <th class="vehicle-type">type</th>
+      <th class="spec-pos">spec position</th>
+      <th class="ride-type">ride type</th>
+      <th class="fixed-coupling-pos">fixed coupling position</th>
+    </tr>
+
+    {%- for vehicle in ride.vehicles %}
+      <tr>
+        <td class="vehicle-number numeric-field"><a href="bim-detail?company={{ ride.company|urlencode|escape }}&amp;vehicle={{ vehicle.vehicle_number }}">{{ vehicle.vehicle_number }}</a></td>
+        <td class="vehicle-type">{% if let Some(vehicle_type) = vehicle.vehicle_type %}{{ vehicle_type|escape }}{% endif %}</td>
+        <td class="spec-pos numeric-field">{{ vehicle.spec_position }}</td>
+        <td class="ride-type {% if vehicle.as_part_of_fixed_coupling %}coupled{% else %}explicit{% endif %}">{% if vehicle.as_part_of_fixed_coupling %}coupled{% else %}explicit{% endif %}</td>
+        <td class="fixed-coupling-pos numeric-field">{{ vehicle.fixed_coupling_position }}</td>
+      </tr>
+    {%- endfor %}
+
+  </table>
+
+{%- include "parts/bim_position_explanation.html" %}
+
+{%- endif %}
+
+</main>
+{% endblock %}

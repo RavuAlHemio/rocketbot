@@ -1,7 +1,8 @@
+use std::borrow::Cow;
 use std::collections::{BTreeMap, BTreeSet, HashMap, HashSet};
 use std::convert::{Infallible, TryInto};
 use std::fs::File;
-use std::borrow::Cow;
+use std::str::FromStr;
 
 use askama::Template;
 use chrono::{DateTime, Local, NaiveDate, TimeZone};
@@ -401,6 +402,42 @@ struct LinePart {
     pub line: String,
 }
 
+#[derive(Clone, Debug, Eq, Hash, PartialEq, Serialize, Template)]
+#[template(path = "bimridebyid.html")]
+struct BimRideByIdTemplate {
+    pub id_param: String,
+    pub ride_state: RideInfoState,
+}
+
+#[derive(Clone, Debug, Eq, Hash, Ord, PartialEq, PartialOrd, Serialize)]
+enum RideInfoState {
+    NotGiven,
+    Invalid,
+    NotFound,
+    Found(RidePart),
+}
+impl Default for RideInfoState {
+    fn default() -> Self { Self::NotGiven }
+}
+
+#[derive(Clone, Debug, Eq, Hash, Ord, PartialEq, PartialOrd, Serialize)]
+struct RidePart {
+    pub id: i64,
+    pub rider_username: String,
+    pub timestamp: String,
+    pub company: String,
+    pub line: Option<String>,
+    pub vehicles: Vec<RideVehiclePart>,
+}
+
+#[derive(Clone, Debug, Eq, Hash, Ord, PartialEq, PartialOrd, Serialize)]
+struct RideVehiclePart {
+    pub vehicle_number: VehicleNumber,
+    pub vehicle_type: Option<String>,
+    pub spec_position: i64,
+    pub as_part_of_fixed_coupling: bool,
+    pub fixed_coupling_position: i64,
+}
 
 #[inline]
 fn cow_empty_to_none<'a, 'b>(val: Option<&'a Cow<'b, str>>) -> Option<&'a Cow<'b, str>> {
@@ -1871,6 +1908,128 @@ pub(crate) async fn handle_bim_achievements(request: &Request<Body>) -> Result<R
         achievement_to_rider_to_timestamp,
         all_riders,
         all_achievements,
+    };
+    match render_response(&template, &query_pairs, 200, vec![]).await {
+        Some(r) => Ok(r),
+        None => return_500(),
+    }
+}
+
+
+pub(crate) async fn handle_bim_ride_by_id(request: &Request<Body>) -> Result<Response<Body>, Infallible> {
+    let query_pairs = get_query_pairs(request);
+
+    if request.method() != Method::GET {
+        return return_405(&query_pairs).await;
+    }
+
+    let ride_id_str = query_pairs.get("id");
+    let ride_id = ride_id_str.map(|ris| i64::from_str(&ris).ok());
+    let ride_state = match ride_id {
+        None => {
+            // no ride ID given
+            RideInfoState::NotGiven
+        },
+        Some(None) => {
+            // ride ID invalid
+            RideInfoState::Invalid
+        },
+        Some(Some(rid)) => {
+            let db_conn = match connect_to_db().await {
+                Some(c) => c,
+                None => return return_500(),
+            };
+            let company_to_bim_database_opts = match obtain_company_to_bim_database().await {
+                Some(ctbdb) => ctbdb,
+                None => return return_500(),
+            };
+            let mut company_to_bim_database: BTreeMap<String, BTreeMap<VehicleNumber, serde_json::Value>> = BTreeMap::new();
+            for (company, bim_database_opt) in company_to_bim_database_opts.into_iter() {
+                company_to_bim_database.insert(company, bim_database_opt.unwrap_or_else(|| BTreeMap::new()));
+            }
+
+            let ride_res = db_conn.query(
+                "
+                    SELECT
+                        rav.company, rav.rider_username, rav.\"timestamp\", rav.line,
+                        rav.vehicle_number, rav.vehicle_type, rav.spec_position,
+                        rav.as_part_of_fixed_coupling, rav.fixed_coupling_position
+                    FROM bim.rides_and_vehicles rav
+                    WHERE
+                        rav.id = $1
+                    ORDER BY
+                        rav.spec_position, rav.fixed_coupling_position
+                ",
+                &[&rid],
+            ).await;
+            let ride_rows = match ride_res {
+                Ok(r) => r,
+                Err(e) => {
+                    error!("failed to query ride: {}", e);
+                    return return_500();
+                },
+            };
+            if ride_rows.len() == 0 {
+                RideInfoState::NotFound
+            } else {
+                let mut company: Option<String> = None;
+                let mut rider_username: Option<String> = None;
+                let mut timestamp: Option<DateTime<Local>> = None;
+                let mut line: Option<Option<String>> = None;
+                let mut vehicles: Vec<RideVehiclePart> = Vec::new();
+
+                for ride_row in ride_rows {
+                    if company.is_none() {
+                        company = Some(ride_row.get(0));
+                    }
+                    if rider_username.is_none() {
+                        rider_username = Some(ride_row.get(1));
+                    }
+                    if timestamp.is_none() {
+                        timestamp = Some(ride_row.get(2));
+                    }
+                    if line.is_none() {
+                        line = Some(ride_row.get(3));
+                    }
+
+                    let vehicle_number_i64: i64 = ride_row.get(4);
+                    let vehicle_number: VehicleNumber = match vehicle_number_i64.try_into() {
+                        Ok(vn) => vn,
+                        Err(_) => {
+                            error!("failed to convert vehicle number {} to VehicleNumber", vehicle_number_i64);
+                            continue;
+                        },
+                    };
+                    let vehicle_type: Option<String> = ride_row.get(5);
+                    let spec_position: i64 = ride_row.get(6);
+                    let as_part_of_fixed_coupling: bool = ride_row.get(7);
+                    let fixed_coupling_position: i64 = ride_row.get(8);
+
+                    let vehicle = RideVehiclePart {
+                        vehicle_number,
+                        vehicle_type,
+                        spec_position,
+                        as_part_of_fixed_coupling,
+                        fixed_coupling_position,
+                    };
+                    vehicles.push(vehicle);
+                }
+
+                RideInfoState::Found(RidePart {
+                    id: rid,
+                    rider_username: rider_username.unwrap(),
+                    timestamp: DateTimeLocalWithWeekday(timestamp.unwrap()).to_string(),
+                    company: company.unwrap(),
+                    line: line.unwrap(),
+                    vehicles,
+                })
+            }
+        },
+    };
+
+    let template = BimRideByIdTemplate {
+        id_param: ride_id_str.map(|s| s.clone().into_owned()).unwrap_or_else(|| "".to_owned()),
+        ride_state,
     };
     match render_response(&template, &query_pairs, 200, vec![]).await {
         Some(r) => Ok(r),
