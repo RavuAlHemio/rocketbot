@@ -339,6 +339,77 @@ CREATE OR REPLACE VIEW bim.ride_by_rider_week AS
     FROM bim.rides_and_vehicles
 ;
 
+CREATE OR REPLACE VIEW bim.first_vehicle_rides AS
+    SELECT
+        rav_a.rider_username, rav_a.company, rav_a.vehicle_number, rav_a."timestamp",
+        RANK() OVER (PARTITION BY rider_username ORDER BY rav_a."timestamp", rav_a.company, rav_a.vehicle_number) nth_first
+    FROM
+        bim.rides_and_vehicles rav_a
+    WHERE
+        NOT EXISTS (
+            SELECT 1 FROM bim.rides_and_vehicles rav_b
+            WHERE
+                rav_b.company = rav_a.company
+                AND rav_b.vehicle_number = rav_a.vehicle_number
+                AND rav_b."timestamp" < rav_a."timestamp"
+        )
+;
+
+CREATE OR REPLACE FUNCTION bim.same_vehicle_consecutive_days_reached
+( rider character varying
+, day_count bigint
+) RETURNS timestamp with time zone
+LANGUAGE plpgsql
+STABLE STRICT
+AS $$
+    DECLARE
+        comp character varying;
+        veh_num bigint;
+        current_day_sequence bigint;
+        days_elapsed bigint;
+        previous_timestamp timestamp with time zone;
+        ts timestamp with time zone;
+        min_timestamp timestamp with time zone;
+    BEGIN
+        IF rider IS NULL THEN RETURN NULL; END IF;
+        IF day_count IS NULL THEN RETURN NULL; END IF;
+        min_timestamp := NULL;
+        FOR comp, veh_num IN
+            SELECT DISTINCT rav1.company, rav1.vehicle_number
+            FROM bim.rides_and_vehicles rav1
+            WHERE rav1.rider_username = rider
+            ORDER BY rav1.company, rav1.vehicle_number
+        LOOP
+            current_day_sequence := 1;
+            previous_timestamp := NULL;
+            FOR ts IN
+                SELECT rav2."timestamp"
+                FROM bim.rides_and_vehicles rav2
+                WHERE rav2.company = comp
+                AND rav2.rider_username = rider
+                AND rav2.vehicle_number = veh_num
+                ORDER BY "timestamp"
+            LOOP
+                IF previous_timestamp IS NOT NULL THEN
+                    days_elapsed := bim.to_transport_date(ts) - bim.to_transport_date(previous_timestamp);
+                    IF days_elapsed = 1 THEN
+                        current_day_sequence := current_day_sequence + 1;
+                        IF current_day_sequence >= day_count AND (min_timestamp IS NULL OR min_timestamp > ts) THEN
+                            min_timestamp := ts;
+                        END IF;
+                    ELSIF days_elapsed > 1 THEN
+                        -- discontinuity
+                        current_day_sequence := 1;
+                    END IF;
+                    -- if days_elapsed = 0, it's not a discontinuity, but don't count it as another day either
+                END IF;
+                previous_timestamp := ts;
+            END LOOP;
+        END LOOP;
+        RETURN min_timestamp;
+    END;
+$$;
+
 CREATE OR REPLACE FUNCTION bim.achievements_of
 ( rider character varying(256)
 ) RETURNS TABLE
@@ -990,4 +1061,226 @@ AS $$
     -- DESCR: Collect 2000 rides in 365 days.
     -- ORDER: 6,22 over time
     SELECT 70, bim.rider_rides_per_timespan_reached(rider, 'P365D', 2000)
+
+    UNION ALL
+
+    -- NAME: First Post
+    -- DESCR: Be the first to ride a vehicle.
+    -- ORDER: 7,1 global firsts
+    SELECT 71, MIN(fvr71."timestamp")
+    FROM
+        bim.first_vehicle_rides fvr71
+    WHERE
+        fvr71.rider_username = rider
+        AND fvr71.nth_first = 1
+
+    UNION ALL
+
+    -- NAME: First Time's the Charm
+    -- DESCR: Be the first rider in ten different vehicles.
+    -- ORDER: 7,2 global firsts
+    SELECT 72, MIN(fvr72."timestamp")
+    FROM
+        bim.first_vehicle_rides fvr72
+    WHERE
+        fvr72.rider_username = rider
+        AND fvr72.nth_first = 10
+
+    UNION ALL
+
+    -- NAME: First Come, First Served
+    -- DESCR: Be the first rider in twenty different vehicles.
+    -- ORDER: 7,3 global firsts
+    SELECT 73, MIN(fvr73."timestamp")
+    FROM
+        bim.first_vehicle_rides fvr73
+    WHERE
+        fvr73.rider_username = rider
+        AND fvr73.nth_first = 20
+
+    UNION ALL
+
+    -- NAME: First Things First
+    -- DESCR: Be the first rider in fifty different vehicles.
+    -- ORDER: 7,4 global firsts
+    SELECT 74, MIN(fvr74."timestamp")
+    FROM
+        bim.first_vehicle_rides fvr74
+    WHERE
+        fvr74.rider_username = rider
+        AND fvr74.nth_first = 50
+
+    UNION ALL
+
+    -- NAME: Nice Impressions Are the Most Lasting
+    -- DESCR: Be the first rider in sixty-nine different vehicles.
+    -- ORDER: 7,5 global firsts
+    SELECT 75, MIN(fvr75."timestamp")
+    FROM
+        bim.first_vehicle_rides fvr75
+    WHERE
+        fvr75.rider_username = rider
+        AND fvr75.nth_first = 69
+
+    UNION ALL
+
+    -- NAME: German Word for a Roof Ridge
+    -- DESCR: Be the first rider in one hundred different vehicles.
+    -- ORDER: 7,6 global firsts
+    SELECT 76, MIN(fvr76."timestamp")
+    FROM
+        bim.first_vehicle_rides fvr76
+    WHERE
+        fvr76.rider_username = rider
+        AND fvr76.nth_first = 100
+
+    UNION ALL
+
+    -- NAME: "Prince" Is Actually Spelled With an Ü
+    -- DESCR: Be the first rider in one hundred and fifty different vehicles.
+    -- ORDER: 7,7 global firsts
+    SELECT 77, MIN(fvr77."timestamp")
+    FROM
+        bim.first_vehicle_rides fvr77
+    WHERE
+        fvr77.rider_username = rider
+        AND fvr77.nth_first = 150
+
+    UNION ALL
+
+    -- NAME: "Deadline" Is a Common Misspelling
+    -- DESCR: Be the first rider in two hundred different vehicles.
+    -- ORDER: 7,8 global firsts
+    SELECT 78, MIN(fvr78."timestamp")
+    FROM
+        bim.first_vehicle_rides fvr78
+    WHERE
+        fvr78.rider_username = rider
+        AND fvr78.nth_first = 200
+
+    UNION ALL
+
+    -- NAME: First Cut Is the Deepest
+    -- DESCR: Be the first rider in two hundred and fifty different vehicles.
+    -- ORDER: 7,9 global firsts
+    SELECT 79, MIN(fvr79."timestamp")
+    FROM
+        bim.first_vehicle_rides fvr79
+    WHERE
+        fvr79.rider_username = rider
+        AND fvr79.nth_first = 250
+
+    UNION ALL
+
+    -- NAME: Hungry and Firsty
+    -- DESCR: Be the first rider in three hundred different vehicles.
+    -- ORDER: 7,10 global firsts
+    SELECT 80, MIN(fvr80."timestamp")
+    FROM
+        bim.first_vehicle_rides fvr80
+    WHERE
+        fvr80.rider_username = rider
+        AND fvr80.nth_first = 300
+
+    UNION ALL
+
+    -- NAME: Firsticuffs
+    -- DESCR: Be the first rider in four hundred different vehicles.
+    -- ORDER: 7,11 global firsts
+    SELECT 81, MIN(fvr81."timestamp")
+    FROM
+        bim.first_vehicle_rides fvr81
+    WHERE
+        fvr81.rider_username = rider
+        AND fvr81.nth_first = 400
+
+    UNION ALL
+
+    -- NAME: Abies-st
+    -- DESCR: Be the first rider in five hundred different vehicles.
+    -- ORDER: 7,12 global firsts
+    SELECT 82, MIN(fvr82."timestamp")
+    FROM
+        bim.first_vehicle_rides fvr82
+    WHERE
+        fvr82.rider_username = rider
+        AND fvr82.nth_first = 500
+
+    UNION ALL
+
+    -- NAME: Abies-st
+    -- DESCR: Be the first rider in five hundred different vehicles.
+    -- ORDER: 7,12 global firsts
+    SELECT 82, MIN(fvr82."timestamp")
+    FROM
+        bim.first_vehicle_rides fvr82
+    WHERE
+        fvr82.rider_username = rider
+        AND fvr82.nth_first = 500
+
+    UNION ALL
+
+    -- NAME: Affirstmation
+    -- DESCR: Be the first rider in six hundred different vehicles.
+    -- ORDER: 7,13 global firsts
+    SELECT 83, MIN(fvr83."timestamp")
+    FROM
+        bim.first_vehicle_rides fvr83
+    WHERE
+        fvr83.rider_username = rider
+        AND fvr83.nth_first = 600
+
+    UNION ALL
+
+    -- NAME: Firstmness
+    -- DESCR: Be the first rider in seven hundred different vehicles.
+    -- ORDER: 7,14 global firsts
+    SELECT 84, MIN(fvr84."timestamp")
+    FROM
+        bim.first_vehicle_rides fvr84
+    WHERE
+        fvr84.rider_username = rider
+        AND fvr84.nth_first = 700
+
+    UNION ALL
+
+    -- NAME: Yesterday You Said Tomorrow
+    -- DESCR: Ride the same vehicle two days in a row.
+    -- ORDER: 8,1 same vehicle days in a row
+    SELECT 85, bim.same_vehicle_consecutive_days_reached(rider, 2)
+
+    UNION ALL
+
+    -- NAME: Long Weekend Together
+    -- DESCR: Ride the same vehicle three days in a row.
+    -- ORDER: 8,2 same vehicle days in a row
+    SELECT 86, bim.same_vehicle_consecutive_days_reached(rider, 3)
+
+    UNION ALL
+
+    -- NAME: Going Steady
+    -- DESCR: Ride the same vehicle four days in a row.
+    -- ORDER: 8,3 same vehicle days in a row
+    SELECT 87, bim.same_vehicle_consecutive_days_reached(rider, 4)
+
+    UNION ALL
+
+    -- NAME: Dating a Co-Worker
+    -- DESCR: Ride the same vehicle five days in a row.
+    -- ORDER: 8,5 same vehicle days in a row
+    SELECT 88, bim.same_vehicle_consecutive_days_reached(rider, 5)
+
+    UNION ALL
+
+    -- NAME: I Don't Roll on Shabbos
+    -- DESCR: Ride the same vehicle six days in a row.
+    -- ORDER: 8,6 same vehicle days in a row
+    SELECT 89, bim.same_vehicle_consecutive_days_reached(rider, 6)
+
+    UNION ALL
+
+    -- NAME: You Make My Knees Week
+    -- DESCR: Ride the same vehicle seven days in a row.
+    -- ORDER: 8,7 same vehicle days in a row
+    SELECT 90, bim.same_vehicle_consecutive_days_reached(rider, 7)
 $$;
