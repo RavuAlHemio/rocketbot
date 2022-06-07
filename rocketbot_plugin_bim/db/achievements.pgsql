@@ -1208,18 +1208,6 @@ AS $$
 
     UNION ALL
 
-    -- NAME: Abies-st
-    -- DESCR: Be the first rider in five hundred different vehicles.
-    -- ORDER: 7,12 global firsts
-    SELECT 82, MIN(fvr82."timestamp")
-    FROM
-        bim.first_vehicle_rides fvr82
-    WHERE
-        fvr82.rider_username = rider
-        AND fvr82.nth_first = 500
-
-    UNION ALL
-
     -- NAME: Affirstmation
     -- DESCR: Be the first rider in six hundred different vehicles.
     -- ORDER: 7,13 global firsts
