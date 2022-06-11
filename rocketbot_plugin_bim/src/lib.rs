@@ -11,7 +11,8 @@ use std::sync::Weak;
 
 use async_trait::async_trait;
 use chrono::{
-    Datelike, DateTime, Duration, Local, LocalResult, NaiveDate, NaiveDateTime, TimeZone, Weekday,
+    Datelike, DateTime, Duration, Local, LocalResult, NaiveDate, NaiveDateTime, Timelike, TimeZone,
+    Weekday,
 };
 use indexmap::IndexSet;
 use log::{error, info, warn};
@@ -534,6 +535,7 @@ impl BimPlugin {
                 format!("This vehicle has been ridden {}.", BimPlugin::english_adverbial_number(count))
             };
 
+            let now = Local::now();
             for (is_you, operator) in &[(true, "="), (false, "<>")] {
                 let ride_row_opt_res = ride_conn.query_opt(
                     &format!(
@@ -567,7 +569,7 @@ impl BimPlugin {
                         write_expect!(ret,
                             " {} last rode it {}",
                             if *is_you { "You" } else { last_rider_username.as_str() },
-                            BimPlugin::canonical_date_format(&last_ride, true, true),
+                            BimPlugin::canonical_date_format_relative(&last_ride, &now, true, true),
                         );
                         if let Some(ll) = last_line {
                             write_expect!(ret, " on line {}", ll);
@@ -647,13 +649,14 @@ impl BimPlugin {
             None
         };
 
+        let ride_timestamp = channel_message.message.timestamp.with_timezone(&Local);
         let increment_res = increment_rides_by_spec(
             &mut ride_conn,
             bim_database_opt.as_ref(),
             company,
             company_def,
             &channel_message.message.sender.username,
-            channel_message.message.timestamp.with_timezone(&Local),
+            ride_timestamp,
             &command.rest,
             config_guard.allow_fixed_coupling_combos,
         ).await;
@@ -724,7 +727,7 @@ impl BimPlugin {
                     "This is their {}{} ride in this vehicle (previously {}",
                     lr.ride_count + 1,
                     Self::english_ordinal(lr.ride_count + 1),
-                    BimPlugin::canonical_date_format(&lr.last_ride, true, false),
+                    BimPlugin::canonical_date_format_relative(&lr.last_ride, &ride_timestamp, true, false),
                 );
                 if let Some(ln) = &lr.last_line {
                     write_expect!(&mut resp, " on line {}", ln);
@@ -735,7 +738,7 @@ impl BimPlugin {
                         &mut resp,
                         " and {} has also ridden it {}",
                         or.rider_username,
-                        BimPlugin::canonical_date_format(&or.last_ride, true, false),
+                        BimPlugin::canonical_date_format_relative(&or.last_ride, &ride_timestamp, true, false),
                     );
                     if let Some(ln) = &or.last_line {
                         write_expect!(&mut resp, " on line {}", ln);
@@ -755,7 +758,7 @@ impl BimPlugin {
                         &mut resp,
                         ", but {} has previously ridden it {}",
                         or.rider_username,
-                        BimPlugin::canonical_date_format(&or.last_ride, true, false),
+                        BimPlugin::canonical_date_format_relative(&or.last_ride, &ride_timestamp, true, false),
                     );
                     if let Some(ln) = &or.last_line {
                         write_expect!(&mut resp, " on line {}", ln);
@@ -799,7 +802,7 @@ impl BimPlugin {
                         "{}{} time, previously {}",
                         lr.ride_count + 1,
                         Self::english_ordinal(lr.ride_count + 1),
-                        BimPlugin::canonical_date_format(&lr.last_ride, false, false),
+                        BimPlugin::canonical_date_format_relative(&lr.last_ride, &ride_timestamp, false, false),
                     );
                     if let Some(ln) = &lr.last_line {
                         write_expect!(&mut resp, " on {}", ln);
@@ -809,7 +812,7 @@ impl BimPlugin {
                             &mut resp,
                             " and {} {}",
                             or.rider_username,
-                            BimPlugin::canonical_date_format(&or.last_ride, false, false),
+                            BimPlugin::canonical_date_format_relative(&or.last_ride, &ride_timestamp, false, false),
                         );
                         if let Some(ln) = &or.last_line {
                             write_expect!(&mut resp, " on {}", ln);
@@ -824,7 +827,7 @@ impl BimPlugin {
                             &mut resp,
                             " since {} {}",
                             or.rider_username,
-                            BimPlugin::canonical_date_format(&or.last_ride, false, false),
+                            BimPlugin::canonical_date_format_relative(&or.last_ride, &ride_timestamp, false, false),
                         );
                         if let Some(ln) = &or.last_line {
                             write_expect!(&mut resp, " on {}", ln);
@@ -2673,6 +2676,27 @@ impl BimPlugin {
         }
     }
 
+    fn canonical_date_format_relative<Tz: TimeZone, Tz2: TimeZone>(date_time: &DateTime<Tz>, relative_to: &DateTime<Tz2>, on_at: bool, seconds: bool) -> String
+            where Tz::Offset: fmt::Display, Tz2::Offset: fmt::Display {
+        let night_owl_date = get_night_owl_date(date_time);
+        let night_owl_relative = get_night_owl_date(relative_to);
+        if night_owl_date == night_owl_relative {
+            // only output time
+            let time_formatted = if seconds {
+                date_time.format("%H:%M:%S")
+            } else {
+                date_time.format("%H:%M")
+            };
+            if on_at {
+                format!("at {}", time_formatted)
+            } else {
+                time_formatted.to_string()
+            }
+        } else {
+            BimPlugin::canonical_date_format(date_time, on_at, seconds)
+        }
+    }
+
     fn english_ordinal(num: usize) -> &'static str {
         let by_hundred = num % 100;
         if by_hundred > 10 && by_hundred < 14 {
@@ -3377,4 +3401,17 @@ pub async fn increment_rides_by_spec(
         line: line_str_opt.map(|s| s.to_owned()),
         vehicles: vehicle_ride_infos,
     })
+}
+
+
+/// Returns the Night Owl Time date for the given date.
+///
+/// With Night Owl Time, hours 0, 1, 2 and 3 are counted towards the previous day.
+fn get_night_owl_date<D: Datelike + Timelike>(date_time: &D) -> NaiveDate {
+    let naive_date = NaiveDate::from_ymd(date_time.year(), date_time.month(), date_time.day());
+    if date_time.hour() < 4 {
+        naive_date.pred()
+    } else {
+        naive_date
+    }
 }
