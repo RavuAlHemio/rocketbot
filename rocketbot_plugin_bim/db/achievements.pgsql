@@ -410,6 +410,54 @@ AS $$
     END;
 $$;
 
+CREATE OR REPLACE FUNCTION bim.repdigit_unique_vehicle_ride
+( rider character varying
+, min_digits bigint
+, nth_ride bigint
+) RETURNS timestamp with time zone
+LANGUAGE sql
+STABLE STRICT
+AS $$
+    WITH
+        first_repdigit_ride(rider_username, company, vehicle_number, min_timestamp) AS (
+            SELECT
+                rider_username, company, vehicle_number, MIN("timestamp")
+            FROM bim.rides_and_vehicles
+            WHERE
+                bim.same_digits(vehicle_number, min_digits)
+            GROUP BY
+                rider_username, company, vehicle_number
+        ),
+        first_repdigit_ride_ranked(rider_username, company, vehicle_number, min_timestamp, nth) AS (
+            SELECT
+                rider_username, company, vehicle_number, min_timestamp,
+                RANK() OVER (PARTITION BY rider_username ORDER BY min_timestamp, company, vehicle_number) nth
+            FROM first_repdigit_ride
+        )
+    SELECT min_timestamp
+    FROM first_repdigit_ride_ranked
+    WHERE rider_username = rider
+    AND nth = nth_ride
+$$;
+
+CREATE OR REPLACE VIEW bim.rider_first_palindrome_vehicle_ride AS
+    WITH first_palindrome_ride(rider_username, company, vehicle_number, min_timestamp) AS (
+        SELECT
+            rider_username, company, vehicle_number, MIN("timestamp")
+        FROM bim.rides_and_vehicles
+        WHERE
+            vehicle_number > 99
+            AND vehicle_number = bim.reverse_bigint(vehicle_number)
+            AND NOT bim.same_digits(vehicle_number, 0)
+        GROUP BY
+            rider_username, company, vehicle_number
+    )
+    SELECT
+        rider_username, company, vehicle_number, min_timestamp,
+        RANK() OVER (PARTITION BY rider_username ORDER BY min_timestamp, company, vehicle_number) nth
+    FROM first_palindrome_ride
+;
+
 CREATE OR REPLACE FUNCTION bim.achievements_of
 ( rider character varying(256)
 ) RETURNS TABLE
@@ -450,43 +498,32 @@ AS $$
 
     -- NAME: Two of a Kind
     -- DESCR: Ride a vehicle (of any company) whose number consists of one digit repeated at least twice.
-    -- ORDER: 1,5 special vehicle numbers
-    SELECT 4, MIN("timestamp")
-    FROM bim.rides_and_vehicles rav4
-    WHERE rav4.rider_username = rider
-    AND bim.same_digits(rav4.vehicle_number, 2)
+    -- ORDER: 10,1 repdigits
+    SELECT 4, bim.repdigit_unique_vehicle_ride(rider, 2, 1)
 
     UNION ALL
 
     -- NAME: Three of a Kind
     -- DESCR: Ride a vehicle (of any company) whose number consists of one digit repeated at least three times.
-    -- ORDER: 1,6 special vehicle numbers
-    SELECT 5, MIN("timestamp")
-    FROM bim.rides_and_vehicles rav5
-    WHERE rav5.rider_username = rider
-    AND bim.same_digits(rav5.vehicle_number, 3)
+    -- ORDER: 10,2 repdigits
+    SELECT 5, bim.repdigit_unique_vehicle_ride(rider, 3, 1)
 
     UNION ALL
 
     -- NAME: Four of a Kind
     -- DESCR: Ride a vehicle (of any company) whose number consists of one digit repeated at least four times.
-    -- ORDER: 1,7 special vehicle numbers
-    SELECT 6, MIN("timestamp")
-    FROM bim.rides_and_vehicles rav6
-    WHERE rav6.rider_username = rider
-    AND bim.same_digits(rav6.vehicle_number, 4)
+    -- ORDER: 10,3 repdigits
+    SELECT 6, bim.repdigit_unique_vehicle_ride(rider, 4, 1)
 
     UNION ALL
 
     -- NAME: Palindrome
     -- DESCR: Ride a vehicle (of any company) whose number is a palindrome while not being all the same digit.
-    -- ORDER: 1,8 special vehicle numbers
-    SELECT 7, MIN("timestamp")
-    FROM bim.rides_and_vehicles rav7
-    WHERE rav7.rider_username = rider
-    AND rav7.vehicle_number > 99
-    AND rav7.vehicle_number = bim.reverse_bigint(rav7.vehicle_number)
-    AND NOT bim.same_digits(rav7.vehicle_number, 0)
+    -- ORDER: 9,1 palindromes
+    SELECT 7, min_timestamp
+    FROM bim.rider_first_palindrome_vehicle_ride rfpvr7
+    WHERE rfpvr7.rider_username = rider
+    AND rfpvr7.nth = 1
 
     UNION ALL
 
@@ -1271,4 +1308,65 @@ AS $$
     -- DESCR: Ride the same vehicle seven days in a row.
     -- ORDER: 8,7 same vehicle days in a row
     SELECT 90, bim.same_vehicle_consecutive_days_reached(rider, 7)
+
+    UNION ALL
+
+    -- NAME: Palindromic
+    -- DESCR: Ride two unique vehicles (of any company) whose numbers are a palindrome while not being all the same digit.
+    -- ORDER: 9,2 palindromes
+    SELECT 91, min_timestamp
+    FROM bim.rider_first_palindrome_vehicle_ride rfpvr91
+    WHERE rfpvr91.rider_username = rider
+    AND rfpvr91.nth = 2
+
+    UNION ALL
+
+    -- NAME: Palindrome's the Charm
+    -- DESCR: Ride three unique vehicles (of any company) whose numbers are a palindrome while not being all the same digit.
+    -- ORDER: 9,3 palindromes
+    SELECT 92, min_timestamp
+    FROM bim.rider_first_palindrome_vehicle_ride rfpvr92
+    WHERE rfpvr92.rider_username = rider
+    AND rfpvr92.nth = 3
+
+    UNION ALL
+
+    -- NAME: Pentalindrome
+    -- DESCR: Ride five unique vehicles (of any company) whose numbers are a palindrome while not being all the same digit.
+    -- ORDER: 9,5 palindromes
+    SELECT 93, min_timestamp
+    FROM bim.rider_first_palindrome_vehicle_ride rfpvr93
+    WHERE rfpvr93.rider_username = rider
+    AND rfpvr93.nth = 5
+
+    UNION ALL
+
+    -- NAME: Decalindrome
+    -- DESCR: Ride ten unique vehicles (of any company) whose numbers are a palindrome while not being all the same digit.
+    -- ORDER: 9,6 palindromes
+    SELECT 94, min_timestamp
+    FROM bim.rider_first_palindrome_vehicle_ride rfpvr94
+    WHERE rfpvr94.rider_username = rider
+    AND rfpvr94.nth = 10
+
+    UNION ALL
+
+    -- NAME: Two by Two
+    -- DESCR: Ride two unique vehicles (of any company) whose numbers consist of one digit repeated at least two times.
+    -- ORDER: 10,4 repdigits
+    SELECT 94, bim.repdigit_unique_vehicle_ride(rider, 2, 2)
+
+    UNION ALL
+
+    -- NAME: Two by Three
+    -- DESCR: Ride two unique vehicles (of any company) whose numbers consist of one digit repeated at least three times.
+    -- ORDER: 10,5 repdigits
+    SELECT 95, bim.repdigit_unique_vehicle_ride(rider, 3, 2)
+
+    UNION ALL
+
+    -- NAME: Three by Two
+    -- DESCR: Ride three unique vehicles (of any company) whose numbers consist of one digit repeated at least two times.
+    -- ORDER: 10,6 repdigits
+    SELECT 96, bim.repdigit_unique_vehicle_ride(rider, 2, 3)
 $$;
