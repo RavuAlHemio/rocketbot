@@ -927,10 +927,9 @@ impl BimPlugin {
 
         let config_guard = self.config.read().await;
 
-        let company = command.options.get("company")
+        let company_opt = command.options.get("company")
             .or_else(|| command.options.get("c"))
-            .map(|v| v.as_str().unwrap())
-            .unwrap_or(config_guard.default_company.as_str());
+            .map(|v| v.as_str().unwrap());
         let lookback_range = match Self::lookback_range_from_command(command) {
             Some(lr) => lr,
             None => {
@@ -943,13 +942,15 @@ impl BimPlugin {
             },
         };
 
-        if !config_guard.company_to_definition.contains_key(company) {
-            send_channel_message!(
-                interface,
-                &channel_message.channel.name,
-                "Unknown company.",
-            ).await;
-            return;
+        if let Some(c) = company_opt {
+            if !config_guard.company_to_definition.contains_key(c) {
+                send_channel_message!(
+                    interface,
+                    &channel_message.channel.name,
+                    "Unknown company.",
+                ).await;
+                return;
+            }
         }
 
         let ride_conn = match self.connect_ride_db(&config_guard).await {
@@ -964,12 +965,21 @@ impl BimPlugin {
             },
         };
 
-        let rows_res = Self::timestamp_query(
-            &ride_conn,
+        let company_stored;
+        let mut other_params: Vec<&(dyn ToSql + Sync)> = Vec::new();
+        let (company_block, timestamp_block) = if let Some(c) = company_opt {
+            company_stored = c.to_owned();
+            other_params.push(&company_stored);
+            ("AND r.company = $1", "AND r.\"timestamp\" >= $2")
+        } else {
+            ("", "AND r.\"timestamp\" >= $1")
+        };
+        let query_template = format!(
             "
                 WITH
-                    total_rides(vehicle_number, total_ride_count) AS (
+                    total_rides(company, vehicle_number, total_ride_count) AS (
                         SELECT
+                            r.company,
                             rv.vehicle_number,
                             CAST(COUNT(*) AS bigint) total_ride_count
                         FROM
@@ -977,10 +987,11 @@ impl BimPlugin {
                             INNER JOIN bim.ride_vehicles rv
                                 ON rv.ride_id = r.id
                         WHERE
-                            r.company = $1
-                            AND rv.fixed_coupling_position = 0
-                            {LOOKBACK_TIMESTAMP}
+                            rv.fixed_coupling_position = 0
+                            {}
+                            {{LOOKBACK_TIMESTAMP}}
                         GROUP BY
+                            r.company,
                             rv.vehicle_number
                     ),
                     top_five_counts(total_ride_count) AS (
@@ -989,15 +1000,21 @@ impl BimPlugin {
                         ORDER BY total_ride_count DESC
                         LIMIT 5
                     )
-                SELECT tr.vehicle_number, tr.total_ride_count
+                SELECT tr.company, tr.vehicle_number, tr.total_ride_count
                 FROM total_rides tr
                 WHERE tr.total_ride_count IN (SELECT total_ride_count FROM top_five_counts)
                 ORDER BY tr.total_ride_count DESC, tr.vehicle_number
             ",
-            "AND r.\"timestamp\" >= $2",
+            company_block,
+        );
+
+        let rows_res = Self::timestamp_query(
+            &ride_conn,
+            &query_template,
+            timestamp_block,
             "",
             lookback_range,
-            &[&company],
+            other_params.as_slice(),
         ).await;
         let rows = match rows_res {
             Ok(r) => r,
@@ -1012,15 +1029,16 @@ impl BimPlugin {
             },
         };
 
-        let mut count_to_vehicles: BTreeMap<i64, Vec<i64>> = BTreeMap::new();
+        let mut count_to_vehicles: BTreeMap<i64, Vec<(String, i64)>> = BTreeMap::new();
         for row in &rows {
-            let vehicle_number: i64 = row.get(0);
-            let total_ride_count: i64 = row.get(1);
+            let company: String = row.get(0);
+            let vehicle_number: i64 = row.get(1);
+            let total_ride_count: i64 = row.get(2);
 
             count_to_vehicles
                 .entry(total_ride_count)
                 .or_insert_with(|| Vec::new())
-                .push(vehicle_number);
+                .push((company, vehicle_number));
         }
 
         let response_str = if count_to_vehicles.len() == 0 {
@@ -1031,7 +1049,19 @@ impl BimPlugin {
                 let times = Self::english_adverbial_number(count);
 
                 let vehicle_number_strings: Vec<String> = vehicle_numbers.iter()
-                    .map(|vn| vn.to_string())
+                    .map(|(comp, vn)|
+                        if let Some(c) = company_opt {
+                            if comp == c {
+                                vn.to_string()
+                            } else {
+                                format!("{}/{}", comp, vn)
+                            }
+                        } else if comp == &config_guard.default_company {
+                            vn.to_string()
+                        } else {
+                            format!("{}/{}", comp, vn)
+                        }
+                    )
                     .collect();
                 let vehicle_numbers_str = phrase_join(&vehicle_number_strings, ", ", " and ");
                 output.push_str(&format!("\n{}: {}", times, vehicle_numbers_str));

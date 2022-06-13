@@ -2,7 +2,7 @@
 
 Returns the most-ridden vehicle(s).
 
-`-c` or `--company` specifies the company operating that vehicle. A default company chosen by the bot operator is used if none is supplied explicitly.
+`-c` or `--company` limits the results to a specific company. Otherwise, vehicles of all known companies are considered.
 
 Normally considers all rides "since the beginning of time". This can be limited:
 * With `-y` or `--last-year`, only considers rides in the last 366 days.
