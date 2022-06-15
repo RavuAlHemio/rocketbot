@@ -490,6 +490,11 @@ async fn main() {
                             }
                         }
                     }
+
+                    current_vehicle.modify_with_type_mapping(&config.type_mapping);
+                    if let Ok(veh) = current_vehicle.try_build() {
+                        vehicles.push(veh);
+                    }
                 }
             }
 
