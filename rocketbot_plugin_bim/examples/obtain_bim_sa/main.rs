@@ -319,20 +319,17 @@ async fn main() {
         .expect("failed to parse last-plate-span selector");
     let last_number_span_sel = Selector::parse("span.\\000031.number")
         .expect("failed to parse last-number-span selector");
-    let next_link_sel = Selector::parse(".next-link")
+    let next_link_sel = Selector::parse(".next-link[href]")
         .expect("failed to parse next-link selector");
 
     let mut vehicles = Vec::new();
     for page_url in &config.pages {
-        let mut page_number: usize = 1;
+        let mut cur_page_url = reqwest::Url::parse(&page_url)
+            .expect("failed to parse page URL");
         loop {
-            let mut page_page_url = reqwest::Url::parse(&page_url)
-                .expect("failed to parse page URL");
-            page_page_url.query_pairs_mut()
-                .append_pair("page", &page_number.to_string());
-            eprintln!("fetching {}", page_page_url);
+            eprintln!("fetching {}", cur_page_url);
 
-            let page_bytes = obtain_page_bytes(page_page_url.as_str()).await;
+            let page_bytes = obtain_page_bytes(cur_page_url.as_str()).await;
             let page_string = String::from_utf8(page_bytes)
                 .expect("failed to decode page as UTF-8");
             let html = Html::parse_document(&page_string);
@@ -449,13 +446,25 @@ async fn main() {
             }
 
             // does another page await us?
-            if !html.root_element().select(&next_link_sel).any(|_| true) {
-                // no
-                break;
+            let next_link = html.root_element().select(&next_link_sel)
+                .nth(0);
+            if let Some(nl) = &next_link {
+                if let Some(href) = nl.value().attr("href") {
+                    match cur_page_url.join(href) {
+                        Ok(u) => {
+                            cur_page_url = u;
+                            continue;
+                        },
+                        Err(e) => {
+                            eprintln!("failed to join {:?} with {:?}: {}", cur_page_url.as_str(), href, e);
+                            // assume no more page
+                        },
+                    }
+                }
             }
 
-            // yes; increase the current page number
-            page_number += 1;
+            // no more page
+            break;
         }
     }
 
