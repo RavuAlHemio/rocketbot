@@ -78,6 +78,7 @@ struct TypeInfo {
     #[serde(default)] pub other_data: BTreeMap<String, String>,
 }
 
+#[derive(Clone, Debug, Eq, PartialEq)]
 struct VehicleInfoBuilder {
     number: Option<VehicleNumber>,
     type_code: Option<String>,
@@ -451,9 +452,17 @@ async fn main() {
                                 current_vehicle.other_data("Kennzeichen", trim_text(&plate));
                             }
                         } else if td_classes.contains("numbers") {
-                            let number_string: String = trim_text(&td.text().collect::<String>());
-                            if let Ok(num) = trim_text(&number_string).parse() {
-                                current_vehicle.number(num);
+                            // last non-empty text child is the number
+                            // (ignore superscripted Roman numerals)
+                            let number_string_opt = td.children()
+                                .filter_map(|c| c.value().as_text())
+                                .map(|t| trim_text(&*t))
+                                .filter(|t| t.len() > 0)
+                                .last();
+                            if let Some(number_string) = number_string_opt {
+                                if let Ok(num) = trim_text(&number_string).parse() {
+                                    current_vehicle.number(num);
+                                }
                             }
                         // no CSS classes beyond this point :-(
                         } else if i == 4 {
@@ -492,8 +501,13 @@ async fn main() {
                     }
 
                     current_vehicle.modify_with_type_mapping(&config.type_mapping);
-                    if let Ok(veh) = current_vehicle.try_build() {
-                        vehicles.push(veh);
+                    match current_vehicle.try_build() {
+                        Ok(veh) => {
+                            vehicles.push(veh);
+                        },
+                        Err(veh_builder) => {
+                            eprintln!("incomplete vehicle: {:?}", veh_builder);
+                        },
                     }
                 }
             }
