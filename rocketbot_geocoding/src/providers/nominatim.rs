@@ -106,7 +106,8 @@ impl NominatimAddress {
         let town = self.municipality.as_ref()
             .or(self.city.as_ref())
             .or(self.town.as_ref())
-            .or(self.village.as_ref())?;
+            .or(self.village.as_ref())
+            .or(self.suburb.as_ref())?;
         let country = self.country.as_ref()?;
 
         if let Some(h) = hamlet {
