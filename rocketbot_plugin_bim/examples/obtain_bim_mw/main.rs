@@ -25,6 +25,11 @@ struct Config {
     pub php_path: Option<String>,
     pub wiki_parse_server_dir: String,
     pub parser_already_running: bool,
+    pub page_sources: Vec<PageSource>,
+}
+
+#[derive(Clone, Debug, Deserialize, Serialize)]
+struct PageSource {
     pub page_url_pattern: String,
     pub pages: Vec<PageConfig>,
 }
@@ -89,15 +94,17 @@ async fn main() {
                 .expect("error creating parser")
         };
 
-        for page in &config.pages {
-            let mut vehicles = process_page(
-                &config.page_url_pattern,
-                &page,
-                &mut parser,
-                process_table,
-                row_data_to_trams,
-            ).await;
-            all_vehicles.append(&mut vehicles);
+        for page_source in &config.page_sources {
+            for page in &page_source.pages {
+                let mut vehicles = process_page(
+                    &page_source.page_url_pattern,
+                    &page,
+                    &mut parser,
+                    process_table,
+                    row_data_to_trams,
+                ).await;
+                all_vehicles.append(&mut vehicles);
+            }
         }
 
         parser.parsing_done()
