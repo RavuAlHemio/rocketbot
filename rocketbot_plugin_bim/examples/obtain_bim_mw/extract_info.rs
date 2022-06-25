@@ -164,7 +164,16 @@ pub(crate) fn row_data_to_trams(page_config: &PageConfig, row_data: Vec<(String,
 
     for (vehicle_number, vehicle_type_code) in &numbers_types {
         vehicle.number = *vehicle_number;
-        vehicle.type_code = vehicle_type_code.clone();
+
+        if let Some(ctc) = &page_config.common_type_code {
+            vehicle.type_code = ctc.clone();
+        } else {
+            vehicle.type_code = vehicle_type_code.clone();
+        }
+
+        if let Some(stcp) = &page_config.specific_type_code_property {
+            vehicle.other_data.insert(stcp.clone(), vehicle_type_code.clone());
+        }
 
         vehicle.fixed_coupling = fixed_coupling_partners.clone();
 
