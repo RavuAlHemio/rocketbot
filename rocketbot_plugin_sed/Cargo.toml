@@ -1,12 +1,12 @@
 [package]
 name = "rocketbot_plugin_sed"
 version = "0.1.0"
-edition = "2018"
+edition = "2021"
 
 [dependencies]
 async-trait = { version = "0.1" }
 log = { version = "0.4" }
 once_cell = { version = "1.10" }
-fancy-regex = { version = "0.8" }
+fancy-regex = { version = "0.10" }
 rocketbot_interface = { path = "../rocketbot_interface" }
 serde_json = { version = "1.0" }

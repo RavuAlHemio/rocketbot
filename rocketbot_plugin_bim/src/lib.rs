@@ -3,7 +3,6 @@ mod range_set;
 
 
 use std::collections::{BTreeMap, BTreeSet, HashMap, HashSet};
-use std::convert::TryInto;
 use std::fmt::{self, Write};
 use std::fs::File;
 use std::num::ParseIntError;

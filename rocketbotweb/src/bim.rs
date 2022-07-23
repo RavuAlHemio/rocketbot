@@ -1,6 +1,6 @@
 use std::borrow::Cow;
 use std::collections::{BTreeMap, BTreeSet, HashMap, HashSet};
-use std::convert::{Infallible, TryInto};
+use std::convert::Infallible;
 use std::fs::File;
 use std::str::FromStr;
 

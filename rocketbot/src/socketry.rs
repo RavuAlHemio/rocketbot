@@ -1,7 +1,6 @@
 use core::panic;
 use std::collections::{HashMap, HashSet};
 use std::collections::hash_map::Entry as HashMapEntry;
-use std::convert::TryInto;
 use std::fmt::Write as FmtWrite;
 use std::io::{Cursor, Read, Write as IoWrite};
 use std::ops::{Deref, DerefMut};

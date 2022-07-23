@@ -8,7 +8,6 @@ pub mod serde;
 pub mod sync;
 
 
-use std::convert::TryInto;
 use std::fmt;
 use std::slice;
 

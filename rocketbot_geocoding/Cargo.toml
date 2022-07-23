@@ -1,7 +1,7 @@
 [package]
 name = "rocketbot_geocoding"
 version = "0.1.0"
-edition = "2018"
+edition = "2021"
 
 [features]
 default = ["confusion"]
@@ -23,5 +23,5 @@ unicode-normalization = { version = "0.1", optional = true }
 url = { version = "2.2" }
 
 [dev-dependencies]
-minidom = { version = "0.13" }
+minidom = { version = "0.15" }
 tokio = { version = "1.17", features = ["macros"] }

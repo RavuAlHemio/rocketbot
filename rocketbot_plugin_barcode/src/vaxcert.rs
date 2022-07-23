@@ -1,4 +1,3 @@
-use std::convert::TryInto;
 use std::io::{BufWriter, Cursor, Write};
 
 use chrono::{Date, DateTime, Utc};
@@ -88,8 +87,7 @@ pub(crate) fn encode_vax(vax_info: &VaxInfo) -> String {
     // protected: 4 = key ID (8 bytes), 1 = algorithm (-7 = ECDSA-256)
     let mut protected = Vec::new();
     {
-        let protected_cur = Cursor::new(&mut protected);
-        let mut protected_cbor = minicbor::Encoder::new(protected_cur);
+        let mut protected_cbor = minicbor::Encoder::new(&mut protected);
         protected_cbor
             .map(2).unwrap()
                 .u8(4).unwrap().bytes(b"FUCKING!").unwrap()
@@ -102,8 +100,7 @@ pub(crate) fn encode_vax(vax_info: &VaxInfo) -> String {
     // let's start with the inner part, the health certificate
     let mut payload = Vec::new();
     {
-        let payload_cur = Cursor::new(&mut payload);
-        let mut payload_cbor = minicbor::Encoder::new(payload_cur);
+        let mut payload_cbor = minicbor::Encoder::new(&mut payload);
         payload_cbor
             .map(4).unwrap()
                 // Issued and Expires are Unix timestamps
@@ -139,8 +136,7 @@ pub(crate) fn encode_vax(vax_info: &VaxInfo) -> String {
     // encode the whole thing as CBOR again
     let mut full = Vec::new();
     {
-        let full_cur = Cursor::new(&mut full);
-        let mut full_cbor = minicbor::Encoder::new(full_cur);
+        let mut full_cbor = minicbor::Encoder::new(&mut full);
         full_cbor
             .tag(Tag::Unassigned(0x12)).unwrap().array(4).unwrap()
                 .bytes(&protected).unwrap()

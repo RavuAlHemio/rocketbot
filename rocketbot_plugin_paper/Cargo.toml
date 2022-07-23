@@ -1,7 +1,7 @@
 [package]
 name = "rocketbot_plugin_paper"
 version = "0.1.0"
-edition = "2018"
+edition = "2021"
 
 [dependencies]
 async-trait = { version = "0.1" }
