@@ -4,7 +4,7 @@ use std::fmt;
 use fancy_regex::Regex;
 use once_cell::sync::Lazy;
 
-use crate::commands::{SedCommand, SubstituteCommand, TransposeCommand};
+use crate::commands::{ExchangeCommand, SedCommand, SubstituteCommand, TransposeCommand};
 
 
 const SPLITTERS_STR: &'static str = "!\"#$%&'*+,-./:;=?^_`|~";
@@ -12,6 +12,7 @@ static SPLITTERS: Lazy<HashSet<char>> = Lazy::new(|| SPLITTERS_STR.chars().colle
 static KNOWN_COMMANDS: Lazy<HashSet<String>> = Lazy::new(|| vec![
     "s",
     "tr",
+    "x",
 ].into_iter().map(|o| o.to_owned()).collect());
 
 
@@ -408,6 +409,8 @@ pub(crate) fn parse_replacement_commands(message: &str) -> Result<Vec<SedCommand
             make_substitute_command(replacement_command)?
         } else if replacement_command.command == "tr" {
             make_transpose_command(replacement_command)?
+        } else if replacement_command.command == "x" {
+            make_exchange_command(replacement_command)?
         } else {
             // command validity has already been checked by take_replacement_command
             unreachable!();
@@ -588,6 +591,17 @@ fn parse_with_ranges(spec: &str) -> Result<Vec<char>, ParserError> {
     }
 
     Ok(ret)
+}
+
+fn make_exchange_command(command: &GenericReplacementCommand) -> Result<SedCommand, ParserError> {
+    let from_regex = Regex::new(&command.old_string)
+        .map_err(|e| ParserError::PatternSyntaxError { pattern: command.old_string.clone(), error_description: e.to_string() })?;
+    let to_regex = Regex::new(&command.new_string)
+        .map_err(|e| ParserError::PatternSyntaxError { pattern: command.new_string.clone(), error_description: e.to_string() })?;
+    Ok(SedCommand::Exchange(ExchangeCommand::new(
+        from_regex,
+        to_regex,
+    )))
 }
 
 #[cfg(test)]

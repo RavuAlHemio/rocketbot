@@ -1,4 +1,5 @@
 use std::collections::HashMap;
+use std::ops::Range;
 
 use fancy_regex::{Captures, Regex};
 use log::warn;
@@ -13,12 +14,14 @@ pub trait Transformer {
 pub(crate) enum SedCommand {
     Substitute(SubstituteCommand),
     Transpose(TransposeCommand),
+    Exchange(ExchangeCommand),
 }
 impl Transformer for SedCommand {
     fn transform(&self, text: &str) -> String {
         match self {
             SedCommand::Substitute(sc) => sc.transform(text),
             SedCommand::Transpose(tc) => tc.transform(text),
+            SedCommand::Exchange(ec) => ec.transform(text),
         }
     }
 }
@@ -133,5 +136,128 @@ impl Transformer for TransposeCommand {
             }
         }
         ret
+    }
+}
+
+#[derive(Debug)]
+pub(crate) struct ExchangeCommand {
+    from_regex: Regex,
+    to_regex: Regex,
+}
+impl ExchangeCommand {
+    pub fn new(
+        from_regex: Regex,
+        to_regex: Regex,
+    ) -> Self {
+        Self {
+            from_regex,
+            to_regex,
+        }
+    }
+}
+impl Transformer for ExchangeCommand {
+    fn transform(&self, text: &str) -> String {
+        let from_match_opt = self.from_regex
+            .find(text).expect("from_regex.find failed");
+        let from_match = match from_match_opt {
+            Some(fm) => fm,
+            None => return text.to_owned(),
+        };
+        let mut to_match_opt = None;
+        for match_res in self.to_regex.find_iter(text) {
+            let m = match_res.expect("to_regex.find failed");
+            if !ranges_overlap(&from_match.range(), &m.range()) {
+                to_match_opt = Some(m);
+                break;
+            }
+        }
+        let to_match = match to_match_opt {
+            Some(tm) => tm,
+            None => return text.to_owned(),
+        };
+
+        let mut ret = String::with_capacity(text.len());
+        if from_match.start() < to_match.start() {
+            ret.push_str(&text[..from_match.start()]);
+            ret.push_str(to_match.as_str());
+            ret.push_str(&text[from_match.end()..to_match.start()]);
+            ret.push_str(from_match.as_str());
+            ret.push_str(&text[to_match.end()..]);
+        } else {
+            assert!(to_match.start() < from_match.start());
+            ret.push_str(&text[..to_match.start()]);
+            ret.push_str(from_match.as_str());
+            ret.push_str(&text[to_match.end()..from_match.start()]);
+            ret.push_str(to_match.as_str());
+            ret.push_str(&text[from_match.end()..]);
+        }
+        ret
+    }
+}
+
+
+fn ranges_overlap<T: PartialOrd>(one: &Range<T>, other: &Range<T>) -> bool {
+    if one.is_empty() || other.is_empty() {
+        return false;
+    }
+
+    !(
+        one.end <= other.start
+        || other.end <= one.start
+    )
+}
+
+
+#[cfg(test)]
+mod tests {
+    use super::{ExchangeCommand, Transformer};
+    use fancy_regex::Regex;
+
+    fn tec1(from_regex_str: &str, to_regex_str: &str, subject: &str, expected: &str) {
+        let from_regex = Regex::new(from_regex_str).unwrap();
+        let to_regex = Regex::new(to_regex_str).unwrap();
+        let cmd = ExchangeCommand::new(from_regex.clone(), to_regex.clone());
+        let transformed = cmd.transform(subject);
+        assert_eq!(expected, transformed.as_str());
+    }
+
+    fn tec(from_regex_str: &str, to_regex_str: &str, subject: &str, expected: &str) {
+        let from_regex = Regex::new(from_regex_str).unwrap();
+        let to_regex = Regex::new(to_regex_str).unwrap();
+        let cmd = ExchangeCommand::new(from_regex.clone(), to_regex.clone());
+        let transformed = cmd.transform(subject);
+        assert_eq!(expected, transformed.as_str());
+
+        // also try it the other way around
+        let cmd2 = ExchangeCommand::new(to_regex.clone(), from_regex.clone());
+        let transformed2 = cmd2.transform(subject);
+        assert_eq!(expected, transformed2.as_str());
+    }
+
+    #[test]
+    fn test_exchange_command() {
+        tec(
+            "fox", "dog",
+            "the quick brown fox jumps over the lazy dog",
+            "the quick brown dog jumps over the lazy fox",
+        );
+
+        tec(
+            "two", "three",
+            "onetwothreefour",
+            "onethreetwofour",
+        );
+
+        // when overlapping, results may differ
+        tec1(
+            "overlap", "lap",
+            "do not exchange overlapping parts as overlap breeds confusion",
+            "do not exchange lapping parts as overoverlap breeds confusion",
+        );
+        tec1(
+            "lap", "overlap",
+            "do not exchange overlapping parts as overlap breeds confusion",
+            "do not exchange overoverlapping parts as lap breeds confusion",
+        );
     }
 }
