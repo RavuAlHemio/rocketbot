@@ -115,6 +115,8 @@ impl std::error::Error for SubFlagsError {
 pub(crate) enum ReplacementError {
     GroupOutOfRange{ group_number: usize },
     TrailingEscape,
+    GroupNumberOverflow,
+    InvalidGroupSyntax,
 }
 impl fmt::Display for ReplacementError {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
@@ -123,6 +125,10 @@ impl fmt::Display for ReplacementError {
                 => write!(f, "group with number {} out of range", group_number),
             Self::TrailingEscape
                 => write!(f, "trailing escape character"),
+            Self::GroupNumberOverflow
+                => write!(f, "group number overflowed"),
+            Self::InvalidGroupSyntax
+                => write!(f, "invalid group syntax"),
         }
     }
 }
@@ -233,6 +239,8 @@ fn transform_replacement_string(replacement_string_sed: &str, cap_group_count: u
     let mut ret = String::with_capacity(replacement_string_sed.len());
 
     let mut escaping = false;
+    let mut parsing_group = '\0';
+    let mut parsing_group_value: usize = 0;
     for c in replacement_string_sed.chars() {
         if c == '\\' {
             if escaping {
@@ -240,6 +248,28 @@ fn transform_replacement_string(replacement_string_sed: &str, cap_group_count: u
                 escaping = false;
             } else {
                 escaping = true;
+            }
+        } else if c == 'g' && escaping && parsing_group == '\0' {
+            // parse numeric group ("\g123;")
+            parsing_group = 'g';
+            escaping = false;
+        } else if parsing_group == 'g' {
+            if c >= '0' && c <= '9' {
+                let digit = (c as usize) - ('0' as usize);
+                parsing_group_value = parsing_group_value.checked_mul(10)
+                    .ok_or_else(|| ReplacementError::GroupNumberOverflow)?
+                    .checked_add(digit)
+                    .ok_or_else(|| ReplacementError::GroupNumberOverflow)?;
+            } else if c == ';' {
+                if parsing_group_value >= cap_group_count {
+                    return Err(ReplacementError::GroupOutOfRange{ group_number: parsing_group_value });
+                }
+                ret.push_str("${");
+                ret.push_str(&parsing_group_value.to_string());
+                ret.push('}');
+                parsing_group = '\0';
+            } else {
+                return Err(ReplacementError::InvalidGroupSyntax);
             }
         } else if c == '$' {
             ret.push_str("$$");
@@ -795,6 +825,38 @@ mod tests {
         assert_eq!(
             parse_replacement_commands("    s/one/two/ only replaces the first occurrence  ").unwrap_err(),
             ParserError::NonCommandCharacter{ character: ' ', index: 19 },
+        );
+    }
+
+    #[test]
+    fn test_transform_replacement_string() {
+        assert_eq!(
+            transform_replacement_string("four", 0).unwrap(),
+            "four",
+        );
+        assert_eq!(
+            transform_replacement_string("four", 2).unwrap(),
+            "four",
+        );
+        assert_eq!(
+            transform_replacement_string("four\\1", 2).unwrap(),
+            "four${1}",
+        );
+        assert_eq!(
+            transform_replacement_string("four\\g1;", 2).unwrap(),
+            "four${1}",
+        );
+        assert_eq!(
+            transform_replacement_string("four\\g12;three", 13).unwrap(),
+            "four${12}three",
+        );
+        assert_eq!(
+            transform_replacement_string("four\\g12;\\3", 13).unwrap(),
+            "four${12}${3}",
+        );
+        assert_eq!(
+            transform_replacement_string("four\\g12;$\\3", 13).unwrap(),
+            "four${12}$$${3}",
         );
     }
 }
