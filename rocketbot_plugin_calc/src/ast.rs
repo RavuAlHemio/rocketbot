@@ -216,14 +216,25 @@ fn pow(start_end: Option<(usize, usize)>, left: &AstNodeAtLocation, right: &AstN
 
                     match (&lnum.value, &rnum.value) {
                         (NumberValue::Int(l), NumberValue::Int(r)) => {
+                            let (invert, power_of) = if r < &BigInt::from(0) {
+                                (true, -r)
+                            } else {
+                                (false, r.clone())
+                            };
                             let one = BigInt::from(1);
                             let mut val = one.clone();
                             let mut counter = BigInt::from(0);
-                            while counter < *r {
+                            while counter < power_of {
                                 val *= l;
                                 counter += &one;
                                 check_timeout(state)?;
                             }
+
+                            let result_value = if invert {
+                                NumberValue::Float(1.0 / val.to_f64().expect("conversion failed"))
+                            } else {
+                                NumberValue::Int(val)
+                            };
 
                             // multiply unit powers
                             let mut new_units = NumberUnits::new();
@@ -236,7 +247,7 @@ fn pow(start_end: Option<(usize, usize)>, left: &AstNodeAtLocation, right: &AstN
                             }
 
                             AstNode::Number(Number::new(
-                                NumberValue::Int(val),
+                                result_value,
                                 new_units,
                             ))
                         },
@@ -519,5 +530,10 @@ mod tests {
         run_test("-4", "-4");
         run_test("-5", "-5");
         run_test("-4", "1-5");
+    }
+
+    #[test]
+    fn test_negative_power() {
+        run_test("0.001", "10**(-3)");
     }
 }
