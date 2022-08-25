@@ -31,6 +31,7 @@ async fn obtain_content(page_url_pattern: &str, page_title: &str) -> String {
         let page_title_encoded: String = form_urlencoded::byte_serialize(page_title.as_bytes())
             .collect();
         let url = page_url_pattern.replace("{TITLE}", &page_title_encoded);
+        eprintln!("obtaining {:?} from URL {:?}", page_title, url);
         let response = reqwest::get(url).await
             .expect("failed to obtain response");
         let response_bytes = response.bytes().await
