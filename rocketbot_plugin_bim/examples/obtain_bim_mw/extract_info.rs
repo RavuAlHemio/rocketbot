@@ -241,11 +241,12 @@ pub(crate) async fn process_page<F, G>(page_url_pattern: &str, page_config: &Pag
         .expect("failed to parse page JSON");
 
     // get title and body
-    let page_dict = page["query"]["pages"][0]
+    let page_dict = page["query"]["pages"]
         .as_array().expect("failed to get pages array")
         .get(0).expect("page array empty");
     let actual_title = page_dict["title"].as_str().expect("page title not a string");
-    let body_wikitext = page_dict["revisions"][0]["*"].as_str().expect("page body not a string");
+    let body_wikitext = page_dict["revisions"][0]["slots"]["main"]["content"]
+        .as_str().expect("page body not a string");
 
     // parse wikitext
     let parsed = parser.parse_article(actual_title, body_wikitext)
