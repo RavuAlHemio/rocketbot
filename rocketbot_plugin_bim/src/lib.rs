@@ -225,6 +225,7 @@ impl BimTypeStats {
 #[derive(Clone, Debug, Deserialize, Serialize)]
 pub struct CompanyDefinition {
     pub name: String,
+    pub country: String,
     pub bim_database_path: Option<String>,
     #[serde(with = "serde_opt_regex")] pub vehicle_number_regex: Option<Regex>,
     #[serde(with = "serde_opt_regex")] pub line_number_regex: Option<Regex>,
@@ -301,6 +302,7 @@ impl CompanyDefinition {
     pub fn placeholder() -> Self {
         Self {
             name: "Placeholder".to_owned(),
+            country: "aq".to_owned(),
             bim_database_path: None,
             vehicle_number_regex: None,
             line_number_regex: None,
@@ -1246,15 +1248,20 @@ impl BimPlugin {
             return;
         }
 
-        let mut company_names: Vec<(&String, &String)> = config_guard.company_to_definition
-            .iter()
-            .map(|(abbr, cd)| (abbr, &cd.name))
-            .collect();
-        company_names.sort_unstable();
+        let mut country_to_company_to_name: BTreeMap<&String, BTreeMap<&String, &String>> = BTreeMap::new();
+        for (company_id, company_def) in &config_guard.company_to_definition {
+            country_to_company_to_name
+                .entry(&company_def.country)
+                .or_insert_with(|| BTreeMap::new())
+                .insert(company_id, &company_def.name);
+        }
 
         let mut response_str = "The following companies exist:".to_owned();
-        for (abbr, company_name) in company_names {
-            write_expect!(&mut response_str, "\n* `{}` ({})", abbr, company_name);
+        for (country, company_to_name) in country_to_company_to_name {
+            write_expect!(&mut response_str, "\n\n:flag_{}:", country);
+            for (abbr, name) in company_to_name {
+                write_expect!(&mut response_str, "\n* `{}` ({})", abbr, name);
+            }
         }
 
         send_channel_message!(
