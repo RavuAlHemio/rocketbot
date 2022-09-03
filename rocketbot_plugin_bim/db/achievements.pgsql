@@ -115,7 +115,7 @@ LANGUAGE sql
 IMMUTABLE LEAKPROOF STRICT
 PARALLEL SAFE
 AS $$
-    SELECT bim.smallest_factor(val) = val
+    SELECT val > 1 AND bim.smallest_factor(val) = val
 $$;
 
 CREATE OR REPLACE FUNCTION bim.is_in_sequence
