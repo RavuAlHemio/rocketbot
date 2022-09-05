@@ -11,8 +11,8 @@ use printpdf::{
     OP_PATH_PAINT_FILL_NZ, OP_PATH_PAINT_FILL_STROKE_CLOSE_NZ, OP_PATH_PAINT_FILL_STROKE_NZ,
     OP_PATH_PAINT_STROKE, OP_PATH_PAINT_STROKE_CLOSE, PdfDocument, PdfDocumentReference, Pt, Rgb,
 };
-use printpdf::image_crate::jpeg::JpegDecoder;
-use printpdf::image_crate::png::PngDecoder;
+use printpdf::image_crate::codecs::jpeg::JpegDecoder;
+use printpdf::image_crate::codecs::png::PngDecoder;
 use printpdf::lopdf::Object;
 use printpdf::lopdf::content::Operation;
 use rustybuzz::{Face, UnicodeBuffer};
