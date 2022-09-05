@@ -2299,6 +2299,9 @@ impl BimPlugin {
         let new_timestamp_str = command.options.get("t")
             .or_else(|| command.options.get("set-timestamp"))
             .map(|cv| cv.as_str().unwrap());
+        let new_vehicles_str = command.options.get("v")
+            .or_else(|| command.options.get("vehicles"))
+            .map(|cv| cv.as_str().unwrap());
 
         let is_admin = config_guard.admin_usernames.contains(sender_username);
 
@@ -2332,7 +2335,7 @@ impl BimPlugin {
             }
         }
 
-        if delete && (new_rider.is_some() || new_company.is_some() || new_line.is_some() || new_timestamp_str.is_some()) {
+        if delete && (new_rider.is_some() || new_company.is_some() || new_line.is_some() || new_timestamp_str.is_some() || new_vehicles_str.is_some()) {
             send_channel_message!(
                 interface,
                 &channel_message.channel.name,
@@ -2341,7 +2344,7 @@ impl BimPlugin {
             return;
         }
 
-        if !delete && new_rider.is_none() && new_company.is_none() && new_line.is_none() && new_timestamp_str.is_none() {
+        if !delete && new_rider.is_none() && new_company.is_none() && new_line.is_none() && new_timestamp_str.is_none() && new_vehicles_str.is_none() {
             send_channel_message!(
                 interface,
                 &channel_message.channel.name,
@@ -2404,7 +2407,7 @@ impl BimPlugin {
         };
 
         // find the ride
-        let ride_conn = match self.connect_ride_db(&config_guard).await {
+        let mut ride_conn = match self.connect_ride_db(&config_guard).await {
             Ok(c) => c,
             Err(_) => {
                 send_channel_message!(
@@ -2415,19 +2418,31 @@ impl BimPlugin {
                 return;
             },
         };
+        let ride_txn = match ride_conn.transaction().await {
+            Ok(txn) => txn,
+            Err(e) => {
+                error!("failed to open database transaction: {}", e);
+                send_channel_message!(
+                    interface,
+                    &channel_message.channel.name,
+                    "Failed to open database transaction. :disappointed:",
+                ).await;
+                return;
+            },
+        };
 
         let ride_row_opt_res = if let Some(rid) = ride_id {
-            ride_conn.query_opt(
+            ride_txn.query_opt(
                 "
-                    SELECT id, rider_username, \"timestamp\" FROM bim.rides
+                    SELECT id, rider_username, \"timestamp\", company FROM bim.rides
                     WHERE id=$1
                 ",
                 &[&rid],
             ).await
         } else {
-            ride_conn.query_opt(
+            ride_txn.query_opt(
                 "
-                    SELECT id, rider_username, \"timestamp\" FROM bim.rides
+                    SELECT id, rider_username, \"timestamp\", company FROM bim.rides
                     WHERE rider_username=$1
                     ORDER BY \"timestamp\" DESC, id DESC
                     LIMIT 1
@@ -2459,6 +2474,7 @@ impl BimPlugin {
         let ride_id: i64 = ride_row.get(0);
         let rider_username: String = ride_row.get(1);
         let ride_timestamp: DateTime<Local> = ride_row.get(2);
+        let ride_company: String = ride_row.get(3);
 
         if !is_admin {
             let max_edit_dur = Duration::seconds(config_guard.max_edit_s);
@@ -2491,17 +2507,30 @@ impl BimPlugin {
         }
 
         if delete {
-            let response = match ride_conn.execute("DELETE FROM bim.rides WHERE id=$1", &[&ride_id]).await {
-                Ok(_) => format!("Ride {} deleted.", ride_id),
-                Err(e) => {
-                    error!("failed to delete ride {}: {}", ride_id, e);
-                    format!("Failed to delete ride {}.", ride_id)
-                },
-            };
+            if let Err(e) = ride_txn.execute("DELETE FROM bim.rides WHERE id=$1", &[&ride_id]).await {
+                error!("failed to delete ride {}: {}", ride_id, e);
+                send_channel_message!(
+                    interface,
+                    &channel_message.channel.name,
+                    &format!("Failed to delete ride {}.", ride_id),
+                ).await;
+                return;
+            }
+
+            if let Err(e) = ride_txn.commit().await {
+                error!("failed to commit changes on ride {}: {}", ride_id, e);
+                send_channel_message!(
+                    interface,
+                    &channel_message.channel.name,
+                    &format!("Failed to commit ride {} changes.", ride_id),
+                ).await;
+                return;
+            }
+
             send_channel_message!(
                 interface,
                 &channel_message.channel.name,
-                &response,
+                &format!("Ride {} deleted.", ride_id),
             ).await;
             return;
         }
@@ -2532,21 +2561,70 @@ impl BimPlugin {
             values.push(&remember_new_timestamp);
         }
 
-        let props_string = props.join(", ");
-        let query = format!("UPDATE bim.rides SET {} WHERE id = ${}", props_string, props.len() + 1);
-        values.push(&ride_id);
+        if props.len() > 0 {
+            let props_string = props.join(", ");
+            let query = format!("UPDATE bim.rides SET {} WHERE id = ${}", props_string, props.len() + 1);
+            values.push(&ride_id);
 
-        let response = match ride_conn.execute(&query, &values).await {
-            Ok(_) => format!("Ride {} modified.", ride_id),
-            Err(e) => {
+            if let Err(e) = ride_txn.execute(&query, &values).await {
                 error!("failed to modify ride {}: {}", ride_id, e);
-                format!("Failed to modify ride {}.", ride_id)
-            },
-        };
+                send_channel_message!(
+                    interface,
+                    &channel_message.channel.name,
+                    &format!("Failed to modify ride {}.", ride_id),
+                ).await;
+                return;
+            }
+        }
+
+        if let Some(nvs) = new_vehicles_str {
+            let this_company = new_company
+                .unwrap_or(ride_company.as_str());
+            let this_bim_db_opt = self.load_bim_database(&config_guard, this_company);
+            let vehicles_res = spec_to_vehicles(
+                nvs,
+                this_bim_db_opt.as_ref(),
+                config_guard.allow_fixed_coupling_combos,
+            );
+            let vehicles = match vehicles_res {
+                Ok(vehicles) => vehicles,
+                Err(e) => {
+                    error!("failed to parse vehicles of ride {}: {}", ride_id, e);
+                    let response = format!("Failed to parse vehicles of ride {}.", ride_id);
+                    send_channel_message!(
+                        interface,
+                        &channel_message.channel.name,
+                        &response,
+                    ).await;
+                    return;
+                },
+            };
+            if let Err(e) = replace_ride_vehicles(&ride_txn, ride_id, &vehicles).await {
+                error!("failed to replace vehicles of ride {}: {}", ride_id, e);
+                let response = format!("Failed to replace vehicles of ride {}.", ride_id);
+                send_channel_message!(
+                    interface,
+                    &channel_message.channel.name,
+                    &response,
+                ).await;
+                return;
+            }
+        }
+
+        if let Err(e) = ride_txn.commit().await {
+            error!("failed to commit transaction while modifying ride {}: {}", ride_id, e);
+            send_channel_message!(
+                interface,
+                &channel_message.channel.name,
+                &format!("Failed to commit transaction while modifying ride {}.", ride_id),
+            ).await;
+            return;
+        }
+
         send_channel_message!(
             interface,
             &channel_message.channel.name,
-            &response,
+            &format!("Ride {} modified.", ride_id),
         ).await;
     }
 
@@ -3003,6 +3081,8 @@ impl RocketBotPlugin for BimPlugin {
                 .add_option("set-line", CommandValueType::String)
                 .add_option("t", CommandValueType::String)
                 .add_option("set-timestamp", CommandValueType::String)
+                .add_option("v", CommandValueType::String)
+                .add_option("vehicles", CommandValueType::String)
                 .build()
         ).await;
         my_interface.register_channel_command(
@@ -3106,6 +3186,14 @@ impl RocketBotPlugin for BimPlugin {
         }
     }
 }
+
+
+const INSERT_VEHICLE_STMT_STR: &str = "
+    INSERT INTO bim.ride_vehicles
+        (ride_id, vehicle_number, vehicle_type, spec_position, as_part_of_fixed_coupling, fixed_coupling_position)
+    VALUES
+        ($1, $2, $3, $4, $5, $6)
+";
 
 
 pub async fn add_ride(
@@ -3234,14 +3322,7 @@ pub async fn add_ride(
     ).await?;
     let ride_id: i64 = id_row.get(0);
 
-    let insert_vehicle_stmt = ride_conn.prepare(
-        "
-            INSERT INTO bim.ride_vehicles
-                (ride_id, vehicle_number, vehicle_type, spec_position, as_part_of_fixed_coupling, fixed_coupling_position)
-            VALUES
-                ($1, $2, $3, $4, $5, $6)
-        ",
-    ).await?;
+    let insert_vehicle_stmt = ride_conn.prepare(INSERT_VEHICLE_STMT_STR).await?;
 
     for vehicle in vehicles {
         let vehicle_number_i64: i64 = vehicle.number.into();
@@ -3259,6 +3340,40 @@ pub async fn add_ride(
     }
 
     Ok((ride_id, vehicle_results))
+}
+
+
+async fn replace_ride_vehicles(
+    ride_conn: &tokio_postgres::Transaction<'_>,
+    ride_id: i64,
+    vehicles: &[NewVehicleEntry],
+) -> Result<(), tokio_postgres::Error> {
+    let remove_vehicles_stmt = ride_conn.prepare(
+        "DELETE FROM bim.ride_vehicles WHERE ride_id = $1",
+    ).await?;
+    let insert_vehicle_stmt = ride_conn.prepare(INSERT_VEHICLE_STMT_STR).await?;
+
+    ride_conn.execute(
+        &remove_vehicles_stmt,
+        &[&ride_id],
+    ).await?;
+
+    for vehicle in vehicles {
+        let vehicle_number_i64: i64 = vehicle.number.into();
+        ride_conn.execute(
+            &insert_vehicle_stmt,
+            &[
+                &ride_id,
+                &vehicle_number_i64,
+                &vehicle.type_code,
+                &vehicle.spec_position,
+                &vehicle.as_part_of_fixed_coupling,
+                &vehicle.fixed_coupling_position,
+            ],
+        ).await?;
+    }
+
+    Ok(())
 }
 
 #[derive(Debug)]
@@ -3285,49 +3400,11 @@ impl fmt::Display for IncrementBySpecError {
 impl std::error::Error for IncrementBySpecError {
 }
 
-pub async fn increment_rides_by_spec(
-    ride_conn: &mut tokio_postgres::Client,
+fn spec_to_vehicles(
+    vehicles_str: &str,
     bim_database_opt: Option<&HashMap<VehicleNumber, VehicleInfo>>,
-    company: &str,
-    company_def: &CompanyDefinition,
-    rider_username: &str,
-    timestamp: DateTime<Local>,
-    rides_spec: &str,
     allow_fixed_coupling_combos: bool,
-) -> Result<RideInfo, IncrementBySpecError> {
-    let spec_no_spaces = rides_spec.replace(" ", "");
-
-    let vehicle_and_line_regex = company_def.vehicle_and_line_regex();
-    let mut vehicle_cap_names = Vec::new();
-    let mut line_cap_names = Vec::new();
-    for cap_name in vehicle_and_line_regex.capture_names() {
-        if let Some(cn) = cap_name {
-            if cn.starts_with("vehicles") {
-                vehicle_cap_names.push(cn);
-            } else if cn.starts_with("line") {
-                line_cap_names.push(cn);
-            }
-        }
-    }
-
-    let caps = match vehicle_and_line_regex.captures(&spec_no_spaces) {
-        Some(c) => c,
-        None => return Err(IncrementBySpecError::SpecParseFailure(spec_no_spaces)),
-    };
-
-    let vehicles_str_opt = vehicle_cap_names
-        .iter()
-        .filter_map(|cn| caps.name(cn))
-        .map(|cap| cap.as_str())
-        .nth(0);
-    let vehicles_str = vehicles_str_opt.expect("failed to capture vehicles");
-
-    let line_str_opt = line_cap_names
-        .iter()
-        .filter_map(|cn| caps.name(cn))
-        .map(|cap| cap.as_str())
-        .nth(0);
-
+) -> Result<Vec<NewVehicleEntry>, IncrementBySpecError> {
     let vehicle_num_strs: Vec<&str> = vehicles_str.split("+").collect();
     let mut vehicle_nums = Vec::new();
     for &vehicle_num_str in &vehicle_num_strs {
@@ -3399,6 +3476,58 @@ pub async fn increment_rides_by_spec(
             all_vehicles.push(vehicle);
         }
     }
+
+    Ok(all_vehicles)
+}
+
+pub async fn increment_rides_by_spec(
+    ride_conn: &mut tokio_postgres::Client,
+    bim_database_opt: Option<&HashMap<VehicleNumber, VehicleInfo>>,
+    company: &str,
+    company_def: &CompanyDefinition,
+    rider_username: &str,
+    timestamp: DateTime<Local>,
+    rides_spec: &str,
+    allow_fixed_coupling_combos: bool,
+) -> Result<RideInfo, IncrementBySpecError> {
+    let spec_no_spaces = rides_spec.replace(" ", "");
+
+    let vehicle_and_line_regex = company_def.vehicle_and_line_regex();
+    let mut vehicle_cap_names = Vec::new();
+    let mut line_cap_names = Vec::new();
+    for cap_name in vehicle_and_line_regex.capture_names() {
+        if let Some(cn) = cap_name {
+            if cn.starts_with("vehicles") {
+                vehicle_cap_names.push(cn);
+            } else if cn.starts_with("line") {
+                line_cap_names.push(cn);
+            }
+        }
+    }
+
+    let caps = match vehicle_and_line_regex.captures(&spec_no_spaces) {
+        Some(c) => c,
+        None => return Err(IncrementBySpecError::SpecParseFailure(spec_no_spaces)),
+    };
+
+    let vehicles_str_opt = vehicle_cap_names
+        .iter()
+        .filter_map(|cn| caps.name(cn))
+        .map(|cap| cap.as_str())
+        .nth(0);
+    let vehicles_str = vehicles_str_opt.expect("failed to capture vehicles");
+
+    let line_str_opt = line_cap_names
+        .iter()
+        .filter_map(|cn| caps.name(cn))
+        .map(|cap| cap.as_str())
+        .nth(0);
+
+    let all_vehicles = spec_to_vehicles(
+        vehicles_str,
+        bim_database_opt,
+        allow_fixed_coupling_combos,
+    )?;
 
     let (ride_id, vehicle_ride_infos) = {
         let xact = ride_conn.transaction().await

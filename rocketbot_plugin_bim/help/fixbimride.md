@@ -18,6 +18,7 @@ A ride is modified using:
 * `-l LINE` or `--line LINE`: The line is changed to the given value.
 * `-R USERNAME` or `--set-rider USERNAME`: The ride is assigned to a different user. This option can only be used by `bim` administrators.
 * `-t TIMESTAMP` or `--set-timestamp TIMESTAMP`: The ride's timestamp is changed. This option can only be used by `bim` administrators.
+* `-v VEHICLES` or `--vehicles VEHICLES`: The vehicles of the ride are replaced by those in the given vehicle specification string (as well as any vehicles participating in a fixed coupling with the given vehicles).
 
 The following options can modify the command behavior further:
 
