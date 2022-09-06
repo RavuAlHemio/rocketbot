@@ -2,6 +2,44 @@
 
 {% block title %}Public Transport Achievements{% endblock %}
 
+{% block scripts %}
+<script type="text/javascript">
+    // <![CDATA[
+    document.addEventListener("DOMContentLoaded", function () {
+        // add info cells
+        var tableRows = document.querySelectorAll("table.bim-achievements tr");
+        for (var i = 0; i < tableRows.length; i++) {
+            var tableRow = tableRows.item(i);
+            var isHeader = tableRow.classList.contains("header-row");
+            var infoCell;
+            if (isHeader) {
+                infoCell = document.createElement("th");
+                infoCell.classList.add("info");
+            } else {
+                infoCell = document.createElement("td");
+                infoCell.classList.add("info");
+                infoCell.textContent = "\u2139";
+            }
+
+            var firstRider = tableRow.querySelector(".rider");
+            if (firstRider === null) {
+                tableRow.appendChild(infoCell);
+            } else {
+                tableRow.insertBefore(infoCell, firstRider);
+            }
+
+            var achievementTitle = tableRow.querySelector("th.achievement").title;
+            (function (innerCell, innerTitle) {
+                innerCell.addEventListener("click", function () {
+                    alert(innerTitle);
+                });
+            })(infoCell, achievementTitle);
+        }
+    });
+    // ]]>
+</script>
+{% endblock %}
+
 {% block content %}
 <main class="bim-achievements">
 
@@ -9,7 +47,7 @@
 
 <table class="bim-achievements booktable">
 
-<tr>
+<tr class="header-row">
     <th class="achievement">Achievement</th>
     {%- for rider in all_riders %}
         <th class="rider" data-rider-username="{{ rider|escape }}">{{ rider|escape }}</th>
