@@ -7,7 +7,7 @@ use tokio_postgres;
 
 pub(crate) async fn get_achievements_for(db_conn: &tokio_postgres::Client, rider_username: &str) -> Result<BTreeMap<i64, AchievementState>, tokio_postgres::Error> {
     let rows = db_conn.query(
-        "SELECT achievement_id, achieved_on FROM bim.achievements_of($1)",
+        "SELECT ra.achievement_id, ra.achieved_on FROM bim.rider_achievements ra WHERE ra.rider_username = $1",
         &[&rider_username],
     ).await?;
     let mut achievements = BTreeMap::new();
@@ -24,4 +24,9 @@ pub(crate) async fn get_achievements_for(db_conn: &tokio_postgres::Client, rider
         );
     }
     Ok(achievements)
+}
+
+pub(crate) async fn recalculate_achievements(db_conn: &tokio_postgres::Client) -> Result<(), tokio_postgres::Error> {
+    db_conn.execute("REFRESH MATERIALIZED VIEW bim.rider_achievements WITH DATA", &[]).await?;
+    Ok(())
 }

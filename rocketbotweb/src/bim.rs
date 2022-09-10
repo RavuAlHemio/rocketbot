@@ -1864,12 +1864,11 @@ pub(crate) async fn handle_bim_achievements(request: &Request<Body>) -> Result<R
     // query achievements
     let ach_rows_res = db_conn.query(
         "
-            SELECT r.rider_username, ach.achievement_id, ach.achieved_on
+            SELECT ra.rider_username, ra.achievement_id, ra.achieved_on
             FROM
-                bim.rides r
-                CROSS JOIN LATERAL bim.achievements_of(r.rider_username) ach
+                bim.bim.rider_achievements ra
             ORDER BY
-                r.rider_username, ach.achievement_id
+                ra.rider_username, ra.achievement_id
         ",
         &[],
     ).await;

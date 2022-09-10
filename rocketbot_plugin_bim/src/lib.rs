@@ -30,7 +30,7 @@ use serde_json;
 use tokio_postgres::NoTls;
 use tokio_postgres::types::ToSql;
 
-use crate::achievements::get_achievements_for;
+use crate::achievements::{get_achievements_for, recalculate_achievements};
 use crate::range_set::RangeSet;
 
 
@@ -851,6 +851,10 @@ impl BimPlugin {
         ).await;
 
         if let Some(prev_ach) = prev_achievements {
+            if let Err(e) = recalculate_achievements(&ride_conn).await {
+                error!("failed to recalculate achievements: {}", e);
+            }
+
             let new_achievements = get_achievements_for(
                 &ride_conn,
                 &channel_message.message.sender.username,
@@ -2626,6 +2630,11 @@ impl BimPlugin {
             &channel_message.channel.name,
             &format!("Ride {} modified.", ride_id),
         ).await;
+
+        // update achievements
+        if let Err(e) = recalculate_achievements(&ride_conn).await {
+            error!("failed to recalculate achievements after fixing bim ride {}: {}", ride_id, e);
+        }
     }
 
     async fn channel_command_widestbims(&self, channel_message: &ChannelMessage, command: &CommandInstance) {

@@ -1370,3 +1370,17 @@ AS $$
     -- ORDER: 10,6 repdigits
     SELECT 96, bim.repdigit_unique_vehicle_ride(rider, 2, 3)
 $$;
+
+CREATE MATERIALIZED VIEW bim.rider_achievements AS
+    WITH all_riders(rider_username) AS (
+        SELECT DISTINCT r.rider_username
+        FROM bim.rides r
+    )
+    SELECT ar.rider_username, ach.achievement_id, ach.achieved_on
+    FROM
+        all_riders ar
+        CROSS JOIN LATERAL bim.achievements_of(ar.rider_username) ach
+    ORDER BY
+        ar.rider_username, ach.achievement_id
+    WITH DATA
+;
