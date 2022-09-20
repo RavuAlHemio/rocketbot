@@ -1866,7 +1866,7 @@ pub(crate) async fn handle_bim_achievements(request: &Request<Body>) -> Result<R
         "
             SELECT ra.rider_username, ra.achievement_id, ra.achieved_on
             FROM
-                bim.bim.rider_achievements ra
+                bim.rider_achievements ra
             ORDER BY
                 ra.rider_username, ra.achievement_id
         ",
