@@ -458,6 +458,39 @@ CREATE OR REPLACE VIEW bim.rider_first_palindrome_vehicle_ride AS
     FROM first_palindrome_ride
 ;
 
+CREATE OR REPLACE FUNCTION bim.same_ride_to_minute_interval_ago
+( interval_ago interval
+) RETURNS TABLE
+( rider_username character varying(256)
+, company character varying(256)
+, line character varying(32)
+, vehicle_number bigint
+, "timestamp" timestamp with time zone
+)
+LANGUAGE sql
+STABLE STRICT
+AS $$
+    WITH ride_vehicles_interval_ago(rider_username, company, line, vehicle_number, timestamp_exact, timestamp_minute, timestamp_minute_day_ago) AS (
+        SELECT
+            rider_username, company, line, vehicle_number, "timestamp", DATE_TRUNC('minute', "timestamp"), DATE_TRUNC('minute', "timestamp" - interval_ago)
+        FROM bim.rides_and_vehicles
+    )
+    SELECT
+        later.rider_username, later.company, later.line, later.vehicle_number, later.timestamp_exact
+    FROM
+        ride_vehicles_interval_ago later
+    WHERE
+        EXISTS (
+            SELECT 1
+            FROM ride_vehicles_interval_ago earlier
+            WHERE earlier.rider_username = later.rider_username
+            AND earlier.company = later.company
+            AND earlier.line = later.line
+            AND earlier.vehicle_number = later.vehicle_number
+            AND earlier.timestamp_minute = later.timestamp_minute_day_ago
+        )
+$$;
+
 CREATE OR REPLACE FUNCTION bim.achievements_of
 ( rider character varying(256)
 ) RETURNS TABLE
@@ -1369,6 +1402,24 @@ AS $$
     -- DESCR: Ride three unique vehicles (of any company) whose numbers consist of one digit repeated at least two times.
     -- ORDER: 10,6 repdigits
     SELECT 96, bim.repdigit_unique_vehicle_ride(rider, 2, 3)
+
+    UNION ALL
+
+    -- NAME: Every Day Is Exactly the Same
+    -- DESCR: Ride the same vehicle on the same line at the same minute two days in a row.
+    -- ORDER: 4,11 same vehicle
+    SELECT 97, MIN(srtmia97."timestamp")
+    FROM bim.same_ride_to_minute_interval_ago(interval '1 day') srtmia97
+    WHERE srtmia97.rider_username = rider
+
+    UNION ALL
+
+    -- NAME: Every Week Is Exactly the Same
+    -- DESCR: Ride the same vehicle on the same line at the same minute two weeks in a row.
+    -- ORDER: 4,12 same vehicle
+    SELECT 98, MIN(srtmia98."timestamp")
+    FROM bim.same_ride_to_minute_interval_ago(interval '7 days') srtmia98
+    WHERE srtmia98.rider_username = rider
 $$;
 
 CREATE MATERIALIZED VIEW bim.rider_achievements AS
