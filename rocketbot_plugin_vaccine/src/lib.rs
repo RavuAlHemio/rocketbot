@@ -58,10 +58,10 @@ struct ExtractedVaccineStats {
     pub delta: VaccinationStats,
     pub dose_to_percent: HashMap<String, f64>,
     pub dose_to_delta_percent_points: HashMap<String, f64>,
-    pub vax_cert: BigUint,
-    pub vax_cert_delta: BigInt,
-    pub vax_cert_percent: f64,
-    pub vax_cert_delta_percent_points: f64,
+    pub vaxxed: BigUint,
+    pub vaxxed_delta: BigInt,
+    pub vaxxed_percent: f64,
+    pub vaxxed_delta_percent_points: f64,
     pub population: BigUint,
     pub state_name: String,
 }
@@ -71,8 +71,8 @@ struct ExtractedVaccineStats {
 struct Config {
     default_target: String,
     doses_timeline_url: String,
-    vax_certs_url: String,
-    prev_vax_certs_url_format: String,
+    vaxxed_url: String,
+    prev_vaxxed_url_format: String,
     max_age_h: i64,
 }
 
@@ -90,11 +90,11 @@ impl VaccinePlugin {
         let doses_timeline_url = config["doses_timeline_url"]
             .as_str().ok_or("doses_timeline_url missing or not a string")?
             .to_owned();
-        let vax_certs_url = config["vax_certs_url"]
-            .as_str().ok_or("vax_certs_url missing or not a string")?
+        let vaxxed_url = config["vaxxed_url"]
+            .as_str().ok_or("vaxxed_url missing or not a string")?
             .to_owned();
-        let prev_vax_certs_url_format = config["prev_vax_certs_url_format"]
-            .as_str().ok_or("prev_vax_certs_url_format missing or not a string")?
+        let prev_vaxxed_url_format = config["prev_vaxxed_url_format"]
+            .as_str().ok_or("prev_vaxxed_url_format missing or not a string")?
             .to_owned();
         let max_age_h = config["max_age_h"]
             .as_i64().ok_or("max_age_h missing or not an i64")?;
@@ -102,8 +102,8 @@ impl VaccinePlugin {
         Ok(Config {
             default_target,
             doses_timeline_url,
-            vax_certs_url,
-            prev_vax_certs_url_format,
+            vaxxed_url,
+            prev_vaxxed_url_format,
             max_age_h,
         })
     }
@@ -121,7 +121,7 @@ impl RocketBotPlugin for VaccinePlugin {
 
         let vaccine_database = RwLock::new(
             "VaccinePlugin::vaccine_database",
-            match VaccineDatabase::new_from_urls(&config_object.doses_timeline_url, &config_object.vax_certs_url, &config_object.prev_vax_certs_url_format).await {
+            match VaccineDatabase::new_from_urls(&config_object.doses_timeline_url, &config_object.vaxxed_url, &config_object.prev_vaxxed_url_format).await {
                 Ok(d) => d,
                 Err(e) => {
                     panic!("initial database population failed: {}", e);
@@ -180,7 +180,7 @@ impl RocketBotPlugin for VaccinePlugin {
             Utc::now() - db_guard.corona_timestamp
         };
         if update_delta.num_hours() > config_guard.max_age_h {
-            match VaccineDatabase::new_from_urls(&config_guard.doses_timeline_url, &config_guard.vax_certs_url, &config_guard.prev_vax_certs_url_format).await {
+            match VaccineDatabase::new_from_urls(&config_guard.doses_timeline_url, &config_guard.vaxxed_url, &config_guard.prev_vaxxed_url_format).await {
                 Ok(d) => {
                     let mut db_guard = self.vaccine_database
                         .write().await;
@@ -275,22 +275,22 @@ impl RocketBotPlugin for VaccinePlugin {
                 dose_to_delta_percent_points.insert(dose_number.clone(), percent - prev_percent);
             }
 
-            let vax_cert = db_guard.cert_database.state_id_and_date_to_cert_count.iter()
+            let vaxxed = db_guard.cert_database.state_id_and_date_to_vaccinated.iter()
                 .filter_map(|((sid, _date), cert_count)| if sid == state_id { Some(cert_count.clone()) } else { None })
                 .nth(0).expect("vax cert statistic missing");
-            let vax_cert_prev = db_guard.prev_cert_database.state_id_and_date_to_cert_count.iter()
+            let vaxxed_prev = db_guard.prev_cert_database.state_id_and_date_to_vaccinated.iter()
                 .filter_map(|((sid, _date), cert_count)| if sid == state_id { Some(cert_count.clone()) } else { None })
                 .nth(0).expect("previous vax cert statistic missing");
-            let vax_cert_delta = BigInt::from(vax_cert.clone()) - BigInt::from(vax_cert_prev.clone());
-            let (vax_cert_percent, vax_cert_prev_percent): (f64, f64) = if pop == zero {
+            let vaxxed_delta = BigInt::from(vaxxed.clone()) - BigInt::from(vaxxed_prev.clone());
+            let (vaxxed_percent, vaxxed_prev_percent): (f64, f64) = if pop == zero {
                 (f64::INFINITY, f64::INFINITY)
             } else {
                 (
-                    (&vax_cert * &hundred_thousand / &pop).to_f64().expect("BigUint to f64") / 1000.0,
-                    (vax_cert_prev * &hundred_thousand / &pop).to_f64().expect("BigUint to f64") / 1000.0,
+                    (&vaxxed * &hundred_thousand / &pop).to_f64().expect("BigUint to f64") / 1000.0,
+                    (vaxxed_prev * &hundred_thousand / &pop).to_f64().expect("BigUint to f64") / 1000.0,
                 )
             };
-            let vax_cert_delta_percent_points = vax_cert_percent - vax_cert_prev_percent;
+            let vaxxed_delta_percent_points = vaxxed_percent - vaxxed_prev_percent;
 
             ExtractedVaccineStats {
                 freshest_entries,
@@ -298,10 +298,10 @@ impl RocketBotPlugin for VaccinePlugin {
                 delta,
                 dose_to_percent,
                 dose_to_delta_percent_points,
-                vax_cert,
-                vax_cert_delta,
-                vax_cert_percent,
-                vax_cert_delta_percent_points,
+                vaxxed,
+                vaxxed_delta,
+                vaxxed_percent,
+                vaxxed_delta_percent_points,
                 population: pop,
                 state_name,
             }
@@ -335,15 +335,15 @@ impl RocketBotPlugin for VaccinePlugin {
             response.push('\n');
             response.push_str(dose_text);
         }
-        let vax_cert_text = format_stat(
+        let vaxxed_text = format_stat(
             "certificates",
-            &evs.vax_cert,
-            &evs.vax_cert_delta,
-            evs.vax_cert_percent,
-            evs.vax_cert_delta_percent_points,
+            &evs.vaxxed,
+            &evs.vaxxed_delta,
+            evs.vaxxed_percent,
+            evs.vaxxed_delta_percent_points,
         );
         response.push('\n');
-        response.push_str(&vax_cert_text);
+        response.push_str(&vaxxed_text);
 
         send_channel_message!(
             interface,

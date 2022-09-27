@@ -66,19 +66,19 @@ pub(crate) struct VaccineCertificateDatabase {
     pub state_id_to_name: HashMap<u32, String>,
     pub lower_name_to_state_id: HashMap<String, u32>,
     pub state_id_to_pop: HashMap<u32, BigUint>,
-    pub state_id_and_date_to_cert_count: HashMap<(u32, NaiveDate), BigUint>,
+    pub state_id_and_date_to_vaccinated: HashMap<(u32, NaiveDate), BigUint>,
 }
 impl VaccineCertificateDatabase {
     pub fn new() -> Self {
         let state_id_to_name = HashMap::new();
         let lower_name_to_state_id = HashMap::new();
         let state_id_to_pop = HashMap::new();
-        let state_id_and_date_to_cert_count = HashMap::new();
+        let state_id_and_date_to_vaccinated = HashMap::new();
         Self {
             state_id_to_name,
             lower_name_to_state_id,
             state_id_to_pop,
-            state_id_and_date_to_cert_count,
+            state_id_and_date_to_vaccinated,
         }
     }
 }
@@ -146,14 +146,14 @@ impl VaccineDatabase {
             .map_err(|e| FetchingError::DateParsing(timestamp_str.to_owned(), e))
     }
 
-    async fn vax_certs_from_url(url: &str) -> Result<VaccineCertificateDatabase, FetchingError> {
-        let vax_certs_string = Self::string_from_url(url).await?;
-        let vax_certs_csv = Self::parse_csv(&vax_certs_string);
+    async fn vaxxed_from_url(url: &str) -> Result<VaccineCertificateDatabase, FetchingError> {
+        let vaxxed_string = Self::string_from_url(url).await?;
+        let vaxxed_csv = Self::parse_csv(&vaxxed_string);
 
         let mut vcdb = VaccineCertificateDatabase::new();
 
         // get the state names and populations from the certs file, as that only contains one day
-        for (entry_num, entry) in vax_certs_csv.iter().enumerate() {
+        for (entry_num, entry) in vaxxed_csv.iter().enumerate() {
             if entry.get("age_group").map(|v| v != "All").unwrap_or(true) {
                 continue;
             }
@@ -174,11 +174,11 @@ impl VaccineDatabase {
             let state_name = entry.get("state_name")
                 .ok_or_else(|| FetchingError::MissingField(entry_num, "state_name".to_owned()))?;
 
-            let cert_count_str = entry.get("valid_certificates")
-                .ok_or_else(|| FetchingError::MissingField(entry_num, "valid_certificates".to_owned()))?;
-            let cert_count: BigUint = cert_count_str
+            let vaccinated_str = entry.get("vaccinated_according_to_recommendation")
+                .ok_or_else(|| FetchingError::MissingField(entry_num, "vaccinated_according_to_recommendation".to_owned()))?;
+            let vaccinated: BigUint = vaccinated_str
                 .parse()
-                .map_err(|e| FetchingError::CertificateCountParsing(entry_num, "valid_certificates".to_owned(), e))?;
+                .map_err(|e| FetchingError::CertificateCountParsing(entry_num, "vaccinated_according_to_recommendation".to_owned(), e))?;
 
             let pop_str = entry.get("population")
                 .ok_or_else(|| FetchingError::MissingField(entry_num, "population".to_owned()))?;
@@ -189,7 +189,7 @@ impl VaccineDatabase {
             vcdb.state_id_to_name.insert(state_id, state_name.clone());
             vcdb.lower_name_to_state_id.insert(state_name.to_lowercase(), state_id);
             vcdb.state_id_to_pop.insert(state_id, pop);
-            vcdb.state_id_and_date_to_cert_count.insert((state_id, date), cert_count);
+            vcdb.state_id_and_date_to_vaccinated.insert((state_id, date), vaccinated);
         }
 
         Ok(vcdb)
@@ -204,12 +204,12 @@ impl VaccineDatabase {
         }
     }
 
-    pub async fn new_from_urls(doses_timeline_url: &str, vax_certs_url: &str, prev_vax_certs_url_format: &str) -> Result<VaccineDatabase, FetchingError> {
+    pub async fn new_from_urls(doses_timeline_url: &str, vaxxed_url: &str, prev_vaxxed_url_format: &str) -> Result<VaccineDatabase, FetchingError> {
         // get state, population and vaccine cert stats
-        let vax_cert_stats = Self::vax_certs_from_url(vax_certs_url).await?;
+        let vaxxed_stats = Self::vaxxed_from_url(vaxxed_url).await?;
 
         // get vax cert stats date
-        let vcs_date_opt = vax_cert_stats.state_id_and_date_to_cert_count
+        let vcs_date_opt = vaxxed_stats.state_id_and_date_to_vaccinated
             .keys()
             .map(|(_state_id, date)| *date)
             .max();
@@ -223,9 +223,9 @@ impl VaccineDatabase {
 
         // get vax cert stats for the previous day (for deltas)
         let prev_date = vcs_date.pred();
-        let prev_vax_certs_url = prev_vax_certs_url_format
+        let prev_vaxxed_url = prev_vaxxed_url_format
             .replace("{date}", &prev_date.format("%Y%m%d").to_string());
-        let prev_vax_cert_stats = Self::vax_certs_from_url(&prev_vax_certs_url).await?;
+        let prev_vaxxed_stats = Self::vaxxed_from_url(&prev_vaxxed_url).await?;
 
         // obtain doses
         let doses_timeline_string = Self::string_from_url(doses_timeline_url).await?;
@@ -282,8 +282,8 @@ impl VaccineDatabase {
         let corona_timestamp = Utc::now();
 
         Ok(VaccineDatabase {
-            cert_database: vax_cert_stats,
-            prev_cert_database: prev_vax_cert_stats,
+            cert_database: vaxxed_stats,
+            prev_cert_database: prev_vaxxed_stats,
             state_id_and_date_to_fields,
             corona_timestamp,
         })
