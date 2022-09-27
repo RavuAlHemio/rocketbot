@@ -56,8 +56,8 @@ struct ExtractedVaccineStats {
     pub freshest_entries: Vec<(NaiveDate, VaccinationStats)>,
     pub freshest_date: NaiveDate,
     pub delta: VaccinationStats,
-    pub dose_to_percent: HashMap<usize, f64>,
-    pub dose_to_delta_percent_points: HashMap<usize, f64>,
+    pub dose_to_percent: HashMap<String, f64>,
+    pub dose_to_delta_percent_points: HashMap<String, f64>,
     pub vax_cert: BigUint,
     pub vax_cert_delta: BigInt,
     pub vax_cert_percent: f64,
@@ -235,8 +235,8 @@ impl RocketBotPlugin for VaccinePlugin {
                 return;
             } else if actual_entries.len() == 1 {
                 let only_entry = &actual_entries[0];
-                let dose_to_zero_count: HashMap<usize, BigUint> = only_entry.dose_to_count.keys()
-                    .map(|&d| (d, BigUint::from(0u32)))
+                let dose_to_zero_count: HashMap<String, BigUint> = only_entry.dose_to_count.keys()
+                    .map(|d| (d.clone(), BigUint::from(0u32)))
                     .collect();
                 actual_entries.push(VaccinationStats {
                     dose_to_count: dose_to_zero_count,
@@ -249,7 +249,7 @@ impl RocketBotPlugin for VaccinePlugin {
                 let prev_count = actual_entries[1].dose_to_count.get(dose_number)
                     .unwrap_or(&zero);
                 if prev_count <= dose_count {
-                    delta_dose_to_count.insert(*dose_number, dose_count - prev_count);
+                    delta_dose_to_count.insert(dose_number.clone(), dose_count - prev_count);
                 }
             }
             let delta = VaccinationStats {
@@ -271,8 +271,8 @@ impl RocketBotPlugin for VaccinePlugin {
                         (prev_dose_count * &hundred_thousand / &pop).to_f64().expect("BigUint to f64") / 1000.0,
                     )
                 };
-                dose_to_percent.insert(*dose_number, percent);
-                dose_to_delta_percent_points.insert(*dose_number, percent - prev_percent);
+                dose_to_percent.insert(dose_number.clone(), percent);
+                dose_to_delta_percent_points.insert(dose_number.clone(), percent - prev_percent);
             }
 
             let vax_cert = db_guard.cert_database.state_id_and_date_to_cert_count.iter()
@@ -318,15 +318,17 @@ impl RocketBotPlugin for VaccinePlugin {
             evs.freshest_date.format("%Y-%m-%d"),
             pop_string,
         ));
-        let mut dose_numbers: Vec<usize> = evs.dose_to_percent.keys().map(|k| *k).collect();
+        let mut dose_numbers: Vec<String> = evs.dose_to_percent.keys()
+            .map(|k| k.clone())
+            .collect();
         dose_numbers.sort_unstable();
         let dose_texts: Vec<String> = dose_numbers.iter()
-            .map(|&dose_number| format_stat(
+            .map(|dose_number| format_stat(
                 &dose_number.to_string(),
-                &evs.freshest_entries[0].1.dose_to_count[&dose_number],
-                &BigInt::from(evs.delta.dose_to_count[&dose_number].clone()),
-                evs.dose_to_percent[&dose_number],
-                evs.dose_to_delta_percent_points[&dose_number],
+                &evs.freshest_entries[0].1.dose_to_count[dose_number],
+                &BigInt::from(evs.delta.dose_to_count[dose_number].clone()),
+                evs.dose_to_percent[dose_number],
+                evs.dose_to_delta_percent_points[dose_number],
             ))
             .collect();
         for dose_text in &dose_texts {

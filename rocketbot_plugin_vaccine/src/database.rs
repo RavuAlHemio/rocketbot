@@ -17,7 +17,6 @@ pub(crate) enum FetchingError {
     MissingField(usize, String),
     StateIdParsing(usize, String, std::num::ParseIntError),
     PopulationParsing(usize, String, num_bigint::ParseBigIntError),
-    DoseNumberParsing(usize, String, std::num::ParseIntError),
     DoseCountParsing(usize, String, num_bigint::ParseBigIntError),
     CertificateCountParsing(usize, String, num_bigint::ParseBigIntError),
 }
@@ -38,8 +37,6 @@ impl fmt::Display for FetchingError {
                 => write!(f, "entry {}: failed to parse state ID {:?}: {}", entry, s, e),
             FetchingError::PopulationParsing(entry, s, e)
                 => write!(f, "entry {}: failed to parse population {:?}: {}", entry, s, e),
-            FetchingError::DoseNumberParsing(entry, s, e)
-                => write!(f, "entry {}: failed to parse dose number {:?}: {}", entry, s, e),
             FetchingError::DoseCountParsing(entry, s, e)
                 => write!(f, "entry {}: failed to parse dose count {:?}: {}", entry, s, e),
             FetchingError::CertificateCountParsing(entry, s, e)
@@ -52,7 +49,7 @@ impl std::error::Error for FetchingError {
 
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub(crate) struct VaccinationStats {
-    pub dose_to_count: HashMap<usize, BigUint>,
+    pub dose_to_count: HashMap<String, BigUint>,
 }
 impl VaccinationStats {
     pub fn new() -> Self {
@@ -259,11 +256,10 @@ impl VaccineDatabase {
             }
             cur_state_date = Some(this_state_date);
 
-            let dose_number_str = entry.get("dose_number")
-                .ok_or_else(|| FetchingError::MissingField(entry_num, "dose_number".to_owned()))?;
-            let dose_number: usize = dose_number_str
-                .parse()
-                .map_err(|e| FetchingError::DoseNumberParsing(entry_num, dose_number_str.clone(), e))?;
+            let dose_number = entry.get("dose_number")
+                .ok_or_else(|| FetchingError::MissingField(entry_num, "dose_number".to_owned()))?
+                .trim()
+                .to_owned();
 
             let dose_count_str = entry.get("doses_administered_cumulative")
                 .ok_or_else(|| FetchingError::MissingField(entry_num, "doses_administered_cumulative".to_owned()))?;
