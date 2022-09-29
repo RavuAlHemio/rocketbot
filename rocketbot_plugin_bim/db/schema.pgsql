@@ -29,3 +29,8 @@ SELECT r.id, r.company, r.rider_username, r."timestamp", r.line
 FROM bim.rides r
 INNER JOIN bim.ride_vehicles rv ON rv.ride_id = r.id
 ;
+
+CREATE TABLE bim.schema_revision
+( sch_rev bigint NOT NULL
+);
+INSERT INTO bim.schema_revision (sch_rev) VALUES (2);
