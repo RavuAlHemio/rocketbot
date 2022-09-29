@@ -159,8 +159,8 @@ impl VehicleInfoBuilder {
     }
 
     pub fn try_build(self) -> Result<VehicleInfo, Self> {
-        let number = match self.number {
-            Some(n) => n,
+        let number = match &self.number {
+            Some(n) => n.clone(),
             None => return Err(self),
         };
         let vehicle_class = match self.vehicle_class {
@@ -543,7 +543,7 @@ async fn main() {
         }
     }
 
-    vehicles.sort_unstable_by_key(|v| v.number);
+    vehicles.sort_unstable_by_key(|v| v.number.clone());
 
     // clear out duplicates
     let mut i = 1;

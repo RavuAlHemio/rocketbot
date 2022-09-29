@@ -85,7 +85,7 @@ impl AddLookbackFlags for CommandDefinitionBuilder {
 }
 
 
-pub type VehicleNumber = u32;
+pub type VehicleNumber = String;
 
 
 macro_rules! write_expect {
@@ -357,7 +357,7 @@ impl BimPlugin {
             },
         };
         let vehicle_hash_map: HashMap<VehicleNumber, VehicleInfo> = vehicles.drain(..)
-            .map(|vi| (vi.number, vi))
+            .map(|vi| (vi.number.clone(), vi))
             .collect();
         Some(vehicle_hash_map)
     }
@@ -499,12 +499,11 @@ impl BimPlugin {
             },
         };
 
-        async fn get_last_ride(me: &BimPlugin, config: &Config, username: &str, company: &str, vehicle_number: VehicleNumber) -> Option<String> {
+        async fn get_last_ride(me: &BimPlugin, config: &Config, username: &str, company: &str, vehicle_number: &VehicleNumber) -> Option<String> {
             let ride_conn = match me.connect_ride_db(config).await {
                 Ok(c) => c,
                 Err(_) => return None,
             };
-            let vehicle_number_i64: i64 = vehicle_number.into();
 
             // query ride count
             let count_row_opt_res = ride_conn.query_opt(
@@ -519,7 +518,7 @@ impl BimPlugin {
                         r.company = $1
                         AND rv.vehicle_number = $2
                 ",
-                &[&company, &vehicle_number_i64],
+                &[&company, &vehicle_number],
             ).await;
             let count: i64 = match count_row_opt_res {
                 Ok(Some(cr)) => cr.get(0),
@@ -559,7 +558,7 @@ impl BimPlugin {
                         ",
                         operator,
                     ),
-                    &[&company, &vehicle_number_i64, &username],
+                    &[&company, &vehicle_number, &username],
                 ).await;
                 match ride_row_opt_res {
                     Ok(Some(lrr)) => {
@@ -587,7 +586,7 @@ impl BimPlugin {
 
             Some(ret)
         }
-        if let Some(last_ride) = get_last_ride(&self, &config_guard, &channel_message.message.sender.username, &company, number).await {
+        if let Some(last_ride) = get_last_ride(&self, &config_guard, &channel_message.message.sender.username, &company, &number).await {
             write_expect!(response, "\n{}", last_ride);
         }
 
@@ -1034,10 +1033,10 @@ impl BimPlugin {
             },
         };
 
-        let mut count_to_vehicles: BTreeMap<i64, Vec<(String, i64)>> = BTreeMap::new();
+        let mut count_to_vehicles: BTreeMap<i64, Vec<(String, String)>> = BTreeMap::new();
         for row in &rows {
             let company: String = row.get(0);
-            let vehicle_number: i64 = row.get(1);
+            let vehicle_number: String = row.get(1);
             let total_ride_count: i64 = row.get(2);
 
             count_to_vehicles
@@ -1375,11 +1374,7 @@ impl BimPlugin {
         for row in rows {
             let rider_username: String = row.get(0);
             let company: String = row.get(1);
-            let vehicle_number_i64: i64 = row.get(2);
-            let vehicle_number: VehicleNumber = match vehicle_number_i64.try_into() {
-                Ok(vn) => vn,
-                Err(_) => continue,
-            };
+            let vehicle_number: String = row.get(2);
             let ride_count: i64 = row.get(3);
 
             if let Some(ru) = rider_username_opt.as_ref() {
@@ -1407,7 +1402,7 @@ impl BimPlugin {
                     ride_count_to_vehicles
                         .entry(*ride_ct)
                         .or_insert_with(|| BTreeSet::new())
-                        .insert((comp.clone(), *veh_no));
+                        .insert((comp.clone(), veh_no.clone()));
                 }
             }
 
@@ -1845,11 +1840,7 @@ impl BimPlugin {
         let mut type_to_count: BTreeMap<(String, String), i64> = BTreeMap::new();
         for row in rows {
             let company: String = row.get(0);
-            let vehicle_number_i64: i64 = row.get(1);
-            let vehicle_number: VehicleNumber = match vehicle_number_i64.try_into() {
-                Ok(vn) => vn,
-                Err(_) => continue,
-            };
+            let vehicle_number: String = row.get(1);
             let ride_count: i64 = row.get(2);
 
             let bim_database_opt = company_to_bim_database_opt
@@ -2059,12 +2050,16 @@ impl BimPlugin {
         };
 
         let lines: Vec<String> = if wants_precise {
-            let mut type_to_ranges: BTreeMap<String, RangeSet<VehicleNumber>> = BTreeMap::new();
-            for (&veh_id, veh_info) in database.iter() {
+            let mut type_to_ranges: BTreeMap<String, RangeSet<u64>> = BTreeMap::new();
+            for (veh_id, veh_info) in database.iter() {
+                let veh_id_u64 = match veh_id.parse() {
+                    Ok(vi) => vi,
+                    Err(_) => continue,
+                };
                 type_to_ranges
                     .entry(veh_info.type_code.clone())
                     .or_insert_with(|| RangeSet::new())
-                    .insert(veh_id);
+                    .insert(veh_id_u64);
             }
 
             type_to_ranges.iter()
@@ -2085,18 +2080,18 @@ impl BimPlugin {
                 .collect()
         } else {
             let mut type_to_range: BTreeMap<String, (VehicleNumber, VehicleNumber)> = BTreeMap::new();
-            for (&veh_id, veh_info) in database.iter() {
+            for (veh_id, veh_info) in database.iter() {
                 type_to_range
                     .entry(veh_info.type_code.clone())
                     .and_modify(|(old_low, old_high)| {
-                        if *old_low > veh_id {
-                            *old_low = veh_id;
+                        if &*old_low > veh_id {
+                            *old_low = veh_id.clone();
                         }
-                        if *old_high < veh_id {
-                            *old_high = veh_id;
+                        if &*old_high < veh_id {
+                            *old_high = veh_id.clone();
                         }
                     })
-                    .or_insert((veh_id, veh_id));
+                    .or_insert((veh_id.clone(), veh_id.clone()));
             }
 
             type_to_range.iter()
@@ -2207,11 +2202,7 @@ impl BimPlugin {
         };
         let mut ridden_vehicles: HashSet<VehicleNumber> = HashSet::new();
         for row in rows {
-            let vehicle_number_i64: i64 = row.get(0);
-            let vehicle_number: VehicleNumber = match vehicle_number_i64.try_into() {
-                Ok(vn) => vn,
-                Err(_) => continue,
-            };
+            let vehicle_number: String = row.get(0);
             ridden_vehicles.insert(vehicle_number);
         }
 
@@ -2711,8 +2702,7 @@ impl BimPlugin {
         let mut max_rider_count_opt = None;
         for ride_row in ride_rows {
             let company: String = ride_row.get(0);
-            let vehicle_number_i64: i64 = ride_row.get(1);
-            let vehicle_number: VehicleNumber = vehicle_number_i64.try_into().unwrap();
+            let vehicle_number: String = ride_row.get(1);
             let rider_count: i64 = ride_row.get(2);
 
             max_rider_count_opt = Some(rider_count);
@@ -3264,30 +3254,28 @@ pub async fn add_ride(
 
     let mut vehicle_results = Vec::new();
     for vehicle in vehicles {
-        let vehicle_number_i64: i64 = vehicle.number.into();
-
         let prev_my_count_row = ride_conn.query_one(
             &prev_my_count_stmt,
-            &[&company, &vehicle_number_i64, &rider_username],
+            &[&company, &vehicle.number, &rider_username],
         ).await?;
         let prev_my_count: i64 = prev_my_count_row.get(0);
 
         let prev_my_row_opt = ride_conn.query_opt(
             &prev_my_row_stmt,
-            &[&company, &vehicle_number_i64, &rider_username],
+            &[&company, &vehicle.number, &rider_username],
         ).await?;
         let prev_my_timestamp: Option<DateTime<Local>> = prev_my_row_opt.as_ref().map(|r| r.get(0));
         let prev_my_line: Option<String> = prev_my_row_opt.as_ref().map(|r| r.get(1)).flatten();
 
         let prev_other_count_row = ride_conn.query_one(
             &prev_other_count_stmt,
-            &[&company, &vehicle_number_i64, &rider_username],
+            &[&company, &vehicle.number, &rider_username],
         ).await?;
         let prev_other_count: i64 = prev_other_count_row.get(0);
 
         let prev_other_row_opt = ride_conn.query_opt(
             &prev_other_row_stmt,
-            &[&company, &vehicle_number_i64, &rider_username],
+            &[&company, &vehicle.number, &rider_username],
         ).await?;
         let prev_other_timestamp: Option<DateTime<Local>> = prev_other_row_opt.as_ref().map(|r| r.get(0));
         let prev_other_line: Option<String> = prev_other_row_opt.as_ref().map(|r| r.get(1)).flatten();
@@ -3334,12 +3322,11 @@ pub async fn add_ride(
     let insert_vehicle_stmt = ride_conn.prepare(INSERT_VEHICLE_STMT_STR).await?;
 
     for vehicle in vehicles {
-        let vehicle_number_i64: i64 = vehicle.number.into();
         ride_conn.execute(
             &insert_vehicle_stmt,
             &[
                 &ride_id,
-                &vehicle_number_i64,
+                &vehicle.number,
                 &vehicle.type_code,
                 &vehicle.spec_position,
                 &vehicle.as_part_of_fixed_coupling,
@@ -3368,12 +3355,11 @@ async fn replace_ride_vehicles(
     ).await?;
 
     for vehicle in vehicles {
-        let vehicle_number_i64: i64 = vehicle.number.into();
         ride_conn.execute(
             &insert_vehicle_stmt,
             &[
                 &ride_id,
-                &vehicle_number_i64,
+                &vehicle.number,
                 &vehicle.type_code,
                 &vehicle.spec_position,
                 &vehicle.as_part_of_fixed_coupling,
@@ -3416,18 +3402,14 @@ fn spec_to_vehicles(
 ) -> Result<Vec<NewVehicleEntry>, IncrementBySpecError> {
     let vehicle_num_strs: Vec<&str> = vehicles_str.split("+").collect();
     let mut vehicle_nums = Vec::new();
-    for &vehicle_num_str in &vehicle_num_strs {
-        let vehicle_num: VehicleNumber = match vehicle_num_str.parse() {
-            Ok(vn) => vn,
-            Err(e) => return Err(IncrementBySpecError::VehicleNumberParseFailure(vehicle_num_str.to_owned(), e)),
-        };
+    for &vehicle_num in &vehicle_num_strs {
         if !allow_fixed_coupling_combos {
             if let Some(bim_database) = bim_database_opt {
-                if let Some(veh) = bim_database.get(&vehicle_num) {
+                if let Some(veh) = bim_database.get(vehicle_num) {
                     if veh.fixed_coupling.len() > 0 && vehicle_num_strs.len() > 1 {
                         // this vehicle is in a fixed coupling but we have more than one vehicle
                         // this is forbidden
-                        return Err(IncrementBySpecError::FixedCouplingCombo(vehicle_num));
+                        return Err(IncrementBySpecError::FixedCouplingCombo(vehicle_num.to_owned()));
                     }
                 }
             }
@@ -3438,29 +3420,29 @@ fn spec_to_vehicles(
     // also count vehicles ridden in a fixed coupling with the given vehicle
     let mut all_vehicles: Vec<NewVehicleEntry> = Vec::new();
     let explicit_vehicle_num_set: HashSet<VehicleNumber> = vehicle_nums.iter()
-        .map(|vn| *vn)
+        .map(|vn| (*vn).to_owned())
         .collect();
     let mut seen_vehicles: HashSet<VehicleNumber> = HashSet::new();
     for (spec_pos, &vehicle_num) in vehicle_nums.iter().enumerate() {
         let mut added_fixed_coupling = false;
         let mut type_code = None;
         if let Some(bim_database) = bim_database_opt {
-            if let Some(veh) = bim_database.get(&vehicle_num) {
+            if let Some(veh) = bim_database.get(vehicle_num) {
                 type_code = Some(veh.type_code.clone());
 
-                for (fc_pos, &fc) in veh.fixed_coupling.iter().enumerate() {
-                    if !seen_vehicles.insert(fc) {
+                for (fc_pos, fc) in veh.fixed_coupling.iter().enumerate() {
+                    if !seen_vehicles.insert(fc.clone()) {
                         // we've seen this vehicle before
                         continue;
                     }
 
-                    let fc_type_code = bim_database.get(&fc)
+                    let fc_type_code = bim_database.get(fc)
                         .map(|veh| veh.type_code.clone());
                     let vehicle = NewVehicleEntry {
-                        number: fc,
+                        number: fc.clone(),
                         type_code: fc_type_code,
                         spec_position: spec_pos.try_into().unwrap(),
-                        as_part_of_fixed_coupling: !explicit_vehicle_num_set.contains(&fc),
+                        as_part_of_fixed_coupling: !explicit_vehicle_num_set.contains(fc),
                         fixed_coupling_position: fc_pos.try_into().unwrap(),
                     };
                     all_vehicles.push(vehicle);
@@ -3470,16 +3452,16 @@ fn spec_to_vehicles(
         }
 
         if !added_fixed_coupling {
-            if !seen_vehicles.insert(vehicle_num) {
+            if !seen_vehicles.insert(vehicle_num.to_owned()) {
                 // we've seen this vehicle before
                 continue;
             }
 
             let vehicle = NewVehicleEntry {
-                number: vehicle_num,
+                number: vehicle_num.to_owned(),
                 type_code,
                 spec_position: spec_pos.try_into().unwrap(),
-                as_part_of_fixed_coupling: !explicit_vehicle_num_set.contains(&vehicle_num),
+                as_part_of_fixed_coupling: !explicit_vehicle_num_set.contains(vehicle_num),
                 fixed_coupling_position: 0,
             };
             all_vehicles.push(vehicle);
@@ -3557,7 +3539,7 @@ pub async fn increment_rides_by_spec(
         let mut vehicle_ride_infos = Vec::new();
         for (new_vehicle, (lri_opt, ori_opt)) in all_vehicles.iter().zip(ride_info_vec.drain(..)) {
             vehicle_ride_infos.push(VehicleRideInfo {
-                vehicle_number: new_vehicle.number,
+                vehicle_number: new_vehicle.number.clone(),
                 ridden_within_fixed_coupling: new_vehicle.as_part_of_fixed_coupling,
                 last_ride: lri_opt,
                 last_ride_other_rider: ori_opt,

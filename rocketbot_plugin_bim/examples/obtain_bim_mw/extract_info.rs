@@ -69,15 +69,11 @@ fn parse_vehicle_numbers(text_value: &str, number_separator_regex: &Option<Regex
     let mut nums = Vec::new();
     if let Some(nsr) = number_separator_regex {
         for piece in nsr.split(text_value) {
-            if let Ok(vn) = piece.parse() {
-                nums.push(vn);
-            }
+            nums.push(piece.to_owned());
             // skip invalid values
         }
     } else {
-        if let Ok(vn) = text_value.parse() {
-            nums.push(vn);
-        }
+        nums.push(text_value.to_owned());
         // skip the value if it is invalid
     }
     nums
@@ -86,7 +82,7 @@ fn parse_vehicle_numbers(text_value: &str, number_separator_regex: &Option<Regex
 
 pub(crate) fn row_data_to_trams(page_config: &PageConfig, row_data: Vec<(String, String)>) -> BTreeMap<VehicleNumber, VehicleInfo> {
     let mut vehicles = BTreeMap::new();
-    let mut vehicle = VehicleInfo::new(0, page_config.vehicle_class, page_config.type_code.clone());
+    let mut vehicle = VehicleInfo::new("0".to_owned(), page_config.vehicle_class, page_config.type_code.clone());
 
     let all_rows = page_config.common_props.iter()
         .chain(row_data.iter().map(|(k, v)| (k, v)));
@@ -157,14 +153,14 @@ pub(crate) fn row_data_to_trams(page_config: &PageConfig, row_data: Vec<(String,
     let fixed_coupling_partners: IndexSet<VehicleNumber> = if page_config.fixed_couplings {
         numbers_types
             .iter()
-            .map(|(num, _tc)| *num)
+            .map(|(num, _tc)| num.clone())
             .collect()
     } else {
         IndexSet::new()
     };
 
     for (vehicle_number, vehicle_type_code) in &numbers_types {
-        vehicle.number = *vehicle_number;
+        vehicle.number = vehicle_number.clone();
 
         if let Some(ctc) = &page_config.common_type_code {
             vehicle.type_code = ctc.clone();
@@ -178,7 +174,7 @@ pub(crate) fn row_data_to_trams(page_config: &PageConfig, row_data: Vec<(String,
 
         vehicle.fixed_coupling = fixed_coupling_partners.clone();
 
-        vehicles.insert(vehicle.number, vehicle.clone());
+        vehicles.insert(vehicle.number.clone(), vehicle.clone());
     }
 
     vehicles

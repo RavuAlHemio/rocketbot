@@ -1,56 +1,5 @@
-CREATE OR REPLACE FUNCTION bim.reverse_bigint
-( val bigint
-) RETURNS bigint
-LANGUAGE plpgsql
-IMMUTABLE LEAKPROOF STRICT
-PARALLEL SAFE
-AS $$
-    DECLARE
-        result bigint NOT NULL := 0;
-        last_digit bigint NOT NULL := 0;
-        negate boolean NOT NULL := FALSE;
-    BEGIN
-        IF val IS NULL THEN
-            RETURN NULL;
-        END IF;
-        IF val < 0 THEN
-            val := -val;
-            negate := TRUE;
-        END IF;
-        WHILE val > 0 LOOP
-            -- pick off last digit
-            last_digit := MOD(val, 10);
-            val := DIV(val, 10);
-            result := result * 10;
-            result := result + last_digit;
-        END LOOP;
-        IF negate THEN
-            result := -result;
-        END IF;
-        RETURN result;
-    END;
-$$;
-
-CREATE OR REPLACE FUNCTION bim.char_to_bigint_or_null
+CREATE OR REPLACE FUNCTION bim.same_chars
 ( val character varying
-) RETURNS bigint
-LANGUAGE plpgsql
-IMMUTABLE LEAKPROOF STRICT
-PARALLEL SAFE
-AS $$
-    BEGIN
-        IF val IS NULL THEN
-            RETURN NULL;
-        END IF;
-        RETURN CAST(val AS bigint);
-    EXCEPTION
-        WHEN invalid_text_representation OR numeric_value_out_of_range THEN
-            RETURN NULL;
-    END;
-$$;
-
-CREATE OR REPLACE FUNCTION bim.same_digits
-( val bigint
 , min_length bigint
 ) RETURNS boolean
 LANGUAGE plpgsql
@@ -58,23 +7,21 @@ IMMUTABLE LEAKPROOF STRICT
 PARALLEL SAFE
 AS $$
     DECLARE
-        val_str character varying;
         digit character;
     BEGIN
         IF val IS NULL OR min_length IS NULL THEN
             RETURN NULL;
         END IF;
-        val_str := CAST(val AS character varying);
-        IF LENGTH(val_str) < min_length THEN
+        IF LENGTH(val) < min_length THEN
             RETURN FALSE;
         END IF;
-        IF LENGTH(val_str) < 2 THEN
+        IF LENGTH(val) < 2 THEN
             RETURN TRUE;
         END IF;
 
-        digit := SUBSTRING(val_str FROM 1 FOR 1);
-        FOR i IN 2..LENGTH(val_str) LOOP
-            IF SUBSTRING(val_str FROM i FOR 1) <> digit THEN
+        digit := SUBSTRING(val FROM 1 FOR 1);
+        FOR i IN 2..LENGTH(val) LOOP
+            IF SUBSTRING(val FROM i FOR 1) <> digit THEN
                 RETURN FALSE;
             END IF;
         END LOOP;
@@ -196,7 +143,7 @@ AS $$
             last_vehicle := -2;
             FOR vehicle_num IN
                 SELECT DISTINCT vehicle_number
-                FROM bim.rides_and_vehicles
+                FROM bim.rides_and_numeric_vehicles
                 WHERE company = comp
                 AND rider_username = rider
                 AND (
@@ -252,7 +199,7 @@ AS $$
             last_timestamps := CAST(ARRAY[] AS timestamp with time zone[]);
             FOR vehicle_num, ts IN
                 SELECT vehicle_number, MIN("timestamp")
-                FROM bim.rides_and_vehicles
+                FROM bim.rides_and_numeric_vehicles
                 WHERE company = comp
                 AND rider_username = rider
                 GROUP BY vehicle_number
@@ -364,7 +311,7 @@ STABLE STRICT
 AS $$
     DECLARE
         comp character varying;
-        veh_num bigint;
+        veh_num character varying;
         current_day_sequence bigint;
         days_elapsed bigint;
         previous_timestamp timestamp with time zone;
@@ -424,7 +371,7 @@ AS $$
                 rider_username, company, vehicle_number, MIN("timestamp")
             FROM bim.rides_and_vehicles
             WHERE
-                bim.same_digits(vehicle_number, min_digits)
+                bim.same_chars(vehicle_number, min_digits)
             GROUP BY
                 rider_username, company, vehicle_number
         ),
@@ -446,9 +393,9 @@ CREATE OR REPLACE VIEW bim.rider_first_palindrome_vehicle_ride AS
             rider_username, company, vehicle_number, MIN("timestamp")
         FROM bim.rides_and_vehicles
         WHERE
-            vehicle_number > 99
-            AND vehicle_number = bim.reverse_bigint(vehicle_number)
-            AND NOT bim.same_digits(vehicle_number, 0)
+            LENGTH(vehicle_number) > 2
+            AND vehicle_number = reverse(vehicle_number)
+            AND NOT bim.same_chars(vehicle_number, 0)
         GROUP BY
             rider_username, company, vehicle_number
     )
@@ -464,7 +411,7 @@ CREATE OR REPLACE FUNCTION bim.same_ride_to_minute_interval_ago
 ( rider_username character varying(256)
 , company character varying(256)
 , line character varying(32)
-, vehicle_number bigint
+, vehicle_number character varying(256)
 , "timestamp" timestamp with time zone
 )
 LANGUAGE sql
@@ -505,7 +452,7 @@ AS $$
     SELECT 1, MIN("timestamp")
     FROM bim.rides_and_vehicles rav1
     WHERE rav1.rider_username = rider
-    AND rav1.vehicle_number = 666
+    AND rav1.vehicle_number = '666'
 
     UNION ALL
 
@@ -515,7 +462,7 @@ AS $$
     SELECT 2, MIN("timestamp")
     FROM bim.rides_and_vehicles rav2
     WHERE rav2.rider_username = rider
-    AND rav2.vehicle_number = 69
+    AND rav2.vehicle_number = '69'
 
     UNION ALL
 
@@ -525,7 +472,7 @@ AS $$
     SELECT 3, MIN("timestamp")
     FROM bim.rides_and_vehicles rav3
     WHERE rav3.rider_username = rider
-    AND rav3.line = CAST(rav3.vehicle_number AS character varying)
+    AND rav3.line = rav3.vehicle_number
 
     UNION ALL
 
@@ -561,12 +508,13 @@ AS $$
     UNION ALL
 
     -- NAME: Mirror Home Line
-    -- DESCR: Ride a vehicle (of any company) where the vehicle number is the reverse of the line.
+    -- DESCR: Ride a vehicle (of any company) where the vehicle number is the reverse of the line (but not the same as the line).
     -- ORDER: 2,2 vehicle numbers in relation to line numbers
     SELECT 8, MIN("timestamp")
     FROM bim.rides_and_vehicles rav8
     WHERE rav8.rider_username = rider
-    AND REVERSE(rav8.line) = CAST(rav8.vehicle_number AS character varying)
+    AND REVERSE(rav8.line) = rav8.vehicle_number
+    AND rav8.line <> rav8.vehicle_number
 
     UNION ALL
 
@@ -576,8 +524,9 @@ AS $$
     SELECT 9, MIN("timestamp")
     FROM bim.rides_and_vehicles rav9
     WHERE rav9.rider_username = rider
-    AND rav9.vehicle_number BETWEEN 707 AND 797
-    AND MOD(rav9.vehicle_number, 10) = 7
+    AND LENGTH(rav9.vehicle_number) = 3
+    AND SUBSTRING(rav9.vehicle_number FROM 1 FOR 1) = '7'
+    AND SUBSTRING(rav9.vehicle_number FROM 3 FOR 1) = '7'
 
     UNION ALL
 
@@ -706,8 +655,8 @@ AS $$
     SELECT 22, MIN(rav22."timestamp")
     FROM bim.rides_and_vehicles rav22
     WHERE rav22.rider_username = rider
-    AND rav22.vehicle_number <> 666
-    AND POSITION('666' IN CAST(rav22.vehicle_number AS character varying)) > 0
+    AND rav22.vehicle_number <> '666'
+    AND POSITION('666' IN rav22.vehicle_number) > 0
 
     UNION ALL
 
@@ -717,8 +666,8 @@ AS $$
     SELECT 23, MIN(rav23."timestamp")
     FROM bim.rides_and_vehicles rav23
     WHERE rav23.rider_username = rider
-    AND rav23.vehicle_number <> 69
-    AND POSITION('69' IN CAST(rav23.vehicle_number AS character varying)) > 0
+    AND rav23.vehicle_number <> '69'
+    AND POSITION('69' IN rav23.vehicle_number) > 0
 
     UNION ALL
 
@@ -726,7 +675,7 @@ AS $$
     -- DESCR: Ride a vehicle (of any company) whose vehicle number is divisible by (but not equal to) its line number.
     -- ORDER: 2,3 vehicle numbers in relation to line numbers
     SELECT 24, MIN(rav24."timestamp")
-    FROM bim.rides_and_vehicles rav24
+    FROM bim.rides_and_numeric_vehicles rav24
     WHERE rav24.rider_username = rider
     AND rav24.vehicle_number > bim.char_to_bigint_or_null(rav24.line)
     AND MOD(rav24.vehicle_number, bim.char_to_bigint_or_null(rav24.line)) = 0
@@ -737,7 +686,7 @@ AS $$
     -- DESCR: Ride a vehicle (of any company) on a line whose number is divisible by (but not equal to) the vehicle's number.
     -- ORDER: 2,4 vehicle numbers in relation to line numbers
     SELECT 25, MIN(rav25."timestamp")
-    FROM bim.rides_and_vehicles rav25
+    FROM bim.rides_and_numeric_vehicles rav25
     WHERE rav25.rider_username = rider
     AND bim.char_to_bigint_or_null(rav25.line) > rav25.vehicle_number
     AND MOD(bim.char_to_bigint_or_null(rav25.line), rav25.vehicle_number) = 0
@@ -748,7 +697,7 @@ AS $$
     -- DESCR: Ride a vehicle (of any company) whose vehicle number is a four-digit prime.
     -- ORDER: 1,10 special vehicle numbers
     SELECT 26, MIN(rav26."timestamp")
-    FROM bim.rides_and_vehicles rav26
+    FROM bim.rides_and_numeric_vehicles rav26
     WHERE rav26.rider_username = rider
     AND rav26.vehicle_number BETWEEN 1000 AND 9999
     AND bim.is_prime(rav26.vehicle_number)
@@ -759,7 +708,7 @@ AS $$
     -- DESCR: Ride a vehicle (of any company) whose vehicle number is a three-digit prime.
     -- ORDER: 1,11 special vehicle numbers
     SELECT 27, MIN(rav27."timestamp")
-    FROM bim.rides_and_vehicles rav27
+    FROM bim.rides_and_numeric_vehicles rav27
     WHERE rav27.rider_username = rider
     AND rav27.vehicle_number BETWEEN 100 AND 999
     AND bim.is_prime(rav27.vehicle_number)
@@ -770,7 +719,7 @@ AS $$
     -- DESCR: Ride a vehicle (of any company) whose vehicle number is a two-digit prime.
     -- ORDER: 1,12 special vehicle numbers
     SELECT 28, MIN(rav28."timestamp")
-    FROM bim.rides_and_vehicles rav28
+    FROM bim.rides_and_numeric_vehicles rav28
     WHERE rav28.rider_username = rider
     AND rav28.vehicle_number BETWEEN 10 AND 99
     AND bim.is_prime(rav28.vehicle_number)
@@ -781,7 +730,7 @@ AS $$
     -- DESCR: Ride a vehicle (of any company) whose vehicle number is a single-digit prime.
     -- ORDER: 1,13 special vehicle numbers
     SELECT 29, MIN(rav29."timestamp")
-    FROM bim.rides_and_vehicles rav29
+    FROM bim.rides_and_numeric_vehicles rav29
     WHERE rav29.rider_username = rider
     AND rav29.vehicle_number BETWEEN 1 AND 9
     AND bim.is_prime(rav29.vehicle_number)
@@ -792,7 +741,7 @@ AS $$
     -- DESCR: Ride a vehicle (of any company) whose at least three-digit number's decimal digits are in ascending order.
     -- ORDER: 1,14 special vehicle numbers
     SELECT 30, MIN(rav30."timestamp")
-    FROM bim.rides_and_vehicles rav30
+    FROM bim.rides_and_numeric_vehicles rav30
     WHERE rav30.rider_username = rider
     AND rav30.vehicle_number > 99
     AND bim.is_in_sequence(rav30.vehicle_number, TRUE)
@@ -803,7 +752,7 @@ AS $$
     -- DESCR: Ride a vehicle (of any company) whose at least three-digit number's decimal digits are in descending order.
     -- ORDER: 1,15 special vehicle numbers
     SELECT 31, MIN(rav31."timestamp")
-    FROM bim.rides_and_vehicles rav31
+    FROM bim.rides_and_numeric_vehicles rav31
     WHERE rav31.rider_username = rider
     AND rav31.vehicle_number > 99
     AND bim.is_in_sequence(rav31.vehicle_number, FALSE)

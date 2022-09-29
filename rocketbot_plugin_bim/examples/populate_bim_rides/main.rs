@@ -47,7 +47,7 @@ async fn main() {
         let mut vehicles: Vec<VehicleInfo> = serde_json::from_reader(f)
             .expect("failed to parse bim database");
         let vehicle_hash_map: HashMap<VehicleNumber, VehicleInfo> = vehicles.drain(..)
-            .map(|vi| (vi.number, vi))
+            .map(|vi| (vi.number.clone(), vi))
             .collect();
         Some(vehicle_hash_map)
     } else {

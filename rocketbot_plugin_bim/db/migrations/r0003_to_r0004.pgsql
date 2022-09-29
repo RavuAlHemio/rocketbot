@@ -1,27 +1,18 @@
-CREATE SCHEMA bim;
+DROP VIEW bim.rides_and_vehicles;
 
-CREATE SEQUENCE bim.rides__id AS bigint;
-
-CREATE TABLE bim.rides
-( id bigint NOT NULL DEFAULT nextval('bim.rides__id')
-, company character varying(256) NOT NULL
-, rider_username character varying(256) NOT NULL
-, "timestamp" timestamp with time zone NOT NULL
-, line character varying(32) NULL
-, CONSTRAINT pkey_rides PRIMARY KEY (id)
-);
-
-CREATE TABLE bim.ride_vehicles
+CREATE TABLE bim.ride_vehicles2
 ( ride_id bigint NOT NULL
 , vehicle_number character varying(256) NOT NULL
 , vehicle_type character varying(256) NULL
 , spec_position bigint NOT NULL
 , as_part_of_fixed_coupling boolean NOT NULL
 , fixed_coupling_position bigint NOT NULL
-, CONSTRAINT fkey_ride_vehicles_ride_id FOREIGN KEY (ride_id) REFERENCES bim.rides (id) ON DELETE CASCADE DEFERRABLE
-, CONSTRAINT pkey_ride_vehicles PRIMARY KEY (ride_id, vehicle_number)
-, CONSTRAINT check_ride_vehicles CHECK (vehicle_number >= 0)
+, CONSTRAINT fkey_ride_vehicles2_ride_id FOREIGN KEY (ride_id) REFERENCES bim.rides (id) ON DELETE CASCADE DEFERRABLE
+, CONSTRAINT pkey_ride_vehicles2 PRIMARY KEY (ride_id, vehicle_number)
 );
+INSERT INTO bim.ride_vehicles2 SELECT * FROM bim.ride_vehicles;
+DROP TABLE bim.ride_vehicles;
+ALTER TABLE bim.ride_vehicles2 RENAME TO ride_vehicles;
 
 CREATE VIEW bim.rides_and_vehicles AS
 SELECT r.id, r.company, r.rider_username, r."timestamp", r.line
@@ -57,8 +48,4 @@ WHERE
     bim.char_to_bigint_or_null(rv.vehicle_number) IS NOT NULL
 ;
 
-
-CREATE TABLE bim.schema_revision
-( sch_rev bigint NOT NULL
-);
-INSERT INTO bim.schema_revision (sch_rev) VALUES (4);
+UPDATE bim.schema_revision SET sch_rev=4;
