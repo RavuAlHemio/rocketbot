@@ -24,6 +24,9 @@ pub(crate) fn unref<T: Copy>(value: &&T) -> askama::Result<T> {
 pub(crate) fn percentify<V: Copifiable<f64>>(value: V) -> askama::Result<String> {
     Ok(format!("{:.2}%", value.copify() * 100.0))
 }
+pub(crate) fn refify<T>(value: &T) -> askama::Result<&T> {
+    Ok(value)
+}
 
 #[derive(Clone, Copy, Debug, Eq, Hash, PartialEq)]
 pub(crate) enum ColorError {

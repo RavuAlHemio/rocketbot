@@ -1,6 +1,8 @@
 use std::borrow::Cow;
+use std::cmp::Ordering;
 use std::collections::{BTreeMap, BTreeSet, HashMap, HashSet};
 use std::convert::Infallible;
+use std::fmt;
 use std::fs::File;
 use std::str::FromStr;
 
@@ -13,7 +15,7 @@ use png;
 use rocketbot_bim_achievements::{AchievementDef, ACHIEVEMENT_DEFINITIONS};
 use rocketbot_date_time::DateTimeLocalWithWeekday;
 use rocketbot_string::natural_compare;
-use serde::{Deserialize, Serialize, Serializer};
+use serde::{Deserialize, Deserializer, Serialize, Serializer};
 use serde::ser::SerializeStruct;
 use tokio_postgres::types::ToSql;
 
@@ -24,7 +26,39 @@ use crate::{
 use crate::templating::filters;
 
 
-type VehicleNumber = String;
+#[derive(Clone, Debug, Default, Hash, Eq, PartialEq)]
+struct VehicleNumber(String);
+impl VehicleNumber {
+    pub fn as_str(&self) -> &str {
+        self.0.as_str()
+    }
+}
+impl fmt::Display for VehicleNumber {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        self.0.fmt(f)
+    }
+}
+impl PartialOrd for VehicleNumber {
+    fn partial_cmp(&self, other: &Self) -> Option<Ordering> {
+        Some(natural_compare(&self.0, &other.0))
+    }
+}
+impl Ord for VehicleNumber {
+    fn cmp(&self, other: &Self) -> Ordering {
+        self.partial_cmp(other).unwrap()
+    }
+}
+impl<'de> Deserialize<'de> for VehicleNumber {
+    fn deserialize<D: Deserializer<'de>>(deserializer: D) -> Result<Self, D::Error> {
+        let inner = String::deserialize(deserializer)?;
+        Ok(Self(inner))
+    }
+}
+impl Serialize for VehicleNumber {
+    fn serialize<S: Serializer>(&self, serializer: S) -> Result<S::Ok, S::Error> {
+        self.0.serialize(serializer)
+    }
+}
 
 
 #[derive(Clone, Debug, Deserialize, Eq, Hash, PartialEq, Serialize)]
@@ -283,7 +317,7 @@ struct VehicleDetailsPart {
 }
 impl VehicleDetailsPart {
     pub fn try_from_json(vehicle: &serde_json::Value) -> Option<Self> {
-        let number = vehicle["number"].as_str()?.to_owned();
+        let number = VehicleNumber(vehicle["number"].as_str()?.to_owned());
         let type_code = vehicle["type_code"].as_str()?.to_owned();
         let vehicle_class = vehicle["vehicle_class"].as_str()?.to_owned();
         let in_service_since = vehicle["in_service_since"]
@@ -305,7 +339,7 @@ impl VehicleDetailsPart {
             .as_array()?;
         let mut fixed_coupling = IndexSet::new();
         for fc_value in fixed_coupling_array {
-            let fc_number = fc_value.as_str()?.to_owned();
+            let fc_number = VehicleNumber(fc_value.as_str()?.to_owned());
             fixed_coupling.insert(fc_number);
         }
 
@@ -512,7 +546,7 @@ async fn obtain_company_to_bim_database() -> Option<BTreeMap<String, Option<BTre
         let mut bim_map: BTreeMap<VehicleNumber, serde_json::Value> = BTreeMap::new();
         for bim in bim_array {
             let number = match bim["number"].as_str() {
-                Some(bn) => bn.to_owned(),
+                Some(bn) => VehicleNumber(bn.to_owned()),
                 None => {
                     error!("number in {} in {:?} bim database file {:?} not a string", bim, company, bim_database_path);
                     continue;
@@ -562,9 +596,9 @@ async fn obtain_vehicle_extract() -> VehicleDatabaseExtract {
             let mut fixed_coupling_vns: Vec<VehicleNumber> = Vec::new();
             for fixed_coupling_value in fixed_coupling {
                 let fc = match fixed_coupling_value.as_str() {
-                    Some(n) => n.to_owned(),
+                    Some(n) => VehicleNumber(n.to_owned()),
                     None => {
-                        error!("fixed coupling value {} in {:?} bim database file not an i64", fixed_coupling_value, company);
+                        error!("fixed coupling value {} in {:?} bim database file not a string", fixed_coupling_value, company);
                         continue;
                     },
                 };
@@ -618,7 +652,7 @@ pub(crate) async fn handle_bim_rides(request: &Request<Body>) -> Result<Response
     let mut has_any_vehicle_type = false;
     for row in rows {
         let company: String = row.get(0);
-        let vehicle_number: String = row.get(1);
+        let vehicle_number = VehicleNumber(row.get(1));
         let ride_count: i64 = row.get(2);
         let last_line: Option<String> = row.get(3);
 
@@ -659,15 +693,9 @@ pub(crate) async fn handle_bim_rides(request: &Request<Body>) -> Result<Response
             .then_with(|| {
                 let mut left_sorted_vehicle_numbers = left.vehicle_numbers.clone();
                 let mut right_sorted_vehicle_numbers = right.vehicle_numbers.clone();
-                left_sorted_vehicle_numbers.sort_unstable_by(|l, r| natural_compare(l, r));
-                right_sorted_vehicle_numbers.sort_unstable_by(|l, r| natural_compare(l, r));
-                for (ln, rn) in left_sorted_vehicle_numbers.iter().zip(right_sorted_vehicle_numbers.iter()) {
-                    let pair_ord = natural_compare(ln, rn);
-                    if pair_ord.is_ne() {
-                        return pair_ord;
-                    }
-                }
-                left_sorted_vehicle_numbers.len().cmp(&right_sorted_vehicle_numbers.len())
+                left_sorted_vehicle_numbers.sort_unstable();
+                right_sorted_vehicle_numbers.sort_unstable();
+                left_sorted_vehicle_numbers.cmp(&right_sorted_vehicle_numbers)
             })
             .then_with(|| left.ride_count.cmp(&right.ride_count))
             .then_with(|| left.last_line.cmp(&right.last_line))
@@ -717,7 +745,7 @@ pub(crate) async fn handle_bim_types(request: &Request<Body>) -> Result<Response
     for row in rows {
         let rider_username: String = row.get(0);
         let company: String = row.get(1);
-        let vehicle_number: String = row.get(2);
+        let vehicle_number = VehicleNumber(row.get(2));
 
         company_to_vehicle_to_riders
             .entry(company)
@@ -866,7 +894,7 @@ pub(crate) async fn handle_bim_vehicles(request: &Request<Body>) -> Result<Respo
     };
     for vehicle_row in vehicle_rows {
         let company: String = vehicle_row.get(0);
-        let vehicle_number: String = vehicle_row.get(1);
+        let vehicle_number = VehicleNumber(vehicle_row.get(1));
         let ride_count: i64 = vehicle_row.get(2);
         let first_ride = RideInfo {
             rider: vehicle_row.get(3),
@@ -903,7 +931,7 @@ pub(crate) async fn handle_bim_vehicles(request: &Request<Body>) -> Result<Respo
     let mut all_riders: BTreeSet<String> = BTreeSet::new();
     for rider_vehicle_row in rider_vehicle_rows {
         let company: String = rider_vehicle_row.get(0);
-        let vehicle_number: String = rider_vehicle_row.get(1);
+        let vehicle_number = VehicleNumber(rider_vehicle_row.get(1));
         let rider_username: String = rider_vehicle_row.get(2);
         let ride_count: i64 = rider_vehicle_row.get(3);
 
@@ -1075,7 +1103,7 @@ pub(crate) async fn handle_bim_coverage(request: &Request<Body>) -> Result<Respo
         let mut max_ride_count: i64 = 0;
         for vehicle_row in vehicle_rows {
             let company: String = vehicle_row.get(0);
-            let vehicle_number: String = vehicle_row.get(1);
+            let vehicle_number = VehicleNumber(vehicle_row.get(1));
             let ride_count: i64 = vehicle_row.get(2);
             if max_ride_count < ride_count {
                 max_ride_count = ride_count;
@@ -1208,7 +1236,7 @@ pub(crate) async fn handle_bim_detail(request: &Request<Body>) -> Result<Respons
         None => return return_400("missing parameter \"vehicle\"", &query_pairs).await,
     };
     let vehicle_number: VehicleNumber = match vehicle_number_str.parse() {
-        Ok(vn) => vn,
+        Ok(vn) => VehicleNumber(vn),
         Err(_) => return return_400("invalid parameter value for \"vehicle\"", &query_pairs).await,
     };
 
@@ -1246,7 +1274,7 @@ pub(crate) async fn handle_bim_detail(request: &Request<Body>) -> Result<Respons
             AND rav.vehicle_number = $2
             ORDER BY rav.\"timestamp\" DESC, rav.id
         ",
-        &[&company, &vehicle_number],
+        &[&company, &vehicle_number.as_str()],
     ).await;
     let ride_rows = match ride_rows_res {
         Ok(rs) => rs,
@@ -1262,7 +1290,7 @@ pub(crate) async fn handle_bim_detail(request: &Request<Body>) -> Result<Respons
         let rider_username: String = ride_row.get(1);
         let timestamp: DateTime<Local> = ride_row.get(2);
         let line: Option<String> = ride_row.get(3);
-        let vehicle_number: String = ride_row.get(4);
+        let vehicle_number = VehicleNumber(ride_row.get(4));
         let spec_position: i64 = ride_row.get(5);
         let as_part_of_fixed_coupling: bool = ride_row.get(6);
         let fixed_coupling_position: i64 = ride_row.get(7);
@@ -1338,7 +1366,7 @@ pub(crate) async fn handle_bim_line_detail(request: &Request<Body>) -> Result<Re
         let rider_username: String = ride_row.get(1);
         let timestamp: DateTime<Local> = ride_row.get(2);
         let line: Option<String> = ride_row.get(3);
-        let vehicle_number: String = ride_row.get(4);
+        let vehicle_number = VehicleNumber(ride_row.get(4));
         let spec_position: i64 = ride_row.get(5);
         let as_part_of_fixed_coupling: bool = ride_row.get(6);
         let fixed_coupling_position: i64 = ride_row.get(7);
@@ -1438,7 +1466,7 @@ pub(crate) async fn handle_wide_bims(request: &Request<Body>) -> Result<Response
     let mut vehicle_to_riders: HashMap<(String, VehicleNumber), BTreeSet<String>> = HashMap::new();
     for ride_row in ride_rows {
         let company: String = ride_row.get(0);
-        let vehicle_number: String = ride_row.get(1);
+        let vehicle_number = VehicleNumber(ride_row.get(1));
         let rider_username: String = ride_row.get(2);
 
         vehicle_to_riders
@@ -1529,7 +1557,7 @@ pub(crate) async fn handle_top_bims(request: &Request<Body>) -> Result<Response<
     let mut count_to_vehicles: BTreeMap<i64, BTreeSet<(String, VehicleNumber)>> = BTreeMap::new();
     for ride_row in ride_rows {
         let company: String = ride_row.get(0);
-        let vehicle_number: String = ride_row.get(1);
+        let vehicle_number = VehicleNumber(ride_row.get(1));
         let ride_count: i64 = ride_row.get(2);
 
         count_to_vehicles
@@ -1629,14 +1657,13 @@ pub(crate) async fn handle_bim_coverage_field(request: &Request<Body>) -> Result
 
     let mut vehicles = HashSet::new();
     for vehicle_row in vehicle_rows {
-        let vehicle_number: String = vehicle_row.get(0);
-
+        let vehicle_number = VehicleNumber(vehicle_row.get(0));
         vehicles.insert(vehicle_number);
     }
 
     let mut pixels = Vec::with_capacity(bim_database.len());
     for vehicle in bim_database.values() {
-        let number: VehicleNumber = vehicle["number"].as_str().unwrap().to_owned();
+        let number = VehicleNumber(vehicle["number"].as_str().unwrap().to_owned());
         pixels.push(vehicles.contains(&number));
     }
 
@@ -1927,7 +1954,7 @@ pub(crate) async fn handle_bim_ride_by_id(request: &Request<Body>) -> Result<Res
                         line = Some(ride_row.get(3));
                     }
 
-                    let vehicle_number: String = ride_row.get(4);
+                    let vehicle_number = VehicleNumber(ride_row.get(4));
                     let vehicle_type: Option<String> = ride_row.get(5);
                     let spec_position: i64 = ride_row.get(6);
                     let as_part_of_fixed_coupling: bool = ride_row.get(7);

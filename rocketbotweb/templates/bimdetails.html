@@ -64,7 +64,7 @@
         {%- if !loop.first -%}
           +
         {%- endif -%}
-        {%- if fcvn == veh.number.as_str() -%}
+        {%- if fcvn == veh.number|refify -%}
           <strong class="this-vehicle">{{ fcvn }}</strong>
         {%- else -%}
           <a class="other-vehicle" href="?company={{ company|urlencode|escape }}&amp;vehicle={{ fcvn }}">{{ fcvn }}</a>
