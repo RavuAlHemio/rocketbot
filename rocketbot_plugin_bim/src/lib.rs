@@ -1007,7 +1007,7 @@ impl BimPlugin {
                 SELECT tr.company, tr.vehicle_number, tr.total_ride_count
                 FROM total_rides tr
                 WHERE tr.total_ride_count IN (SELECT total_ride_count FROM top_five_counts)
-                ORDER BY tr.total_ride_count DESC, tr.vehicle_number
+                ORDER BY tr.total_ride_count DESC, tr.vehicle_number USING OPERATOR(bim.<~<)
             ",
             company_block,
         );

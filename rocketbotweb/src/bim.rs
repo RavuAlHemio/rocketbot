@@ -12,6 +12,7 @@ use log::{error, warn};
 use png;
 use rocketbot_bim_achievements::{AchievementDef, ACHIEVEMENT_DEFINITIONS};
 use rocketbot_date_time::DateTimeLocalWithWeekday;
+use rocketbot_string::natural_compare;
 use serde::{Deserialize, Serialize, Serializer};
 use serde::ser::SerializeStruct;
 use tokio_postgres::types::ToSql;
@@ -49,18 +50,6 @@ impl RideRow {
             ride_count,
             last_line,
         }
-    }
-
-    pub fn sort_key(&self) -> (String, Vec<VehicleNumber>, i64, Option<String>) {
-        let mut sorted_vehicle_numbers = self.vehicle_numbers.clone();
-        sorted_vehicle_numbers.sort_unstable();
-
-        (
-            self.company.clone(),
-            sorted_vehicle_numbers,
-            self.ride_count,
-            self.last_line.clone(),
-        )
     }
 }
 
@@ -616,7 +605,6 @@ pub(crate) async fn handle_bim_rides(request: &Request<Body>) -> Result<Response
         INNER JOIN bim.ride_vehicles rv ON rv.ride_id = r.id
         WHERE rv.fixed_coupling_position = 0
         GROUP BY r.company, rv.vehicle_number
-        ORDER BY r.company, rv.vehicle_number
     ", &[]).await;
     let rows = match query_res {
         Ok(r) => r,
@@ -666,7 +654,24 @@ pub(crate) async fn handle_bim_rides(request: &Request<Body>) -> Result<Response
         }
     }
 
-    rides.sort_unstable_by_key(|entry| entry.sort_key());
+    rides.sort_unstable_by(|left, right| {
+        left.company.cmp(&right.company)
+            .then_with(|| {
+                let mut left_sorted_vehicle_numbers = left.vehicle_numbers.clone();
+                let mut right_sorted_vehicle_numbers = right.vehicle_numbers.clone();
+                left_sorted_vehicle_numbers.sort_unstable_by(|l, r| natural_compare(l, r));
+                right_sorted_vehicle_numbers.sort_unstable_by(|l, r| natural_compare(l, r));
+                for (ln, rn) in left_sorted_vehicle_numbers.iter().zip(right_sorted_vehicle_numbers.iter()) {
+                    let pair_ord = natural_compare(ln, rn);
+                    if pair_ord.is_ne() {
+                        return pair_ord;
+                    }
+                }
+                left_sorted_vehicle_numbers.len().cmp(&right_sorted_vehicle_numbers.len())
+            })
+            .then_with(|| left.ride_count.cmp(&right.ride_count))
+            .then_with(|| left.last_line.cmp(&right.last_line))
+    });
 
     let template = BimRidesTemplate {
         has_any_vehicle_type,

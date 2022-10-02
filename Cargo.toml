@@ -55,5 +55,6 @@ members = [
     "rocketbot_plugin_wienerlinien",
     "rocketbot_regex_replace",
     "rocketbot_spelling",
+    "rocketbot_string",
     "rocketbotweb",
 ]

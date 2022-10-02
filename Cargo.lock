@@ -2723,6 +2723,10 @@ dependencies = [
 ]
 
 [[package]]
+name = "rocketbot_string"
+version = "0.1.0"
+
+[[package]]
 name = "rocketbotweb"
 version = "0.1.0"
 dependencies = [
@@ -2737,6 +2741,7 @@ dependencies = [
  "png",
  "rocketbot_bim_achievements",
  "rocketbot_date_time",
+ "rocketbot_string",
  "serde",
  "serde_json",
  "tokio",
