@@ -15,7 +15,7 @@ once_cell = { version = "1.10" }
 png = { version = "0.17" }
 rocketbot_bim_achievements = { path = "../rocketbot_bim_achievements" }
 rocketbot_date_time = { path = "../rocketbot_date_time" }
-rocketbot_string = { path = "../rocketbot_string" }
+rocketbot_string = { path = "../rocketbot_string", features = ["serde"] }
 serde = { version = "1.0", features = ["derive"] }
 serde_json = { version = "1.0" }
 tokio = { version = "1.17", features = ["macros", "rt-multi-thread"] }

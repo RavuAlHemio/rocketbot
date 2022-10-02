@@ -2135,6 +2135,7 @@ dependencies = [
  "reqwest",
  "rocketbot_bim_achievements",
  "rocketbot_interface",
+ "rocketbot_string",
  "scraper",
  "serde",
  "serde_json",
@@ -2725,6 +2726,9 @@ dependencies = [
 [[package]]
 name = "rocketbot_string"
 version = "0.1.0"
+dependencies = [
+ "serde",
+]
 
 [[package]]
 name = "rocketbotweb"

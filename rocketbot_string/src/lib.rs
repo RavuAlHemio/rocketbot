@@ -1,4 +1,6 @@
 use std::cmp::Ordering;
+use std::fmt;
+use std::ops::{Deref, DerefMut};
 
 
 /// Compares two slices of digit characters.
@@ -97,6 +99,58 @@ pub fn natural_compare(left: &str, right: &str) -> Ordering {
     // all segments until now compared equal
     // compare by length
     left.len().cmp(&right.len())
+}
+
+
+/// A string that is subject to natural ordering rules ([`natural_compare`]).
+#[derive(Clone, Debug, Default, Eq, Hash, PartialEq)]
+pub struct NatSortedString(String);
+impl NatSortedString {
+    /// Wraps the given [`String`] into a `NatSortedString`.
+    pub const fn from_string(s: String) -> Self { Self(s) }
+
+    /// Unwraps the `NatSortedString` into a [`String`].
+    pub fn into_string(self) -> String { self.0 }
+}
+impl fmt::Display for NatSortedString {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        self.0.fmt(f)
+    }
+}
+impl PartialOrd for NatSortedString {
+    fn partial_cmp(&self, other: &Self) -> Option<Ordering> {
+        Some(natural_compare(&self.0, &other.0))
+    }
+}
+impl Ord for NatSortedString {
+    fn cmp(&self, other: &Self) -> Ordering {
+        self.partial_cmp(other).unwrap()
+    }
+}
+impl Deref for NatSortedString {
+    type Target = String;
+    fn deref(&self) -> &Self::Target { &self.0 }
+}
+impl DerefMut for NatSortedString {
+    fn deref_mut(&mut self) -> &mut Self::Target { &mut self.0 }
+}
+impl From<String> for NatSortedString {
+    fn from(inner: String) -> Self { Self(inner) }
+}
+
+#[cfg(feature = "serde")]
+impl serde::Serialize for NatSortedString {
+    fn serialize<S: serde::Serializer>(&self, serializer: S) -> Result<S::Ok, S::Error> {
+        self.0.serialize(serializer)
+    }
+}
+
+#[cfg(feature = "serde")]
+impl<'de> serde::Deserialize<'de> for NatSortedString {
+    fn deserialize<D: serde::Deserializer<'de>>(deserializer: D) -> Result<Self, D::Error> {
+        let inner = String::deserialize(deserializer)?;
+        Ok(Self(inner))
+    }
 }
 
 

@@ -69,11 +69,11 @@ fn parse_vehicle_numbers(text_value: &str, number_separator_regex: &Option<Regex
     let mut nums = Vec::new();
     if let Some(nsr) = number_separator_regex {
         for piece in nsr.split(text_value) {
-            nums.push(piece.to_owned());
+            nums.push(piece.to_owned().into());
             // skip invalid values
         }
     } else {
-        nums.push(text_value.to_owned());
+        nums.push(text_value.to_owned().into());
         // skip the value if it is invalid
     }
     nums
@@ -82,7 +82,7 @@ fn parse_vehicle_numbers(text_value: &str, number_separator_regex: &Option<Regex
 
 pub(crate) fn row_data_to_trams(page_config: &PageConfig, row_data: Vec<(String, String)>) -> BTreeMap<VehicleNumber, VehicleInfo> {
     let mut vehicles = BTreeMap::new();
-    let mut vehicle = VehicleInfo::new("0".to_owned(), page_config.vehicle_class, page_config.type_code.clone());
+    let mut vehicle = VehicleInfo::new("0".to_owned().into(), page_config.vehicle_class, page_config.type_code.clone());
 
     let all_rows = page_config.common_props.iter()
         .chain(row_data.iter().map(|(k, v)| (k, v)));

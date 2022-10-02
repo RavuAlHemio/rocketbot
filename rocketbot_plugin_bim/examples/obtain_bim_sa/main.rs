@@ -4,7 +4,6 @@ use std::env::args_os;
 use std::fs::File;
 use std::io::Read;
 use std::path::PathBuf;
-use std::str::FromStr;
 
 use indexmap::IndexSet;
 use once_cell::sync::Lazy;
@@ -376,24 +375,17 @@ async fn main() {
                                     .name("coupling").expect("coupling not captured")
                                     .as_str()
                                     .split("+");
-                                let mut failed = false;
                                 for couple_str in couple_strs {
                                     let couple_str_no_asterisk = couple_str.trim_end_matches([' ', '*', '\t']);
-                                    if let Ok(couple) = VehicleNumber::from_str(couple_str_no_asterisk) {
-                                        fixed_coupling.insert(couple);
-                                    } else {
-                                        failed = true;
-                                        break;
-                                    }
+                                    let couple = VehicleNumber::from_string(couple_str_no_asterisk.to_owned());
+                                    fixed_coupling.insert(couple);
                                 }
-                                if !failed {
-                                    current_vehicle.fixed_coupling(fixed_coupling);
+                                current_vehicle.fixed_coupling(fixed_coupling);
 
-                                    // remove the fixed coupling info from the note
-                                    let caps_range = caps.get(0).unwrap().range();
-                                    std::mem::drop(caps);
-                                    note.replace_range(caps_range, "");
-                                }
+                                // remove the fixed coupling info from the note
+                                let caps_range = caps.get(0).unwrap().range();
+                                std::mem::drop(caps);
+                                note.replace_range(caps_range, "");
                             }
                             current_vehicle.other_data("Anmerkung", trim_text(&note));
                         } else if td_classes.contains("plates") {
@@ -411,9 +403,8 @@ async fn main() {
                                 // (this ignores Roman numerals in <sup> tags)
                                 let lns_text = text_of_first_text_child(&lns);
                                 if let Some(t) = lns_text {
-                                    if let Ok(lns_number) = VehicleNumber::from_str(&t) {
-                                        current_vehicle.number(lns_number);
-                                    }
+                                    let lns_number = VehicleNumber::from_string(t);
+                                    current_vehicle.number(lns_number);
                                 }
                             }
                         } else if td_classes.contains("current-operator") {
@@ -460,9 +451,8 @@ async fn main() {
                                 .filter(|t| t.len() > 0)
                                 .last();
                             if let Some(number_string) = number_string_opt {
-                                if let Ok(num) = trim_text(&number_string).parse() {
-                                    current_vehicle.number(num);
-                                }
+                                let num = trim_text(&number_string).into();
+                                current_vehicle.number(num);
                             }
                         // no CSS classes beyond this point :-(
                         } else if i == 4 {

@@ -345,11 +345,11 @@ async fn main() {
             for number in &numbers {
                 let mut vehicle = VehicleInfoBuilder::new();
                 vehicle
-                    .number(number.clone())
+                    .number(number.clone().into())
                     .type_code(&page_info.type_code)
                     .vehicle_class(page_info.vehicle_class);
                 if numbers.len() > 1 {
-                    vehicle.fixed_coupling(numbers.iter().map(|n| n.clone()));
+                    vehicle.fixed_coupling(numbers.iter().map(|n| n.clone().into()));
                 }
                 if let Some(builder) = &builder_opt {
                     vehicle.manufacturer(builder);
