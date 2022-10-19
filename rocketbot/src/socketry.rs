@@ -2294,7 +2294,7 @@ async fn distribute_private_message_commands(private_message: &PrivateMessage, s
     }
 }
 
-async fn get_http_json(state: &SharedConnectionState, request: hyper::Request<hyper::Body>) -> Result<serde_json::Value, HttpError> {
+async fn perform_http_json(state: &SharedConnectionState, request: hyper::Request<hyper::Body>) -> Result<serde_json::Value, HttpError> {
     let full_uri = request.uri().clone();
 
     let response_res = state.http_client
@@ -2354,11 +2354,21 @@ async fn get_http_json(state: &SharedConnectionState, request: hyper::Request<hy
     Ok(json_value)
 }
 
-async fn get_request_for_http_from_server<Q, K, V>(state: &SharedConnectionState, uri_path: &str, query_options: Q) -> Result<hyper::Request<hyper::Body>, HttpError>
+async fn obtain_request_for_http_from_server<Q, QK, QV, H, HK, HV>(
+    state: &SharedConnectionState,
+    uri_path: &str,
+    method: &str,
+    body: hyper::Body,
+    query_options: Q,
+    headers: H,
+) -> Result<hyper::Request<hyper::Body>, HttpError>
     where
-        Q: IntoIterator<Item = (K, Option<V>)>,
-        K: AsRef<str>,
-        V: AsRef<str>,
+        Q: IntoIterator<Item = (QK, Option<QV>)>,
+        QK: AsRef<str>,
+        QV: AsRef<str>,
+        H: IntoIterator<Item = (HK, HV)>,
+        HK: AsRef<str>,
+        HV: AsRef<str>,
 {
     let user_id = {
         let uid_guard = state.my_user_id
@@ -2388,8 +2398,12 @@ async fn get_request_for_http_from_server<Q, K, V>(state: &SharedConnectionState
         .expect("failed to join API endpoint to URI");
 
     {
+        // peek first if we even have any query parameters
+        // this avoids appending the question mark if we have none
+        let mut query_options_peek = query_options.into_iter().peekable();
+        if query_options_peek.peek().is_some() {
         let mut query_params = full_uri.query_pairs_mut();
-        for (k, v) in query_options {
+            for (k, v) in query_options_peek {
             if let Some(sv) = v {
                 query_params.append_pair(k.as_ref(), sv.as_ref());
             } else {
@@ -2397,13 +2411,18 @@ async fn get_request_for_http_from_server<Q, K, V>(state: &SharedConnectionState
             }
         }
     }
+    }
 
-    let request = hyper::Request::builder()
-        .method("GET")
+    let mut request_builder = hyper::Request::builder()
+        .method(method)
         .uri(full_uri.as_str())
         .header("X-User-Id", &user_id)
-        .header("X-Auth-Token", auth_token)
-        .body(hyper::Body::empty())
+        .header("X-Auth-Token", auth_token);
+    for (key, value) in headers {
+        request_builder = request_builder.header(key.as_ref(), value.as_ref());
+    }
+    let request = request_builder
+        .body(body)
         .expect("failed to construct request");
 
     Ok(request)
@@ -2415,7 +2434,14 @@ async fn get_http_from_server<Q, K, V>(state: &SharedConnectionState, uri_path: 
         K: AsRef<str>,
         V: AsRef<str>,
 {
-    let request: hyper::Request<hyper::Body> = get_request_for_http_from_server(&state, uri_path, query_options).await?;
+    let no_headers: [(&str, &str); 0] = [];
+    let request: hyper::Request<hyper::Body> = obtain_request_for_http_from_server(
+        &state, uri_path,
+        "GET",
+        hyper::Body::empty(),
+        query_options,
+        no_headers,
+    ).await?;
     let full_uri = request.uri().clone();
     let response_res = state.http_client
         .request(request).await;
@@ -2435,8 +2461,44 @@ async fn get_api_json<Q, K, V>(state: &SharedConnectionState, uri_path: &str, qu
         K: AsRef<str>,
         V: AsRef<str>,
 {
-    let request = get_request_for_http_from_server(&state, uri_path, query_options).await?;
-    get_http_json(state, request).await
+    let no_headers: [(&str, &str); 0] = [];
+    let request = obtain_request_for_http_from_server(
+        &state,
+        uri_path,
+        "GET",
+        hyper::Body::empty(),
+        query_options,
+        no_headers,
+    ).await?;
+    perform_http_json(state, request).await
+}
+
+async fn post_api_json<Q, K, V>(
+    state: &SharedConnectionState,
+    uri_path: &str,
+    body_json: serde_json::Value,
+    query_options: Q,
+) -> Result<serde_json::Value, HttpError>
+    where
+        Q: IntoIterator<Item = (K, Option<V>)>,
+        K: AsRef<str>,
+        V: AsRef<str>,
+{
+    let body_string = serde_json::to_string(&body_json)
+        .expect("failed to serialize JSON value");
+    let body = hyper::Body::from(body_string);
+    let headers: [(&str, &str); 1] = [
+        ("Content-Type", "application/json"),
+    ];
+    let request = obtain_request_for_http_from_server(
+        &state,
+        uri_path,
+        "POST",
+        body,
+        query_options,
+        headers,
+    ).await?;
+    perform_http_json(state, request).await
 }
 
 async fn obtain_users_in_room(state: &ConnectionState, channel: &Channel) {
@@ -2541,7 +2603,7 @@ async fn obtain_builtin_emoji(state: &ConnectionState) -> Vec<Emoji> {
         .body(hyper::Body::empty())
         .expect("failed to construct request");
 
-    let json_value = match get_http_json(&state.shared_state, request).await {
+    let json_value = match perform_http_json(&state.shared_state, request).await {
         Ok(jv) => jv,
         Err(_) => {
             return Vec::new();
