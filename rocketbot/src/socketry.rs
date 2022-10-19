@@ -1578,6 +1578,19 @@ async fn handle_received(body: &serde_json::Value, mut state: &mut ConnectionSta
         });
         state.shared_state.outgoing_sender.send(custom_emoji_list_body)
             .expect("failed to enqueue custom emoji list message");
+
+        // set our status (via the REST API, since this is apparently broken with the realtime API)
+        let no_query_options: [(&str, Option<&str>); 0] = [];
+        post_api_json(
+            &state.shared_state,
+            "api/v1/users.setStatus",
+            serde_json::json!({
+                "message": "",
+                "status": "online",
+            }),
+            no_query_options,
+        )
+            .await.expect("failed to set status");
     } else if body["msg"] == "result" && body["id"] == GET_SETTINGS_MESSAGE_ID {
         let settings = &body["result"];
         for entry in settings.members_or_empty() {
@@ -2402,15 +2415,15 @@ async fn obtain_request_for_http_from_server<Q, QK, QV, H, HK, HV>(
         // this avoids appending the question mark if we have none
         let mut query_options_peek = query_options.into_iter().peekable();
         if query_options_peek.peek().is_some() {
-        let mut query_params = full_uri.query_pairs_mut();
+            let mut query_params = full_uri.query_pairs_mut();
             for (k, v) in query_options_peek {
-            if let Some(sv) = v {
-                query_params.append_pair(k.as_ref(), sv.as_ref());
-            } else {
-                query_params.append_key_only(k.as_ref());
+                if let Some(sv) = v {
+                    query_params.append_pair(k.as_ref(), sv.as_ref());
+                } else {
+                    query_params.append_key_only(k.as_ref());
+                }
             }
         }
-    }
     }
 
     let mut request_builder = hyper::Request::builder()
