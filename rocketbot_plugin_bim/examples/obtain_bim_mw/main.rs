@@ -7,6 +7,7 @@ use std::collections::BTreeMap;
 use std::env::args_os;
 use std::fs::File;
 use std::path::PathBuf;
+use std::time::Duration;
 
 use indexmap::IndexMap;
 use regex::Regex;
@@ -92,8 +93,13 @@ async fn main() {
         let mut parser = if config.parser_already_running {
             WikiParser::new_existing()
         } else {
-            WikiParser::new(php_command, &config.wiki_parse_server_dir)
-                .expect("error creating parser")
+            let parser = WikiParser::new(php_command, &config.wiki_parse_server_dir)
+                .expect("error creating parser");
+
+            // wait a bit to allow the parser to start
+            tokio::time::sleep(Duration::from_millis(500)).await;
+
+            parser
         };
 
         for page_source in &config.page_sources {
