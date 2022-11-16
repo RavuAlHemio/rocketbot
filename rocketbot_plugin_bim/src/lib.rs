@@ -31,7 +31,7 @@ use serde_json;
 use tokio_postgres::NoTls;
 use tokio_postgres::types::ToSql;
 
-use crate::achievements::{get_achievements_for, recalculate_achievements};
+use crate::achievements::{get_achievements_for, get_all_achievements, recalculate_achievements};
 use crate::range_set::RangeSet;
 
 
@@ -2761,6 +2761,117 @@ impl BimPlugin {
         ).await;
     }
 
+    async fn channel_command_refreshbimach(&self, channel_message: &ChannelMessage, _command: &CommandInstance) {
+        let interface = match self.interface.upgrade() {
+            None => return,
+            Some(i) => i,
+        };
+
+        let config_guard = self.config.read().await;
+
+        let sender_username = channel_message.message.sender.username.as_str();
+        if !config_guard.admin_usernames.contains(sender_username) {
+            send_channel_message!(
+                interface,
+                &channel_message.channel.name,
+                "You are not a `bim` admin. :disappointed:",
+            ).await;
+            return;
+        }
+
+        if !config_guard.achievements_active {
+            send_channel_message!(
+                interface,
+                &channel_message.channel.name,
+                "Achievements are not active. :disappointed:",
+            ).await;
+            return;
+        }
+
+        let ride_conn = match self.connect_ride_db(&config_guard).await {
+            Ok(c) => c,
+            Err(_) => {
+                send_channel_message!(
+                    interface,
+                    &channel_message.channel.name,
+                    "Failed to open database connection. :disappointed:",
+                ).await;
+                return;
+            },
+        };
+
+        let prev_users_achievements = get_all_achievements(
+            &ride_conn,
+        ).await
+            .unwrap_or_else(|e| {
+                error!("failed to obtain previous achievements: {}", e);
+                BTreeMap::new()
+            });
+
+        if let Err(e) = recalculate_achievements(&ride_conn).await {
+            error!("failed to recalculate achievements: {}", e);
+            send_channel_message!(
+                interface,
+                &channel_message.channel.name,
+                "Failed to recalculate achievements. :disappointed:",
+            ).await;
+            return;
+        }
+
+        let new_users_achievements = get_all_achievements(
+            &ride_conn,
+        ).await
+            .unwrap_or_else(|e| {
+                error!("failed to obtain current achievements: {}", e);
+                BTreeMap::new()
+            });
+
+        let empty_achievements = BTreeMap::new();
+        for (user, new_achievements) in new_users_achievements {
+            let prev_achievements = prev_users_achievements.get(&user)
+                .unwrap_or_else(|| &empty_achievements);
+
+            for (ach_id, new_ach_state) in new_achievements {
+                let new_timestamp = match new_ach_state.timestamp {
+                    Some(ts) => ts.0,
+                    None => continue, // locked achievements aren't interesting
+                };
+
+                let had_timestamp_previously = prev_achievements
+                    .get(&ach_id)
+                    .map(|st8| st8.timestamp.is_some())
+                    .unwrap_or(false);
+                if !had_timestamp_previously {
+                    // newly unlocked achievement!
+                    let ach_def_opt = ACHIEVEMENT_DEFINITIONS
+                        .iter()
+                        .filter(|ad| ad.id == ach_id)
+                        .nth(0);
+                    if let Some(ach_def) = ach_def_opt {
+                        info!(
+                            "achievement unlocked during refresh! rider {:?} unlocked achievement {} at {}",
+                            user,
+                            ach_id,
+                            new_timestamp,
+                        );
+
+                        send_channel_message!(
+                            interface,
+                            &channel_message.channel.name,
+                            &format!(
+                                "{} unlocked *{}* ({}) {}",
+                                user,
+                                ach_def.name,
+                                ach_def.description,
+                                Self::canonical_date_format(&new_timestamp, true, false),
+                            ),
+                        ).await;
+                    }
+                }
+            }
+        }
+    }
+
     #[inline]
     fn weekday_abbr2(weekday: Weekday) -> &'static str {
         match weekday {
@@ -3095,6 +3206,15 @@ impl RocketBotPlugin for BimPlugin {
                 .add_lookback_flags()
                 .build()
         ).await;
+        my_interface.register_channel_command(
+            &CommandDefinitionBuilder::new(
+                "refreshbimach",
+                "bim",
+                "{cpfx}refreshbimach",
+                "Refreshes achievements and outputs newly unlocked ones.",
+            )
+                .build()
+        ).await;
 
         Self {
             interface,
@@ -3131,6 +3251,8 @@ impl RocketBotPlugin for BimPlugin {
             self.channel_command_fixbimride(channel_message, command).await
         } else if command.name == "widestbims" {
             self.channel_command_widestbims(channel_message, command).await
+        } else if command.name == "refreshbimach" {
+            self.channel_command_refreshbimach(channel_message, command).await
         }
     }
 
@@ -3167,6 +3289,8 @@ impl RocketBotPlugin for BimPlugin {
             Some(include_str!("../help/fixbimride.md").to_owned())
         } else if command_name == "widestbims" {
             Some(include_str!("../help/widestbims.md").to_owned())
+        } else if command_name == "refreshbimach" {
+            Some(include_str!("../help/refreshbimach.md").to_owned())
         } else {
             None
         }
