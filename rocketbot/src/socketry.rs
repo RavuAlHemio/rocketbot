@@ -4,7 +4,7 @@ use std::collections::hash_map::Entry as HashMapEntry;
 use std::fmt::Write as FmtWrite;
 use std::io::{Cursor, Read, Write as IoWrite};
 use std::ops::{Deref, DerefMut};
-use std::sync::Arc;
+use std::sync::{Arc, Weak};
 use std::time::Duration;
 
 use async_trait::async_trait;
@@ -260,6 +260,7 @@ struct ConnectionState {
     new_timer_receiver: mpsc::UnboundedReceiver<(DateTime<Utc>, serde_json::Value)>,
     reload_config_receiver: mpsc::Receiver<()>,
     last_seen_message_timestamp: DateTime<Utc>,
+    process_message_sender: mpsc::UnboundedSender<MessageToHandle>,
 }
 impl ConnectionState {
     fn new(
@@ -269,6 +270,7 @@ impl ConnectionState {
         new_timer_receiver: mpsc::UnboundedReceiver<(DateTime<Utc>, serde_json::Value)>,
         reload_config_receiver: mpsc::Receiver<()>,
         last_seen_message_timestamp: DateTime<Utc>,
+        process_message_sender: mpsc::UnboundedSender<MessageToHandle>,
     ) -> ConnectionState {
         ConnectionState {
             shared_state,
@@ -277,6 +279,7 @@ impl ConnectionState {
             new_timer_receiver,
             reload_config_receiver,
             last_seen_message_timestamp,
+            process_message_sender,
         }
     }
 }
@@ -949,6 +952,13 @@ pub(crate) async fn connect() -> Arc<ServerConnection> {
         active_behavior_flags,
     ));
 
+    // start the message handler
+    let (process_message_sender, process_message_receiver) = mpsc::unbounded_channel();
+    let shared_state_weak = Arc::downgrade(&shared_state);
+    tokio::spawn(async move {
+        message_handler(shared_state_weak, process_message_receiver)
+    });
+
     let conn = Arc::new(ServerConnection::new(
         Arc::clone(&shared_state),
     ));
@@ -961,6 +971,7 @@ pub(crate) async fn connect() -> Arc<ServerConnection> {
         Utc
             .ymd(1969, 1, 1)
             .and_hms(0, 0, 0),
+        process_message_sender,
     );
     let second_conn: Arc<ServerConnection> = Arc::clone(&conn);
     let generic_conn: Arc<dyn RocketBotInterface> = second_conn;
@@ -1477,6 +1488,85 @@ fn message_is_current(state: &mut ConnectionState, message: &Message) -> bool {
     true
 }
 
+#[derive(Debug)]
+enum MessageToHandle {
+    Channel {
+        sender_id: String,
+        my_user_id: String,
+        message: ChannelMessage,
+    },
+    Private {
+        sender_id: String,
+        my_user_id: String,
+        message: PrivateMessage,
+    }
+}
+
+async fn message_handler(shared_state_weak: Weak<SharedConnectionState>, mut message_receiver: mpsc::UnboundedReceiver<MessageToHandle>) {
+    while let Some(message) = message_receiver.recv().await {
+        let shared_state = match shared_state_weak.upgrade() {
+            Some(ss) => ss,
+            None => {
+                info!("shared state is gone; ending message handler loop");
+                return;
+            },
+        };
+
+        match message {
+            MessageToHandle::Channel { sender_id, my_user_id, message }
+                => handle_channel_message(shared_state, &sender_id, &my_user_id, &message).await,
+            MessageToHandle::Private { sender_id, my_user_id, message }
+                => handle_private_message(shared_state, &sender_id, &my_user_id, &message).await,
+        }
+    }
+}
+
+async fn handle_channel_message(shared_state: Arc<SharedConnectionState>, sender_id: &str, my_user_id: &str, channel_message: &ChannelMessage) {
+    // distribute among plugins
+    {
+        let plugins = shared_state.plugins
+            .read().await;
+        debug!("distributing channel message among plugins");
+        for plugin in plugins.iter() {
+            if channel_message.message.edit_info.is_some() {
+                plugin.plugin.channel_message_edited(&channel_message).await;
+            } else if sender_id == my_user_id {
+                plugin.plugin.channel_message_delivered(&channel_message).await;
+            } else {
+                plugin.plugin.channel_message(&channel_message).await;
+            }
+        }
+    }
+
+    if channel_message.message.edit_info.is_none() && sender_id != my_user_id {
+        // parse commands if there are any (not on edited messages or the bot's own messages!)
+        distribute_channel_message_commands(&channel_message, shared_state).await;
+    }
+}
+
+async fn handle_private_message(shared_state: Arc<SharedConnectionState>, sender_id: &str, my_user_id: &str, private_message: &PrivateMessage) {
+    // distribute among plugins
+    {
+        let plugins = shared_state.plugins
+            .read().await;
+        debug!("distributing private message among plugins");
+        for plugin in plugins.iter() {
+            if private_message.message.edit_info.is_some() {
+                plugin.plugin.private_message_edited(&private_message).await;
+            } else if sender_id == my_user_id {
+                plugin.plugin.private_message_delivered(&private_message).await;
+            } else {
+                plugin.plugin.private_message(&private_message).await;
+            }
+        }
+    }
+
+    if private_message.message.edit_info.is_none() {
+        // parse commands if there are any (not on edited messages!)
+        distribute_private_message_commands(&private_message, shared_state).await;
+    }
+}
+
 async fn handle_received(body: &serde_json::Value, mut state: &mut ConnectionState) {
     if body["msg"] == "ping" {
         // answer with a pong
@@ -1796,26 +1886,13 @@ async fn handle_received(body: &serde_json::Value, mut state: &mut ConnectionSta
                     channel,
                 );
 
-                // distribute among plugins
-                {
-                    let plugins = state.shared_state.plugins
-                        .read().await;
-                    debug!("distributing message among plugins");
-                    for plugin in plugins.iter() {
-                        if channel_message.message.edit_info.is_some() {
-                            plugin.plugin.channel_message_edited(&channel_message).await;
-                        } else if sender_id == my_user_id {
-                            plugin.plugin.channel_message_delivered(&channel_message).await;
-                        } else {
-                            plugin.plugin.channel_message(&channel_message).await;
-                        }
-                    }
-                }
-
-                if channel_message.message.edit_info.is_none() && sender_id != my_user_id {
-                    // parse commands if there are any (not on edited messages or the bot's own messages!)
-                    distribute_channel_message_commands(&channel_message, &mut state).await;
-                }
+                // send off for asynchronous processing
+                state.process_message_sender.send(MessageToHandle::Channel {
+                    sender_id: sender_id.to_owned(),
+                    my_user_id: my_user_id.to_owned(),
+                    message: channel_message,
+                })
+                    .expect("failed to enqueue channel message");
             } else if let Some(convo) = convo_opt {
                 let message = match message_from_json(message_json) {
                     Some(m) => m,
@@ -1834,26 +1911,13 @@ async fn handle_received(body: &serde_json::Value, mut state: &mut ConnectionSta
                     convo,
                 );
 
-                // distribute among plugins
-                {
-                    let plugins = state.shared_state.plugins
-                        .read().await;
-                    debug!("distributing message among plugins");
-                    for plugin in plugins.iter() {
-                        if private_message.message.edit_info.is_some() {
-                            plugin.plugin.private_message_edited(&private_message).await;
-                        } else if sender_id == my_user_id {
-                            plugin.plugin.private_message_delivered(&private_message).await;
-                        } else {
-                            plugin.plugin.private_message(&private_message).await;
-                        }
-                    }
-                }
-
-                if private_message.message.edit_info.is_none() {
-                    // parse commands if there are any (not on edited messages!)
-                    distribute_private_message_commands(&private_message, &mut state).await;
-                }
+                // send off for asynchronous processing
+                state.process_message_sender.send(MessageToHandle::Private {
+                    sender_id: sender_id.to_owned(),
+                    my_user_id: my_user_id.to_owned(),
+                    message: private_message,
+                })
+                    .expect("failed to enqueue private message");
             }
         }
     } else if body["msg"] == "changed" && body["collection"] == "stream-notify-user" {
@@ -2201,8 +2265,8 @@ fn message_from_json(message_json: &serde_json::Value) -> Option<Message> {
     ))
 }
 
-async fn distribute_channel_message_commands(channel_message: &ChannelMessage, state: &mut ConnectionState) {
-    let command_config = &state.shared_state.command_config;
+async fn distribute_channel_message_commands(channel_message: &ChannelMessage, shared_state: Arc<SharedConnectionState>) {
+    let command_config = &shared_state.command_config;
 
     let command_prefix = &command_config.command_prefix;
     let message = &channel_message.message;
@@ -2223,7 +2287,7 @@ async fn distribute_channel_message_commands(channel_message: &ChannelMessage, s
 
     // do we know this command?
     let command = {
-        let commands_guard = state.shared_state.channel_commands
+        let commands_guard = shared_state.channel_commands
             .read().await;
         match commands_guard.get(command_name) {
             Some(cd) => cd.clone(),
@@ -2245,7 +2309,7 @@ async fn distribute_channel_message_commands(channel_message: &ChannelMessage, s
 
     // distribute among plugins
     {
-        let plugins = state.shared_state.plugins
+        let plugins = shared_state.plugins
             .read().await;
         debug!("asking plugins to execute channel command {:?}", instance.name);
         for plugin in plugins.iter() {
@@ -2254,8 +2318,8 @@ async fn distribute_channel_message_commands(channel_message: &ChannelMessage, s
     }
 }
 
-async fn distribute_private_message_commands(private_message: &PrivateMessage, state: &mut ConnectionState) {
-    let command_config = &state.shared_state.command_config;
+async fn distribute_private_message_commands(private_message: &PrivateMessage, shared_state: Arc<SharedConnectionState>) {
+    let command_config = &shared_state.command_config;
 
     let command_prefix = &command_config.command_prefix;
     let message = &private_message.message;
@@ -2276,7 +2340,7 @@ async fn distribute_private_message_commands(private_message: &PrivateMessage, s
 
     // do we know this command?
     let command = {
-        let commands_guard = state.shared_state.private_message_commands
+        let commands_guard = shared_state.private_message_commands
             .read().await;
         match commands_guard.get(command_name) {
             Some(cd) => cd.clone(),
@@ -2298,7 +2362,7 @@ async fn distribute_private_message_commands(private_message: &PrivateMessage, s
 
     // distribute among plugins
     {
-        let plugins = state.shared_state.plugins
+        let plugins = shared_state.plugins
             .read().await;
         debug!("asking plugins to execute private message command {:?}", instance.name);
         for plugin in plugins.iter() {
