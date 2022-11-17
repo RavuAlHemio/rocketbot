@@ -956,7 +956,7 @@ pub(crate) async fn connect() -> Arc<ServerConnection> {
     let (process_message_sender, process_message_receiver) = mpsc::unbounded_channel();
     let shared_state_weak = Arc::downgrade(&shared_state);
     tokio::spawn(async move {
-        message_handler(shared_state_weak, process_message_receiver)
+        message_handler(shared_state_weak, process_message_receiver).await
     });
 
     let conn = Arc::new(ServerConnection::new(
