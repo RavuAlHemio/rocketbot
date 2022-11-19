@@ -1369,6 +1369,16 @@ AS $$
     SELECT 98, MIN(srtmia98."timestamp")
     FROM bim.same_ride_to_minute_interval_ago(interval '7 days') srtmia98
     WHERE srtmia98.rider_username = rider
+
+    UNION ALL
+
+    -- NAME: Donald Duck's Car
+    -- DESCR: Ride a vehicle (of any company) with the number 313.
+    -- ORDER: 1,16 special vehicle numbers
+    SELECT 99, MIN(rav99."timestamp")
+    FROM bim.rides_and_numeric_vehicles rav99
+    WHERE rav99.rider_username = rider
+    AND rav99.vehicle_number = 313
 $$;
 
 CREATE MATERIALIZED VIEW bim.rider_achievements AS
