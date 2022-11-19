@@ -100,6 +100,9 @@ impl UnitDatabase {
         self.si_prefix_to_factor.insert("d".to_owned(), 1e-1);
         self.si_prefix_to_factor.insert("c".to_owned(), 1e-2);
         self.si_prefix_to_factor.insert("m".to_owned(), 1e-3);
+        // allow two variants of micro-
+        // rationale is documented in calc_lang.pest
+        self.si_prefix_to_factor.insert("\u{00B5}".to_owned(), 1e-6);
         self.si_prefix_to_factor.insert("\u{03BC}".to_owned(), 1e-6);
         self.si_prefix_to_factor.insert("n".to_owned(), 1e-9);
         self.si_prefix_to_factor.insert("p".to_owned(), 1e-12);
