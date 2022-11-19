@@ -48,7 +48,10 @@ decimal_expression = { decimal ~ unit_suffix* }
 integer_expression = { integer ~ unit_suffix* }
 
 unit_suffix = { "#" ~ unit_abbrev ~ unit_pow? }
-unit_abbrev = @{ ('A'..'Z'|'a'..'z')+ }
+// U+03BC = lowercase Greek mu; U+00B5 = micro symbol
+// U+00B5 does not canonically decompose, but it does compatibility-decompose to U+03BC
+// => U+03BC is the "correct" representation, but allow U+00B5 as well
+unit_abbrev = @{ ('A'..'Z'|'a'..'z'|"\u{00B5}"|"\u{03BC}")+ }
 unit_pow = @{ "-"? ~ ('0'..'9')+ }
 
 
