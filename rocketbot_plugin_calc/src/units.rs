@@ -84,6 +84,8 @@ impl UnitDatabase {
     }
 
     pub fn insert_canonical_si_prefixes(&mut self) {
+        self.si_prefix_to_factor.insert("Q".to_owned(), 1e30);
+        self.si_prefix_to_factor.insert("R".to_owned(), 1e27);
         self.si_prefix_to_factor.insert("Y".to_owned(), 1e24);
         self.si_prefix_to_factor.insert("Z".to_owned(), 1e21);
         self.si_prefix_to_factor.insert("E".to_owned(), 1e18);
@@ -105,6 +107,8 @@ impl UnitDatabase {
         self.si_prefix_to_factor.insert("a".to_owned(), 1e-18);
         self.si_prefix_to_factor.insert("z".to_owned(), 1e-21);
         self.si_prefix_to_factor.insert("y".to_owned(), 1e-24);
+        self.si_prefix_to_factor.insert("r".to_owned(), 1e-27);
+        self.si_prefix_to_factor.insert("q".to_owned(), 1e-30);
     }
 
     pub fn get_base_unit(&self, letters: &str) -> Option<BaseUnit> {
