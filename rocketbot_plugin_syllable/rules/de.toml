@@ -20,8 +20,8 @@ rules = [
     { find = "(?i)[bdfgkmnpqstvwxz]l[bcdfghjklmnpqrstvwxz]" },
 
     # diphthongs make a syllable
-    { find = "[aeiouyäöü]{2}" },
+    { find = "(?i)[aeiouyäöü]{2}" },
 
     # vowels make a syllable
-    { find = "[aeiouyäöü]" },
+    { find = "(?i)[aeiouyäöü]" },
 ]
