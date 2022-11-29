@@ -7,6 +7,7 @@ members = [
     "rocketbot_geocoding",
     "rocketbot_interface",
     "rocketbot_makepdf",
+    "rocketbot_mediawiki_parsing",
     "rocketbot_plugin_allograph",
     "rocketbot_plugin_barcode",
     "rocketbot_plugin_belch",

@@ -2078,6 +2078,13 @@ dependencies = [
 ]
 
 [[package]]
+name = "rocketbot_mediawiki_parsing"
+version = "0.1.0"
+dependencies = [
+ "reqwest",
+]
+
+[[package]]
 name = "rocketbot_plugin_allograph"
 version = "0.1.0"
 dependencies = [
@@ -2135,6 +2142,7 @@ dependencies = [
  "reqwest",
  "rocketbot_bim_achievements",
  "rocketbot_interface",
+ "rocketbot_mediawiki_parsing",
  "rocketbot_string",
  "scraper",
  "serde",

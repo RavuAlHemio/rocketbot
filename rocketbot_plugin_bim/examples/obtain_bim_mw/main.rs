@@ -1,6 +1,4 @@
-mod droppable_child;
 mod extract_info;
-mod wiki_parsing;
 
 
 use std::collections::BTreeMap;
@@ -12,12 +10,12 @@ use std::time::Duration;
 use indexmap::IndexMap;
 use regex::Regex;
 use rocketbot_interface::serde::{serde_opt_regex, serde_regex};
+use rocketbot_mediawiki_parsing::WikiParser;
 use rocketbot_plugin_bim::{VehicleClass, VehicleInfo};
 use serde::{Deserialize, Serialize};
 use serde_json;
 
 use crate::extract_info::{process_page, process_table, row_data_to_trams};
-use crate::wiki_parsing::WikiParser;
 
 
 #[derive(Clone, Debug, Deserialize, Serialize)]

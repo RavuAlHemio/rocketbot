@@ -5,13 +5,13 @@ use std::fs::File;
 use form_urlencoded;
 use indexmap::IndexSet;
 use regex::Regex;
+use rocketbot_mediawiki_parsing::WikiParser;
 use rocketbot_plugin_bim::{VehicleInfo, VehicleNumber};
 use sxd_document;
 use sxd_document::dom::Element;
 use sxd_xpath::{self, XPath};
 
 use crate::{MatcherTransformerConfig, PageConfig};
-use crate::wiki_parsing::WikiParser;
 
 
 async fn obtain_content(page_url_pattern: &str, page_title: &str) -> String {

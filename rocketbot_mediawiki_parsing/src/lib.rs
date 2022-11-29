@@ -1,3 +1,6 @@
+mod droppable_child;
+
+
 use std::error;
 use std::fmt;
 use std::num::TryFromIntError;
@@ -15,7 +18,7 @@ const STOP_MAGIC: &[u8] = b"EnOuGhWiKi";
 
 
 #[derive(Debug)]
-pub(crate) enum ParserError {
+pub enum ParserError {
     LengthDoesNotFit(TryFromIntError),
     DataTransfer(io::Error),
     Utf8Decoding(FromUtf8Error),
@@ -38,7 +41,7 @@ impl From<io::Error> for ParserError {
 }
 
 
-pub(crate) struct WikiParser {
+pub struct WikiParser {
     _parser: Option<DroppableChild>,
     socket: Option<TcpStream>,
 }
