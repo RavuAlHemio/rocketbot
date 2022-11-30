@@ -87,6 +87,7 @@ impl AddLookbackFlags for CommandDefinitionBuilder {
 
 
 pub type VehicleNumber = NatSortedString;
+pub type RegionToLineToOperator = HashMap<String, HashMap<String, String>>;
 
 
 macro_rules! write_expect {
@@ -323,6 +324,8 @@ struct Config {
     admin_usernames: HashSet<String>,
     max_edit_s: i64,
     achievements_active: bool,
+    operator_databases: HashSet<String>,
+    default_operator_region: String,
 }
 
 
@@ -361,6 +364,37 @@ impl BimPlugin {
             .map(|vi| (vi.number.clone(), vi))
             .collect();
         Some(vehicle_hash_map)
+    }
+
+    fn load_operator_databases(&self, config: &Config) -> Option<HashMap<String, HashMap<String, String>>> {
+        let mut region_to_line_to_operator: RegionToLineToOperator = HashMap::new();
+
+        for db_path in &config.operator_databases {
+            let f = match File::open(db_path) {
+                Ok(f) => f,
+                Err(e) => {
+                    error!("failed to open operator database {:?}: {}", db_path, e);
+                    return None;
+                },
+            };
+            let this_region_to_line_to_operator: RegionToLineToOperator = match serde_json::from_reader(f) {
+                Ok(v) => v,
+                Err(e) => {
+                    error!("failed to parse bim database {:?}: {}", db_path, e);
+                    return None;
+                },
+            };
+            for (this_region, this_line_to_operator) in this_region_to_line_to_operator {
+                let line_to_operator = region_to_line_to_operator
+                    .entry(this_region)
+                    .or_insert_with(|| HashMap::new());
+                for (this_line, this_operator) in this_line_to_operator {
+                    line_to_operator.insert(this_line, this_operator);
+                }
+            }
+        }
+
+        Some(region_to_line_to_operator)
     }
 
     async fn connect_ride_db(&self, config: &Config) -> Result<tokio_postgres::Client, tokio_postgres::Error> {
@@ -2872,6 +2906,54 @@ impl BimPlugin {
         }
     }
 
+    async fn channel_command_bimop(&self, channel_message: &ChannelMessage, command: &CommandInstance) {
+        let interface = match self.interface.upgrade() {
+            None => return,
+            Some(i) => i,
+        };
+        let config_guard = self.config.read().await;
+
+        let region = command.options.get("region")
+            .or_else(|| command.options.get("r"))
+            .map(|v| v.as_str().expect("region value not a string"))
+            .unwrap_or_else(|| config_guard.default_operator_region.as_str());
+
+        let region_to_line_to_operator = match self.load_operator_databases(&config_guard) {
+            Some(rlo) => rlo,
+            None => {
+                send_channel_message!(
+                    interface,
+                    &channel_message.channel.name,
+                    "Failed to load the operators database. :disappointed:",
+                ).await;
+                return;
+            }
+        };
+
+        let line = command.rest.trim();
+        let operator_opt = region_to_line_to_operator
+            .get(region)
+            .map(|lto| lto.get(line))
+            .flatten();
+
+        match operator_opt {
+            Some(o) => {
+                send_channel_message!(
+                    interface,
+                    &channel_message.channel.name,
+                    &format!("Line *{}* is operated by *{}*.", line, o),
+                ).await;
+            },
+            None => {
+                send_channel_message!(
+                    interface,
+                    &channel_message.channel.name,
+                    &format!("Failed to find operator for line *{}*.", line),
+                ).await;
+            },
+        }
+    }
+
     #[inline]
     fn weekday_abbr2(weekday: Weekday) -> &'static str {
         match weekday {
@@ -3011,6 +3093,29 @@ impl BimPlugin {
                 .as_bool().ok_or("achievements_active not a bool")?
         };
 
+        let operator_databases = if config["operator_databases"].is_null() {
+            HashSet::new()
+        } else {
+            let operator_database_values = config["operator_databases"]
+                .as_array().ok_or("operator_databases not a list")?;
+            let mut operator_databases = HashSet::new();
+            for operator_database_value in operator_database_values {
+                let database = operator_database_value
+                    .as_str().ok_or("operator_databases entry not a string")?
+                    .to_owned();
+                operator_databases.insert(database);
+            }
+            operator_databases
+        };
+
+        let default_operator_region = if config["default_operator_region"].is_null() {
+            String::new()
+        } else {
+            config["default_operator_region"]
+                .as_str().ok_or("default_operator_region not a string")?
+                .to_owned()
+        };
+
         Ok(Config {
             company_to_definition,
             default_company,
@@ -3020,6 +3125,8 @@ impl BimPlugin {
             admin_usernames,
             max_edit_s,
             achievements_active,
+            operator_databases,
+            default_operator_region,
         })
     }
 }
@@ -3215,6 +3322,17 @@ impl RocketBotPlugin for BimPlugin {
             )
                 .build()
         ).await;
+        my_interface.register_channel_command(
+            &CommandDefinitionBuilder::new(
+                "bimop",
+                "bim",
+                "{cpfx}bimop LINE",
+                "Obtains the name of the company operating the given line.",
+            )
+                .add_option("r", CommandValueType::String)
+                .add_option("region", CommandValueType::String)
+                .build()
+        ).await;
 
         Self {
             interface,
@@ -3253,6 +3371,8 @@ impl RocketBotPlugin for BimPlugin {
             self.channel_command_widestbims(channel_message, command).await
         } else if command.name == "refreshbimach" {
             self.channel_command_refreshbimach(channel_message, command).await
+        } else if command.name == "bimop" {
+            self.channel_command_bimop(channel_message, command).await
         }
     }
 
@@ -3291,6 +3411,8 @@ impl RocketBotPlugin for BimPlugin {
             Some(include_str!("../help/widestbims.md").to_owned())
         } else if command_name == "refreshbimach" {
             Some(include_str!("../help/refreshbimach.md").to_owned())
+        } else if command_name == "bimop" {
+            Some(include_str!("../help/bimop.md").to_owned())
         } else {
             None
         }
