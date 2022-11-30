@@ -111,6 +111,8 @@ impl WikiParser {
     }
 
     pub fn parsing_done(&mut self) -> Result<(), io::Error> {
+        self.ensure_open_socket()?;
+
         {
             let socket = self.socket.as_mut().unwrap();
             socket.write_all(STOP_MAGIC)?;
