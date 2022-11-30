@@ -4,6 +4,7 @@ require_once __DIR__ . '/vendor/autoload.php';
 
 use Wikimedia\Parsoid\Parsoid;
 use Wikimedia\Parsoid\Config\PageConfig;
+use Wikimedia\Parsoid\Core\ContentMetadataCollector;
 use Wikimedia\Parsoid\Mocks\MockDataAccess;
 use Wikimedia\Parsoid\Mocks\MockPageConfig;
 use Wikimedia\Parsoid\Mocks\MockPageContent;
@@ -33,19 +34,14 @@ class WrongMagicException extends \Exception {
 
 class ParseServerDataAccess extends MockDataAccess {
     /** @inheritDoc */
-    public function parseWikitext(PageConfig $pageConfig, string $wikitext): array {
+    public function parseWikitext(PageConfig $pageConfig, ContentMetadataCollector $metadata, string $wikitext): string {
         preg_match('#<([A-Za-z][^\t\n\v />\0]*)#', $wikitext, $match);
         $blnStrict = true;
         if (\in_array(\strtolower($match[1]), ['math', 'chem', 'timeline', 'syntaxhighlight', 'hiero', 'inputbox', 'score', 'graph', 'categorytree', 'maplink'], $blnStrict)) {
-            return [
-                'html' => $wikitext,
-                'modules' => [],
-                'modulestyles' => [],
-                'categories' => [],
-            ];
+            return $wikitext;
         }
 
-        return parent::parseWikitext($pageConfig, $wikitext);
+        return parent::parseWikitext($pageConfig, $metadata, $wikitext);
     }
 }
 
