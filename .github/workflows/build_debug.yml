@@ -25,10 +25,6 @@ jobs:
         run: cargo build --all-targets
       - name: run debug tests
         run: cargo test
-      - name: build obtain_bim_mw
-        run: cargo build --example obtain_bim_mw
-      - name: build obtain_bim_sa
-        run: cargo build --example obtain_bim_sa
       - name: generate CountryCodes.json
         run: cargo run --example countrycodes
       - name: upload debug binary
