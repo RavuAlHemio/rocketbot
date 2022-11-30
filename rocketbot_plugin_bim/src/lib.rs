@@ -87,7 +87,7 @@ impl AddLookbackFlags for CommandDefinitionBuilder {
 
 
 pub type VehicleNumber = NatSortedString;
-pub type RegionToLineToOperator = HashMap<String, HashMap<String, String>>;
+pub type RegionToLineToOperator = HashMap<String, HashMap<String, LineOperatorInfo>>;
 
 
 macro_rules! write_expect {
@@ -313,6 +313,13 @@ impl CompanyDefinition {
     }
 }
 
+#[derive(Clone, Debug, Default, Deserialize, Eq, Hash, Ord, PartialEq, PartialOrd, Serialize)]
+pub struct LineOperatorInfo {
+    pub canonical_line: String,
+    pub operator_name: String,
+    pub operator_abbrev: Option<String>,
+}
+
 
 #[derive(Clone, Debug)]
 struct Config {
@@ -366,7 +373,7 @@ impl BimPlugin {
         Some(vehicle_hash_map)
     }
 
-    fn load_operator_databases(&self, config: &Config) -> Option<HashMap<String, HashMap<String, String>>> {
+    fn load_operator_databases(&self, config: &Config) -> Option<RegionToLineToOperator> {
         let mut region_to_line_to_operator: RegionToLineToOperator = HashMap::new();
 
         for db_path in &config.operator_databases {
@@ -2930,18 +2937,29 @@ impl BimPlugin {
             }
         };
 
-        let line = command.rest.trim();
+        let line = command.rest.trim().to_lowercase();
         let operator_opt = region_to_line_to_operator
             .get(region)
-            .map(|lto| lto.get(line))
+            .map(|lto| lto.get(&line))
             .flatten();
 
         match operator_opt {
             Some(o) => {
+                let message = if let Some(abbrev) = o.operator_abbrev.as_ref() {
+                    format!(
+                        "Line *{}* is operated by *{}* (`{}`).",
+                        o.canonical_line, o.operator_name, abbrev,
+                    )
+                } else {
+                    format!(
+                        "Line *{}* is operated by *{}*.",
+                        o.canonical_line, o.operator_name,
+                    )
+                };
                 send_channel_message!(
                     interface,
                     &channel_message.channel.name,
-                    &format!("Line *{}* is operated by *{}*.", line, o),
+                    &message,
                 ).await;
             },
             None => {

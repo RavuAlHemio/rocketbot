@@ -6,6 +6,7 @@ use std::time::Duration;
 
 use reqwest::Client;
 use rocketbot_mediawiki_parsing::WikiParser;
+use rocketbot_plugin_bim::LineOperatorInfo;
 use serde::{Deserialize, Serialize};
 use serde_json;
 use sxd_document;
@@ -25,6 +26,7 @@ struct Config {
 struct PageSource {
     pub page_url_pattern: String,
     pub pages: Vec<PageConfig>,
+    pub operator_name_to_abbrev: BTreeMap<String, String>,
 }
 
 #[derive(Clone, Debug, Deserialize, Serialize)]
@@ -94,9 +96,10 @@ async fn process_page(
     reqwest_client: &mut Client,
     url_pattern: &str,
     page_config: &PageConfig,
+    operator_name_to_abbrev: &BTreeMap<String, String>,
     wiki_parser: &mut WikiParser,
-) -> BTreeMap<String, BTreeMap<String, String>> {
-    // return value is region -> line -> operator
+) -> BTreeMap<String, BTreeMap<String, LineOperatorInfo>> {
+    // return value is: region -> line -> operator_info
 
     let url = url_pattern.replace("{TITLE}", &page_config.title);
 
@@ -175,15 +178,23 @@ async fn process_page(
             Some(l) => l,
             None => continue,
         };
-        let operator = match operator_opt {
+        let operator_name = match operator_opt {
             Some(o) => o,
             None => continue,
+        };
+        let operator_abbrev = operator_name_to_abbrev
+            .get(&operator_name)
+            .map(|oa| oa.clone());
+        let operator_info = LineOperatorInfo {
+            canonical_line: line.clone(),
+            operator_name,
+            operator_abbrev,
         };
 
         ret
             .entry(page_config.region.clone())
             .or_insert_with(|| BTreeMap::new())
-            .insert(line, operator);
+            .insert(line.to_lowercase(), operator_info);
     }
 
     ret
@@ -229,6 +240,7 @@ async fn main() {
                     &mut reqwest_client,
                     &page_source.page_url_pattern,
                     &page,
+                    &page_source.operator_name_to_abbrev,
                     &mut parser,
                 ).await;
                 for (this_region, this_line_to_operator) in this_region_to_line_to_operator {
