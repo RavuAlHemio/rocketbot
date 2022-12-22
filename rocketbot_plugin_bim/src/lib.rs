@@ -647,6 +647,22 @@ impl BimPlugin {
 
         let config_guard = self.config.read().await;
 
+        let is_admin = config_guard.admin_usernames.contains(&channel_message.message.sender.username);
+        let alternate_rider = command.options.get("rider")
+            .or_else(|| command.options.get("r"));
+        let alternate_timestamp_string = command.options.get("timestamp")
+            .or_else(|| command.options.get("t"));
+        let utc_timestamp = command.flags.contains("utc") || command.flags.contains("u");
+
+        if (alternate_rider.is_some() || alternate_timestamp_string.is_some()) && !is_admin {
+            send_channel_message!(
+                interface,
+                &channel_message.channel.name,
+                "-r/--rider and -t/--timestamp can only be used by `bim` administrators!",
+            ).await;
+            return;
+        }
+
         let company = command.options.get("company")
             .or_else(|| command.options.get("c"))
             .map(|v| v.as_str().unwrap())
@@ -662,6 +678,26 @@ impl BimPlugin {
                 ).await;
                 return;
             }
+        };
+
+        let ride_timestamp = if let Some(ats) = alternate_timestamp_string {
+            let timestamp_opt = self.parse_user_timestamp(
+                ats.as_str().expect("timestamp string not a string?!"),
+                utc_timestamp,
+                &channel_message.channel.name,
+            ).await;
+            match timestamp_opt {
+                Some(t) => t,
+                None => return, // error message already output
+            }
+        } else {
+            channel_message.message.timestamp.with_timezone(&Local)
+        };
+
+        let rider_username = if let Some(ar) = alternate_rider {
+            ar.as_str().expect("explicit rider not a string?!")
+        } else {
+            channel_message.message.sender.username.as_str()
         };
 
         let bim_database_opt = self.load_bim_database(&config_guard, company);
@@ -691,13 +727,12 @@ impl BimPlugin {
             None
         };
 
-        let ride_timestamp = channel_message.message.timestamp.with_timezone(&Local);
         let increment_res = increment_rides_by_spec(
             &mut ride_conn,
             bim_database_opt.as_ref(),
             company,
             company_def,
-            &channel_message.message.sender.username,
+            rider_username,
             ride_timestamp,
             &command.rest,
             config_guard.allow_fixed_coupling_combos,
@@ -2404,41 +2439,15 @@ impl BimPlugin {
         }
 
         let new_timestamp_opt = if let Some(nts) = new_timestamp_str {
-            let ndt = match NaiveDateTime::parse_from_str(nts, TIMESTAMP_INPUT_FORMAT) {
-                Ok(ndt) => ndt,
-                Err(_) => {
-                    send_channel_message!(
-                        interface,
-                        &channel_message.channel.name,
-                        &format!("Failed to parse timestamp; expected format `{}`.", TIMESTAMP_INPUT_FORMAT),
-                    ).await;
-                    return;
-                },
-            };
-            let dt = if utc_time {
-                Local.from_utc_datetime(&ndt)
-            } else {
-                match Local.from_local_datetime(&ndt) {
-                    LocalResult::None => {
-                        send_channel_message!(
-                            interface,
-                            &channel_message.channel.name,
-                            "That local time does not exist. You may wish to use the -u/--utc option.",
-                        ).await;
-                        return;
-                    },
-                    LocalResult::Ambiguous(_, _) => {
-                        send_channel_message!(
-                            interface,
-                            &channel_message.channel.name,
-                            "That local time is ambiguous. Please specify it in UTC using the -u/--utc option.",
-                        ).await;
-                        return;
-                    },
-                    LocalResult::Single(t) => t,
-                }
-            };
-            Some(dt)
+            let nt = self.parse_user_timestamp(
+                nts,
+                utc_time,
+                &channel_message.channel.name,
+            ).await;
+            match nt {
+                Some(t) => Some(t),
+                None => return, // error message already output
+            }
         } else {
             None
         };
@@ -3147,6 +3156,48 @@ impl BimPlugin {
             default_operator_region,
         })
     }
+
+    async fn parse_user_timestamp(&self, timestamp_str: &str, utc_time: bool, channel_name: &str) -> Option<DateTime<Local>> {
+        let interface = match self.interface.upgrade() {
+            Some(rbi) => rbi,
+            None => return None,
+        };
+
+        let ndt = match NaiveDateTime::parse_from_str(timestamp_str, TIMESTAMP_INPUT_FORMAT) {
+            Ok(ndt) => ndt,
+            Err(_) => {
+                send_channel_message!(
+                    interface,
+                    channel_name,
+                    &format!("Failed to parse timestamp; expected format `{}`.", TIMESTAMP_INPUT_FORMAT),
+                ).await;
+                return None;
+            },
+        };
+        if utc_time {
+            Some(Local.from_utc_datetime(&ndt))
+        } else {
+            match Local.from_local_datetime(&ndt) {
+                LocalResult::None => {
+                    send_channel_message!(
+                        interface,
+                        channel_name,
+                        "That local time does not exist. You may wish to use the -u/--utc option.",
+                    ).await;
+                    None
+                },
+                LocalResult::Ambiguous(_, _) => {
+                    send_channel_message!(
+                        interface,
+                        channel_name,
+                        "That local time is ambiguous. Please specify it in UTC using the -u/--utc option.",
+                    ).await;
+                    None
+                },
+                LocalResult::Single(t) => Some(t),
+            }
+        }
+    }
 }
 #[async_trait]
 impl RocketBotPlugin for BimPlugin {
@@ -3183,6 +3234,12 @@ impl RocketBotPlugin for BimPlugin {
             )
                 .add_option("company", CommandValueType::String)
                 .add_option("c", CommandValueType::String)
+                .add_option("rider", CommandValueType::String)
+                .add_option("r", CommandValueType::String)
+                .add_option("timestamp", CommandValueType::String)
+                .add_option("t", CommandValueType::String)
+                .add_flag("u")
+                .add_flag("utc")
                 .build()
         ).await;
         my_interface.register_channel_command(
