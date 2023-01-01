@@ -1956,6 +1956,7 @@ dependencies = [
  "rocketbot_plugin_catchword",
  "rocketbot_plugin_config_user_alias",
  "rocketbot_plugin_date",
+ "rocketbot_plugin_degrees",
  "rocketbot_plugin_deobfuscate",
  "rocketbot_plugin_dice",
  "rocketbot_plugin_exiftell",
@@ -2207,6 +2208,19 @@ dependencies = [
  "regex",
  "rocketbot_interface",
  "serde_json",
+]
+
+[[package]]
+name = "rocketbot_plugin_degrees"
+version = "0.1.0"
+dependencies = [
+ "async-trait",
+ "log",
+ "png",
+ "regex",
+ "rocketbot_interface",
+ "serde_json",
+ "tokio",
 ]
 
 [[package]]
