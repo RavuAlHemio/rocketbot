@@ -6,7 +6,7 @@ use std::collections::{BTreeMap, BTreeSet, HashMap, HashSet};
 use std::fmt::{self, Write};
 use std::fs::File;
 use std::num::ParseIntError;
-use std::sync::Weak;
+use std::sync::{Arc, Weak};
 
 use async_trait::async_trait;
 use chrono::{
@@ -14,7 +14,7 @@ use chrono::{
     Weekday,
 };
 use indexmap::IndexSet;
-use log::{error, info, warn};
+use log::{error, info};
 use once_cell::sync::OnceCell;
 use rand::{Rng, thread_rng};
 use regex::Regex;
@@ -28,10 +28,11 @@ use rocketbot_interface::sync::RwLock;
 use rocketbot_string::NatSortedString;
 use serde::{Deserialize, Serialize};
 use serde_json;
+use tokio::sync::mpsc;
 use tokio_postgres::NoTls;
 use tokio_postgres::types::ToSql;
 
-use crate::achievements::{get_achievements_for, get_all_achievements, recalculate_achievements};
+use crate::achievements::{get_all_achievements, recalculate_achievements};
 use crate::range_set::RangeSet;
 
 
@@ -338,7 +339,8 @@ struct Config {
 
 pub struct BimPlugin {
     interface: Weak<dyn RocketBotInterface>,
-    config: RwLock<Config>,
+    config: Arc<RwLock<Config>>,
+    achievement_update_sender: mpsc::UnboundedSender<String>,
 }
 impl BimPlugin {
     fn load_bim_database(&self, config: &Config, company: &str) -> Option<HashMap<VehicleNumber, VehicleInfo>> {
@@ -402,20 +404,6 @@ impl BimPlugin {
         }
 
         Some(region_to_line_to_operator)
-    }
-
-    async fn connect_ride_db(&self, config: &Config) -> Result<tokio_postgres::Client, tokio_postgres::Error> {
-        let (client, connection) = match tokio_postgres::connect(&config.ride_db_conn_string, NoTls).await {
-            Ok(cc) => cc,
-            Err(e) => {
-                error!("error connecting to database: {}", e);
-                return Err(e);
-            },
-        };
-        tokio::spawn(async move {
-            connection.await
-        });
-        Ok(client)
     }
 
     fn lookback_range_from_command(command: &CommandInstance) -> Option<LookbackRange> {
@@ -541,8 +529,8 @@ impl BimPlugin {
             },
         };
 
-        async fn get_last_ride(me: &BimPlugin, config: &Config, username: &str, company: &str, vehicle_number: &VehicleNumber) -> Option<String> {
-            let ride_conn = match me.connect_ride_db(config).await {
+        async fn get_last_ride(config: &Config, username: &str, company: &str, vehicle_number: &VehicleNumber) -> Option<String> {
+            let ride_conn = match connect_ride_db(config).await {
                 Ok(c) => c,
                 Err(_) => return None,
             };
@@ -628,7 +616,7 @@ impl BimPlugin {
 
             Some(ret)
         }
-        if let Some(last_ride) = get_last_ride(&self, &config_guard, &channel_message.message.sender.username, &company, &number).await {
+        if let Some(last_ride) = get_last_ride(&config_guard, &channel_message.message.sender.username, &company, &number).await {
             write_expect!(response, "\n{}", last_ride);
         }
 
@@ -701,7 +689,7 @@ impl BimPlugin {
         };
 
         let bim_database_opt = self.load_bim_database(&config_guard, company);
-        let mut ride_conn = match self.connect_ride_db(&config_guard).await {
+        let mut ride_conn = match connect_ride_db(&config_guard).await {
             Ok(c) => c,
             Err(_) => {
                 send_channel_message!(
@@ -711,20 +699,6 @@ impl BimPlugin {
                 ).await;
                 return;
             },
-        };
-
-        let prev_achievements = if config_guard.achievements_active {
-            let prev_ach = get_achievements_for(
-                    &ride_conn,
-                    &channel_message.message.sender.username,
-                ).await
-                    .unwrap_or_else(|e| {
-                        error!("failed to obtain previous achievements: {}", e);
-                        BTreeMap::new()
-                    });
-            Some(prev_ach)
-        } else {
-            None
         };
 
         let increment_res = increment_rides_by_spec(
@@ -926,77 +900,9 @@ impl BimPlugin {
             &response_str,
         ).await;
 
-        if let Some(prev_ach) = prev_achievements {
-            if let Err(e) = recalculate_achievements(&ride_conn).await {
-                error!("failed to recalculate achievements: {}", e);
-            }
-
-            let new_achievements = get_achievements_for(
-                &ride_conn,
-                &channel_message.message.sender.username,
-            ).await
-                .unwrap_or_else(|e| {
-                    error!("failed to obtain new achievements: {}", e);
-                    BTreeMap::new()
-                });
-
-            for (ach_id, old_achievement) in &prev_ach {
-                let new_achievement = match new_achievements.get(ach_id) {
-                    Some(na) => na,
-                    None => continue,
-                };
-
-                match (old_achievement.timestamp, new_achievement.timestamp) {
-                    (None, None) => {
-                        // achievement not unlocked
-                    },
-                    (None, Some(new_ts)) => {
-                        // achievement unlocked!
-                        info!(
-                            "achievement unlocked! rider {:?} unlocked achievement {} at {}",
-                            channel_message.message.sender.username,
-                            ach_id,
-                            new_ts,
-                        );
-
-                        let ach_def_opt = ACHIEVEMENT_DEFINITIONS
-                            .iter()
-                            .filter(|ad| ad.id == *ach_id)
-                            .nth(0);
-                        if let Some(ach_def) = ach_def_opt {
-                            send_channel_message!(
-                                interface,
-                                &channel_message.channel.name,
-                                &format!(
-                                    "Achievement unlocked! {} unlocked *{}* ({})",
-                                    channel_message.message.sender.username,
-                                    ach_def.name,
-                                    ach_def.description,
-                                ),
-                            ).await;
-                        }
-                    },
-                    (Some(old_ts), Some(new_ts)) => {
-                        if old_ts != new_ts {
-                            warn!(
-                                "achievement timestamp changed! rider {:?} achievement {} from {} to {}",
-                                channel_message.message.sender.username,
-                                ach_id,
-                                old_ts,
-                                new_ts,
-                            );
-                        }
-                    },
-                    (Some(old_ts), None) => {
-                        warn!(
-                            "achievement disappeared! rider {:?} achievement {} previously at {}",
-                            channel_message.message.sender.username,
-                            ach_id,
-                            old_ts,
-                        );
-                    },
-                }
-            }
+        // signal to update achievements
+        if config_guard.achievements_active {
+            let _ = self.achievement_update_sender.send(channel_message.channel.name.clone());
         }
     }
 
@@ -1034,7 +940,7 @@ impl BimPlugin {
             }
         }
 
-        let ride_conn = match self.connect_ride_db(&config_guard).await {
+        let ride_conn = match connect_ride_db(&config_guard).await {
             Ok(c) => c,
             Err(_) => {
                 send_channel_message!(
@@ -1177,7 +1083,7 @@ impl BimPlugin {
             },
         };
 
-        let ride_conn = match self.connect_ride_db(&config_guard).await {
+        let ride_conn = match connect_ride_db(&config_guard).await {
             Ok(c) => c,
             Err(_) => {
                 send_channel_message!(
@@ -1380,7 +1286,7 @@ impl BimPlugin {
             }
         };
 
-        let ride_conn = match self.connect_ride_db(&config_guard).await {
+        let ride_conn = match connect_ride_db(&config_guard).await {
             Ok(c) => c,
             Err(_) => {
                 send_channel_message!(
@@ -1576,7 +1482,7 @@ impl BimPlugin {
             }
         };
 
-        let ride_conn = match self.connect_ride_db(&config_guard).await {
+        let ride_conn = match connect_ride_db(&config_guard).await {
             Ok(c) => c,
             Err(_) => {
                 send_channel_message!(
@@ -1720,7 +1626,7 @@ impl BimPlugin {
             }
         };
 
-        let ride_conn = match self.connect_ride_db(&config_guard).await {
+        let ride_conn = match connect_ride_db(&config_guard).await {
             Ok(c) => c,
             Err(_) => {
                 send_channel_message!(
@@ -1866,7 +1772,7 @@ impl BimPlugin {
             }
         };
 
-        let ride_conn = match self.connect_ride_db(&config_guard).await {
+        let ride_conn = match connect_ride_db(&config_guard).await {
             Ok(c) => c,
             Err(_) => {
                 send_channel_message!(
@@ -2005,7 +1911,7 @@ impl BimPlugin {
             }
         };
 
-        let ride_conn = match self.connect_ride_db(&config_guard).await {
+        let ride_conn = match connect_ride_db(&config_guard).await {
             Ok(c) => c,
             Err(_) => {
                 send_channel_message!(
@@ -2226,7 +2132,7 @@ impl BimPlugin {
             None => HashMap::new(), // work with an empty database
         };
 
-        let ride_conn = match self.connect_ride_db(&config_guard).await {
+        let ride_conn = match connect_ride_db(&config_guard).await {
             Ok(c) => c,
             Err(_) => {
                 send_channel_message!(
@@ -2453,7 +2359,7 @@ impl BimPlugin {
         };
 
         // find the ride
-        let mut ride_conn = match self.connect_ride_db(&config_guard).await {
+        let mut ride_conn = match connect_ride_db(&config_guard).await {
             Ok(c) => c,
             Err(_) => {
                 send_channel_message!(
@@ -2699,7 +2605,7 @@ impl BimPlugin {
             },
         };
 
-        let ride_conn = match self.connect_ride_db(&config_guard).await {
+        let ride_conn = match connect_ride_db(&config_guard).await {
             Ok(c) => c,
             Err(_) => {
                 send_channel_message!(
@@ -2838,88 +2744,7 @@ impl BimPlugin {
             return;
         }
 
-        let ride_conn = match self.connect_ride_db(&config_guard).await {
-            Ok(c) => c,
-            Err(_) => {
-                send_channel_message!(
-                    interface,
-                    &channel_message.channel.name,
-                    "Failed to open database connection. :disappointed:",
-                ).await;
-                return;
-            },
-        };
-
-        let prev_users_achievements = get_all_achievements(
-            &ride_conn,
-        ).await
-            .unwrap_or_else(|e| {
-                error!("failed to obtain previous achievements: {}", e);
-                BTreeMap::new()
-            });
-
-        if let Err(e) = recalculate_achievements(&ride_conn).await {
-            error!("failed to recalculate achievements: {}", e);
-            send_channel_message!(
-                interface,
-                &channel_message.channel.name,
-                "Failed to recalculate achievements. :disappointed:",
-            ).await;
-            return;
-        }
-
-        let new_users_achievements = get_all_achievements(
-            &ride_conn,
-        ).await
-            .unwrap_or_else(|e| {
-                error!("failed to obtain current achievements: {}", e);
-                BTreeMap::new()
-            });
-
-        let empty_achievements = BTreeMap::new();
-        for (user, new_achievements) in new_users_achievements {
-            let prev_achievements = prev_users_achievements.get(&user)
-                .unwrap_or_else(|| &empty_achievements);
-
-            for (ach_id, new_ach_state) in new_achievements {
-                let new_timestamp = match new_ach_state.timestamp {
-                    Some(ts) => ts.0,
-                    None => continue, // locked achievements aren't interesting
-                };
-
-                let had_timestamp_previously = prev_achievements
-                    .get(&ach_id)
-                    .map(|st8| st8.timestamp.is_some())
-                    .unwrap_or(false);
-                if !had_timestamp_previously {
-                    // newly unlocked achievement!
-                    let ach_def_opt = ACHIEVEMENT_DEFINITIONS
-                        .iter()
-                        .filter(|ad| ad.id == ach_id)
-                        .nth(0);
-                    if let Some(ach_def) = ach_def_opt {
-                        info!(
-                            "achievement unlocked during refresh! rider {:?} unlocked achievement {} at {}",
-                            user,
-                            ach_id,
-                            new_timestamp,
-                        );
-
-                        send_channel_message!(
-                            interface,
-                            &channel_message.channel.name,
-                            &format!(
-                                "{} unlocked *{}* ({}) {}",
-                                user,
-                                ach_def.name,
-                                ach_def.description,
-                                Self::canonical_date_format(&new_timestamp, true, false),
-                            ),
-                        ).await;
-                    }
-                }
-            }
-        }
+        let _ = self.achievement_update_sender.send(channel_message.channel.name.clone());
     }
 
     async fn channel_command_bimop(&self, channel_message: &ChannelMessage, command: &CommandInstance) {
@@ -3209,10 +3034,10 @@ impl RocketBotPlugin for BimPlugin {
 
         let config_object = Self::try_get_config(config)
             .expect("failed to load configuration");
-        let config_lock = RwLock::new(
+        let config_lock = Arc::new(RwLock::new(
             "BimPlugin::config",
             config_object,
-        );
+        ));
 
         my_interface.register_channel_command(
             &CommandDefinitionBuilder::new(
@@ -3409,9 +3234,52 @@ impl RocketBotPlugin for BimPlugin {
                 .build()
         ).await;
 
+        // set up the achievement update loop
+        let (achievement_update_sender, mut achievement_update_receiver) = mpsc::unbounded_channel();
+        let achievement_update_interface = Weak::clone(&interface);
+        let achievement_config_lock = Arc::downgrade(&config_lock);
+        tokio::spawn(async move {
+            loop {
+                // wait for us to be told which channel wants to update the achievements
+                let channel: String = match achievement_update_receiver.recv().await {
+                    Some(c) => c,
+                    None => return, // sender has been dropped; no more channel names will ever reach us
+                };
+
+                // try to connect to the database
+                let db_conn = {
+                    // try to get a handle on the config lock
+                    let config_lock = match Weak::upgrade(&achievement_config_lock) {
+                        Some(cl) => cl,
+                        None => return, // config lock is gone
+                    };
+                    let config_guard = config_lock
+                        .read().await;
+                    match connect_ride_db(&config_guard).await {
+                        Ok(dbc) => dbc,
+                        Err(e) => {
+                            error!("failed to open postgres connection: {}", e);
+                            // try again later
+                            continue;
+                        },
+                    }
+                };
+
+                // try to get the interface to write to the channel
+                let interface = match Weak::upgrade(&achievement_update_interface) {
+                    Some(i) => i,
+                    None => return, // that's not coming back either
+                };
+
+                // run the achievement update process
+                do_update_achievements(&*interface, &db_conn, &channel).await;
+            }
+        });
+
         Self {
             interface,
             config: config_lock,
+            achievement_update_sender,
         }
     }
 
@@ -3504,6 +3372,95 @@ impl RocketBotPlugin for BimPlugin {
                 error!("failed to reload configuration: {}", e);
                 false
             },
+        }
+    }
+}
+
+
+async fn connect_ride_db(config: &Config) -> Result<tokio_postgres::Client, tokio_postgres::Error> {
+    let (client, connection) = match tokio_postgres::connect(&config.ride_db_conn_string, NoTls).await {
+        Ok(cc) => cc,
+        Err(e) => {
+            error!("error connecting to database: {}", e);
+            return Err(e);
+        },
+    };
+    tokio::spawn(async move {
+        connection.await
+    });
+    Ok(client)
+}
+
+
+async fn do_update_achievements(interface: &dyn RocketBotInterface, ride_conn: &tokio_postgres::Client, channel_name: &str) {
+    let prev_users_achievements = get_all_achievements(
+        &ride_conn,
+    ).await
+        .unwrap_or_else(|e| {
+            error!("failed to obtain previous achievements: {}", e);
+            BTreeMap::new()
+        });
+
+    if let Err(e) = recalculate_achievements(&ride_conn).await {
+        error!("failed to recalculate achievements: {}", e);
+        send_channel_message!(
+            interface,
+            channel_name,
+            "Failed to recalculate achievements. :disappointed:",
+        ).await;
+        return;
+    }
+
+    let new_users_achievements = get_all_achievements(
+        &ride_conn,
+    ).await
+        .unwrap_or_else(|e| {
+            error!("failed to obtain current achievements: {}", e);
+            BTreeMap::new()
+        });
+
+    let empty_achievements = BTreeMap::new();
+    for (user, new_achievements) in new_users_achievements {
+        let prev_achievements = prev_users_achievements.get(&user)
+            .unwrap_or_else(|| &empty_achievements);
+
+        for (ach_id, new_ach_state) in new_achievements {
+            let new_timestamp = match new_ach_state.timestamp {
+                Some(ts) => ts.0,
+                None => continue, // locked achievements aren't interesting
+            };
+
+            let had_timestamp_previously = prev_achievements
+                .get(&ach_id)
+                .map(|st8| st8.timestamp.is_some())
+                .unwrap_or(false);
+            if !had_timestamp_previously {
+                // newly unlocked achievement!
+                let ach_def_opt = ACHIEVEMENT_DEFINITIONS
+                    .iter()
+                    .filter(|ad| ad.id == ach_id)
+                    .nth(0);
+                if let Some(ach_def) = ach_def_opt {
+                    info!(
+                        "achievement unlocked! rider {:?} unlocked achievement {} at {}",
+                        user,
+                        ach_id,
+                        new_timestamp,
+                    );
+
+                    send_channel_message!(
+                        interface,
+                        channel_name,
+                        &format!(
+                            "{} unlocked *{}* ({}) {}",
+                            user,
+                            ach_def.name,
+                            ach_def.description,
+                            BimPlugin::canonical_date_format(&new_timestamp, true, false),
+                        ),
+                    ).await;
+                }
+            }
         }
     }
 }
