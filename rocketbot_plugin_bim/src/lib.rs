@@ -2579,9 +2579,9 @@ impl BimPlugin {
             &format!("Ride {} modified.", ride_id),
         ).await;
 
-        // update achievements
-        if let Err(e) = recalculate_achievements(&ride_conn).await {
-            error!("failed to recalculate achievements after fixing bim ride {}: {}", ride_id, e);
+        // enqueue achievement recalculation
+        if config_guard.achievements_active {
+            let _ = self.achievement_update_sender.send(channel_message.channel.name.clone());
         }
     }
 
