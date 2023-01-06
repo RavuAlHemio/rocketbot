@@ -3,6 +3,7 @@ use std::path::PathBuf;
 
 use once_cell::sync::OnceCell;
 use rocketbot_interface::sync::RwLock;
+use rocketbot_interface::commands::CommandConfiguration;
 use serde::{Deserialize, Serialize};
 use serde_json;
 
@@ -16,6 +17,7 @@ pub(crate) static CONFIG: OnceCell<RwLock<Config>> = OnceCell::new();
 #[derive(Clone, Debug, Deserialize, Eq, PartialEq, Serialize)]
 pub(crate) struct Config {
     pub server: ServerConfig,
+    #[serde(default)] pub commands: CommandConfiguration,
     pub plugins: Vec<PluginConfig>,
 }
 

@@ -1,6 +1,7 @@
 use std::collections::{HashMap, HashSet};
 
 use bitflags::bitflags;
+use serde::{Deserialize, Serialize};
 
 
 bitflags! {
@@ -201,12 +202,22 @@ impl CommandInstance {
 }
 
 
-#[derive(Clone, Debug, Eq, Hash, PartialEq)]
+#[derive(Clone, Debug, Deserialize, Eq, Hash, Ord, PartialEq, PartialOrd, Serialize)]
 pub struct CommandConfiguration {
+    #[serde(default = "CommandConfiguration::default_command_prefix")]
     pub command_prefix: String,
+
+    #[serde(default = "CommandConfiguration::default_short_option_prefix")]
     pub short_option_prefix: String,
+
+    #[serde(default = "CommandConfiguration::default_long_option_prefix")]
     pub long_option_prefix: String,
+
+    #[serde(default = "CommandConfiguration::default_stop_parse_option")]
     pub stop_parse_option: String,
+
+    #[serde(default = "CommandConfiguration::default_case_fold_commands")]
+    pub case_fold_commands: bool,
 }
 impl CommandConfiguration {
     pub fn new(
@@ -214,22 +225,31 @@ impl CommandConfiguration {
         short_option_prefix: String,
         long_option_prefix: String,
         stop_parse_option: String,
+        case_fold_commands: bool,
     ) -> CommandConfiguration {
         CommandConfiguration {
             command_prefix,
             short_option_prefix,
             long_option_prefix,
             stop_parse_option,
+            case_fold_commands,
         }
     }
+
+    fn default_command_prefix() -> String { "!".to_owned() }
+    fn default_short_option_prefix() -> String { "-".to_owned() }
+    fn default_long_option_prefix() -> String { "--".to_owned() }
+    fn default_stop_parse_option() -> String { "--".to_owned() }
+    fn default_case_fold_commands() -> bool { false }
 }
 impl Default for CommandConfiguration {
     fn default() -> Self {
         CommandConfiguration::new(
-            String::from("!"),
-            String::from("-"),
-            String::from("--"),
-            String::from("--"),
+            Self::default_command_prefix(),
+            Self::default_short_option_prefix(),
+            Self::default_long_option_prefix(),
+            Self::default_stop_parse_option(),
+            Self::default_case_fold_commands(),
         )
     }
 }

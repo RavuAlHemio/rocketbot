@@ -1,4 +1,5 @@
 use core::panic;
+use std::borrow::Cow;
 use std::collections::{HashMap, HashSet};
 use std::collections::hash_map::Entry as HashMapEntry;
 use std::fmt::Write as FmtWrite;
@@ -306,6 +307,20 @@ impl ServerConnection {
     pub fn disconnect(&self) {
         self.shared_state.exit_notify.notify_one();
     }
+
+    fn downcase_command_if_needed<'a>(&self, command_name: &'a str) -> Cow<'a, str> {
+        if self.shared_state.command_config.case_fold_commands {
+            Cow::Owned(command_name.to_lowercase())
+        } else {
+            Cow::Borrowed(command_name)
+        }
+    }
+
+    fn downcase_command_if_needed_mut(&self, command_name: &mut String) {
+        if self.shared_state.command_config.case_fold_commands {
+            *command_name = command_name.to_lowercase();
+        }
+    }
 }
 impl Clone for ServerConnection {
     fn clone(&self) -> Self {
@@ -481,12 +496,14 @@ impl RocketBotInterface for ServerConnection {
     async fn register_channel_command(&self, command: &CommandDefinition) -> bool {
         let mut commands_guard = self.shared_state.channel_commands
             .write().await;
-        match commands_guard.entry(command.name.clone()) {
+        let mut my_command = command.clone();
+        self.downcase_command_if_needed_mut(&mut my_command.name);
+        match commands_guard.entry(my_command.name.clone()) {
             HashMapEntry::Occupied(_) => {
                 false
             },
             HashMapEntry::Vacant(ve) => {
-                ve.insert(command.clone());
+                ve.insert(my_command);
                 true
             },
         }
@@ -495,12 +512,16 @@ impl RocketBotInterface for ServerConnection {
     async fn register_private_message_command(&self, command: &CommandDefinition) -> bool {
         let mut commands_guard = self.shared_state.private_message_commands
             .write().await;
-        match commands_guard.entry(command.name.clone()) {
+        let mut my_command = command.clone();
+        if self.shared_state.command_config.case_fold_commands {
+            my_command.name = my_command.name.to_lowercase();
+        }
+        match commands_guard.entry(my_command.name.clone()) {
             HashMapEntry::Occupied(_) => {
                 false
             },
             HashMapEntry::Vacant(ve) => {
-                ve.insert(command.clone());
+                ve.insert(my_command);
                 true
             },
         }
@@ -509,13 +530,15 @@ impl RocketBotInterface for ServerConnection {
     async fn unregister_channel_command(&self, command_name: &str) -> bool {
         let mut commands_guard = self.shared_state.channel_commands
             .write().await;
-        commands_guard.remove(command_name).is_some()
+        let downcased_name = self.downcase_command_if_needed(command_name);
+        commands_guard.remove(downcased_name.as_ref()).is_some()
     }
 
     async fn unregister_private_message_command(&self, command_name: &str) -> bool {
         let mut commands_guard = self.shared_state.private_message_commands
             .write().await;
-        commands_guard.remove(command_name).is_some()
+        let downcased_name = self.downcase_command_if_needed(command_name);
+        commands_guard.remove(downcased_name.as_ref()).is_some()
     }
 
     async fn get_command_configuration(&self) -> CommandConfiguration {
@@ -878,7 +901,12 @@ pub(crate) async fn connect() -> Arc<ServerConnection> {
         "SharedConnectionState::rng",
         StdRng::from_entropy(),
     );
-    let command_config = Default::default();
+    let command_config = {
+        let config_guard = CONFIG
+            .get().expect("CONFIG is not set?!")
+            .read().await;
+        config_guard.commands.clone()
+    };
     let channel_commands = RwLock::new(
         "SharedConnectionState::channel_commands",
         HashMap::new(),
@@ -2283,13 +2311,16 @@ async fn distribute_channel_message_commands(channel_message: &ChannelMessage, s
     if !command_text.value.starts_with(command_prefix) {
         return;
     }
-    let command_name = &command_text.value[command_prefix.len()..];
+    let mut command_name = Cow::Borrowed(&command_text.value[command_prefix.len()..]);
+    if shared_state.command_config.case_fold_commands {
+        command_name = Cow::Owned(command_name.to_lowercase());
+    }
 
     // do we know this command?
     let command = {
         let commands_guard = shared_state.channel_commands
             .read().await;
-        match commands_guard.get(command_name) {
+        match commands_guard.get(command_name.as_ref()) {
             Some(cd) => cd.clone(),
             None => return,
         }
@@ -2336,13 +2367,16 @@ async fn distribute_private_message_commands(private_message: &PrivateMessage, s
     if !command_text.value.starts_with(command_prefix) {
         return;
     }
-    let command_name = &command_text.value[command_prefix.len()..];
+    let mut command_name = Cow::Borrowed(&command_text.value[command_prefix.len()..]);
+    if shared_state.command_config.case_fold_commands {
+        command_name = Cow::Owned(command_name.to_lowercase());
+    }
 
     // do we know this command?
     let command = {
         let commands_guard = shared_state.private_message_commands
             .read().await;
-        match commands_guard.get(command_name) {
+        match commands_guard.get(command_name.as_ref()) {
             Some(cd) => cd.clone(),
             None => return,
         }
