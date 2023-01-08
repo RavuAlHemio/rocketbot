@@ -1,5 +1,5 @@
 use rocketbot_interface::JsonValueExtensions;
-use rocketbot_interface::message::{Checkbox, InlineFragment, ListItem, MessageFragment};
+use rocketbot_interface::message::{Checkbox, Emoji, InlineFragment, ListItem, MessageFragment};
 use serde_json;
 
 use crate::errors::MessageParsingError;
@@ -43,6 +43,12 @@ fn parse_inline_fragment(inline: &serde_json::Value) -> Result<InlineFragment, M
             Ok(InlineFragment::Link(url, Box::new(label)))
         },
         "MENTION_CHANNEL"|"MENTION_USER"|"EMOJI"|"INLINE_CODE" => {
+            if inline_type == "EMOJI" && inline["unicode"].is_string() {
+                // special case: Unicode emoji
+                return Ok(InlineFragment::Emoji(Emoji::Unicode(
+                    inline["unicode"].as_str().unwrap().to_owned()
+                )));
+            }
             let value_type = inline["value"]["type"].as_str()
                 .ok_or(MessageParsingError::TargetValueNotSinglePlainText(inline_type.into()))?;
             if value_type != "PLAIN_TEXT" {
@@ -54,7 +60,7 @@ fn parse_inline_fragment(inline: &serde_json::Value) -> Result<InlineFragment, M
             let result = match inline_type {
                 "MENTION_CHANNEL" => InlineFragment::MentionChannel(target),
                 "MENTION_USER" => InlineFragment::MentionUser(target),
-                "EMOJI" => InlineFragment::Emoji(target),
+                "EMOJI" => InlineFragment::Emoji(Emoji::Code(target)),
                 "INLINE_CODE" => InlineFragment::InlineCode(target),
                 _ => panic!("type does not match pre-filtered types; assume bug"),
             };
@@ -118,12 +124,14 @@ fn parse_code_line(item: &serde_json::Value) -> Result<InlineFragment, MessagePa
 fn parse_paragraph_fragment(paragraph: &serde_json::Value) -> Result<MessageFragment, MessageParsingError> {
     match paragraph["type"].as_str().ok_or(MessageParsingError::TypeNotString)? {
         "BIG_EMOJI" => {
-            let mut emoji: Vec<String> = Vec::new();
+            let mut emoji: Vec<Emoji> = Vec::new();
             for big_emoji in paragraph["value"].members().ok_or(MessageParsingError::InnerValueNotList)? {
-                let emoji_string = big_emoji["value"]["value"].as_str()
-                    .ok_or(MessageParsingError::BigEmojiValueNotString)?
-                    .to_owned();
-                emoji.push(emoji_string);
+                let inline_emoji = parse_inline_fragment(big_emoji)?;
+                if let InlineFragment::Emoji(e) = inline_emoji {
+                    emoji.push(e);
+                } else {
+                    return Err(MessageParsingError::BigEmojiValueNotEmoji);
+                }
             }
             Ok(MessageFragment::BigEmoji(emoji))
         },

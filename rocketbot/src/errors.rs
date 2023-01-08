@@ -56,7 +56,7 @@ impl error::Error for ConfigError {
 pub(crate) enum MessageParsingError {
     UnexpectedFragment(String, String),
     TypeNotString,
-    BigEmojiValueNotString,
+    BigEmojiValueNotEmoji,
     TaskStatusNotBool,
     CodeLanguageNotString,
     HeadingLevelNotU32,
@@ -74,8 +74,8 @@ impl fmt::Display for MessageParsingError {
                 => write!(f, "unexpected fragment {:?}; expected {}", frag_name, expectation),
             MessageParsingError::TypeNotString
                 => write!(f, "fragment type is either missing or not a string"),
-            MessageParsingError::BigEmojiValueNotString
-                => write!(f, "big emoji value is either missing or not a string"),
+            MessageParsingError::BigEmojiValueNotEmoji
+                => write!(f, "big emoji value is not an emoji"),
             MessageParsingError::TaskStatusNotBool
                 => write!(f, "task status is either missing or not a bool"),
             MessageParsingError::CodeLanguageNotString

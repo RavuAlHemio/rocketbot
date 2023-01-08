@@ -18,7 +18,7 @@ pub enum InlineFragment {
     Link(String, Box<InlineFragment>),
     MentionChannel(String),
     MentionUser(String),
-    Emoji(String),
+    Emoji(Emoji),
     InlineCode(String),
 }
 impl fmt::Display for InlineFragment {
@@ -39,7 +39,7 @@ impl fmt::Display for InlineFragment {
             InlineFragment::MentionUser(tgt)
                 => write!(f, "@{}", tgt),
             InlineFragment::Emoji(tgt)
-                => write!(f, ":{}:", tgt),
+                => write!(f, "{}", tgt),
             InlineFragment::InlineCode(tgt)
                 => write!(f, "`{}`", tgt),
         }
@@ -77,7 +77,7 @@ impl fmt::Display for ListItem {
 
 #[derive(Clone, Debug, Eq, Hash, PartialEq)]
 pub enum MessageFragment {
-    BigEmoji(Vec<String>),
+    BigEmoji(Vec<Emoji>),
     UnorderedList(Vec<ListItem>),
     Quote(Vec<MessageFragment>),
     Tasks(Vec<Checkbox>),
@@ -91,7 +91,7 @@ impl fmt::Display for MessageFragment {
         match self {
             MessageFragment::BigEmoji(emoji) => {
                 let wrapped_emoji: Vec<String> = emoji.iter()
-                    .map(|moji| format!(":{}:", moji))
+                    .map(|moji| moji.to_string())
                     .collect();
                 let emoji_string = wrapped_emoji.join(" ");
                 write!(f, "{}", emoji_string)
@@ -147,6 +147,22 @@ impl fmt::Display for MessageFragment {
         }
     }
 }
+
+
+#[derive(Clone, Debug, Eq, Hash, Ord, PartialEq, PartialOrd)]
+pub enum Emoji {
+    Code(String),
+    Unicode(String),
+}
+impl fmt::Display for Emoji {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match self {
+            Self::Code(c) => write!(f, ":{}:", c),
+            Self::Unicode(s) => f.write_str(s),
+        }
+    }
+}
+
 
 pub fn collect_inline_urls<'a, I: Iterator<Item = &'a InlineFragment>>(fragments: I) -> Vec<String> {
     let mut urls = Vec::new();
