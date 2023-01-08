@@ -3448,16 +3448,32 @@ async fn do_update_achievements(interface: &dyn RocketBotInterface, ride_conn: &
                         new_timestamp,
                     );
 
+                    // find how many users had this achievement previously
+                    let previous_count = prev_users_achievements
+                        .values()
+                        .filter_map(|user_achievements|
+                            user_achievements.get(&ach_id)
+                        )
+                        .filter(|ach_state| ach_state.timestamp.is_some())
+                        .count();
+
+                    let mut message = format!(
+                        "{} unlocked *{}* ({}) {}",
+                        user,
+                        ach_def.name,
+                        ach_def.description,
+                        BimPlugin::canonical_date_format(&new_timestamp, true, false),
+                    );
+                    match previous_count {
+                        0 => write!(message, ", the first to do so!"),
+                        1 => write!(message, ", the second to do so!"),
+                        more => write!(message, ", joining the ranks of {} riders before them!", more),
+                    }.unwrap();
+
                     send_channel_message!(
                         interface,
                         channel_name,
-                        &format!(
-                            "{} unlocked *{}* ({}) {}",
-                            user,
-                            ach_def.name,
-                            ach_def.description,
-                            BimPlugin::canonical_date_format(&new_timestamp, true, false),
-                        ),
+                        &message,
                     ).await;
                 }
             }
