@@ -212,3 +212,149 @@ pub(crate) fn parse_message(paragraphs: &serde_json::Value) -> Result<Vec<Messag
     }
     Ok(ret)
 }
+
+
+#[cfg(test)]
+mod tests {
+    use super::parse_message;
+    use rocketbot_interface::message::{Emoji, InlineFragment, MessageFragment};
+    use serde_json::json;
+
+    #[test]
+    fn parse_plain() {
+        let msg = json!([
+            {
+                "type": "PARAGRAPH",
+                "value": [
+                    {
+                        "type": "PLAIN_TEXT",
+                        "value": "auch irgendwie zu subtil um einen Unterschied zu machen"
+                    }
+                ]
+            }
+        ]);
+        let mut parsed = parse_message(&msg).unwrap();
+        assert_eq!(parsed.len(), 1);
+        let mut inlines = match parsed.remove(0) {
+            MessageFragment::Paragraph(inlines) => inlines,
+            _ => panic!("not a paragraph"),
+        };
+        assert_eq!(inlines.len(), 1);
+        let plain_text = match inlines.remove(0) {
+            InlineFragment::PlainText(plain) => plain,
+            _ => panic!("not plain"),
+        };
+        assert_eq!(plain_text, "auch irgendwie zu subtil um einen Unterschied zu machen");
+    }
+
+    #[test]
+    fn parse_link() {
+        let msg = json!([
+            {
+                "type": "PARAGRAPH",
+                "value": [
+                    {
+                        "type": "PLAIN_TEXT",
+                        "value": "frag mal auf "
+                    },
+                    {
+                        "type": "LINK",
+                        "value": {
+                            "src": {
+                                "type": "PLAIN_TEXT",
+                                "value": "//english.stackexchange.com..."
+                            },
+                            "label": {
+                                "type": "PLAIN_TEXT",
+                                "value": "english.stackexchange.com..."
+                            }
+                        }
+                    }
+                ]
+            }
+        ]);
+        let mut parsed = parse_message(&msg).unwrap();
+        assert_eq!(parsed.len(), 1);
+        let mut inlines = match parsed.remove(0) {
+            MessageFragment::Paragraph(inlines) => inlines,
+            _ => panic!("not a paragraph"),
+        };
+        assert_eq!(inlines.len(), 2);
+
+        let plain_text = match inlines.remove(0) {
+            InlineFragment::PlainText(plain) => plain,
+            _ => panic!("not plain"),
+        };
+        assert_eq!(plain_text, "frag mal auf ");
+
+        let (url, link_body) = match inlines.remove(0) {
+            InlineFragment::Link(url, link_body) => (url, link_body),
+            _ => panic!("not link"),
+        };
+        assert_eq!(url, "//english.stackexchange.com...");
+        let link_text = match link_body.as_ref() {
+            InlineFragment::PlainText(plain) => plain,
+            _ => panic!("link body not plain"),
+        };
+        assert_eq!(link_text, "english.stackexchange.com...");
+    }
+
+    #[test]
+    fn parse_big_emoji_code() {
+        let msg = json!([
+            {
+                "type": "BIG_EMOJI",
+                "value": [
+                    {
+                        "type": "EMOJI",
+                        "value": {
+                            "type": "PLAIN_TEXT",
+                            "value": "eggplant"
+                        },
+                        "shortCode": "eggplant"
+                    }
+                ]
+            }
+        ]);
+        let mut parsed = parse_message(&msg).unwrap();
+        assert_eq!(parsed.len(), 1);
+        let mut emoji = match parsed.remove(0) {
+            MessageFragment::BigEmoji(emoji) => emoji,
+            _ => panic!("not a paragraph"),
+        };
+        assert_eq!(emoji.len(), 1);
+        let em = match emoji.remove(0) {
+            Emoji::Code(em) => em,
+            _ => panic!("not plain"),
+        };
+        assert_eq!(em, "eggplant");
+    }
+
+    #[test]
+    fn parse_big_emoji_unicode() {
+        let msg = json!([
+            {
+                "type": "BIG_EMOJI",
+                "value": [
+                    {
+                        "type": "EMOJI",
+                        "unicode": "\u{1F346}"
+                    }
+                ]
+            }
+        ]);
+        let mut parsed = parse_message(&msg).unwrap();
+        assert_eq!(parsed.len(), 1);
+        let mut emoji = match parsed.remove(0) {
+            MessageFragment::BigEmoji(emoji) => emoji,
+            _ => panic!("not a paragraph"),
+        };
+        assert_eq!(emoji.len(), 1);
+        let em = match emoji.remove(0) {
+            Emoji::Unicode(em) => em,
+            _ => panic!("not plain"),
+        };
+        assert_eq!(em.chars().count(), 1);
+        assert_eq!(em.chars().nth(0).unwrap() as u32, 0x1F346);
+    }
+}
