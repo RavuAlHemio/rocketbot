@@ -74,6 +74,14 @@ pub trait JsonValueExtensions {
     /// otherwise, returns `""`.
     fn as_str_or_empty(&self) -> &str;
 
+    /// Attempts to interpret the JSON value as an unsigned 64-bit value, falling back on a default
+    /// value if it is missing.
+    ///
+    /// Returns `Some(_)` if the value is a [number][serde_json::Value::Number] and fits into
+    /// `u64`. Returns `Some(default)` if the value is null or missing. Returns `None` if the value
+    /// is present but of a different type.
+    fn as_u64_or_strict(&self, default: u64) -> Option<u64>;
+
     /// Attempts to interpret the JSON value as an object and return an iterator over its entries,
     /// or returns an iterator over an empty JSON object.
     ///
@@ -144,6 +152,14 @@ impl JsonValueExtensions for serde_json::Value {
 
     fn as_str_or_empty(&self) -> &str {
         self.as_str().unwrap_or("")
+    }
+
+    fn as_u64_or_strict(&self, default: u64) -> Option<u64> {
+        if self.is_null() {
+            Some(default)
+        } else {
+            self.as_u64()
+        }
     }
 
     fn entries_or_empty_strict(&self) -> Option<serde_json::map::Iter> {
