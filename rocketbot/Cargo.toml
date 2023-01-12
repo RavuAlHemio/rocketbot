@@ -35,6 +35,7 @@ rocketbot_plugin_group_pressure = { path = "../rocketbot_plugin_group_pressure" 
 rocketbot_plugin_help = { path = "../rocketbot_plugin_help" }
 rocketbot_plugin_link_react = { path = "../rocketbot_plugin_link_react" }
 rocketbot_plugin_logger = { path = "../rocketbot_plugin_logger" }
+rocketbot_plugin_netdev = { path = "../rocketbot_plugin_netdev" }
 rocketbot_plugin_new_year = { path = "../rocketbot_plugin_new_year" }
 rocketbot_plugin_nines = { path = "../rocketbot_plugin_nines" }
 rocketbot_plugin_numberword = { path = "../rocketbot_plugin_numberword" }

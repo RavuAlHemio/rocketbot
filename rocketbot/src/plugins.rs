@@ -69,6 +69,8 @@ pub(crate) async fn load_plugins(iface: Weak<dyn RocketBotInterface>) -> Vec<Plu
                 Box::new(rocketbot_plugin_link_react::LinkReactPlugin::new(iface_weak, inner_config).await)
             } else if plugin_config.name == "logger" {
                 Box::new(rocketbot_plugin_logger::LoggerPlugin::new(iface_weak, inner_config).await)
+            } else if plugin_config.name == "netdev" {
+                Box::new(rocketbot_plugin_netdev::NetdevPlugin::new(iface_weak, inner_config).await)
             } else if plugin_config.name == "new_year" {
                 Box::new(rocketbot_plugin_new_year::NewYearPlugin::new(iface_weak, inner_config).await)
             } else if plugin_config.name == "nines" {
