@@ -1028,7 +1028,9 @@ pub(crate) async fn handle_bim_coverage(request: &Request<Body>) -> Result<Respo
             };
 
             // end of that day is actually next day at 04:00
-            let naive_timestamp = input_date.succ().and_hms(4, 0, 0);
+            let naive_timestamp = input_date
+                .succ_opt().unwrap()
+                .and_hms_opt(4, 0, 0).unwrap();
             local_timestamp = match Local.from_local_datetime(&naive_timestamp).earliest() {
                 Some(lts) => lts,
                 None => return return_400("failed to convert timestamp to local time", &query_pairs).await,

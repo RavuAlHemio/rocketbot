@@ -80,7 +80,7 @@ impl TimePlugin {
         let time = Utc::now().with_timezone(timezone);
         let (y, m, d, h, min, s) = if night_owl_time && time.hour() < 4 {
             // previous day, later hour
-            let prev_day = time.date().pred();
+            let prev_day = time.date_naive().pred_opt().unwrap();
 
             (
                 prev_day.year(),

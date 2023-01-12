@@ -5,7 +5,7 @@ use std::collections::{BTreeSet, BTreeMap};
 
 use async_trait::async_trait;
 use bytes::Buf;
-use chrono::{Date, Datelike, DateTime, Duration, TimeZone, Utc, Weekday};
+use chrono::{Datelike, DateTime, Duration, NaiveDate, TimeZone, Utc, Weekday};
 use log::{debug, error};
 use once_cell::sync::Lazy;
 use regex::Regex;
@@ -112,11 +112,12 @@ impl ForecastSummary {
         }
     }
 
-    fn summarize_forecast(forecast: &Forecast) -> BTreeMap<Date<Utc>, ForecastSummary> {
-        let mut ret: BTreeMap<Date<Utc>, ForecastSummary> = BTreeMap::new();
+    fn summarize_forecast(forecast: &Forecast) -> BTreeMap<NaiveDate, ForecastSummary> {
+        let mut ret: BTreeMap<NaiveDate, ForecastSummary> = BTreeMap::new();
         for weather_state in &forecast.weather_states {
-            let timestamp = Utc.timestamp(weather_state.unix_timestamp, 0);
-            let date = timestamp.date();
+            let timestamp = Utc.timestamp_opt(weather_state.unix_timestamp, 0)
+                .single().unwrap();
+            let date = timestamp.date_naive();
 
             let this_max_kelvin = weather_state.main.max_temp_kelvin;
             let this_min_kelvin = weather_state.main.min_temp_kelvin;
@@ -244,7 +245,9 @@ impl OpenWeatherMapProvider {
         ));
 
         // append time info
-        let time_diff = Utc.timestamp(newest_reading.unix_timestamp, 0) - Utc::now();
+        let newest_reading = Utc.timestamp_opt(newest_reading.unix_timestamp, 0)
+            .single().unwrap();
+        let time_diff = newest_reading - Utc::now();
         ret.push_str(&format!(" ({})", format_duration(time_diff)));
 
         format!("OpenWeatherMap: {}", ret)

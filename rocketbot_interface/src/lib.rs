@@ -241,7 +241,7 @@ pub fn is_sorted_no_dupes<T: Ord, I: Iterator<Item = T>>(mut iterator: I) -> boo
 
 pub fn rocketchat_timestamp_to_datetime(timestamp: i64) -> DateTime<Utc> {
     let timestamp_nsecs: u32 = ((timestamp % 1_000) * 1_000_000).try_into().unwrap();
-    Utc.timestamp(timestamp / 1_000, timestamp_nsecs)
+    Utc.timestamp_opt(timestamp / 1_000, timestamp_nsecs).single().unwrap()
 }
 
 pub fn phrase_join<S: AsRef<str>>(items: &[S], general_glue: &str, final_glue: &str) -> String {

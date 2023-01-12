@@ -1,6 +1,6 @@
 use std::io::{BufWriter, Cursor, Write};
 
-use chrono::{Date, DateTime, Utc};
+use chrono::{DateTime, NaiveDate, Utc};
 use flate2::write::ZlibEncoder;
 use minicbor;
 use minicbor::data::Tag;
@@ -25,7 +25,7 @@ pub(crate) struct VaxInfo {
     pub country_name_en: String,
     pub dose_number: usize,
     pub total_doses: usize,
-    pub date_of_birth: Date<Utc>,
+    pub date_of_birth: NaiveDate,
     pub cert_id: String,
     pub surname: String,
     pub surname_normalized: String,

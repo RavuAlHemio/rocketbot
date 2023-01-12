@@ -997,8 +997,7 @@ pub(crate) async fn connect() -> Arc<ServerConnection> {
         new_timer_receiver,
         reload_config_receiver,
         Utc
-            .ymd(1969, 1, 1)
-            .and_hms(0, 0, 0),
+            .with_ymd_and_hms(1969, 1, 1, 0, 0, 0).unwrap(),
         process_message_sender,
     );
     let second_conn: Arc<ServerConnection> = Arc::clone(&conn);

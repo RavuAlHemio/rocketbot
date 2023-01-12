@@ -1,7 +1,8 @@
 use std::collections::HashMap;
 use std::io::{Cursor, Read};
 
-use base64;
+use base64::Engine;
+use base64::engine::general_purpose::STANDARD as BASE64_STANDARD;
 use flate2::Compression;
 use flate2::read::{ZlibEncoder, ZlibDecoder};
 use serde::{Deserialize, Deserializer, Serialize, Serializer};
@@ -108,14 +109,14 @@ impl Serialize for PdfBinaryDataDescription {
             zlibbed
         };
 
-        let b64 = base64::encode(&zlibbed);
+        let b64 = BASE64_STANDARD.encode(&zlibbed);
         b64.serialize(serializer)
     }
 }
 impl<'de> Deserialize<'de> for PdfBinaryDataDescription {
     fn deserialize<D: Deserializer<'de>>(deserializer: D) -> Result<Self, D::Error> {
         let b64 = String::deserialize(deserializer)?;
-        let zlibbed = base64::decode(b64)
+        let zlibbed = BASE64_STANDARD.decode(b64)
             .map_err(|e| D::Error::custom(e))?;
 
         let bs = {

@@ -49,9 +49,7 @@ impl RocketBotPlugin for NewYearPlugin {
         // register timer in any case; channel list in config might change in the meantime
         let now_local = Local::now();
         let next_year = now_local.year()+1;
-        let new_year_local = Local
-            .ymd(next_year, 1, 1)
-            .and_hms(0, 0, 0);
+        let new_year_local = Local.with_ymd_and_hms(next_year, 1, 1, 0, 0, 0).unwrap();
         let new_year_utc = new_year_local.with_timezone(&Utc);
 
         let custom_data = serde_json::json!(["new_year", next_year]);

@@ -51,7 +51,7 @@ impl DatePlugin {
         let year: i32 = year_match.as_str().parse().expect("failed to parse year");
         let month: u32 = month_match.as_str().parse().expect("failed to parse month");
         let day: u32 = day_match.as_str().parse().expect("failed to parse day");
-        Some(NaiveDate::from_ymd(year, month, day))
+        Some(NaiveDate::from_ymd_opt(year, month, day).unwrap())
     }
 
     async fn handle_days(&self, channel_message: &ChannelMessage, command: &CommandInstance) {
@@ -65,7 +65,7 @@ impl DatePlugin {
             None => return,
         };
 
-        let delta = date.signed_duration_since(Local::today().naive_local());
+        let delta = date.signed_duration_since(Local::now().date_naive());
         let in_days = delta.num_days();
         let response_text = if in_days < 0 {
             let day_days = if in_days == -1 { "day" } else { "days" };
@@ -105,7 +105,7 @@ impl DatePlugin {
             Weekday::Sun => "Sunday",
         };
 
-        let today = Local::today().naive_local();
+        let today = Local::now().date_naive();
         let verb = if date < today {
             "was"
         } else if date == today {

@@ -198,7 +198,7 @@ impl BarcodePlugin {
 
         // attempt to parse the dates
         let birthdate = match NaiveDate::parse_from_str(&birthdate_str, "%Y-%m-%d") {
-            Ok(bd) => Utc.from_utc_date(&bd),
+            Ok(bd) => bd,
             Err(_) => {
                 interface.send_channel_message(
                     &channel_message.channel.name,
@@ -208,7 +208,7 @@ impl BarcodePlugin {
             },
         };
         let issue_date = match NaiveDate::parse_from_str(&issue_date_str, "%Y-%m-%d") {
-            Ok(bd) => Utc.from_utc_datetime(&bd.and_hms(13, 37, 23)),
+            Ok(bd) => Utc.from_utc_datetime(&bd.and_hms_opt(13, 37, 23).unwrap()),
             Err(_) => {
                 interface.send_channel_message(
                     &channel_message.channel.name,
@@ -219,7 +219,7 @@ impl BarcodePlugin {
         };
         let valid_date = if let Some(valid_date_str) = valid_date_str_opt {
             match NaiveDate::parse_from_str(&valid_date_str, "%Y-%m-%d") {
-                Ok(bd) => Utc.from_utc_datetime(&bd.and_hms(0, 0, 0)),
+                Ok(bd) => Utc.from_utc_datetime(&bd.and_hms_opt(0, 0, 0).unwrap()),
                 Err(_) => {
                     interface.send_channel_message(
                         &channel_message.channel.name,
@@ -230,7 +230,11 @@ impl BarcodePlugin {
             }
         } else {
             // add 334 days to issuance date and round down to midnight
-            (issue_date + Duration::days(334)).date().and_hms(0, 0, 0)
+            Utc.from_utc_datetime(
+                &(issue_date + Duration::days(334))
+                    .date_naive()
+                    .and_hms_opt(0, 0, 0).unwrap()
+            )
         };
 
         // assemble the cert data

@@ -36,8 +36,10 @@ impl Counter {
 
 async fn register_topic_timer(interface: Arc<dyn RocketBotInterface>, base_timestamp: &DateTime<Utc>, index: usize) {
     let now = Utc::now();
-    let mut next_occurrence = now.date()
-        .and_hms(base_timestamp.hour(), base_timestamp.minute(), base_timestamp.second());
+    let mut next_occurrence = Utc.from_utc_datetime(
+        &now.date_naive()
+            .and_hms_opt(base_timestamp.hour(), base_timestamp.minute(), base_timestamp.second()).unwrap()
+    );
     if next_occurrence < now {
         next_occurrence = next_occurrence + chrono::Duration::days(1);
     }

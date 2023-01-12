@@ -200,7 +200,7 @@ impl VaccineDatabase {
             cert_database: VaccineCertificateDatabase::new(),
             prev_cert_database: VaccineCertificateDatabase::new(),
             state_id_and_date_to_fields: HashMap::new(),
-            corona_timestamp: Utc.timestamp(0, 0),
+            corona_timestamp: Utc.timestamp_opt(0, 0).unwrap(),
         }
     }
 
@@ -222,7 +222,7 @@ impl VaccineDatabase {
         };
 
         // get vax cert stats for the previous day (for deltas)
-        let prev_date = vcs_date.pred();
+        let prev_date = vcs_date.pred_opt().unwrap();
         let prev_vaxxed_url = prev_vaxxed_url_format
             .replace("{date}", &prev_date.format("%Y%m%d").to_string());
         let prev_vaxxed_stats = Self::vaxxed_from_url(&prev_vaxxed_url).await?;

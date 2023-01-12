@@ -1565,11 +1565,11 @@ impl BimPlugin {
             let day: i64 = row.get(2);
             let ride_count: i64 = row.get(3);
 
-            let date = NaiveDate::from_ymd(
+            let date = NaiveDate::from_ymd_opt(
                 year.try_into().expect("invalid year"),
                 month.try_into().expect("invalid month"),
                 day.try_into().expect("invalid day"),
-            );
+            ).unwrap();
 
             date_and_ride_count.push((date, ride_count));
         }
@@ -3863,9 +3863,10 @@ pub async fn increment_rides_by_spec(
 ///
 /// With Night Owl Time, hours 0, 1, 2 and 3 are counted towards the previous day.
 fn get_night_owl_date<D: Datelike + Timelike>(date_time: &D) -> NaiveDate {
-    let naive_date = NaiveDate::from_ymd(date_time.year(), date_time.month(), date_time.day());
+    let naive_date = NaiveDate::from_ymd_opt(date_time.year(), date_time.month(), date_time.day())
+        .unwrap();
     if date_time.hour() < 4 {
-        naive_date.pred()
+        naive_date.pred_opt().unwrap()
     } else {
         naive_date
     }
