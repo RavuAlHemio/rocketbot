@@ -27,6 +27,7 @@ members = [
     "rocketbot_plugin_help",
     "rocketbot_plugin_link_react",
     "rocketbot_plugin_logger",
+    "rocketbot_plugin_netdev",
     "rocketbot_plugin_new_year",
     "rocketbot_plugin_nines",
     "rocketbot_plugin_numberword",
