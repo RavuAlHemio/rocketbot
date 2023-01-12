@@ -2,13 +2,13 @@
 from collections import defaultdict
 import os
 import sys
-from typing import Any, DefaultDict, NamedTuple, Optional
+from typing import Any, DefaultDict, List, NamedTuple, Optional, Set, Tuple
 import toml
 
 
 class SentencePart(NamedTuple):
     text: str
-    options: tuple[str, ...]
+    options: Tuple[str, ...]
 
 
 def quote_grammar(s: str) -> str:
@@ -39,7 +39,7 @@ def validate_flags(all_flags, flags) -> None:
 
 
 def validate_grammar(grammar_toml: Any) -> None:
-    top_level_categories: list[str] = grammar_toml["metadata"]["top_level_categories"]
+    top_level_categories: List[str] = grammar_toml["metadata"]["top_level_categories"]
     if top_level_categories != sorted(top_level_categories):
         raise ValueError("metadata.top_level_categories is not sorted")
 
@@ -103,14 +103,14 @@ def validate_grammar(grammar_toml: Any) -> None:
                     raise ValueError(f"category error: rights {entry['rights']} have an additional category {rights_add_categories} that is already the base category")
 
 
-def compile_grammar(grammar_name: str, grammar_toml: Any) -> list[str]:
-    ret: list[str] = ["// generated from a TOML file -- no sense in editing this!", ""]
+def compile_grammar(grammar_name: str, grammar_toml: Any) -> List[str]:
+    ret: List[str] = ["// generated from a TOML file -- no sense in editing this!", ""]
 
     flag_to_opt = grammar_toml["metadata"]["flags"]
     glue = grammar_toml["metadata"]["glue"]
 
-    category_lefts: DefaultDict[str, set[SentencePart]] = defaultdict(set)
-    category_rights: DefaultDict[str, set[SentencePart]] = defaultdict(set)
+    category_lefts: DefaultDict[str, Set[SentencePart]] = defaultdict(set)
+    category_rights: DefaultDict[str, Set[SentencePart]] = defaultdict(set)
 
     for entry in grammar_toml["entries"]:
         category = entry["category"]
@@ -180,7 +180,7 @@ def compile_grammar(grammar_name: str, grammar_toml: Any) -> list[str]:
     return ret
 
 
-def save_grammar(grammar_path: str, compiled_grammar: list[str]):
+def save_grammar(grammar_path: str, compiled_grammar: List[str]):
     with open(grammar_path, "w", encoding="utf-8") as f:
         for line in compiled_grammar:
             f.write(line)
