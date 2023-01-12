@@ -2,6 +2,7 @@
 import os.path
 import subprocess
 import sys
+from typing import List
 
 
 CODE_FILE = os.path.join("rocketbot_plugin_version", "src", "lib.rs")
@@ -9,7 +10,7 @@ SHORT_HASH_PLACEHOLDER = "{{VERSION}}"
 COMMIT_SUBJECT_PLACEHOLDER = "{{COMMIT_MESSAGE_SHORT}}"
 
 
-def get_output(args: list[str]) -> str:
+def get_output(args: List[str]) -> str:
     completed_process = subprocess.run(
         args,
         capture_output=True,
