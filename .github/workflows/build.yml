@@ -149,6 +149,6 @@ jobs:
       - name: make a variable-setting script
         run: 'echo "export TESTING=abc" > /tmp/testenvset'
       - name: source the variable-setting script
-        run: source /tmp/testenvset
+        run: . /tmp/testenvset
       - name: read variable
         run: echo $TESTING
