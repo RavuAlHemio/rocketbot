@@ -117,13 +117,13 @@ jobs:
       - name: generate TSV grammars
         run: 'python3 cicd/toml2grammar.py rocketbot_plugin_grammargen/grammars/*.toml'
       - name: fetch dependencies
-        run: sh ./cicd/cargo_fetch.sh
+        run: '. $HOME/.cargo/env && sh ./cicd/cargo_fetch.sh'
       - name: run release build
-        run: cargo build --all-targets --release
+        run: '. $HOME/.cargo/env && cargo build --all-targets --release'
       - name: run release tests
-        run: cargo test --release
+        run: '. $HOME/.cargo/env && cargo test --release'
       - name: generate CountryCodes.json
-        run: cargo run --example countrycodes --release
+        run: '. $HOME/.cargo/env && cargo run --example countrycodes --release'
       - name: upload release binary
         uses: actions/upload-artifact@v3
         with:
