@@ -142,13 +142,3 @@ jobs:
             rocketbotweb/static/*
             rocketbotweb/templates/*.tera
             CountryCodes.json
-  envirotest:
-    runs-on: ubuntu-latest
-    container: ubuntu:focal
-    steps:
-      - name: make a variable-setting script
-        run: 'echo "export TESTING=abc" > /tmp/testenvset'
-      - name: source the variable-setting script
-        run: . /tmp/testenvset
-      - name: read variable
-        run: echo $TESTING
