@@ -2806,6 +2806,146 @@ impl BimPlugin {
         }
     }
 
+    async fn channel_command_lastbims(&self, channel_message: &ChannelMessage, _command: &CommandInstance) {
+        let interface = match self.interface.upgrade() {
+            None => return,
+            Some(i) => i,
+        };
+
+        let config_guard = self.config.read().await;
+
+        let ride_conn = match connect_ride_db(&config_guard).await {
+            Ok(c) => c,
+            Err(_) => {
+                send_channel_message!(
+                    interface,
+                    &channel_message.channel.name,
+                    "Failed to open database connection. :disappointed:",
+                ).await;
+                return;
+            },
+        };
+
+        let ride_rows_res = ride_conn.query(
+            "
+                SELECT rav1.rider_username, CAST(COUNT(*) AS bigint) vehicle_count
+                FROM bim.rides_and_vehicles rav1
+                WHERE NOT EXISTS (
+                    -- same vehicle, later timestamp
+                    SELECT 1
+                    FROM bim.rides_and_vehicles rav2
+                    WHERE rav2.company = rav1.company
+                    AND rav2.vehicle_number = rav1.vehicle_number
+                    AND rav2.\"timestamp\" > rav1.\"timestamp\"
+                )
+                GROUP BY rav1.rider_username
+                ORDER BY vehicle_count DESC
+            ",
+            &[],
+        ).await;
+        let ride_rows = match ride_rows_res {
+            Ok(rr) => rr,
+            Err(e) => {
+                error!("failed to obtain last vehicles: {}", e);
+                send_channel_message!(
+                    interface,
+                    &channel_message.channel.name,
+                    "Failed to obtain last vehicles. :disappointed:",
+                ).await;
+                return;
+            },
+        };
+        if ride_rows.len() == 0 {
+            send_channel_message!(
+                interface,
+                &channel_message.channel.name,
+                "Nobody has ever ridden any vehicle. :disappointed:",
+            ).await;
+            return;
+        }
+        let mut text = "Last rider in this number of vehicles:".to_owned();
+        for ride_row in ride_rows {
+            let rider_username: String = ride_row.get(0);
+            let vehicle_count: i64 = ride_row.get(1);
+            write_expect!(text, "\n{}: {}", rider_username, vehicle_count);
+        }
+        send_channel_message!(
+            interface,
+            &channel_message.channel.name,
+            &text,
+        ).await;
+    }
+
+    async fn channel_command_lonebims(&self, channel_message: &ChannelMessage, _command: &CommandInstance) {
+        let interface = match self.interface.upgrade() {
+            None => return,
+            Some(i) => i,
+        };
+
+        let config_guard = self.config.read().await;
+
+        let ride_conn = match connect_ride_db(&config_guard).await {
+            Ok(c) => c,
+            Err(_) => {
+                send_channel_message!(
+                    interface,
+                    &channel_message.channel.name,
+                    "Failed to open database connection. :disappointed:",
+                ).await;
+                return;
+            },
+        };
+
+        let ride_rows_res = ride_conn.query(
+            "
+                SELECT rav1.rider_username, CAST(COUNT(*) AS bigint) vehicle_count
+                FROM bim.rides_and_vehicles rav1
+                WHERE NOT EXISTS (
+                    -- same vehicle, different rider
+                    SELECT 1
+                    FROM bim.rides_and_vehicles rav2
+                    WHERE rav2.company = rav1.company
+                    AND rav2.vehicle_number = rav1.vehicle_number
+                    AND rav2.rider_username <> rav1.rider_username
+                )
+                GROUP BY rav1.rider_username
+                ORDER BY vehicle_count DESC
+            ",
+            &[],
+        ).await;
+        let ride_rows = match ride_rows_res {
+            Ok(rr) => rr,
+            Err(e) => {
+                error!("failed to obtain lone vehicles: {}", e);
+                send_channel_message!(
+                    interface,
+                    &channel_message.channel.name,
+                    "Failed to obtain lone vehicles. :disappointed:",
+                ).await;
+                return;
+            },
+        };
+        if ride_rows.len() == 0 {
+            send_channel_message!(
+                interface,
+                &channel_message.channel.name,
+                "Nobody has ever ridden any vehicle. :disappointed:",
+            ).await;
+            return;
+        }
+        let mut text = "Lone rider in this number of vehicles:".to_owned();
+        for ride_row in ride_rows {
+            let rider_username: String = ride_row.get(0);
+            let vehicle_count: i64 = ride_row.get(1);
+            write_expect!(text, "\n{}: {}", rider_username, vehicle_count);
+        }
+        send_channel_message!(
+            interface,
+            &channel_message.channel.name,
+            &text,
+        ).await;
+    }
+
     #[inline]
     fn weekday_abbr2(weekday: Weekday) -> &'static str {
         match weekday {
@@ -3233,6 +3373,24 @@ impl RocketBotPlugin for BimPlugin {
                 .add_option("region", CommandValueType::String)
                 .build()
         ).await;
+        my_interface.register_channel_command(
+            &CommandDefinitionBuilder::new(
+                "lastbims",
+                "bim",
+                "{cpfx}lastbims",
+                "How many vehicles has each rider been the last rider of?",
+            )
+                .build()
+        ).await;
+        my_interface.register_channel_command(
+            &CommandDefinitionBuilder::new(
+                "lonebims",
+                "bim",
+                "{cpfx}lonebims",
+                "How many vehicles has each rider been the only one to ride?",
+            )
+                .build()
+        ).await;
 
         // set up the achievement update loop
         let (achievement_update_sender, mut achievement_update_receiver) = mpsc::unbounded_channel();
@@ -3316,6 +3474,10 @@ impl RocketBotPlugin for BimPlugin {
             self.channel_command_refreshbimach(channel_message, command).await
         } else if command.name == "bimop" {
             self.channel_command_bimop(channel_message, command).await
+        } else if command.name == "lastbims" {
+            self.channel_command_lastbims(channel_message, command).await
+        } else if command.name == "lonebims" {
+            self.channel_command_lonebims(channel_message, command).await
         }
     }
 
@@ -3356,6 +3518,10 @@ impl RocketBotPlugin for BimPlugin {
             Some(include_str!("../help/refreshbimach.md").to_owned())
         } else if command_name == "bimop" {
             Some(include_str!("../help/bimop.md").to_owned())
+        } else if command_name == "lastbims" {
+            Some(include_str!("../help/lastbims.md").to_owned())
+        } else if command_name == "lonebims" {
+            Some(include_str!("../help/lonebims.md").to_owned())
         } else {
             None
         }
