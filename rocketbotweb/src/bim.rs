@@ -464,6 +464,23 @@ impl ChartColor {
     }
 }
 
+#[derive(Clone, Debug, Default, Eq, Hash, Ord, PartialEq, PartialOrd, Serialize, Template)]
+#[template(path = "bimlatestridercount.html")]
+struct BimLatestRiderCountTemplate {
+    pub riders: Vec<GraphRiderPart>,
+}
+
+#[derive(Clone, Debug, Default, Eq, Hash, Ord, PartialEq, PartialOrd, Serialize)]
+struct GraphRiderPart {
+    pub name: String,
+    pub color: [u8; 3],
+}
+impl GraphRiderPart {
+    pub fn color_hex(&self) -> String {
+        format!("#{:02X}{:02X}{:02X}", self.color[0], self.color[1], self.color[2])
+    }
+}
+
 #[inline]
 fn cow_empty_to_none<'a, 'b>(val: Option<&'a Cow<'b, str>>) -> Option<&'a Cow<'b, str>> {
     match val {
@@ -2203,5 +2220,57 @@ pub(crate) async fn handle_bim_latest_rider_count_over_time_image(request: &Requ
             error!("failed to construct latest-rider-count-over-time-image response: {}", e);
             return return_500();
         }
+    }
+}
+
+
+pub(crate) async fn handle_bim_latest_rider_count_over_time(request: &Request<Body>) -> Result<Response<Body>, Infallible> {
+    let query_pairs = get_query_pairs(request);
+    if request.method() != Method::GET {
+        return return_405(&query_pairs).await;
+    }
+
+    let db_conn = match connect_to_db().await {
+        Some(c) => c,
+        None => return return_500(),
+    };
+    let riders_res = db_conn.query(
+        "SELECT DISTINCT rider_username FROM bim.rides",
+        &[],
+    ).await;
+    let rider_rows = match riders_res {
+        Ok(r) => r,
+        Err(e) => {
+            error!("failed to query riders: {}", e);
+            return return_500();
+        },
+    };
+
+    let mut all_riders = HashSet::new();
+    for row in &rider_rows {
+        let rider_username: String = row.get(0);
+        all_riders.insert(rider_username);
+    }
+
+    let mut rider_names: Vec<String> = all_riders
+        .iter()
+        .map(|rn| rn.clone())
+        .collect();
+    rider_names.sort_unstable_by_key(|r| (r.to_lowercase(), r.clone()));
+
+    let mut riders: Vec<GraphRiderPart> = Vec::with_capacity(rider_names.len());
+    for (i, rider_name) in rider_names.iter().enumerate() {
+        riders.push(GraphRiderPart {
+            name: rider_name.clone(),
+            color: CHART_COLORS[i % CHART_COLORS.len()],
+        });
+    }
+
+    let template = BimLatestRiderCountTemplate {
+        riders,
+    };
+    match render_response(&template, &query_pairs, 200, vec![]).await {
+        Some(r) => Ok(r),
+        None => return_500(),
     }
 }

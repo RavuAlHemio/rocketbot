@@ -1,0 +1,26 @@
+{% extends "base.html" %}
+
+{% block title %}Public Transport Latest Rider Vehicle Count over Time{% endblock %}
+
+{% block content %}
+<main class="bim-details">
+
+<h1>Public Transport Latest Rider Vehicle Count over Time</h1>
+
+<p>
+    <img id="bim-latest-rider-count-over-time-image" src="bim-latest-rider-count-over-time/image" />
+</p>
+
+<p>
+    <ul style="list-style:none">
+        {% for rider in riders %}
+        <li>
+            <span class="rider-square" style="color:{{ rider.color_hex() }}">&#9632;</span>
+            <span class="rider-name">{{ rider.name }}</span>
+        </li>
+        {% endfor %}
+    </ul>
+</p>
+
+</main>
+{% endblock %}
