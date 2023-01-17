@@ -2123,16 +2123,6 @@ pub(crate) async fn handle_bim_latest_rider_count_over_time_image(request: &Requ
 
     let mut pixels = vec![ChartColor::Background; usize::try_from(width * height).unwrap()];
 
-    // draw frame
-    for y in 0..height {
-        pixels[y * width + 0] = ChartColor::Border;
-        pixels[y * width + (width - 1)] = ChartColor::Border;
-    }
-    for x in 0..width {
-        pixels[0 * width + x] = ChartColor::Border;
-        pixels[(height - 1) * width + x] = ChartColor::Border;
-    }
-
     // draw ticks
     const HORIZONTAL_TICK_STEP: usize = 100;
     const VERTICAL_TICK_STEP: usize = 100;
@@ -2147,6 +2137,16 @@ pub(crate) async fn handle_bim_latest_rider_count_over_time_image(request: &Requ
         for y in 1..(height-1) {
             pixels[y * width + x] = ChartColor::Tick;
         }
+    }
+
+    // draw frame
+    for y in 0..height {
+        pixels[y * width + 0] = ChartColor::Border;
+        pixels[y * width + (width - 1)] = ChartColor::Border;
+    }
+    for x in 0..width {
+        pixels[0 * width + x] = ChartColor::Border;
+        pixels[(height - 1) * width + x] = ChartColor::Border;
     }
 
     // now draw the data
