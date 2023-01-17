@@ -43,7 +43,7 @@ jobs:
             rocketbot_plugin_syllable/rules/*.toml
             rocketbot_plugin_transliterate/languages/*.json
             rocketbotweb/static/*
-            rocketbotweb/templates/*.tera
+            rocketbotweb/ts/dist/*
             CountryCodes.json
   build-arch-release:
     runs-on: ubuntu-latest
@@ -87,7 +87,7 @@ jobs:
             rocketbot_plugin_syllable/rules/*.toml
             rocketbot_plugin_transliterate/languages/*.json
             rocketbotweb/static/*
-            rocketbotweb/templates/*.tera
+            rocketbotweb/ts/dist/*
             CountryCodes.json
   build-ubuntu-focal-release:
     runs-on: ubuntu-latest
@@ -140,5 +140,5 @@ jobs:
             rocketbot_plugin_syllable/rules/*.toml
             rocketbot_plugin_transliterate/languages/*.json
             rocketbotweb/static/*
-            rocketbotweb/templates/*.tera
+            rocketbotweb/ts/dist/*
             CountryCodes.json
