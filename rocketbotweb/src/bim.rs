@@ -2083,11 +2083,6 @@ pub(crate) async fn handle_bim_latest_rider_count_over_time_image(request: &Requ
     };
 
     let mut all_riders = HashSet::new();
-    for row in &ride_rows {
-        let rider_username: String = row.get(2);
-        all_riders.insert(rider_username);
-    }
-
     let mut vehicle_to_latest_rider: HashMap<(String, String), String> = HashMap::new();
     let mut ride_id_to_rider_to_latest_vehicle_count: HashMap<i64, HashMap<String, usize>> = HashMap::new();
     let mut ride_ids_in_order: Vec<i64> = Vec::new();
