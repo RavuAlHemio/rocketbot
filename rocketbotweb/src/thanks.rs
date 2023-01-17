@@ -11,7 +11,7 @@ use crate::templating::filters;
 
 
 #[derive(Clone, Debug, Deserialize, Eq, PartialEq, Serialize, Template)]
-#[template(path = "thanks.html")]
+#[template(path = "thanks.html", escape = "none")]
 struct ThanksTemplate {
     pub users: Vec<String>,
     pub thanks_from_to: Vec<Vec<i64>>,

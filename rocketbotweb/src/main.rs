@@ -45,7 +45,7 @@ pub(crate) static CONFIG: OnceCell<RwLock<WebConfig>> = OnceCell::new();
 
 
 #[derive(Clone, Copy, Debug, Deserialize, Eq, Hash, PartialEq, Serialize, Template)]
-#[template(path = "index.html")]
+#[template(path = "index.html", escape = "none")]
 struct IndexTemplate;
 
 
