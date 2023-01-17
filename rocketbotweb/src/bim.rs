@@ -2410,35 +2410,35 @@ pub(crate) async fn handle_bim_histogram_by_vehicle_ride_count_group(request: &R
         },
     };
 
-    let mut rider_to_vehicle_to_count: BTreeMap<String, BTreeMap<String, i64>> = BTreeMap::new();
+    let mut rider_to_vehicle_to_ride_count: BTreeMap<String, BTreeMap<String, i64>> = BTreeMap::new();
     for row in &rider_rows {
         let rider_username: String = row.get(0);
         let vehicle_number: String = row.get(1);
         let ride_count: i64 = row.get(2);
 
-        rider_to_vehicle_to_count
+        rider_to_vehicle_to_ride_count
             .entry(rider_username)
             .or_insert_with(|| BTreeMap::new())
             .insert(vehicle_number, ride_count);
     }
 
-    let mut rider_to_bin_to_count: BTreeMap<String, BTreeMap<usize, i64>> = BTreeMap::new();
-    for (rider, vehicle_to_count) in &rider_to_vehicle_to_count {
-        let bin_to_count = rider_to_bin_to_count
+    let mut rider_to_bin_to_vehicle_count: BTreeMap<String, BTreeMap<usize, i64>> = BTreeMap::new();
+    for (rider, vehicle_to_ride_count) in &rider_to_vehicle_to_ride_count {
+        let bin_to_vehicle_count = rider_to_bin_to_vehicle_count
             .entry(rider.clone())
             .or_insert_with(|| BTreeMap::new());
-        for count in vehicle_to_count.values() {
-            let bin_index_i64 = *count / BIN_SIZE;
+        for ride_count in vehicle_to_ride_count.values() {
+            let bin_index_i64 = *ride_count / BIN_SIZE;
             if bin_index_i64 < 0 {
                 continue;
             }
             let bin_index: usize = bin_index_i64.try_into().unwrap();
 
-            *bin_to_count.entry(bin_index).or_insert(0) += *count;
+            *bin_to_vehicle_count.entry(bin_index).or_insert(0) += 1;
         }
     }
 
-    let max_bin_index = rider_to_bin_to_count
+    let max_bin_index = rider_to_bin_to_vehicle_count
         .values()
         .flat_map(|bin_to_count| bin_to_count.keys())
         .map(|count| *count)
@@ -2452,7 +2452,7 @@ pub(crate) async fn handle_bim_histogram_by_vehicle_ride_count_group(request: &R
     }
 
     let mut rider_to_group_counts: BTreeMap<String, Vec<i64>> = BTreeMap::new();
-    for (rider, bin_to_count) in rider_to_bin_to_count.iter() {
+    for (rider, bin_to_count) in rider_to_bin_to_vehicle_count.iter() {
         let group_counts = rider_to_group_counts
             .entry(rider.clone())
             .or_insert_with(|| vec![0; max_bin_index+1]);
