@@ -59,13 +59,32 @@ export module RocketBotWeb.Bim.Charting {
             });
         }
 
-        new Chart(canvas, {
+        const chart = new Chart(canvas, {
             type: "bar",
             data: {
                 labels: data.rideCountGroupNames,
                 datasets: datasets,
             },
+            options: {
+                scales: {
+                    y: {
+                        ticks: {
+                            format: {
+                                minimumFractionDigits: 0,
+                            }
+                        }
+                    },
+                },
+            },
         });
+
+        const logPlotCheckbox = <HTMLInputElement|null>document.getElementById("bim-charting-log-plot-checkbox");
+        if (logPlotCheckbox !== null) {
+            logPlotCheckbox.addEventListener("change", () => {
+                chart.options.scales!.y!.type = logPlotCheckbox.checked ? "logarithmic" : "linear";
+                chart.update();
+            });
+        }
     }
 
     export function setUpByDayOfWeek() {
