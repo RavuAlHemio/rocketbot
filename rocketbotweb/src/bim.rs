@@ -2067,10 +2067,10 @@ pub(crate) async fn handle_bim_latest_rider_count_over_time_image(request: &Requ
     let ride_res = db_conn.query(
         "
             SELECT
-                rav.company, rav.vehicle_number, rav.rider_username
+                rav.id, rav.company, rav.vehicle_number, rav.rider_username
             FROM bim.rides_and_vehicles rav
             ORDER BY
-                rav.\"timestamp\"
+                rav.\"timestamp\", rav.id
         ",
         &[],
     ).await;
@@ -2082,7 +2082,6 @@ pub(crate) async fn handle_bim_latest_rider_count_over_time_image(request: &Requ
         },
     };
 
-    let ride_count = ride_rows.len();
     let mut all_riders = HashSet::new();
     for row in &ride_rows {
         let rider_username: String = row.get(2);
@@ -2090,23 +2089,36 @@ pub(crate) async fn handle_bim_latest_rider_count_over_time_image(request: &Requ
     }
 
     let mut vehicle_to_latest_rider: HashMap<(String, String), String> = HashMap::new();
-    let mut rider_to_latest_vehicle_count_rows: Vec<HashMap<String, usize>> = Vec::with_capacity(ride_count);
+    let mut ride_id_to_rider_to_latest_vehicle_count: HashMap<i64, HashMap<String, usize>> = HashMap::new();
+    let mut ride_ids_in_order: Vec<i64> = Vec::new();
     for row in &ride_rows {
-        let company: String = row.get(0);
-        let vehicle_number: String = row.get(1);
-        let rider_username: String = row.get(2);
+        let ride_id: i64 = row.get(0);
+        let company: String = row.get(1);
+        let vehicle_number: String = row.get(2);
+        let rider_username: String = row.get(3);
+
+        all_riders.insert(rider_username.clone());
+
+        if ride_ids_in_order.last() != Some(&ride_id) {
+            ride_ids_in_order.push(ride_id);
+        }
 
         vehicle_to_latest_rider.insert((company, vehicle_number), rider_username);
 
-        let mut rider_to_latest_vehicle_count_row: HashMap<String, usize> = HashMap::with_capacity(all_riders.len());
+        let rider_to_latest_vehicle_count = ride_id_to_rider_to_latest_vehicle_count
+            .entry(ride_id)
+            .or_insert_with(|| HashMap::new());
+
+        // reset all numbers -- only keep the last entry per ride ID
         for rider_username in &all_riders {
-            rider_to_latest_vehicle_count_row.insert(rider_username.clone(), 0);
+            rider_to_latest_vehicle_count.insert(rider_username.clone(), 0);
         }
         for latest_rider in vehicle_to_latest_rider.values() {
-            *rider_to_latest_vehicle_count_row.get_mut(latest_rider).unwrap() += 1;
+            *rider_to_latest_vehicle_count.get_mut(latest_rider).unwrap() += 1;
         }
-        rider_to_latest_vehicle_count_rows.push(rider_to_latest_vehicle_count_row);
     }
+
+    let ride_count = ride_ids_in_order.len();
 
     let mut rider_names: Vec<String> = all_riders
         .iter()
@@ -2127,8 +2139,11 @@ pub(crate) async fn handle_bim_latest_rider_count_over_time_image(request: &Requ
             tsv_output.push_str(rider);
         }
 
-        for rider_to_latest_vehicle_count_row in &rider_to_latest_vehicle_count_rows {
+        for ride_id in &ride_ids_in_order {
             tsv_output.push('\n');
+
+            let rider_to_latest_vehicle_count = ride_id_to_rider_to_latest_vehicle_count
+                .get(ride_id).unwrap();
 
             let mut first_rider = true;
             for rider in &rider_names {
@@ -2137,7 +2152,7 @@ pub(crate) async fn handle_bim_latest_rider_count_over_time_image(request: &Requ
                 } else {
                     tsv_output.push('\t');
                 }
-                let vehicle_count = rider_to_latest_vehicle_count_row
+                let vehicle_count = rider_to_latest_vehicle_count
                     .get(rider)
                     .map(|vc| *vc)
                     .unwrap_or(0);
@@ -2157,8 +2172,8 @@ pub(crate) async fn handle_bim_latest_rider_count_over_time_image(request: &Requ
         }
     }
 
-    let max_count = rider_to_latest_vehicle_count_rows
-        .iter()
+    let max_count = ride_id_to_rider_to_latest_vehicle_count
+        .values()
         .flat_map(|rtlvc_row| rtlvc_row.values())
         .map(|val| *val)
         .max()
@@ -2207,10 +2222,13 @@ pub(crate) async fn handle_bim_latest_rider_count_over_time_image(request: &Requ
     }
 
     // now draw the data
-    for (graph_x, rider_to_latest_vehicle_count_row) in rider_to_latest_vehicle_count_rows.iter().enumerate() {
+    for (graph_x, ride_id) in ride_ids_in_order.iter().enumerate() {
+        let rider_to_latest_vehicle_count = ride_id_to_rider_to_latest_vehicle_count
+            .get(ride_id).unwrap();
+
         let x = 1 + graph_x;
         for (i, rider) in rider_names.iter().enumerate() {
-            let vehicle_count = rider_to_latest_vehicle_count_row
+            let vehicle_count = rider_to_latest_vehicle_count
                 .get(rider)
                 .map(|vc| *vc)
                 .unwrap_or(0);
