@@ -1,6 +1,7 @@
 use std::borrow::Cow;
 use std::collections::{BTreeMap, BTreeSet, HashMap, HashSet};
 use std::convert::Infallible;
+use std::fmt::Write;
 use std::fs::File;
 use std::str::FromStr;
 
@@ -22,6 +23,22 @@ use crate::{
     return_500,
 };
 use crate::templating::filters;
+
+
+const CHART_COLORS: [[u8; 3]; 7] = [
+    [54, 162, 235],
+    [255, 99, 132],
+    [255, 159, 64],
+    [255, 205, 86],
+    [75, 192, 192],
+    [153, 102, 255],
+    [201, 203, 207],
+];
+const CHART_BORDER_COLOR: [u8; 3] = [0, 0, 0];
+const CHART_BACKGROUND_COLOR: [u8; 3] = [255, 255, 255];
+const CHART_TICK_COLOR: [u8; 3] = [221, 221, 221];
+
+const CHART_LINE_Y_THICKEN: usize = 2;
 
 
 type VehicleNumber = NatSortedString;
@@ -426,6 +443,25 @@ struct RideVehiclePart {
     pub spec_position: i64,
     pub as_part_of_fixed_coupling: bool,
     pub fixed_coupling_position: i64,
+}
+
+#[derive(Clone, Copy, Debug, Eq, Hash, Ord, PartialEq, PartialOrd)]
+enum ChartColor {
+    Background,
+    Border,
+    Tick,
+    Data(u8),
+}
+impl ChartColor {
+    #[inline]
+    pub fn palette_index(&self) -> u8 {
+        match self {
+            Self::Background => 0,
+            Self::Border => 1,
+            Self::Tick => 2,
+            Self::Data(d) => d.checked_add(3).unwrap(),
+        }
+    }
 }
 
 #[inline]
@@ -1957,5 +1993,215 @@ pub(crate) async fn handle_bim_ride_by_id(request: &Request<Body>) -> Result<Res
     match render_response(&template, &query_pairs, 200, vec![]).await {
         Some(r) => Ok(r),
         None => return_500(),
+    }
+}
+
+
+pub(crate) async fn handle_bim_latest_rider_count_over_time_image(request: &Request<Body>) -> Result<Response<Body>, Infallible> {
+    let query_pairs = get_query_pairs(request);
+    if request.method() != Method::GET {
+        return return_405(&query_pairs).await;
+    }
+
+    let db_conn = match connect_to_db().await {
+        Some(c) => c,
+        None => return return_500(),
+    };
+    let ride_res = db_conn.query(
+        "
+            SELECT
+                rav.company, rav.vehicle_number, rav.rider_username
+            FROM bim.rides_and_vehicles rav
+            ORDER BY
+                rav.\"timestamp\"
+        ",
+        &[],
+    ).await;
+    let ride_rows = match ride_res {
+        Ok(r) => r,
+        Err(e) => {
+            error!("failed to query rides: {}", e);
+            return return_500();
+        },
+    };
+
+    let ride_count = ride_rows.len();
+    let mut all_riders = HashSet::new();
+    for row in &ride_rows {
+        let rider_username: String = row.get(2);
+        all_riders.insert(rider_username);
+    }
+
+    let mut vehicle_to_latest_rider: HashMap<(String, String), String> = HashMap::new();
+    let mut rider_to_latest_vehicle_count_rows: Vec<HashMap<String, usize>> = Vec::with_capacity(ride_count);
+    for row in &ride_rows {
+        let company: String = row.get(0);
+        let vehicle_number: String = row.get(1);
+        let rider_username: String = row.get(2);
+
+        vehicle_to_latest_rider.insert((company, vehicle_number), rider_username);
+
+        let mut rider_to_latest_vehicle_count_row: HashMap<String, usize> = HashMap::with_capacity(all_riders.len());
+        for rider_username in &all_riders {
+            rider_to_latest_vehicle_count_row.insert(rider_username.clone(), 0);
+        }
+        for latest_rider in vehicle_to_latest_rider.values() {
+            *rider_to_latest_vehicle_count_row.get_mut(latest_rider).unwrap() += 1;
+        }
+        rider_to_latest_vehicle_count_rows.push(rider_to_latest_vehicle_count_row);
+    }
+
+    let mut rider_names: Vec<String> = all_riders
+        .iter()
+        .map(|rn| rn.clone())
+        .collect();
+    rider_names.sort_unstable_by_key(|r| (r.to_lowercase(), r.clone()));
+
+    if query_pairs.get("format").map(|f| f == "tsv").unwrap_or(false) {
+        let mut tsv_output = String::new();
+        let mut first_rider = true;
+
+        for rider in &rider_names {
+            if first_rider {
+                first_rider = false;
+            } else {
+                tsv_output.push('\t');
+            }
+            tsv_output.push_str(rider);
+        }
+
+        for rider_to_latest_vehicle_count_row in &rider_to_latest_vehicle_count_rows {
+            tsv_output.push('\n');
+
+            let mut first_rider = true;
+            for rider in &rider_names {
+                if first_rider {
+                    first_rider = false;
+                } else {
+                    tsv_output.push('\t');
+                }
+                let vehicle_count = rider_to_latest_vehicle_count_row
+                    .get(rider)
+                    .map(|vc| *vc)
+                    .unwrap_or(0);
+                write!(&mut tsv_output, "{}", vehicle_count).unwrap();
+            }
+        }
+
+        let response_res = Response::builder()
+            .header("Content-Type", "text/tab-separated-values; charset=utf-8")
+            .body(Body::from(tsv_output));
+        match response_res {
+            Ok(r) => return Ok(r),
+            Err(e) => {
+                error!("failed to construct latest-rider-count-over-time-image TSV response: {}", e);
+                return return_500();
+            }
+        }
+    }
+
+    let max_count = rider_to_latest_vehicle_count_rows
+        .iter()
+        .flat_map(|rtlvc_row| rtlvc_row.values())
+        .map(|val| *val)
+        .max()
+        .unwrap_or(0);
+    let max_count_with_headroom = if max_count % 100 > 75 {
+        // 80 -> 200
+        ((max_count / 100) + 2) * 100
+    } else {
+        // 50 -> 100
+        ((max_count / 100) + 1) * 100
+    };
+
+    // calculate image size
+    // 2 = frame width on both edges
+    let width = 2 + ride_count;
+    let height = 2 + max_count_with_headroom;
+    let width_u32: u32 = width.try_into().expect("width too large");
+    let height_u32: u32 = height.try_into().expect("height too large");
+
+    let mut pixels = vec![ChartColor::Background; usize::try_from(width * height).unwrap()];
+
+    // draw frame
+    for y in 0..height {
+        pixels[y * width + 0] = ChartColor::Border;
+        pixels[y * width + (width - 1)] = ChartColor::Border;
+    }
+    for x in 0..width {
+        pixels[0 * width + x] = ChartColor::Border;
+        pixels[(height - 1) * width + x] = ChartColor::Border;
+    }
+
+    // draw ticks
+    const HORIZONTAL_TICK_STEP: usize = 100;
+    const VERTICAL_TICK_STEP: usize = 100;
+    for graph_y in (0..max_count_with_headroom).step_by(VERTICAL_TICK_STEP) {
+        let y = height - (1 + graph_y);
+        for x in 1..(width-1) {
+            pixels[y * width + x] = ChartColor::Tick;
+        }
+    }
+    for graph_x in (0..ride_count).step_by(HORIZONTAL_TICK_STEP) {
+        let x = 1 + graph_x;
+        for y in 1..(height-1) {
+            pixels[y * width + x] = ChartColor::Tick;
+        }
+    }
+
+    // now draw the data
+    for (graph_x, rider_to_latest_vehicle_count_row) in rider_to_latest_vehicle_count_rows.iter().enumerate() {
+        let x = 1 + graph_x;
+        for (i, rider) in rider_names.iter().enumerate() {
+            let vehicle_count = rider_to_latest_vehicle_count_row
+                .get(rider)
+                .map(|vc| *vc)
+                .unwrap_or(0);
+
+            let y = height - (1 + vehicle_count);
+            let pixel_value = ChartColor::Data((i % CHART_COLORS.len()).try_into().unwrap());
+            pixels[y * width + x] = pixel_value;
+
+            for graph_thicker_y in 0..CHART_LINE_Y_THICKEN {
+                let thicker_y_down = y + 1 + graph_thicker_y;
+                if thicker_y_down < height {
+                    pixels[thicker_y_down * width + x] = pixel_value;
+                }
+
+                if let Some(thicker_y_up) = y.checked_sub(1 + graph_thicker_y) {
+                    pixels[thicker_y_up * width + x] = pixel_value;
+                }
+            }
+        }
+    }
+
+    // PNGify
+    let palette: Vec<u8> = CHART_BACKGROUND_COLOR.into_iter()
+        .chain(CHART_BORDER_COLOR.into_iter())
+        .chain(CHART_TICK_COLOR.into_iter())
+        .chain(CHART_COLORS.into_iter().flat_map(|cs| cs))
+        .collect();
+    let mut png_bytes: Vec<u8> = Vec::new();
+
+    {
+        let mut png_encoder = png::Encoder::new(&mut png_bytes, width_u32, height_u32);
+        png_encoder.set_color(png::ColorType::Indexed);
+        png_encoder.set_depth(png::BitDepth::Eight);
+        png_encoder.set_palette(palette);
+        let mut png_writer = png_encoder.write_header().expect("failed to write PNG header");
+        let mut png_data = Vec::with_capacity(pixels.len());
+        png_data.extend(pixels.iter().map(|p| p.palette_index()));
+        png_writer.write_image_data(&png_data).expect("failed to write image data");
+    }
+
+    let response_res = Response::builder()
+        .header("Content-Type", "image/png")
+        .body(Body::from(png_bytes));
+    match response_res {
+        Ok(r) => Ok(r),
+        Err(e) => {
+            error!("failed to construct latest-rider-count-over-time-image response: {}", e);
+            return return_500();
+        }
     }
 }
