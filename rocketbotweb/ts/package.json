@@ -1,0 +1,13 @@
+{
+  "name": "rocketbotweb-ts",
+  "version": "0.1.0",
+  "description": "rocketbotweb TypeScript",
+  "scripts": {
+    "build": "yarn parcel build"
+  },
+  "source": "./src/rocketbotweb.ts",
+  "devDependencies": {
+    "chart.js": "^4.1.2",
+    "parcel": "^2.8.2"
+  }
+}

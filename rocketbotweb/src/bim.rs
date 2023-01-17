@@ -481,6 +481,25 @@ impl GraphRiderPart {
     }
 }
 
+#[derive(Clone, Debug, Default, Eq, Hash, Ord, PartialEq, PartialOrd, Serialize, Template)]
+#[template(path = "bimhistogramdow.html", escape = "none")]
+struct HistogramByDayOfWeekTemplate {
+    pub rider_to_weekday_counts: BTreeMap<String, [i64; 7]>,
+}
+impl HistogramByDayOfWeekTemplate {
+    pub fn json_data(&self) -> String {
+        let riders: Vec<&String> = self.rider_to_weekday_counts
+            .keys()
+            .collect();
+        let value = serde_json::json!({
+            "riders": riders,
+            "riderToWeekdayToCount": self.rider_to_weekday_counts,
+        });
+        serde_json::to_string(&value)
+            .expect("failed to JSON-encode graph data")
+    }
+}
+
 #[inline]
 fn cow_empty_to_none<'a, 'b>(val: Option<&'a Cow<'b, str>>) -> Option<&'a Cow<'b, str>> {
     match val {
@@ -2268,6 +2287,66 @@ pub(crate) async fn handle_bim_latest_rider_count_over_time(request: &Request<Bo
 
     let template = BimLatestRiderCountTemplate {
         riders,
+    };
+    match render_response(&template, &query_pairs, 200, vec![]).await {
+        Some(r) => Ok(r),
+        None => return_500(),
+    }
+}
+
+
+pub(crate) async fn handle_bim_histogram_by_day_of_week(request: &Request<Body>) -> Result<Response<Body>, Infallible> {
+    let query_pairs = get_query_pairs(request);
+    if request.method() != Method::GET {
+        return return_405(&query_pairs).await;
+    }
+
+    let db_conn = match connect_to_db().await {
+        Some(c) => c,
+        None => return return_500(),
+    };
+    let riders_res = db_conn.query(
+        "
+            SELECT
+                rider_username,
+                CAST(EXTRACT(DOW FROM bim.to_transport_date(\"timestamp\")) AS bigint) day_of_week,
+                CAST(COUNT(*) AS bigint) count
+            FROM
+                bim.rides
+            GROUP BY
+                rider_username,
+                day_of_week
+        ",
+        &[],
+    ).await;
+    let rider_rows = match riders_res {
+        Ok(r) => r,
+        Err(e) => {
+            error!("failed to query riders: {}", e);
+            return return_500();
+        },
+    };
+    let mut rider_to_weekday_counts: BTreeMap<String, [i64; 7]> = BTreeMap::new();
+    for row in &rider_rows {
+        let rider_username: String = row.get(0);
+        let day_of_week_postgres: i64 = row.get(1);
+        let ride_count: i64 = row.get(2);
+
+        let day_of_week_graph: usize = if day_of_week_postgres == 0 {
+            // Sunday
+            6
+        } else {
+            (day_of_week_postgres - 1).try_into().expect("very unexpected weekday number")
+        };
+
+        let weekday_values = rider_to_weekday_counts
+            .entry(rider_username)
+            .or_insert_with(|| [0; 7]);
+        weekday_values[day_of_week_graph] += ride_count;
+    }
+
+    let template = HistogramByDayOfWeekTemplate {
+        rider_to_weekday_counts,
     };
     match render_response(&template, &query_pairs, 200, vec![]).await {
         Some(r) => Ok(r),
