@@ -500,6 +500,27 @@ impl HistogramByDayOfWeekTemplate {
     }
 }
 
+#[derive(Clone, Debug, Default, Eq, Hash, Ord, PartialEq, PartialOrd, Serialize, Template)]
+#[template(path = "bimhistogramridecountgroup.html", escape = "none")]
+struct HistogramByVehicleRideCountGroupTemplate {
+    pub ride_count_group_names: Vec<String>,
+    pub rider_to_group_counts: BTreeMap<String, Vec<i64>>,
+}
+impl HistogramByVehicleRideCountGroupTemplate {
+    pub fn json_data(&self) -> String {
+        let riders: Vec<&String> = self.rider_to_group_counts
+            .keys()
+            .collect();
+        let value = serde_json::json!({
+            "riders": riders,
+            "rideCountGroupNames": self.ride_count_group_names,
+            "riderToGroupToCount": self.rider_to_group_counts,
+        });
+        serde_json::to_string(&value)
+            .expect("failed to JSON-encode graph data")
+    }
+}
+
 #[inline]
 fn cow_empty_to_none<'a, 'b>(val: Option<&'a Cow<'b, str>>) -> Option<&'a Cow<'b, str>> {
     match val {
@@ -2347,6 +2368,102 @@ pub(crate) async fn handle_bim_histogram_by_day_of_week(request: &Request<Body>)
 
     let template = HistogramByDayOfWeekTemplate {
         rider_to_weekday_counts,
+    };
+    match render_response(&template, &query_pairs, 200, vec![]).await {
+        Some(r) => Ok(r),
+        None => return_500(),
+    }
+}
+
+
+pub(crate) async fn handle_bim_histogram_by_vehicle_ride_count_group(request: &Request<Body>) -> Result<Response<Body>, Infallible> {
+    const BIN_SIZE: i64 = 10;
+
+    let query_pairs = get_query_pairs(request);
+    if request.method() != Method::GET {
+        return return_405(&query_pairs).await;
+    }
+
+    let db_conn = match connect_to_db().await {
+        Some(c) => c,
+        None => return return_500(),
+    };
+    let riders_res = db_conn.query(
+        "
+            SELECT
+                rider_username,
+                vehicle_number,
+                CAST(COUNT(*) AS bigint) count
+            FROM
+                bim.rides_and_vehicles
+            GROUP BY
+                rider_username,
+                vehicle_number
+        ",
+        &[],
+    ).await;
+    let rider_rows = match riders_res {
+        Ok(r) => r,
+        Err(e) => {
+            error!("failed to query rides: {}", e);
+            return return_500();
+        },
+    };
+
+    let mut rider_to_vehicle_to_count: BTreeMap<String, BTreeMap<String, i64>> = BTreeMap::new();
+    for row in &rider_rows {
+        let rider_username: String = row.get(0);
+        let vehicle_number: String = row.get(1);
+        let ride_count: i64 = row.get(2);
+
+        rider_to_vehicle_to_count
+            .entry(rider_username)
+            .or_insert_with(|| BTreeMap::new())
+            .insert(vehicle_number, ride_count);
+    }
+
+    let mut rider_to_bin_to_count: BTreeMap<String, BTreeMap<usize, i64>> = BTreeMap::new();
+    for (rider, vehicle_to_count) in &rider_to_vehicle_to_count {
+        let bin_to_count = rider_to_bin_to_count
+            .entry(rider.clone())
+            .or_insert_with(|| BTreeMap::new());
+        for count in vehicle_to_count.values() {
+            let bin_index_i64 = *count / BIN_SIZE;
+            if bin_index_i64 < 0 {
+                continue;
+            }
+            let bin_index: usize = bin_index_i64.try_into().unwrap();
+
+            *bin_to_count.entry(bin_index).or_insert(0) += *count;
+        }
+    }
+
+    let max_bin_index = rider_to_bin_to_count
+        .values()
+        .flat_map(|bin_to_count| bin_to_count.keys())
+        .map(|count| *count)
+        .max()
+        .unwrap_or(0);
+
+    let mut bin_names = Vec::with_capacity(max_bin_index + 1);
+    let bin_size_usize: usize = BIN_SIZE.try_into().unwrap();
+    for i in 0..(max_bin_index+1) {
+        bin_names.push(format!("{}-{}", i*bin_size_usize, ((i+1)*bin_size_usize)-1));
+    }
+
+    let mut rider_to_group_counts: BTreeMap<String, Vec<i64>> = BTreeMap::new();
+    for (rider, bin_to_count) in rider_to_bin_to_count.iter() {
+        let group_counts = rider_to_group_counts
+            .entry(rider.clone())
+            .or_insert_with(|| vec![0; max_bin_index+1]);
+        for (bin, count) in bin_to_count.iter() {
+            group_counts[*bin] += *count;
+        }
+    }
+
+    let template = HistogramByVehicleRideCountGroupTemplate {
+        ride_count_group_names: bin_names,
+        rider_to_group_counts,
     };
     match render_response(&template, &query_pairs, 200, vec![]).await {
         Some(r) => Ok(r),
