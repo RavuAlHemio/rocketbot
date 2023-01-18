@@ -2390,12 +2390,33 @@ pub(crate) async fn handle_bim_histogram_by_day_of_week(request: &Request<Body>)
 
 
 pub(crate) async fn handle_bim_histogram_by_vehicle_ride_count_group(request: &Request<Body>) -> Result<Response<Body>, Infallible> {
-    const BIN_SIZE: i64 = 10;
-
     let query_pairs = get_query_pairs(request);
     if request.method() != Method::GET {
         return return_405(&query_pairs).await;
     }
+
+    let mut bin_size: i64 = 10;
+    if let Some(bin_size_str) = query_pairs.get("group-size") {
+        match bin_size_str.parse() {
+            Ok(bs) => {
+                if bs <= 0 {
+                    return return_400(
+                        "group-size must be at least 1", &query_pairs
+                    ).await
+                }
+                bin_size = bs;
+            },
+            Err(_) => return return_400(
+                "group-size is not a valid 64-bit integer", &query_pairs
+            ).await,
+        }
+    }
+    let bin_size_usize: usize = match bin_size.try_into() {
+        Ok(bs) => bs,
+        Err(_) => return return_400(
+            "group-size is not a valid unsigned native-sized integer", &query_pairs
+        ).await,
+    };
 
     let db_conn = match connect_to_db().await {
         Some(c) => c,
@@ -2441,7 +2462,7 @@ pub(crate) async fn handle_bim_histogram_by_vehicle_ride_count_group(request: &R
             .entry(rider.clone())
             .or_insert_with(|| BTreeMap::new());
         for ride_count in vehicle_to_ride_count.values() {
-            let bin_index_i64 = *ride_count / BIN_SIZE;
+            let bin_index_i64 = *ride_count / bin_size;
             if bin_index_i64 < 0 {
                 continue;
             }
@@ -2459,7 +2480,6 @@ pub(crate) async fn handle_bim_histogram_by_vehicle_ride_count_group(request: &R
         .unwrap_or(0);
 
     let mut bin_names = Vec::with_capacity(max_bin_index + 1);
-    let bin_size_usize: usize = BIN_SIZE.try_into().unwrap();
     for i in 0..(max_bin_index+1) {
         bin_names.push(format!("{}-{}", i*bin_size_usize, ((i+1)*bin_size_usize)-1));
     }
