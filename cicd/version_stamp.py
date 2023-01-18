@@ -1,11 +1,15 @@
 #!/usr/bin/env python3
+import glob
 import os.path
 import subprocess
 import sys
 from typing import List
 
 
-CODE_FILE = os.path.join("rocketbot_plugin_version", "src", "lib.rs")
+CODE_FILES = (
+    [os.path.join("rocketbot_plugin_version", "src", "lib.rs")]
+    + glob.glob(os.path.join("rocketbotweb", "templates", "*.html"))
+)
 SHORT_HASH_PLACEHOLDER = "{{VERSION}}"
 COMMIT_SUBJECT_PLACEHOLDER = "{{COMMIT_MESSAGE_SHORT}}"
 
@@ -41,17 +45,18 @@ def main():
     short_hash = get_output(["git", "show", "--pretty=tformat:%h", "--no-patch", "HEAD"])
     commit_subject = get_output(["git", "show", "--pretty=tformat:%s", "--no-patch", "HEAD"])
 
-    with open(CODE_FILE, "r", encoding="utf-8") as f:
-        code = f.read()
+    for code_file in CODE_FILES:
+        with open(code_file, "r", encoding="utf-8") as f:
+            code = f.read()
 
-    code = (
-        code
-            .replace(SHORT_HASH_PLACEHOLDER, rust_escape(short_hash))
-            .replace(COMMIT_SUBJECT_PLACEHOLDER, rust_escape(commit_subject))
-    )
+        code = (
+            code
+                .replace(SHORT_HASH_PLACEHOLDER, rust_escape(short_hash))
+                .replace(COMMIT_SUBJECT_PLACEHOLDER, rust_escape(commit_subject))
+        )
 
-    with open(CODE_FILE, "w", encoding="utf-8") as f:
-        f.write(code)
+        with open(code_file, "w", encoding="utf-8") as f:
+            f.write(code)
 
 
 if __name__ == "__main__":
