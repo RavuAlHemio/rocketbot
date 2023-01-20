@@ -94,6 +94,10 @@
         { "replacement": "i" },
         { "replacement": "u" }
       ]
+    },
+    {
+      "matcher": "y",
+      "replacements": [{ "replacement": "i" }]
     }
   ],
   "from_lang": [
