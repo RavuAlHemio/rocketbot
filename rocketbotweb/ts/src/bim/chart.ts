@@ -91,7 +91,7 @@ export module RocketBotWeb.Bim.Charting {
         document.addEventListener("DOMContentLoaded", doSetUpByDayOfWeek);
     }
 
-    export function setUpByVehicleRideCountGroup() {
+    export function setUpByRideCountGroup() {
         document.addEventListener("DOMContentLoaded", doSetUpByRideCountGroup);
     }
 }
