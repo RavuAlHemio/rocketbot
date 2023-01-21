@@ -2426,12 +2426,14 @@ pub(crate) async fn handle_bim_histogram_by_vehicle_ride_count_group(request: &R
         "
             SELECT
                 rider_username,
+                company,
                 vehicle_number,
                 CAST(COUNT(*) AS bigint) count
             FROM
                 bim.rides_and_vehicles
             GROUP BY
                 rider_username,
+                company,
                 vehicle_number
         ",
         &[],
@@ -2444,16 +2446,17 @@ pub(crate) async fn handle_bim_histogram_by_vehicle_ride_count_group(request: &R
         },
     };
 
-    let mut rider_to_vehicle_to_ride_count: BTreeMap<String, BTreeMap<String, i64>> = BTreeMap::new();
+    let mut rider_to_vehicle_to_ride_count: BTreeMap<String, BTreeMap<(String, String), i64>> = BTreeMap::new();
     for row in &rider_rows {
         let rider_username: String = row.get(0);
-        let vehicle_number: String = row.get(1);
-        let ride_count: i64 = row.get(2);
+        let company: String = row.get(1);
+        let vehicle_number: String = row.get(2);
+        let ride_count: i64 = row.get(3);
 
         rider_to_vehicle_to_ride_count
             .entry(rider_username)
             .or_insert_with(|| BTreeMap::new())
-            .insert(vehicle_number, ride_count);
+            .insert((company, vehicle_number), ride_count);
     }
 
     let mut rider_to_bin_to_vehicle_count: BTreeMap<String, BTreeMap<usize, i64>> = BTreeMap::new();
