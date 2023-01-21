@@ -501,12 +501,13 @@ impl HistogramByDayOfWeekTemplate {
 }
 
 #[derive(Clone, Debug, Default, Eq, Hash, Ord, PartialEq, PartialOrd, Serialize, Template)]
-#[template(path = "bimhistogramvehridecountgroup.html")]
-struct HistogramByVehicleRideCountGroupTemplate {
+#[template(path = "bimhistogramridecountgroup.html")]
+struct HistogramByRideCountGroupTemplate {
+    pub what: String,
     pub ride_count_group_names: Vec<String>,
     pub rider_to_group_counts: BTreeMap<String, Vec<i64>>,
 }
-impl HistogramByVehicleRideCountGroupTemplate {
+impl HistogramByRideCountGroupTemplate {
     pub fn json_data(&self) -> String {
         let riders: Vec<&String> = self.rider_to_group_counts
             .keys()
@@ -2497,7 +2498,129 @@ pub(crate) async fn handle_bim_histogram_by_vehicle_ride_count_group(request: &R
         }
     }
 
-    let template = HistogramByVehicleRideCountGroupTemplate {
+    let template = HistogramByRideCountGroupTemplate {
+        what: "Vehicle".to_owned(),
+        ride_count_group_names: bin_names,
+        rider_to_group_counts,
+    };
+    match render_response(&template, &query_pairs, 200, vec![]).await {
+        Some(r) => Ok(r),
+        None => return_500(),
+    }
+}
+
+pub(crate) async fn handle_bim_histogram_by_line_ride_count_group(request: &Request<Body>) -> Result<Response<Body>, Infallible> {
+    let query_pairs = get_query_pairs(request);
+    if request.method() != Method::GET {
+        return return_405(&query_pairs).await;
+    }
+
+    let mut bin_size: i64 = 10;
+    if let Some(bin_size_str) = query_pairs.get("group-size") {
+        match bin_size_str.parse() {
+            Ok(bs) => {
+                if bs <= 0 {
+                    return return_400(
+                        "group-size must be at least 1", &query_pairs
+                    ).await
+                }
+                bin_size = bs;
+            },
+            Err(_) => return return_400(
+                "group-size is not a valid 64-bit integer", &query_pairs
+            ).await,
+        }
+    }
+    let bin_size_usize: usize = match bin_size.try_into() {
+        Ok(bs) => bs,
+        Err(_) => return return_400(
+            "group-size is not a valid unsigned native-sized integer", &query_pairs
+        ).await,
+    };
+
+    let db_conn = match connect_to_db().await {
+        Some(c) => c,
+        None => return return_500(),
+    };
+    let riders_res = db_conn.query(
+        "
+            SELECT
+                rider_username,
+                company,
+                line,
+                CAST(COUNT(*) AS bigint) count
+            FROM
+                bim.rides
+            WHERE
+                line IS NOT NULL
+            GROUP BY
+                rider_username,
+                company,
+                line
+        ",
+        &[],
+    ).await;
+    let rider_rows = match riders_res {
+        Ok(r) => r,
+        Err(e) => {
+            error!("failed to query rides: {}", e);
+            return return_500();
+        },
+    };
+
+    let mut rider_to_line_to_ride_count: BTreeMap<String, BTreeMap<(String, String), i64>> = BTreeMap::new();
+    for row in &rider_rows {
+        let rider_username: String = row.get(0);
+        let company: String = row.get(1);
+        let line: String = row.get(2);
+        let ride_count: i64 = row.get(3);
+
+        rider_to_line_to_ride_count
+            .entry(rider_username)
+            .or_insert_with(|| BTreeMap::new())
+            .insert((company, line), ride_count);
+    }
+
+    let mut rider_to_bin_to_line_count: BTreeMap<String, BTreeMap<usize, i64>> = BTreeMap::new();
+    for (rider, line_to_ride_count) in &rider_to_line_to_ride_count {
+        let bin_to_line_count = rider_to_bin_to_line_count
+            .entry(rider.clone())
+            .or_insert_with(|| BTreeMap::new());
+        for ride_count in line_to_ride_count.values() {
+            let bin_index_i64 = *ride_count / bin_size;
+            if bin_index_i64 < 0 {
+                continue;
+            }
+            let bin_index: usize = bin_index_i64.try_into().unwrap();
+
+            *bin_to_line_count.entry(bin_index).or_insert(0) += 1;
+        }
+    }
+
+    let max_bin_index = rider_to_bin_to_line_count
+        .values()
+        .flat_map(|bin_to_count| bin_to_count.keys())
+        .map(|count| *count)
+        .max()
+        .unwrap_or(0);
+
+    let mut bin_names = Vec::with_capacity(max_bin_index + 1);
+    for i in 0..(max_bin_index+1) {
+        bin_names.push(format!("{}-{}", i*bin_size_usize, ((i+1)*bin_size_usize)-1));
+    }
+
+    let mut rider_to_group_counts: BTreeMap<String, Vec<i64>> = BTreeMap::new();
+    for (rider, bin_to_count) in rider_to_bin_to_line_count.iter() {
+        let group_counts = rider_to_group_counts
+            .entry(rider.clone())
+            .or_insert_with(|| vec![0; max_bin_index+1]);
+        for (bin, count) in bin_to_count.iter() {
+            group_counts[*bin] += *count;
+        }
+    }
+
+    let template = HistogramByRideCountGroupTemplate {
+        what: "Line".to_owned(),
         ride_count_group_names: bin_names,
         rider_to_group_counts,
     };

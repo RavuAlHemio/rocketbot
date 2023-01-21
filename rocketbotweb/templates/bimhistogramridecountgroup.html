@@ -1,9 +1,9 @@
 <!DOCTYPE html>
 <html xmlns="https://www.w3.org/1999/xhtml">
 <head>
-<title>Public Transport Vehicle Counts Groups by Ride Count Group</title>
+<title>Public Transport {{ what|escape }} Count Groups by Ride Count Group</title>
 <script src="static/rocketbotweb.js?{{ "{{VERSION}}" }}"></script>
-<script>RocketBotWeb.Bim.Charting.setUpByVehicleRideCountGroup();</script>
+<script>RocketBotWeb.Bim.Charting.setUpByRideCountGroup();</script>
 </head>
 <body>
 <p><label><input type="checkbox" id="bim-charting-log-plot-checkbox" /> log plot</label></p>

@@ -5,7 +5,7 @@ interface ByDayOfWeekData {
     riderToWeekdayToCount: { [rider: string]: number[] };
 }
 
-interface ByVehicleRideCountGroupData {
+interface ByRideCountGroupData {
     riders: string[];
     rideCountGroupNames: string[];
     riderToGroupToCount: { [rider: string]: number[] };
@@ -40,7 +40,7 @@ export module RocketBotWeb.Bim.Charting {
         });
     }
 
-    function doSetUpByVehicleRideCountGroup() {
+    function doSetUpByRideCountGroup() {
         const canvas = <HTMLCanvasElement|null>document.getElementById("chart-canvas");
         if (canvas === null) {
             return;
@@ -50,7 +50,7 @@ export module RocketBotWeb.Bim.Charting {
         if (dataString === null || dataString === undefined) {
             return;
         }
-        const data: ByVehicleRideCountGroupData = JSON.parse(dataString);
+        const data: ByRideCountGroupData = JSON.parse(dataString);
         const datasets: ChartDataset[] = [];
         for (const rider of data.riders) {
             datasets.push({
@@ -92,6 +92,6 @@ export module RocketBotWeb.Bim.Charting {
     }
 
     export function setUpByVehicleRideCountGroup() {
-        document.addEventListener("DOMContentLoaded", doSetUpByVehicleRideCountGroup);
+        document.addEventListener("DOMContentLoaded", doSetUpByRideCountGroup);
     }
 }
