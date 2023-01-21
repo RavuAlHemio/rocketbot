@@ -221,21 +221,21 @@ impl VehicleProfile {
 
 
 #[derive(Clone, Debug, Deserialize, Eq, Hash, PartialEq, Serialize, Template)]
-#[template(path = "bimrides.html", escape = "none")]
+#[template(path = "bimrides.html")]
 struct BimRidesTemplate {
     pub has_any_vehicle_type: bool,
     pub rides: Vec<RideRow>,
 }
 
 #[derive(Clone, Debug, Eq, Hash, PartialEq, Serialize, Template)]
-#[template(path = "bimtypes.html", escape = "none")]
+#[template(path = "bimtypes.html")]
 struct BimTypesTemplate {
     pub company_to_stats: BTreeMap<String, CompanyTypeStats>,
     pub all_riders: BTreeSet<String>,
 }
 
 #[derive(Clone, Debug, Eq, Hash, PartialEq, Serialize, Template)]
-#[template(path = "bimvehicles.html", escape = "none")]
+#[template(path = "bimvehicles.html")]
 struct BimVehicleTemplate {
     pub per_rider: bool,
     pub all_riders: BTreeSet<String>,
@@ -243,7 +243,7 @@ struct BimVehicleTemplate {
 }
 
 #[derive(Clone, Debug, Eq, Hash, PartialEq, Serialize, Template)]
-#[template(path = "bimcoverage.html", escape = "none")]
+#[template(path = "bimcoverage.html")]
 struct BimCoverageTemplate {
     pub max_ride_count: i64,
     pub company_to_type_to_block_to_vehicles: BTreeMap<String, BTreeMap<String, BTreeMap<String, Vec<CoverageVehiclePart>>>>,
@@ -266,13 +266,13 @@ impl CoverageVehiclePart {
 }
 
 #[derive(Clone, Debug, Eq, Hash, PartialEq, Serialize, Template)]
-#[template(path = "bimcoverage-pickrider.html", escape = "none")]
+#[template(path = "bimcoverage-pickrider.html")]
 struct BimCoveragePickRiderTemplate {
     pub riders: BTreeSet<String>,
 }
 
 #[derive(Clone, Debug, Eq, PartialEq, Serialize, Template)]
-#[template(path = "bimdetails.html", escape = "none")]
+#[template(path = "bimdetails.html")]
 struct BimDetailsTemplate {
     pub company: String,
     pub vehicle: Option<VehicleDetailsPart>,
@@ -280,7 +280,7 @@ struct BimDetailsTemplate {
 }
 
 #[derive(Clone, Debug, Eq, PartialEq, Serialize, Template)]
-#[template(path = "bimachievements.html", escape = "none")]
+#[template(path = "bimachievements.html")]
 struct BimAchievementsTemplate {
     pub achievement_to_rider_to_timestamp: HashMap<i64, HashMap<String, DateTimeLocalWithWeekday>>,
     pub all_achievements: Vec<AchievementDef>,
@@ -340,7 +340,7 @@ impl VehicleDetailsPart {
 }
 
 #[derive(Clone, Debug, Eq, PartialEq, Serialize, Template)]
-#[template(path = "bimlinedetails.html", escape = "none")]
+#[template(path = "bimlinedetails.html")]
 struct BimLineDetailsTemplate {
     pub company: String,
     pub line: String,
@@ -360,7 +360,7 @@ struct BimDetailsRidePart {
 }
 
 #[derive(Clone, Debug, Eq, Hash, PartialEq, Serialize, Template)]
-#[template(path = "widebims.html", escape = "none")]
+#[template(path = "widebims.html")]
 struct WideBimsTemplate {
     pub rider_count: i64,
     pub rider_groups: Vec<RiderGroupPart>,
@@ -379,7 +379,7 @@ struct VehiclePart {
 }
 
 #[derive(Clone, Debug, Eq, Hash, PartialEq, Serialize, Template)]
-#[template(path = "topbims.html", escape = "none")]
+#[template(path = "topbims.html")]
 struct TopBimsTemplate {
     pub counts_vehicles: Vec<CountVehiclesPart>,
 }
@@ -391,7 +391,7 @@ struct CountVehiclesPart {
 }
 
 #[derive(Clone, Debug, Eq, Hash, PartialEq, Serialize, Template)]
-#[template(path = "topbimlines.html", escape = "none")]
+#[template(path = "topbimlines.html")]
 struct TopBimLinesTemplate {
     pub counts_lines: Vec<CountLinesPart>,
 }
@@ -409,7 +409,7 @@ struct LinePart {
 }
 
 #[derive(Clone, Debug, Eq, Hash, PartialEq, Serialize, Template)]
-#[template(path = "bimridebyid.html", escape = "none")]
+#[template(path = "bimridebyid.html")]
 struct BimRideByIdTemplate {
     pub id_param: String,
     pub ride_state: RideInfoState,
@@ -465,7 +465,7 @@ impl ChartColor {
 }
 
 #[derive(Clone, Debug, Default, Eq, Hash, Ord, PartialEq, PartialOrd, Serialize, Template)]
-#[template(path = "bimlatestridercount.html", escape = "none")]
+#[template(path = "bimlatestridercount.html")]
 struct BimLatestRiderCountTemplate {
     pub riders: Vec<GraphRiderPart>,
 }
@@ -482,7 +482,7 @@ impl GraphRiderPart {
 }
 
 #[derive(Clone, Debug, Default, Eq, Hash, Ord, PartialEq, PartialOrd, Serialize, Template)]
-#[template(path = "bimhistogramdow.html", escape = "none")]
+#[template(path = "bimhistogramdow.html")]
 struct HistogramByDayOfWeekTemplate {
     pub rider_to_weekday_counts: BTreeMap<String, [i64; 7]>,
 }
@@ -501,7 +501,7 @@ impl HistogramByDayOfWeekTemplate {
 }
 
 #[derive(Clone, Debug, Default, Eq, Hash, Ord, PartialEq, PartialOrd, Serialize, Template)]
-#[template(path = "bimhistogramridecountgroup.html", escape = "none")]
+#[template(path = "bimhistogramridecountgroup.html")]
 struct HistogramByVehicleRideCountGroupTemplate {
     pub ride_count_group_names: Vec<String>,
     pub rider_to_group_counts: BTreeMap<String, Vec<i64>>,

@@ -9,7 +9,7 @@ use crate::{connect_to_db, get_query_pairs, render_response, return_405, return_
 
 
 #[derive(Clone, Debug, Deserialize, Eq, Hash, PartialEq, Serialize, Template)]
-#[template(path = "topquotes.html", escape = "none")]
+#[template(path = "topquotes.html")]
 struct TopQuotesTemplate {
     pub quotes: Vec<TopQuotePart>,
 }
@@ -22,7 +22,7 @@ struct TopQuotePart {
 }
 
 #[derive(Clone, Debug, Deserialize, Eq, Hash, PartialEq, Serialize, Template)]
-#[template(path = "quotesvotes.html", escape = "none")]
+#[template(path = "quotesvotes.html")]
 struct QuotesVotesPart {
     pub quotes: Vec<QuoteVotesPart>,
 }

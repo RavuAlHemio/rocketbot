@@ -10,7 +10,7 @@ use crate::{get_bot_config, get_query_pairs, render_response, return_405, return
 
 
 #[derive(Clone, Debug, Deserialize, Hash, Eq, Template, PartialEq, Serialize)]
-#[template(path = "aliases.html", escape = "none")]
+#[template(path = "aliases.html")]
 struct AliasesTemplate {
     pub aliases: Vec<AliasPart>,
 }
