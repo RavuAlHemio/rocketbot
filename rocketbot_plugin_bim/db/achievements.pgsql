@@ -258,6 +258,12 @@ CREATE OR REPLACE VIEW bim.ride_by_rider_vehicle_timestamp AS
         RANK() OVER (PARTITION BY rider_username, company, vehicle_number ORDER BY "timestamp") nth
     FROM bim.rides_and_vehicles
 ;
+CREATE OR REPLACE VIEW bim.ride_by_rider_line_timestamp AS
+    SELECT
+        rider_username, company, line, "timestamp",
+        RANK() OVER (PARTITION BY rider_username, company, line ORDER BY "timestamp") nth
+    FROM bim.rides
+;
 CREATE OR REPLACE VIEW bim.ride_by_rider_vehicle_line_timestamp AS
     SELECT
         rider_username, company, vehicle_number, line, "timestamp",
@@ -1379,6 +1385,46 @@ AS $$
     FROM bim.rides_and_numeric_vehicles rav99
     WHERE rav99.rider_username = rider
     AND rav99.vehicle_number = 313
+
+    UNION ALL
+
+    -- NAME: I Keep Going There
+    -- DESCR: Ride on the same line one hundred times.
+    -- ORDER: 11,1 same line
+    SELECT 100, MIN(rbrlt100."timestamp")
+    FROM bim.ride_by_rider_line_timestamp rbrlt100
+    WHERE rbrlt100.rider_username = rider
+    AND rbrlt100.nth = 100
+
+    UNION ALL
+
+    -- NAME: I Can't Stay Away
+    -- DESCR: Ride on the same line two hundred times.
+    -- ORDER: 11,2 same line
+    SELECT 101, MIN(rbrlt101."timestamp")
+    FROM bim.ride_by_rider_line_timestamp rbrlt101
+    WHERE rbrlt101.rider_username = rider
+    AND rbrlt101.nth = 200
+
+    UNION ALL
+
+    -- NAME: It Gives Me Comfort
+    -- DESCR: Ride on the same line five hundred times.
+    -- ORDER: 11,3 same line
+    SELECT 102, MIN(rbrlt102."timestamp")
+    FROM bim.ride_by_rider_line_timestamp rbrlt102
+    WHERE rbrlt102.rider_username = rider
+    AND rbrlt102.nth = 500
+
+    UNION ALL
+
+    -- NAME: I Must
+    -- DESCR: Ride on the same line one thousand times.
+    -- ORDER: 11,4 same line
+    SELECT 103, MIN(rbrlt103."timestamp")
+    FROM bim.ride_by_rider_line_timestamp rbrlt103
+    WHERE rbrlt103.rider_username = rider
+    AND rbrlt103.nth = 1000
 $$;
 
 CREATE MATERIALIZED VIEW bim.rider_achievements AS
