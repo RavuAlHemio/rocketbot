@@ -16,7 +16,7 @@
         {% for rider in riders %}
         <li>
             <span class="rider-square" style="color:{{ rider.color_hex() }}">&#9632;</span>
-            <span class="rider-name">{{ rider.name }}</span>
+            <span class="rider-name">{{ rider.name|escape }}</span>
         </li>
         {% endfor %}
     </ul>

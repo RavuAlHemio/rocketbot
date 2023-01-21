@@ -9,6 +9,6 @@
 <p>
     <canvas id="chart-canvas"></canvas>
 </p>
-<script type="application/json" id="chart-data">{{ self.json_data() }}</script>
+<script type="application/json" id="chart-data">{{ self.json_data()|safe }}</script>
 </body>
 </html>
