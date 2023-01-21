@@ -501,7 +501,7 @@ impl HistogramByDayOfWeekTemplate {
 }
 
 #[derive(Clone, Debug, Default, Eq, Hash, Ord, PartialEq, PartialOrd, Serialize, Template)]
-#[template(path = "bimhistogramridecountgroup.html")]
+#[template(path = "bimhistogramvehridecountgroup.html")]
 struct HistogramByVehicleRideCountGroupTemplate {
     pub ride_count_group_names: Vec<String>,
     pub rider_to_group_counts: BTreeMap<String, Vec<i64>>,
