@@ -38,8 +38,6 @@ const CHART_BORDER_COLOR: [u8; 3] = [0, 0, 0];
 const CHART_BACKGROUND_COLOR: [u8; 3] = [255, 255, 255];
 const CHART_TICK_COLOR: [u8; 3] = [221, 221, 221];
 
-const CHART_LINE_Y_THICKEN: usize = 2;
-
 
 type VehicleNumber = NatSortedString;
 
@@ -2061,6 +2059,13 @@ pub(crate) async fn handle_bim_latest_rider_count_over_time_image(request: &Requ
         return return_405(&query_pairs).await;
     }
 
+    let mut thicken = 1;
+    if let Some(thicken_str) = query_pairs.get("thicken") {
+        if let Ok(thicken_val) = thicken_str.parse() {
+            thicken = thicken_val;
+        }
+    }
+
     let db_conn = match connect_to_db().await {
         Some(c) => c,
         None => return return_500(),
@@ -2233,7 +2238,7 @@ pub(crate) async fn handle_bim_latest_rider_count_over_time_image(request: &Requ
             let pixel_value = ChartColor::Data((i % CHART_COLORS.len()).try_into().unwrap());
             pixels[y * width + x] = pixel_value;
 
-            for graph_thicker_y in 0..CHART_LINE_Y_THICKEN {
+            for graph_thicker_y in 0..thicken {
                 let thicker_y_down = y + 1 + graph_thicker_y;
                 if thicker_y_down < height {
                     pixels[thicker_y_down * width + x] = pixel_value;
