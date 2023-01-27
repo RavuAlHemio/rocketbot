@@ -2828,7 +2828,7 @@ impl BimPlugin {
 
         let ride_rows_res = ride_conn.query(
             "
-                SELECT rav1.rider_username, CAST(COUNT(DISTINCT rav1.company, rav1.vehicle_number) AS bigint) vehicle_count
+                SELECT rav1.rider_username, CAST(COUNT(*) AS bigint) vehicle_count
                 FROM bim.rides_and_vehicles rav1
                 WHERE NOT EXISTS (
                     -- same vehicle, later timestamp
@@ -2898,7 +2898,7 @@ impl BimPlugin {
 
         let ride_rows_res = ride_conn.query(
             "
-                SELECT rav1.rider_username, CAST(COUNT(DISTINCT rav1.company, rav1.vehicle_number) AS bigint) vehicle_count
+                SELECT rav1.rider_username, CAST(COUNT(*) AS bigint) vehicle_count
                 FROM bim.rides_and_vehicles rav1
                 WHERE NOT EXISTS (
                     -- same vehicle, different rider
