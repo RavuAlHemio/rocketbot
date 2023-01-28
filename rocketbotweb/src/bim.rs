@@ -364,9 +364,22 @@ struct WideBimsTemplate {
     pub rider_groups: Vec<RiderGroupPart>,
 }
 
+#[derive(Clone, Debug, Eq, Hash, PartialEq, Serialize, Template)]
+#[template(path = "explorerbims.html")]
+struct ExplorerBimsTemplate {
+    pub line_count: i64,
+    pub line_groups: Vec<LineGroupPart>,
+}
+
 #[derive(Clone, Debug, Eq, Hash, PartialEq, Serialize)]
 struct RiderGroupPart {
     pub riders: BTreeSet<String>,
+    pub vehicles: BTreeSet<VehiclePart>,
+}
+
+#[derive(Clone, Debug, Eq, Hash, PartialEq, Serialize)]
+struct LineGroupPart {
+    pub lines: BTreeSet<LinePart>,
     pub vehicles: BTreeSet<VehiclePart>,
 }
 
@@ -403,7 +416,7 @@ struct CountLinesPart {
 #[derive(Clone, Debug, Eq, Hash, Ord, PartialEq, PartialOrd, Serialize)]
 struct LinePart {
     pub company: String,
-    pub line: String,
+    pub line: NatSortedString,
 }
 
 #[derive(Clone, Debug, Eq, Hash, PartialEq, Serialize, Template)]
@@ -1563,6 +1576,123 @@ pub(crate) async fn handle_wide_bims(request: &Request<Body>) -> Result<Response
     }
 }
 
+pub(crate) async fn handle_explorer_bims(request: &Request<Body>) -> Result<Response<Body>, Infallible> {
+    let query_pairs = get_query_pairs(request);
+
+    if request.method() != Method::GET {
+        return return_405(&query_pairs).await;
+    }
+
+    let count_opt: Option<i64> = query_pairs.get("count")
+        .map(|c_str| c_str.parse().ok())
+        .flatten();
+
+    let db_conn = match connect_to_db().await {
+        Some(c) => c,
+        None => return return_500(),
+    };
+
+    let line_count = if let Some(c) = count_opt {
+        c
+    } else {
+        // query for most lines per vehicle
+        let most_lines_row_opt_res = db_conn.query_opt(
+            "
+                WITH vehicle_and_distinct_line_count(company, vehicle_number, line_count) AS (
+                    SELECT rav.company, rav.vehicle_number, COUNT(DISTINCT rav.line)
+                    FROM bim.rides_and_vehicles rav
+                    WHERE rav.fixed_coupling_position = 0
+                    AND rav.line IS NOT NULL
+                    GROUP BY rav.company, rav.vehicle_number
+                )
+                SELECT CAST(COALESCE(MAX(line_count), 0) AS bigint) FROM vehicle_and_distinct_line_count
+            ",
+            &[],
+        ).await;
+        match most_lines_row_opt_res {
+            Ok(Some(r)) => r.get(0),
+            Ok(None) => 0,
+            Err(e) => {
+                error!("error querying maximum distinct line count: {}", e);
+                return return_500();
+            },
+        }
+    };
+
+    // query rides
+    let ride_rows_res = db_conn.query(
+        "
+            WITH vehicle_and_distinct_line_count(company, vehicle_number, line_count) AS (
+                SELECT rav.company, rav.vehicle_number, COUNT(DISTINCT rav.line)
+                FROM bim.rides_and_vehicles rav
+                WHERE rav.fixed_coupling_position = 0
+                AND rav.line IS NOT NULL
+                GROUP BY rav.company, rav.vehicle_number
+            )
+            SELECT DISTINCT rav.company, rav.vehicle_number, rav.line
+            FROM bim.rides_and_vehicles rav
+            INNER JOIN vehicle_and_distinct_line_count vadlc
+                ON vadlc.company = rav.company
+                AND vadlc.vehicle_number = rav.vehicle_number
+            WHERE
+                vadlc.line_count = $1
+                AND rav.line IS NOT NULL
+        ",
+        &[&line_count],
+    ).await;
+    let ride_rows = match ride_rows_res {
+        Ok(rs) => rs,
+        Err(e) => {
+            error!("error querying vehicle rides: {}", e);
+            return return_500();
+        },
+    };
+
+    let mut vehicle_to_lines: HashMap<(String, VehicleNumber), BTreeSet<String>> = HashMap::new();
+    for ride_row in ride_rows {
+        let company: String = ride_row.get(0);
+        let vehicle_number = VehicleNumber::from_string(ride_row.get(1));
+        let line: String = ride_row.get(2);
+
+        vehicle_to_lines
+            .entry((company, vehicle_number))
+            .or_insert_with(|| BTreeSet::new())
+            .insert(line);
+    }
+
+    let mut line_groups_to_rides: BTreeMap<BTreeSet<(String, String)>, BTreeSet<VehiclePart>> = BTreeMap::new();
+    for ((company, vehicle_number), lines) in vehicle_to_lines.drain() {
+        let lines_with_company: BTreeSet<(String, String)> = lines.into_iter()
+            .map(|l| (company.clone(), l))
+            .collect();
+        line_groups_to_rides
+            .entry(lines_with_company)
+            .or_insert_with(|| BTreeSet::new())
+            .insert(VehiclePart {
+                company,
+                number: vehicle_number,
+            });
+    }
+
+    let line_groups: Vec<LineGroupPart> = line_groups_to_rides.iter()
+        .map(|(lines, rides)| LineGroupPart {
+            lines: lines.iter()
+                .map(|(c, l)| LinePart { company: c.clone(), line: l.clone().into() })
+                .collect(),
+            vehicles: rides.clone(),
+        })
+        .collect();
+
+    let template = ExplorerBimsTemplate {
+        line_count,
+        line_groups,
+    };
+    match render_response(&template, &query_pairs, 200, vec![]).await {
+        Some(r) => Ok(r),
+        None => return_500(),
+    }
+}
+
 pub(crate) async fn handle_top_bims(request: &Request<Body>) -> Result<Response<Body>, Infallible> {
     let query_pairs = get_query_pairs(request);
 
@@ -1861,7 +1991,7 @@ pub(crate) async fn handle_top_bim_lines(request: &Request<Body>) -> Result<Resp
             let line_parts: BTreeSet<LinePart> = vehicles.iter()
                 .map(|(c, l)| LinePart {
                     company: c.clone(),
-                    line: l.clone(),
+                    line: l.clone().into(),
                 })
                 .collect();
             CountLinesPart {

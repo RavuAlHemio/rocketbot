@@ -34,8 +34,8 @@ use crate::bim::{
     handle_bim_histogram_by_day_of_week, handle_bim_histogram_by_line_ride_count_group,
     handle_bim_histogram_by_vehicle_ride_count_group, handle_bim_latest_rider_count_over_time,
     handle_bim_latest_rider_count_over_time_image, handle_bim_line_detail, handle_bim_ride_by_id,
-    handle_bim_rides, handle_bim_types, handle_bim_vehicles, handle_top_bims, handle_top_bim_lines,
-    handle_wide_bims,
+    handle_bim_rides, handle_bim_types, handle_bim_vehicles, handle_explorer_bims, handle_top_bims,
+    handle_top_bim_lines, handle_wide_bims,
 };
 use crate::config::WebConfig;
 use crate::quotes::{handle_quotes_votes, handle_top_quotes};
@@ -241,6 +241,7 @@ async fn handle_request(request: Request<Body>) -> Result<Response<Body>, Infall
         "/bim-line-detail" => handle_bim_line_detail(&request).await,
         "/top-bims" => handle_top_bims(&request).await,
         "/wide-bims" => handle_wide_bims(&request).await,
+        "/explorer-bims" => handle_explorer_bims(&request).await,
         "/bim-coverage-field" => handle_bim_coverage_field(&request).await,
         "/top-bim-lines" => handle_top_bim_lines(&request).await,
         "/bim-achievements" => handle_bim_achievements(&request).await,

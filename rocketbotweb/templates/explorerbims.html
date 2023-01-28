@@ -1,0 +1,34 @@
+{% extends "base.html" %}
+
+{% block title %}Explorer Public Transport Vehicles{% endblock %}
+
+{% block content %}
+<main class="explorer-bims">
+
+<h1>Explorer Public Transport Vehicles</h1>
+
+<p>The following vehicles have been ridden on <span class="line-count">{{ line_count }}</span> {% if line_count == 1 %}line{% else %}lines{% endif %}.</p>
+
+{% for group in line_groups %}
+<section class="line-group">
+
+<h2>
+    {%- for line in group.lines -%}
+        {%- if !loop.first %}, {% endif -%}
+        <span class="company">{{ line.company|escape }}</span>/<span class="line">{{ line.line|escape }}</span>
+    {%- endfor -%}
+</h2>
+
+<p>
+    {%- for vehicle in group.vehicles -%}
+        {%- if !loop.first %}, {% endif -%}
+        <a href="bim-detail?company={{ vehicle.company|urlencode|escape }}&amp;vehicle={{ vehicle.number }}"><span class="company">{{ vehicle.company|escape }}</span>/<span class="number">{{ vehicle.number }}</span></a>
+    {%- endfor -%}
+</p>
+
+</section> {#- end of rider group #}
+{% endfor %}
+
+</main>
+
+{% endblock %}
