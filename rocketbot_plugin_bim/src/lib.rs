@@ -2828,18 +2828,23 @@ impl BimPlugin {
 
         let ride_rows_res = ride_conn.query(
             "
-                SELECT rav1.rider_username, CAST(COUNT(*) AS bigint) vehicle_count
-                FROM bim.rides_and_vehicles rav1
-                WHERE NOT EXISTS (
-                    -- same vehicle, later timestamp
-                    SELECT 1
-                    FROM bim.rides_and_vehicles rav2
-                    WHERE rav2.company = rav1.company
-                    AND rav2.vehicle_number = rav1.vehicle_number
-                    AND rav2.\"timestamp\" > rav1.\"timestamp\"
-                )
-                GROUP BY rav1.rider_username
-                ORDER BY vehicle_count DESC
+                SELECT innerquery.rider_username, CAST(COUNT(*) AS bigint) vehicle_count
+                FROM (
+                    SELECT DISTINCT rav1.rider_username, rav1.company, rav1.vehicle_number
+                    FROM bim.rides_and_vehicles rav1
+                    WHERE NOT EXISTS (
+                        -- same vehicle, later timestamp
+                        SELECT 1
+                        FROM bim.rides_and_vehicles rav2
+                        WHERE rav2.company = rav1.company
+                        AND rav2.vehicle_number = rav1.vehicle_number
+                        AND rav2.\"timestamp\" > rav1.\"timestamp\"
+                    )
+                ) innerquery
+                GROUP BY innerquery.rider_username
+                ORDER BY
+                    vehicle_count DESC,
+                    rider_username
             ",
             &[],
         ).await;
@@ -2898,18 +2903,23 @@ impl BimPlugin {
 
         let ride_rows_res = ride_conn.query(
             "
-                SELECT rav1.rider_username, CAST(COUNT(*) AS bigint) vehicle_count
-                FROM bim.rides_and_vehicles rav1
-                WHERE NOT EXISTS (
-                    -- same vehicle, different rider
-                    SELECT 1
-                    FROM bim.rides_and_vehicles rav2
-                    WHERE rav2.company = rav1.company
-                    AND rav2.vehicle_number = rav1.vehicle_number
-                    AND rav2.rider_username <> rav1.rider_username
-                )
-                GROUP BY rav1.rider_username
-                ORDER BY vehicle_count DESC
+                SELECT innerquery.rider_username, CAST(COUNT(*) AS bigint) vehicle_count
+                FROM (
+                    SELECT DISTINCT rav1.rider_username, rav1.company, rav1.vehicle_number
+                    FROM bim.rides_and_vehicles rav1
+                    WHERE NOT EXISTS (
+                        -- same vehicle, different rider
+                        SELECT 1
+                        FROM bim.rides_and_vehicles rav2
+                        WHERE rav2.company = rav1.company
+                        AND rav2.vehicle_number = rav1.vehicle_number
+                        AND rav2.rider_username <> rav1.rider_username
+                    )
+                ) innerquery
+                GROUP BY innerquery.rider_username
+                ORDER BY
+                    vehicle_count DESC,
+                    rider_username
             ",
             &[],
         ).await;
