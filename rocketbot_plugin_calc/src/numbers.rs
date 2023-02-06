@@ -335,9 +335,7 @@ impl Number {
         for (self_unit, self_pow) in lhs_units {
             if let Some(rhs_pow) = rhs_units.get(self_unit) {
                 let new_pow = self_pow + transform_rhs(rhs_pow.clone());
-                if new_pow != BigInt::from(0) {
-                    new_units.insert(self_unit.clone(), new_pow);
-                }
+                new_units.insert(self_unit.clone(), new_pow);
             } else {
                 new_units.insert(self_unit.clone(), self_pow.clone());
             }
@@ -349,6 +347,7 @@ impl Number {
             }
             new_units.insert(rhs_unit, transform_rhs(rhs_pow));
         }
+        new_units.retain(|_unit, power| power != &BigInt::from(0));
         new_units
     }
 

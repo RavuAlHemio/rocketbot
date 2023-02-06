@@ -536,4 +536,20 @@ mod tests {
     fn test_negative_power() {
         run_test("0.001", "10**(-3)");
     }
+
+    #[test]
+    fn test_unit_multiplication() {
+        run_test("100#m", "10 * 10#m");
+        run_test("100#m2", "10#m * 10#m");
+        run_test("100#m3", "10#m2 * 10#m");
+        run_test("100", "10#m * 10#m-1");
+    }
+
+    #[test]
+    fn test_unit_division() {
+        run_test("10#m", "100#m2 / 10#m");
+        run_test("1", "10#m / 10#m");
+        run_test("0.1#m-1", "1 / 10#m");
+        run_test("0.1#m", "1#m / 10");
+    }
 }
