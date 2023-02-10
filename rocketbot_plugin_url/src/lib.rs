@@ -233,7 +233,16 @@ impl RocketBotPlugin for UrlPlugin {
             &CommandDefinitionBuilder::new(
                 "fixurls",
                 "url",
-                "{cpfx}fixurls URL",
+                "{cpfx}fixurls MESSAGE",
+                "Re-outputs the given message with its URLs fixed.",
+            )
+                .build()
+        ).await;
+        my_interface.register_channel_command(
+            &CommandDefinitionBuilder::new(
+                "fixurl",
+                "url",
+                "{cpfx}fixurl MESSAGE",
                 "Re-outputs the given message with its URLs fixed.",
             )
                 .build()
@@ -250,13 +259,13 @@ impl RocketBotPlugin for UrlPlugin {
     }
 
     async fn channel_command(&self, channel_message: &ChannelMessage, command: &CommandInstance) {
-        if command.name == "fixurls" {
+        if command.name == "fixurls" || command.name == "fixurl" {
             self.channel_command_fixurls(channel_message, command).await
         }
     }
 
     async fn get_command_help(&self, command_name: &str) -> Option<String> {
-        if command_name == "fixurls" {
+        if command_name == "fixurls" || command_name == "fixurl" {
             Some(include_str!("../help/fixurls.md").to_owned())
         } else {
             None
