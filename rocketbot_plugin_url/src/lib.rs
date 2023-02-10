@@ -145,6 +145,7 @@ fn fix_urls(message: &str, url_safe_characters: &HashSet<char>, wrapper_pairs: &
 pub struct UrlPlugin {
     interface: Weak<dyn RocketBotInterface>,
     config: RwLock<Config>,
+    channel_id_to_last_fix: Mutex<HashMap<String, String>>,
 }
 impl UrlPlugin {
     fn try_get_config(config: serde_json::Value) -> Result<Config, &'static str> {
@@ -197,7 +198,17 @@ impl UrlPlugin {
             )
         };
 
-        if command.rest.trim().len() == 0 {
+        let command_body = command.rest.trim();
+        if command_body.len() == 0 {
+            // get the last message with a fixable URL
+            let last_fix_guard = self.channel_id_to_last_fix.lock().await;
+            if let Some(channel_last_fix) = last_fix_guard.get(&channel_message.channel.id) {
+                send_channel_message!(
+                    interface,
+                    &channel_message.channel.name,
+                    &channel_last_fix,
+                ).await;
+            }
             return;
         }
 
@@ -229,6 +240,11 @@ impl RocketBotPlugin for UrlPlugin {
             config_object,
         );
 
+        let channel_id_to_last_fix = Mutex::new(
+            "UrlPlugin::channel_id_to_last_fix",
+            HashMap::new(),
+        );
+
         my_interface.register_channel_command(
             &CommandDefinitionBuilder::new(
                 "fixurls",
@@ -251,11 +267,45 @@ impl RocketBotPlugin for UrlPlugin {
         Self {
             interface,
             config: config_lock,
+            channel_id_to_last_fix,
         }
     }
 
     async fn plugin_name(&self) -> String {
         "url".to_owned()
+    }
+
+    async fn channel_message(&self, channel_message: &ChannelMessage) {
+        let interface = match self.interface.upgrade() {
+            None => return,
+            Some(i) => i,
+        };
+
+        let message_body = match &channel_message.message.raw {
+            None => return,
+            Some(mb) => mb,
+        };
+
+        let (url_safe_characters, wrapper_pairs) = {
+            let config_guard = self.config.read().await;
+            (
+                config_guard.url_safe_characters.clone(),
+                config_guard.wrapper_pairs.clone(),
+            )
+        };
+
+        let fixed = fix_urls(message_body, &url_safe_characters, &wrapper_pairs);
+        if &fixed == message_body {
+            return;
+        }
+
+        {
+            let mut fix_guard = self.channel_id_to_last_fix.lock().await;
+            fix_guard.insert(
+                channel_message.channel.id.clone(),
+                fixed.clone(),
+            );
+        }
     }
 
     async fn channel_command(&self, channel_message: &ChannelMessage, command: &CommandInstance) {
