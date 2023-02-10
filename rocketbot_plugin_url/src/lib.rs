@@ -10,7 +10,7 @@ use rocketbot_interface::send_channel_message;
 use rocketbot_interface::commands::{CommandDefinitionBuilder, CommandInstance};
 use rocketbot_interface::interfaces::{RocketBotInterface, RocketBotPlugin};
 use rocketbot_interface::model::ChannelMessage;
-use rocketbot_interface::sync::RwLock;
+use rocketbot_interface::sync::{Mutex, RwLock};
 use serde_json;
 
 
@@ -18,6 +18,7 @@ use serde_json;
 struct Config {
     url_safe_characters: HashSet<char>,
     wrapper_pairs: HashMap<char, char>,
+    auto_fix_channels: HashSet<String>,
 }
 
 // don't escape '/', '%', '?', '&', '=' or '+' by default as parts of the original URL may contain them
@@ -178,9 +179,27 @@ impl UrlPlugin {
             wrapper_pairs.insert(from_char, to_char);
         }
 
+        let auto_fix_channels_val = &config["auto_fix_channels"];
+        let auto_fix_channels = if auto_fix_channels_val.is_null() {
+            HashSet::new()
+        } else if let Some(afc_array) = auto_fix_channels_val.as_array() {
+            let mut afc_set = HashSet::new();
+            for afc_val in afc_array {
+                if let Some(afc) = afc_val.as_str() {
+                    afc_set.insert(afc.to_owned());
+                } else {
+                    return Err("auto_fix_channels entry is not string");
+                }
+            }
+            afc_set
+        } else {
+            return Err("auto_fix_channels is neither null nor an array");
+        };
+
         Ok(Config {
             url_safe_characters,
             wrapper_pairs,
+            auto_fix_channels,
         })
     }
 
@@ -286,11 +305,12 @@ impl RocketBotPlugin for UrlPlugin {
             Some(mb) => mb,
         };
 
-        let (url_safe_characters, wrapper_pairs) = {
+        let (url_safe_characters, wrapper_pairs, auto_fix_channels) = {
             let config_guard = self.config.read().await;
             (
                 config_guard.url_safe_characters.clone(),
                 config_guard.wrapper_pairs.clone(),
+                config_guard.auto_fix_channels.clone(),
             )
         };
 
@@ -305,6 +325,14 @@ impl RocketBotPlugin for UrlPlugin {
                 channel_message.channel.id.clone(),
                 fixed.clone(),
             );
+        }
+
+        if auto_fix_channels.contains(&channel_message.channel.name) {
+            send_channel_message!(
+                interface,
+                &channel_message.channel.name,
+                &fixed,
+            ).await;
         }
     }
 
