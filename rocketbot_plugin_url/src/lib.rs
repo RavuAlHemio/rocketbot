@@ -5,7 +5,7 @@ use std::sync::Weak;
 use async_trait::async_trait;
 use log::error;
 use once_cell::sync::Lazy;
-use regex::{Captures, Regex, Replacer};
+use regex::Regex;
 use rocketbot_interface::send_channel_message;
 use rocketbot_interface::commands::{CommandDefinitionBuilder, CommandInstance};
 use rocketbot_interface::interfaces::{RocketBotInterface, RocketBotPlugin};
@@ -25,22 +25,14 @@ struct Config {
 const DEFAULT_URL_SAFE_CHARACTERS: &str = "0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz-_./%?&=+";
 const DEFAULT_WRAPPER_PAIRS: &str = "(){}[]";
 
-static WRAPPED_URL_RE: Lazy<Regex> = Lazy::new(|| Regex::new(concat!(
-    "(?P<pre_delimiter>",
-        "^",
-        "|",
-        "\\s",
-    ")",
-    "(?P<pre_wrapper>",
-        "\\S*?",
-    ")",
+static URL_RE: Lazy<Regex> = Lazy::new(|| Regex::new(concat!(
     "(?P<scheme>",
         "[A-Za-z]",
         "[A-Za-z0-9+-.]*",
     ")",
     "(?P<cds>://)", // colon-double-slash
     "(?P<rest>\\S+)", // rest of URL (one would assume)
-)).expect("failed to parse wrapped URL regex"));
+)).expect("failed to parse URL regex"));
 
 
 fn char_to_escaped(c: char) -> String {
@@ -54,92 +46,126 @@ fn char_to_escaped(c: char) -> String {
 }
 
 
-struct FixUrlReplacer<'a> {
-    url_safe_characters: &'a HashSet<char>,
-    wrapper_pairs: &'a HashMap<char, char>,
-}
-impl<'a> Replacer for FixUrlReplacer<'a> {
-    fn replace_append(&mut self, caps: &Captures<'_>, dst: &mut String) {
-        let pre_delimiter = caps.name("pre_delimiter").expect("pre_delimiter not captured").as_str();
-        let pre_wrapper = caps.name("pre_wrapper").expect("pre_wrapper not captured").as_str();
-        let scheme = caps.name("scheme").expect("scheme not captured").as_str();
-        let cds = caps.name("cds").expect("cds not captured").as_str();
-        let rest = caps.name("rest").expect("rest not captured").as_str();
+fn fix_urls(
+    escape_me: &str,
+    url_safe_characters: &HashSet<char>,
+    wrapper_pairs: &HashMap<char, char>,
+) -> String {
+    // choose what to do depending on what appears earlier:
+    // 1. a wrapper character
+    // 2. a URL
 
-        // be able to detect wrapper characters at the end of the URL
-        let wrapper_ends: HashSet<char> = self.wrapper_pairs
-            .values()
-            .map(|e| *e)
+    let mut url_caps_opt = URL_RE.captures(escape_me);
+    let mut wrapper_index_char_opt = escape_me.char_indices()
+        .filter(|(_i, c)| wrapper_pairs.contains_key(c))
+        .nth(0);
+
+    if url_caps_opt.is_some() && wrapper_index_char_opt.is_some() {
+        // only keep the earlier option
+        let caps_start = url_caps_opt.as_ref().unwrap().get(0).unwrap().start();
+        let (wrapper_index, _wrapper_char) = wrapper_index_char_opt.unwrap();
+        if caps_start < wrapper_index {
+            wrapper_index_char_opt = None;
+        } else {
+            url_caps_opt = None;
+        }
+    }
+
+    if let Some(url_caps) = url_caps_opt {
+        // assume it's all part of the URL and escape it
+        let mut ret = String::with_capacity(escape_me.len());
+
+        let url_full_match = url_caps.get(0).unwrap();
+
+        // add everything before the URL, raw
+        ret.push_str(&escape_me[..url_full_match.start()]);
+
+        // add the URL:
+        // * scheme raw
+        ret.push_str(url_caps.name("scheme").unwrap().as_str());
+        // * colon-double-slash raw
+        ret.push_str(url_caps.name("cds").unwrap().as_str());
+        // * rest escaped
+        for c in url_caps.name("rest").unwrap().as_str().chars() {
+            if url_safe_characters.contains(&c) {
+                ret.push(c);
+            } else {
+                ret.push_str(&char_to_escaped(c));
+            }
+        }
+
+        // append the rest, processed by the same algorithm
+        let rest = fix_urls(
+            &escape_me[url_full_match.end()..],
+            url_safe_characters,
+            wrapper_pairs,
+        );
+        ret.push_str(&rest);
+
+        ret
+    } else if let Some((opening_wrapper_index, opening_wrapper_char)) = wrapper_index_char_opt {
+        // try to balance this wrapper
+        let closing_wrappers: HashSet<char> = wrapper_pairs.values()
+            .map(|c| *c)
             .collect();
 
-        // collect any wrapper characters in front of the URL
-        let mut pre_wrappers: Vec<char> = Vec::with_capacity(pre_wrapper.chars().count());
-        for b in pre_wrapper.chars() {
-            if let Some(e) = self.wrapper_pairs.get(&b) {
-                pre_wrappers.push(*e);
-            }
-        }
-
-        // go through the URL [rest]
-        let mut url_wrappers: Vec<char> = Vec::new();
-        let mut escaped_rest = String::with_capacity(rest.len());
-        for c in rest.chars() {
-            // is this a wrapper character?
-            if let Some(e) = self.wrapper_pairs.get(&c) {
-                // yes, it's a start character
-                url_wrappers.push(*e);
-            } else if wrapper_ends.contains(&c) {
-                // yes, it's an end character
-                if let Some(expected_end) = url_wrappers.pop() {
-                    if c == expected_end {
-                        // it's a wrapper within the URL; escape it
-                        escaped_rest.push_str(&char_to_escaped(c));
-                        continue;
-                    }
-
-                    // it's not the wrapper we expected; put it back and continue with regular logic
-                    url_wrappers.push(expected_end);
-                }
-
-                if let Some(expected_end) = pre_wrappers.pop() {
-                    if c == expected_end {
-                        // it's a wrapper outside the URL; append it unescaped
-                        escaped_rest.push(c);
-                        continue;
-                    }
-
-                    // it's not the wrapper we expected; put it back and continue with regular logic
-                    pre_wrappers.push(expected_end);
-                }
+        for (closing_wrapper_index, closing_wrapper_char) in escape_me.char_indices().rev() {
+            if !closing_wrappers.contains(&closing_wrapper_char) {
+                // not a wrapper; never mind
+                continue;
             }
 
-            // and now, the regular appending logic
+            // it's a wrapper
+            // is it the correct one?
+            if *wrapper_pairs.get(&opening_wrapper_char).unwrap() == closing_wrapper_char {
+                // yes; we're balanced!
+                let mut ret = String::with_capacity(escape_me.len());
 
-            if self.url_safe_characters.contains(&c) {
-                escaped_rest.push(c);
+                // take everything before the opening wrapper verbatim
+                ret.push_str(&escape_me[..opening_wrapper_index]);
+
+                // take the opening wrapper
+                ret.push(opening_wrapper_char);
+
+                // take everything within the wrappers, escaped using the same algorithm
+                let within_slice = &escape_me[opening_wrapper_index+opening_wrapper_char.len_utf8()..closing_wrapper_index];
+                let within = fix_urls(within_slice, url_safe_characters, wrapper_pairs);
+                ret.push_str(&within);
+
+                // take the closing wrapper
+                ret.push(closing_wrapper_char);
+
+                // take the rest behind the closing wrapper, escaped using the same algorithm
+                let rest_slice = &escape_me[closing_wrapper_index+closing_wrapper_char.len_utf8()..];
+                let rest = fix_urls(rest_slice, url_safe_characters, wrapper_pairs);
+                ret.push_str(&rest);
+
+                return ret;
             } else {
-                escaped_rest.push_str(&char_to_escaped(c));
+                // no; it's a different one; break out
+                break;
             }
         }
 
-        // append the replacement string
-        // (copy everything verbatim except the rest, where we take the escaped variant)
-        dst.push_str(pre_delimiter);
-        dst.push_str(pre_wrapper);
-        dst.push_str(scheme);
-        dst.push_str(cds);
-        dst.push_str(&escaped_rest);
+        // we failed to balance the wrapper; just take it verbatim and process the rest
+        let mut ret = String::with_capacity(escape_me.len());
+
+        // everything before the lone wrapper
+        ret.push_str(&escape_me[..opening_wrapper_index]);
+
+        // the lone wrapper
+        ret.push(opening_wrapper_char);
+
+        // the rest, escaped per algorithm
+        let rest_slice = &escape_me[opening_wrapper_index+opening_wrapper_char.len_utf8()..];
+        let rest = fix_urls(rest_slice, url_safe_characters, wrapper_pairs);
+        ret.push_str(&rest);
+
+        ret
+    } else {
+        // just spit out the original string
+        escape_me.to_string()
     }
-}
-
-
-fn fix_urls(message: &str, url_safe_characters: &HashSet<char>, wrapper_pairs: &HashMap<char, char>) -> String {
-    let replacer = FixUrlReplacer {
-        url_safe_characters,
-        wrapper_pairs,
-    };
-    WRAPPED_URL_RE.replace_all(message, replacer)
-        .into_owned()
 }
 
 
@@ -421,5 +447,10 @@ mod tests {
     #[test]
     fn test_fix_urls_mismatched_wrapper() {
         run_fix_urls_test("some of this stuff is weird (http://example.com/wiki/A_(disambiguation)] lol", "some of this stuff is weird (http://example.com/wiki/A_%28disambiguation%29%5D lol");
+    }
+
+    #[test]
+    fn test_fix_urls_outer_wrapper() {
+        run_fix_urls_test("(borrowed from [The Grauniad](https://www.theguardian.com/))", "(borrowed from [The Grauniad](https://www.theguardian.com/))");
     }
 }
