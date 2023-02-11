@@ -21,8 +21,8 @@ struct Config {
     auto_fix_channels: HashSet<String>,
 }
 
-// don't escape '/', '%', '?', '&', '=' or '+' by default as parts of the original URL may contain them
-const DEFAULT_URL_SAFE_CHARACTERS: &str = "0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz-_./%?&=+";
+// don't escape '/', '%', '?', '&', '=', '+' or '#' by default as parts of the original URL may contain them
+const DEFAULT_URL_SAFE_CHARACTERS: &str = "0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz-_./%?&=+#";
 const DEFAULT_WRAPPER_PAIRS: &str = "(){}[]";
 
 static URL_RE: Lazy<Regex> = Lazy::new(|| Regex::new(concat!(
