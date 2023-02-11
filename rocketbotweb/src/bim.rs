@@ -244,6 +244,7 @@ struct BimVehicleTemplate {
 #[template(path = "bimcoverage.html")]
 struct BimCoverageTemplate {
     pub max_ride_count: i64,
+    pub everybody_max_ride_count: i64,
     pub company_to_type_to_block_to_vehicles: BTreeMap<String, BTreeMap<String, BTreeMap<String, Vec<CoverageVehiclePart>>>>,
     pub merge_types: bool,
 }
@@ -256,10 +257,15 @@ struct CoverageVehiclePart {
     pub full_number_str: String,
     pub is_active: bool,
     pub ride_count: i64,
+    pub everybody_ride_count: i64,
 }
 impl CoverageVehiclePart {
     pub fn has_ride(&self) -> bool {
         self.ride_count > 0
+    }
+
+    pub fn has_everybody_ride(&self) -> bool {
+        self.everybody_ride_count > 0
     }
 }
 
@@ -1097,6 +1103,68 @@ pub(crate) async fn handle_bim_vehicles(request: &Request<Body>) -> Result<Respo
     }
 }
 
+async fn get_company_to_vehicles_ridden(
+    db_conn: &tokio_postgres::Client,
+    to_date_opt: Option<DateTime<Local>>,
+    rider_username_opt: Option<&str>,
+) -> Option<(HashMap<String, HashMap<VehicleNumber, i64>>, i64)> {
+    let mut conditions: Vec<String> = Vec::with_capacity(2);
+    let mut params: Vec<&(dyn ToSql + Sync)> = Vec::with_capacity(2);
+
+    if let Some(to_date) = to_date_opt.as_ref() {
+        conditions.push(format!("\"timestamp\" <= ${}", conditions.len() + 1));
+        params.push(to_date);
+    }
+
+    if let Some(rider_username) = rider_username_opt.as_ref() {
+        conditions.push(format!("rider_username = ${}", conditions.len() + 1));
+        params.push(rider_username);
+    }
+
+    let conditions_string = if conditions.len() > 0 {
+        let mut conds_string = conditions.join(" AND ");
+        conds_string.insert_str(0, "WHERE ");
+        conds_string
+    } else {
+        String::new()
+    };
+
+    let query = format!(
+        "
+            SELECT company, vehicle_number, CAST(COUNT(*) AS bigint)
+            FROM bim.rides_and_vehicles
+            {}
+            GROUP BY company, vehicle_number
+        ",
+        conditions_string,
+    );
+
+    // get ridden vehicles for rider
+    let vehicles_res = db_conn.query(&query, &params).await;
+    let vehicle_rows = match vehicles_res {
+        Ok(r) => r,
+        Err(e) => {
+            error!("failed to query vehicles: {}", e);
+            return None;
+        },
+    };
+    let mut company_to_vehicles_ridden: HashMap<String, HashMap<VehicleNumber, i64>> = HashMap::new();
+    let mut max_ride_count: i64 = 0;
+    for vehicle_row in vehicle_rows {
+        let company: String = vehicle_row.get(0);
+        let vehicle_number = VehicleNumber::from_string(vehicle_row.get(1));
+        let ride_count: i64 = vehicle_row.get(2);
+        if max_ride_count < ride_count {
+            max_ride_count = ride_count;
+        }
+        company_to_vehicles_ridden
+            .entry(company)
+            .or_insert_with(|| HashMap::new())
+            .insert(vehicle_number, ride_count);
+    }
+    Some((company_to_vehicles_ridden, max_ride_count))
+}
+
 pub(crate) async fn handle_bim_coverage(request: &Request<Body>) -> Result<Response<Body>, Infallible> {
     let query_pairs = get_query_pairs(request);
 
@@ -1110,6 +1178,9 @@ pub(crate) async fn handle_bim_coverage(request: &Request<Body>) -> Result<Respo
     let hide_inactive = query_pairs.get("hide-inactive")
         .map(|qp| qp == "1")
         .unwrap_or(false);
+    let compare_mode = query_pairs.get("compare")
+        .map(|qp| qp == "1")
+        .unwrap_or(false);
 
     let db_conn = match connect_to_db().await {
         Some(c) => c,
@@ -1117,15 +1188,13 @@ pub(crate) async fn handle_bim_coverage(request: &Request<Body>) -> Result<Respo
     };
 
     if let Some(rider_name) = query_pairs.get("rider") {
-        let mut conditions: Vec<String> = Vec::with_capacity(2);
-        let mut params: Vec<&(dyn ToSql + Sync)> = Vec::with_capacity(2);
+        let rider_username_opt = if rider_name == "!ALL" {
+            None
+        } else {
+            Some(rider_name.as_ref())
+        };
 
-        if rider_name != "!ALL" {
-            conditions.push(format!("rider_username = ${}", conditions.len() + 1));
-            params.push(&rider_name);
-        }
-
-        let local_timestamp: DateTime<Local>;
+        let mut to_date_opt: Option<DateTime<Local>> = None;
         if let Some(date_str) = cow_empty_to_none(query_pairs.get("to-date")) {
             let input_date = match NaiveDate::parse_from_str(date_str, "%Y-%m-%d") {
                 Ok(d) => d,
@@ -1136,56 +1205,35 @@ pub(crate) async fn handle_bim_coverage(request: &Request<Body>) -> Result<Respo
             let naive_timestamp = input_date
                 .succ_opt().unwrap()
                 .and_hms_opt(4, 0, 0).unwrap();
-            local_timestamp = match Local.from_local_datetime(&naive_timestamp).earliest() {
-                Some(lts) => lts,
+            to_date_opt = match Local.from_local_datetime(&naive_timestamp).earliest() {
+                Some(lts) => Some(lts),
                 None => return return_400("failed to convert timestamp to local time", &query_pairs).await,
             };
-
-            conditions.push(format!("\"timestamp\" <= ${}", conditions.len() + 1));
-            params.push(&local_timestamp);
         }
-
-        let conditions_string = if conditions.len() > 0 {
-            let mut conds_string = conditions.join(" AND ");
-            conds_string.insert_str(0, "WHERE ");
-            conds_string
-        } else {
-            String::new()
+        let query_res = get_company_to_vehicles_ridden(
+            &db_conn,
+            to_date_opt,
+            rider_username_opt,
+        ).await;
+        let (company_to_vehicles_ridden, max_ride_count) = match query_res {
+            Some(val) => val,
+            None => return return_500(),
         };
 
-        let query = format!(
-            "
-                SELECT company, vehicle_number, CAST(COUNT(*) AS bigint)
-                FROM bim.rides_and_vehicles
-                {}
-                GROUP BY company, vehicle_number
-            ",
-            conditions_string,
-        );
-
-        // get ridden vehicles for rider
-        let vehicles_res = db_conn.query(&query, &params).await;
-        let vehicle_rows = match vehicles_res {
-            Ok(r) => r,
-            Err(e) => {
-                error!("failed to query vehicles: {}", e);
-                return return_500();
-            },
-        };
-        let mut company_to_vehicles_ridden: HashMap<String, HashMap<VehicleNumber, i64>> = HashMap::new();
-        let mut max_ride_count: i64 = 0;
-        for vehicle_row in vehicle_rows {
-            let company: String = vehicle_row.get(0);
-            let vehicle_number = VehicleNumber::from_string(vehicle_row.get(1));
-            let ride_count: i64 = vehicle_row.get(2);
-            if max_ride_count < ride_count {
-                max_ride_count = ride_count;
+        let (all_riders_company_to_vehicles_ridden, everybody_max_ride_count) = if compare_mode {
+            // get ridden vehicles for all riders
+            let query_res = get_company_to_vehicles_ridden(
+                &db_conn,
+                to_date_opt,
+                None,
+            ).await;
+            match query_res {
+                Some(val) => val,
+                None => return return_500(),
             }
-            company_to_vehicles_ridden
-                .entry(company)
-                .or_insert_with(|| HashMap::new())
-                .insert(vehicle_number, ride_count);
-        }
+        } else {
+            (HashMap::new(), 0)
+        };
 
         // get vehicle database
         let company_to_bim_database_opts = match obtain_company_to_bim_database().await {
@@ -1207,6 +1255,8 @@ pub(crate) async fn handle_bim_coverage(request: &Request<Body>) -> Result<Respo
         let no_ridden_vehicles = HashMap::new();
         for (company, number_to_vehicle) in &company_to_bim_database {
             let ridden_vehicles = company_to_vehicles_ridden.get(company)
+                .unwrap_or(&no_ridden_vehicles);
+            let all_riders_ridden_vehicles = all_riders_company_to_vehicles_ridden.get(company)
                 .unwrap_or(&no_ridden_vehicles);
 
             let mut type_to_block_to_vehicles = BTreeMap::new();
@@ -1234,6 +1284,8 @@ pub(crate) async fn handle_bim_coverage(request: &Request<Body>) -> Result<Respo
                 let to_known = vehicle["out_of_service_since"].is_string();
                 let is_active = from_known && !to_known;
                 let ride_count = ridden_vehicles.get(number).map(|c| *c).unwrap_or(0);
+                let everybody_ride_count = all_riders_ridden_vehicles.get(number).map(|c| *c)
+                    .unwrap_or(0);
 
                 if hide_inactive && !is_active && ride_count == 0 {
                     continue;
@@ -1246,6 +1298,7 @@ pub(crate) async fn handle_bim_coverage(request: &Request<Body>) -> Result<Respo
                     full_number_str: full_number_str.clone(),
                     is_active,
                     ride_count,
+                    everybody_ride_count,
                 };
                 type_to_block_to_vehicles
                     .entry(type_code_key)
@@ -1260,6 +1313,7 @@ pub(crate) async fn handle_bim_coverage(request: &Request<Body>) -> Result<Respo
 
         let template = BimCoverageTemplate {
             max_ride_count,
+            everybody_max_ride_count,
             company_to_type_to_block_to_vehicles,
             merge_types,
         };

@@ -51,8 +51,12 @@
 
 {% for vehicle in vehicles -%}
 <a href="bim-detail?company={{ company|urlencode|escape }}&amp;vehicle={{ vehicle.full_number_str|urlencode|escape }}"><div
-    class="vehicle floaty {% if vehicle.is_active %}active{% else %}inactive{% endif %} {% if vehicle.ride_count > 0 %}ridden{% else %}unridden{% endif %}" data-full-number="{{ vehicle.full_number_str|escape }}"
-    {% if vehicle.has_ride() %}style="background-color:{% if vehicle.is_active %}{{ vehicle.ride_count|mix_color(0, max_ride_count, "#eeffee", "#00ff00") }}{% else %}{{ vehicle.ride_count|mix_color(0, max_ride_count, "#ffffee", "#ffff00") }}{% endif %}"{% endif %}
+    class="vehicle floaty {% if vehicle.is_active %}active{% else %}inactive{% endif %} {% if vehicle.ride_count > 0 %}ridden{% else %}unridden{% endif %} {% if vehicle.everybody_ride_count > 0 %}other-ridden{% else %}other-unridden{% endif %}" data-full-number="{{ vehicle.full_number_str|escape }}"
+    {% if vehicle.has_ride() -%}
+      style="background-color:{% if vehicle.is_active %}{{ vehicle.ride_count|mix_color(0, max_ride_count, "#eeffee", "#00ff00") }}{% else %}{{ vehicle.ride_count|mix_color(0, max_ride_count, "#ffffee", "#ffff00") }}{% endif %}"
+    {%- else if vehicle.has_everybody_ride() -%}
+      style="background-color:{% if vehicle.is_active %}{{ vehicle.everybody_ride_count|mix_color(0, everybody_max_ride_count, "#ccccff", "#6666ff") }}{% else %}{{ vehicle.everybody_ride_count|mix_color(0, everybody_max_ride_count, "#ffeeee", "#ff6666") }}{% endif %}"
+    {%- endif %}
     data-ride-count="{{ vehicle.ride_count }}"
 >{{ vehicle.number_str|escape }}</div></a>
 {%- endfor %}

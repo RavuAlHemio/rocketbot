@@ -245,11 +245,15 @@ main.bim-coverage .vehicles-box .vehicle.ridden {
   background-color: #0f0;
   color: #000;
 }
-main.bim-coverage .vehicles-box .vehicle.unridden.active {
+main.bim-coverage .vehicles-box .vehicle.unridden.other-ridden {
+  background-color: #66f;
+  color: #000;
+}
+main.bim-coverage .vehicles-box .vehicle.unridden.other-unridden.active {
   background-color: #ccc;
   color: #000;
 }
-main.bim-coverage .vehicles-box .vehicle.unridden.inactive {
+main.bim-coverage .vehicles-box .vehicle.unridden.other-unridden.inactive {
   background-color: #000;
   color: #fff;
 }
