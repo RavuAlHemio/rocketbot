@@ -46,6 +46,65 @@ fn char_to_escaped(c: char) -> String {
 }
 
 
+fn find_wrapper_balance(
+    balance_me: &str,
+    wrapper_pairs: &HashMap<char, char>,
+) -> Option<(usize, char)> {
+    if balance_me.len() == 0 {
+        return None;
+    }
+
+    let top_start_char = balance_me.chars().nth(0).unwrap();
+    let top_end_char = match wrapper_pairs.get(&top_start_char) {
+        Some(c) => *c,
+        None => return None,
+    };
+
+    let closers: HashSet<char> = wrapper_pairs.values()
+        .map(|c| *c)
+        .collect();
+
+    let mut wrapper_stack: Vec<(char, char)> = Vec::new();
+    wrapper_stack.push((top_start_char, top_end_char));
+
+    for (i, c) in balance_me.char_indices().skip(1) {
+        assert!(wrapper_stack.len() > 0);
+
+        if let Some(closer) = wrapper_pairs.get(&c) {
+            // the character is an opener
+            // place it on the stack
+            wrapper_stack.push((c, *closer));
+            continue;
+        }
+        if closers.contains(&c) {
+            // the character is a closer
+            // does it match the top of the stack?
+            let expected_closer = wrapper_stack.last().unwrap().1;
+            if c == expected_closer {
+                // yes; pop off the stack entry
+                wrapper_stack.pop();
+
+                if wrapper_stack.len() == 0 {
+                    // we have balanced the outermost brackets
+                    // this is it
+                    return Some((i, c));
+                }
+
+                continue;
+            } else {
+                // incorrect closer
+                // surrender
+                return None;
+            }
+        }
+
+        // neither opener nor closer? not interesting
+    }
+
+    None
+}
+
+
 fn fix_urls(
     escape_me: &str,
     url_safe_characters: &HashSet<char>,
@@ -105,20 +164,15 @@ fn fix_urls(
         ret
     } else if let Some((opening_wrapper_index, opening_wrapper_char)) = wrapper_index_char_opt {
         // try to balance this wrapper
-        let closing_wrappers: HashSet<char> = wrapper_pairs.values()
-            .map(|c| *c)
-            .collect();
+        let closing_wrapper_opt = find_wrapper_balance(
+            &escape_me[opening_wrapper_index..],
+            wrapper_pairs,
+        );
+        match closing_wrapper_opt {
+            Some((closing_wrapper_relative_index, closing_wrapper_char)) => {
+                let closing_wrapper_index = closing_wrapper_relative_index + opening_wrapper_index;
 
-        for (closing_wrapper_index, closing_wrapper_char) in escape_me.char_indices().rev() {
-            if !closing_wrappers.contains(&closing_wrapper_char) {
-                // not a wrapper; never mind
-                continue;
-            }
-
-            // it's a wrapper
-            // is it the correct one?
-            if *wrapper_pairs.get(&opening_wrapper_char).unwrap() == closing_wrapper_char {
-                // yes; we're balanced!
+                // succeeded balancing the wrapper
                 let mut ret = String::with_capacity(escape_me.len());
 
                 // take everything before the opening wrapper verbatim
@@ -141,27 +195,26 @@ fn fix_urls(
                 ret.push_str(&rest);
 
                 return ret;
-            } else {
-                // no; it's a different one; break out
-                break;
-            }
+            },
+            None => {
+                // failed to balance the wrapper
+                // just add it verbatim and escape the rest
+                let mut ret = String::with_capacity(escape_me.len());
+
+                // take everything before the opening wrapper verbatim
+                ret.push_str(&escape_me[..opening_wrapper_index]);
+
+                // take the opening wrapper
+                ret.push(opening_wrapper_char);
+
+                // take the rest behind the opening wrapper, escaped using the same algorithm
+                let rest_slice = &escape_me[opening_wrapper_index+opening_wrapper_char.len_utf8()..];
+                let rest = fix_urls(rest_slice, url_safe_characters, wrapper_pairs);
+                ret.push_str(&rest);
+
+                return ret;
+            },
         }
-
-        // we failed to balance the wrapper; just take it verbatim and process the rest
-        let mut ret = String::with_capacity(escape_me.len());
-
-        // everything before the lone wrapper
-        ret.push_str(&escape_me[..opening_wrapper_index]);
-
-        // the lone wrapper
-        ret.push(opening_wrapper_char);
-
-        // the rest, escaped per algorithm
-        let rest_slice = &escape_me[opening_wrapper_index+opening_wrapper_char.len_utf8()..];
-        let rest = fix_urls(rest_slice, url_safe_characters, wrapper_pairs);
-        ret.push_str(&rest);
-
-        ret
     } else {
         // just spit out the original string
         escape_me.to_string()
@@ -421,6 +474,7 @@ mod tests {
         run_fix_urls_test("abc def ghi", "abc def ghi");
         run_fix_urls_test("look at this site: http://example.com/ or don't", "look at this site: http://example.com/ or don't");
         run_fix_urls_test("look at this site: http://example.com/lol/rofl/ or don't", "look at this site: http://example.com/lol/rofl/ or don't");
+        run_fix_urls_test("tr/[a-zA-Z]/[n-za-mN-ZA-M]/", "tr/[a-zA-Z]/[n-za-mN-ZA-M]/");
     }
 
     #[test]
