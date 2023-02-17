@@ -1425,6 +1425,27 @@ AS $$
     FROM bim.ride_by_rider_line_timestamp rbrlt103
     WHERE rbrlt103.rider_username = rider
     AND rbrlt103.nth = 1000
+
+    UNION ALL
+
+    -- NAME: Tyr? Thor? Tripe
+    -- DESCR: Ride the same vehicle on the same line on a Tuesday and a Thursday of the same week.
+    -- ORDER: 2,15 vehicle numbers in relation to line numbers
+    SELECT 104, MIN(rav104."timestamp")
+    FROM bim.rides_and_vehicles rav104
+    WHERE rav104.rider_username = rider
+    AND EXTRACT(DOW FROM rav104."timestamp") = 4
+    AND EXISTS (
+        SELECT 1
+        FROM bim.rides_and_vehicles rav104b
+        WHERE rav104b.rider_username = rav104.rider_username
+        AND rav104b.company = rav104.company
+        AND rav104b.vehicle_number = rav104.vehicle_number
+        AND rav104b.line = rav104.line
+        AND EXTRACT(YEAR FROM (rav104."timestamp" - INTERVAL 'P2D')) = EXTRACT(YEAR FROM rav104b."timestamp")
+        AND EXTRACT(MONTH FROM (rav104."timestamp" - INTERVAL 'P2D')) = EXTRACT(MONTH FROM rav104b."timestamp")
+        AND EXTRACT(DAY FROM (rav104."timestamp" - INTERVAL 'P2D')) = EXTRACT(DAY FROM rav104b."timestamp")
+    )
 $$;
 
 CREATE MATERIALIZED VIEW bim.rider_achievements AS
