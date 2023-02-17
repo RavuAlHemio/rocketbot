@@ -32,6 +32,6 @@ pub(crate) async fn get_all_achievements(db_conn: &tokio_postgres::Client) -> Re
 
 
 pub(crate) async fn recalculate_achievements(db_conn: &tokio_postgres::Client) -> Result<(), tokio_postgres::Error> {
-    db_conn.execute("REFRESH MATERIALIZED VIEW bim.rider_achievements WITH DATA", &[]).await?;
+    db_conn.execute("CALL bim.refresh_achievements()", &[]).await?;
     Ok(())
 }

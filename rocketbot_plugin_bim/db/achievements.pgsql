@@ -444,6 +444,41 @@ AS $$
         )
 $$;
 
+CREATE TABLE IF NOT EXISTS bim.not_thursday_timestamp
+( rider_username character varying(256)
+, "timestamp" timestamp with time zone
+, CONSTRAINT pkey_not_thursday_timestamp PRIMARY KEY (rider_username)
+);
+
+CREATE OR REPLACE PROCEDURE bim.refresh_achievements()
+LANGUAGE plpgsql
+AS $$
+    DECLARE
+        rider character varying;
+        ts timestamp with time zone;
+    BEGIN
+        REFRESH MATERIALIZED VIEW bim.rider_achievements WITH DATA;
+
+        -- admin should tactically remove entries from the not_thursday_timestamp table
+        -- for trolling purposes
+        FOR rider, ts IN
+            SELECT r.rider_username, MAX("timestamp") FROM bim.rides r
+            WHERE EXTRACT(dow FROM "timestamp") <> 4
+            AND NOT EXISTS (
+                SELECT 1
+                FROM bim.not_thursday_timestamp ntt
+                WHERE ntt.rider_username = r.rider_username
+            )
+            GROUP BY rider_username
+        LOOP
+            INSERT INTO bim.not_thursday_timestamp
+                (rider_username, "timestamp")
+            VALUES
+                (rider, ts);
+        END LOOP;
+    END;
+$$;
+
 CREATE OR REPLACE FUNCTION bim.achievements_of
 ( rider character varying(256)
 ) RETURNS TABLE
@@ -1446,6 +1481,15 @@ AS $$
         AND EXTRACT(MONTH FROM (rav104."timestamp" - INTERVAL 'P2D')) = EXTRACT(MONTH FROM rav104b."timestamp")
         AND EXTRACT(DAY FROM (rav104."timestamp" - INTERVAL 'P2D')) = EXTRACT(DAY FROM rav104b."timestamp")
     )
+
+    UNION ALL
+
+    -- NAME: It's Not Even Thursday
+    -- DESCR: "????" —Steve
+    -- ORDER: 99,1 troll achievements
+    SELECT 105, MIN(ntt105."timestamp")
+    FROM bim.not_thursday_timestamp ntt105
+    WHERE ntt105.rider_username = rider
 $$;
 
 CREATE MATERIALIZED VIEW bim.rider_achievements AS
