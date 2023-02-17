@@ -337,10 +337,17 @@ struct Config {
 }
 
 
+#[derive(Clone, Debug, Default, Eq, Hash, Ord, PartialEq, PartialOrd)]
+struct UpdateAchievementsData {
+    pub channel: String,
+    pub explicit: bool,
+}
+
+
 pub struct BimPlugin {
     interface: Weak<dyn RocketBotInterface>,
     config: Arc<RwLock<Config>>,
-    achievement_update_sender: mpsc::UnboundedSender<String>,
+    achievement_update_sender: mpsc::UnboundedSender<UpdateAchievementsData>,
 }
 impl BimPlugin {
     fn load_bim_database(&self, config: &Config, company: &str) -> Option<HashMap<VehicleNumber, VehicleInfo>> {
@@ -902,7 +909,11 @@ impl BimPlugin {
 
         // signal to update achievements
         if config_guard.achievements_active {
-            let _ = self.achievement_update_sender.send(channel_message.channel.name.clone());
+            let data = UpdateAchievementsData {
+                channel: channel_message.channel.name.clone(),
+                explicit: false,
+            };
+            let _ = self.achievement_update_sender.send(data);
         }
     }
 
@@ -2581,7 +2592,11 @@ impl BimPlugin {
 
         // enqueue achievement recalculation
         if config_guard.achievements_active {
-            let _ = self.achievement_update_sender.send(channel_message.channel.name.clone());
+            let data = UpdateAchievementsData {
+                channel: channel_message.channel.name.clone(),
+                explicit: false,
+            };
+            let _ = self.achievement_update_sender.send(data);
         }
     }
 
@@ -2744,7 +2759,11 @@ impl BimPlugin {
             return;
         }
 
-        let _ = self.achievement_update_sender.send(channel_message.channel.name.clone());
+        let data = UpdateAchievementsData {
+            channel: channel_message.channel.name.clone(),
+            explicit: true,
+        };
+        let _ = self.achievement_update_sender.send(data);
     }
 
     async fn channel_command_bimop(&self, channel_message: &ChannelMessage, command: &CommandInstance) {
@@ -3408,8 +3427,8 @@ impl RocketBotPlugin for BimPlugin {
         let achievement_config_lock = Arc::downgrade(&config_lock);
         tokio::spawn(async move {
             loop {
-                // wait for us to be told which channel wants to update the achievements
-                let channel: String = match achievement_update_receiver.recv().await {
+                // wait for us to be told the details
+                let data: UpdateAchievementsData = match achievement_update_receiver.recv().await {
                     Some(c) => c,
                     None => return, // sender has been dropped; no more channel names will ever reach us
                 };
@@ -3440,7 +3459,7 @@ impl RocketBotPlugin for BimPlugin {
                 };
 
                 // run the achievement update process
-                do_update_achievements(&*interface, &db_conn, &channel).await;
+                do_update_achievements(&*interface, &db_conn, &data).await;
             }
         });
 
@@ -3568,7 +3587,11 @@ async fn connect_ride_db(config: &Config) -> Result<tokio_postgres::Client, toki
 }
 
 
-async fn do_update_achievements(interface: &dyn RocketBotInterface, ride_conn: &tokio_postgres::Client, channel_name: &str) {
+async fn do_update_achievements(
+    interface: &dyn RocketBotInterface,
+    ride_conn: &tokio_postgres::Client,
+    data: &UpdateAchievementsData,
+) {
     let prev_users_achievements = get_all_achievements(
         &ride_conn,
     ).await
@@ -3581,7 +3604,7 @@ async fn do_update_achievements(interface: &dyn RocketBotInterface, ride_conn: &
         error!("failed to recalculate achievements: {}", e);
         send_channel_message!(
             interface,
-            channel_name,
+            &data.channel,
             "Failed to recalculate achievements. :disappointed:",
         ).await;
         return;
@@ -3634,21 +3657,26 @@ async fn do_update_achievements(interface: &dyn RocketBotInterface, ride_conn: &
                         .count();
 
                     let mut message = format!(
-                        "{} unlocked *{}* ({}) {}",
+                        "{} unlocked *{}* ({}){} {}",
                         user,
                         ach_def.name,
                         ach_def.description,
+                        if data.explicit { ", fulfilling the criteria" } else { "" },
                         BimPlugin::canonical_date_format(&new_timestamp, true, false),
                     );
                     match previous_count {
-                        0 => write!(message, ", the first to do so!"),
+                        0 => if data.explicit {
+                            write!(message, ", among the first to do so!")
+                        } else {
+                            write!(message, ", the first to do so!")
+                        },
                         1 => write!(message, ", the second to do so!"),
                         more => write!(message, ", joining the ranks of {} riders before them!", more),
                     }.unwrap();
 
                     send_channel_message!(
                         interface,
-                        channel_name,
+                        &data.channel,
                         &message,
                     ).await;
                 }
