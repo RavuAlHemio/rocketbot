@@ -450,6 +450,30 @@ CREATE TABLE IF NOT EXISTS bim.not_thursday_timestamp
 , CONSTRAINT pkey_not_thursday_timestamp PRIMARY KEY (rider_username)
 );
 
+CREATE OR REPLACE VIEW bim.riders AS
+SELECT DISTINCT rider_username AS rider_username FROM bim.rides;
+
+-- for every combination of user and ride, this view contains the number
+-- of vehicles the user was the last rider of at the time of that ride
+CREATE OR REPLACE VIEW bim.last_rides AS
+SELECT r1.rider_username, r2.id ride_id, r2."timestamp", (
+    SELECT COUNT(*) vehicle_count
+    FROM bim.rides_and_vehicles rav1
+    WHERE rav1.rider_username = r1.rider_username
+    AND rav1.id <= r2.id
+    AND NOT EXISTS (
+        -- same vehicle, later timestamp
+        SELECT 1
+        FROM bim.rides_and_vehicles rav2
+        WHERE rav2.company = rav1.company
+        AND rav2.vehicle_number = rav1.vehicle_number
+        AND rav2."timestamp" > rav1."timestamp"
+        AND rav2.id <= r2.id
+    )
+)
+FROM bim.riders r1
+    CROSS JOIN bim.rides r2;
+
 CREATE OR REPLACE PROCEDURE bim.refresh_achievements()
 LANGUAGE plpgsql
 AS $$
@@ -1490,6 +1514,36 @@ AS $$
     SELECT 105, MIN(ntt105."timestamp")
     FROM bim.not_thursday_timestamp ntt105
     WHERE ntt105.rider_username = rider
+
+    UNION ALL
+
+    -- NAME: Capture the Flag
+    -- DESCR: Be the last rider in at least 100 vehicles at the same time.
+    -- ORDER: 12,1 last rider
+    SELECT 106, MIN(lr."timestamp")
+    FROM bim.last_rides lr
+    WHERE lr.rider_username = rider
+    AND lr.vehicle_count >= 100
+
+    UNION ALL
+
+    -- NAME: Always the Last One
+    -- DESCR: Be the last rider in at least 500 vehicles at the same time.
+    -- ORDER: 12,2 last rider
+    SELECT 107, MIN(lr."timestamp")
+    FROM bim.last_rides lr
+    WHERE lr.rider_username = rider
+    AND lr.vehicle_count >= 500
+
+    UNION ALL
+
+    -- NAME: World Domination
+    -- DESCR: Be the last rider in at least 1000 vehicles at the same time.
+    -- ORDER: 12,3 last rider
+    SELECT 108, MIN(lr."timestamp")
+    FROM bim.last_rides lr
+    WHERE lr.rider_username = rider
+    AND lr.vehicle_count >= 1000
 $$;
 
 CREATE MATERIALIZED VIEW bim.rider_achievements AS
