@@ -16,15 +16,16 @@ CREATE TABLE bim.ride_vehicles
 , vehicle_number character varying(256) NOT NULL
 , vehicle_type character varying(256) NULL
 , spec_position bigint NOT NULL
-, as_part_of_fixed_coupling boolean NOT NULL
 , fixed_coupling_position bigint NOT NULL
+, coupling_mode character(1) NOT NULL -- 'R' = explicit and actually ridden, 'E' = explicit, 'F' = as part of fixed coupling
 , CONSTRAINT fkey_ride_vehicles_ride_id FOREIGN KEY (ride_id) REFERENCES bim.rides (id) ON DELETE CASCADE DEFERRABLE
 , CONSTRAINT pkey_ride_vehicles PRIMARY KEY (ride_id, vehicle_number)
+, CONSTRAINT check_ride_vehicles_coupling_mode (coupling_mode IN ('R', 'E', 'F'))
 );
 
 CREATE VIEW bim.rides_and_vehicles AS
 SELECT r.id, r.company, r.rider_username, r."timestamp", r.line
-    , rv.vehicle_number, rv.vehicle_type, rv.spec_position, rv.as_part_of_fixed_coupling, rv.fixed_coupling_position
+    , rv.vehicle_number, rv.vehicle_type, rv.spec_position, rv.coupling_mode, rv.fixed_coupling_position
 FROM bim.rides r
 INNER JOIN bim.ride_vehicles rv ON rv.ride_id = r.id
 ;
@@ -49,7 +50,7 @@ $$;
 
 CREATE OR REPLACE VIEW bim.rides_and_numeric_vehicles AS
 SELECT r.id, r.company, r.rider_username, r."timestamp", r.line
-    , bim.char_to_bigint_or_null(rv.vehicle_number) vehicle_number, rv.vehicle_type, rv.spec_position, rv.as_part_of_fixed_coupling, rv.fixed_coupling_position
+    , bim.char_to_bigint_or_null(rv.vehicle_number) vehicle_number, rv.vehicle_type, rv.spec_position, rv.coupling_mode, rv.fixed_coupling_position
 FROM bim.rides r
 INNER JOIN bim.ride_vehicles rv ON rv.ride_id = r.id
 WHERE
@@ -218,4 +219,4 @@ AS  OPERATOR 1 bim.<~<
 CREATE TABLE bim.schema_revision
 ( sch_rev bigint NOT NULL
 );
-INSERT INTO bim.schema_revision (sch_rev) VALUES (5);
+INSERT INTO bim.schema_revision (sch_rev) VALUES (6);

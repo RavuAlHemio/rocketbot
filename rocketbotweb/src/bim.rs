@@ -1,7 +1,7 @@
 use std::borrow::Cow;
 use std::collections::{BTreeMap, BTreeSet, HashMap, HashSet};
 use std::convert::Infallible;
-use std::fmt::Write;
+use std::fmt::{self, Write};
 use std::fs::File;
 use std::str::FromStr;
 
@@ -40,6 +40,40 @@ const CHART_TICK_COLOR: [u8; 3] = [221, 221, 221];
 
 
 type VehicleNumber = NatSortedString;
+
+
+/// Specifies whether a vehicle has actually been ridden or was simply coupled to one that was ridden.
+#[derive(Clone, Copy, Debug, Deserialize, Eq, Hash, Ord, PartialEq, PartialOrd, Serialize)]
+#[serde(rename_all = "kebab-case")]
+pub enum CouplingMode {
+    /// Explicitly specified and actually ridden.
+    Ridden,
+
+    /// Explicitly specified but only coupled to the vehicle actually ridden.
+    Explicit,
+
+    /// Not specified, but fixed-coupled to the vehicle actually ridden.
+    FixedCoupling,
+}
+impl CouplingMode {
+    pub fn try_from_db_str(db_str: &str) -> Option<Self> {
+        match db_str {
+            "R" => Some(Self::Ridden),
+            "E" => Some(Self::Explicit),
+            "F" => Some(Self::FixedCoupling),
+            _ => None,
+        }
+    }
+}
+impl fmt::Display for CouplingMode {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match self {
+            Self::Ridden => write!(f, "ridden"),
+            Self::Explicit => write!(f, "explicit"),
+            Self::FixedCoupling => write!(f, "coupled"),
+        }
+    }
+}
 
 
 #[derive(Clone, Debug, Deserialize, Eq, Hash, PartialEq, Serialize)]
@@ -359,7 +393,7 @@ struct BimDetailsRidePart {
     pub line: Option<String>,
     pub vehicle_number: VehicleNumber,
     pub spec_position: i64,
-    pub as_part_of_fixed_coupling: bool,
+    pub coupling_mode: CouplingMode,
     pub fixed_coupling_position: i64,
 }
 
@@ -458,7 +492,7 @@ struct RideVehiclePart {
     pub vehicle_number: VehicleNumber,
     pub vehicle_type: Option<String>,
     pub spec_position: i64,
-    pub as_part_of_fixed_coupling: bool,
+    pub coupling_mode: CouplingMode,
     pub fixed_coupling_position: i64,
 }
 
@@ -1395,7 +1429,7 @@ pub(crate) async fn handle_bim_detail(request: &Request<Body>) -> Result<Respons
         "
             SELECT
                 rav.id, rav.rider_username, rav.\"timestamp\", rav.line, rav.vehicle_number,
-                rav.spec_position, rav.as_part_of_fixed_coupling, rav.fixed_coupling_position
+                rav.spec_position, rav.coupling_mode, rav.fixed_coupling_position
             FROM bim.rides_and_vehicles rav
             WHERE rav.company = $1
             AND rav.vehicle_number = $2
@@ -1419,8 +1453,19 @@ pub(crate) async fn handle_bim_detail(request: &Request<Body>) -> Result<Respons
         let line: Option<String> = ride_row.get(3);
         let vehicle_number = VehicleNumber::from_string(ride_row.get(4));
         let spec_position: i64 = ride_row.get(5);
-        let as_part_of_fixed_coupling: bool = ride_row.get(6);
+        let coupling_mode_string: String = ride_row.get(6);
         let fixed_coupling_position: i64 = ride_row.get(7);
+
+        let coupling_mode = match CouplingMode::try_from_db_str(&coupling_mode_string) {
+            Some(cm) => cm,
+            None => {
+                error!(
+                    "error decoding coupling mode string {:?} on ride ID {} from database; skipping row",
+                    coupling_mode_string, ride_id,
+                );
+                continue;
+            }
+        };
 
         rides.push(BimDetailsRidePart {
             id: ride_id,
@@ -1429,7 +1474,7 @@ pub(crate) async fn handle_bim_detail(request: &Request<Body>) -> Result<Respons
             line,
             vehicle_number,
             spec_position,
-            as_part_of_fixed_coupling,
+            coupling_mode,
             fixed_coupling_position,
         });
     }
@@ -1471,7 +1516,7 @@ pub(crate) async fn handle_bim_line_detail(request: &Request<Body>) -> Result<Re
         "
             SELECT
                 rav.id, rav.rider_username, rav.\"timestamp\", rav.line, rav.vehicle_number,
-                rav.spec_position, rav.as_part_of_fixed_coupling, rav.fixed_coupling_position
+                rav.spec_position, rav.coupling_mode, rav.fixed_coupling_position
             FROM bim.rides_and_vehicles rav
             WHERE rav.company = $1
             AND rav.line = $2
@@ -1495,8 +1540,19 @@ pub(crate) async fn handle_bim_line_detail(request: &Request<Body>) -> Result<Re
         let line: Option<String> = ride_row.get(3);
         let vehicle_number = VehicleNumber::from_string(ride_row.get(4));
         let spec_position: i64 = ride_row.get(5);
-        let as_part_of_fixed_coupling: bool = ride_row.get(6);
+        let coupling_mode_string: String = ride_row.get(6);
         let fixed_coupling_position: i64 = ride_row.get(7);
+
+        let coupling_mode = match CouplingMode::try_from_db_str(&coupling_mode_string) {
+            Some(cm) => cm,
+            None => {
+                error!(
+                    "error decoding coupling mode string {:?} on ride ID {} from database; skipping row",
+                    coupling_mode_string, ride_id,
+                );
+                continue;
+            }
+        };
 
         rides.push(BimDetailsRidePart {
             id: ride_id,
@@ -1505,7 +1561,7 @@ pub(crate) async fn handle_bim_line_detail(request: &Request<Body>) -> Result<Re
             line,
             vehicle_number,
             spec_position,
-            as_part_of_fixed_coupling,
+            coupling_mode,
             fixed_coupling_position,
         });
     }
@@ -2159,7 +2215,7 @@ pub(crate) async fn handle_bim_ride_by_id(request: &Request<Body>) -> Result<Res
                     SELECT
                         rav.company, rav.rider_username, rav.\"timestamp\", rav.line,
                         rav.vehicle_number, rav.vehicle_type, rav.spec_position,
-                        rav.as_part_of_fixed_coupling, rav.fixed_coupling_position
+                        rav.coupling_mode, rav.fixed_coupling_position
                     FROM bim.rides_and_vehicles rav
                     WHERE
                         rav.id = $1
@@ -2201,14 +2257,25 @@ pub(crate) async fn handle_bim_ride_by_id(request: &Request<Body>) -> Result<Res
                     let vehicle_number = VehicleNumber::from_string(ride_row.get(4));
                     let vehicle_type: Option<String> = ride_row.get(5);
                     let spec_position: i64 = ride_row.get(6);
-                    let as_part_of_fixed_coupling: bool = ride_row.get(7);
+                    let coupling_mode_string: String = ride_row.get(7);
                     let fixed_coupling_position: i64 = ride_row.get(8);
+
+                    let coupling_mode = match CouplingMode::try_from_db_str(&coupling_mode_string) {
+                        Some(cm) => cm,
+                        None => {
+                            error!(
+                                "error decoding coupling mode string {:?} on ride ID {} from database; skipping row",
+                                coupling_mode_string, rid,
+                            );
+                            continue;
+                        }
+                    };
 
                     let vehicle = RideVehiclePart {
                         vehicle_number,
                         vehicle_type,
                         spec_position,
-                        as_part_of_fixed_coupling,
+                        coupling_mode,
                         fixed_coupling_position,
                     };
                     vehicles.push(vehicle);

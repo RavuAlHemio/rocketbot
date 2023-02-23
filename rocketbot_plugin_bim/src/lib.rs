@@ -130,6 +130,37 @@ impl fmt::Display for VehicleClass {
 }
 
 
+/// Specifies whether a vehicle has actually been ridden or was simply coupled to one that was ridden.
+#[derive(Clone, Copy, Debug, Deserialize, Eq, Hash, Ord, PartialEq, PartialOrd, Serialize)]
+#[serde(rename_all = "kebab-case")]
+pub enum CouplingMode {
+    /// Explicitly specified and actually ridden.
+    Ridden,
+
+    /// Explicitly specified but only coupled to the vehicle actually ridden.
+    Explicit,
+
+    /// Not specified, but fixed-coupled to the vehicle actually ridden.
+    FixedCoupling,
+}
+impl CouplingMode {
+    pub fn as_db_str(&self) -> &'static str {
+        match self {
+            Self::Ridden => "R",
+            Self::Explicit => "E",
+            Self::FixedCoupling => "F",
+        }
+    }
+
+    pub fn is_explicit(&self) -> bool {
+        match self {
+            Self::Ridden|Self::Explicit => true,
+            _ => false,
+        }
+    }
+}
+
+
 #[derive(Clone, Debug, Deserialize, Eq, PartialEq, Serialize)]
 pub struct VehicleInfo {
     pub number: VehicleNumber,
@@ -175,7 +206,7 @@ pub struct OtherRiderInfo {
 #[derive(Clone, Debug, Hash, Eq, PartialEq)]
 pub struct VehicleRideInfo {
     pub vehicle_number: VehicleNumber,
-    pub ridden_within_fixed_coupling: bool,
+    pub coupling_mode: CouplingMode,
     pub last_ride: Option<LastRideInfo>,
     pub last_ride_other_rider: Option<OtherRiderInfo>,
 }
@@ -192,7 +223,7 @@ pub struct NewVehicleEntry {
     pub number: VehicleNumber,
     pub type_code: Option<String>,
     pub spec_position: i64,
-    pub as_part_of_fixed_coupling: bool,
+    pub coupling_mode: CouplingMode,
     pub fixed_coupling_position: i64,
 }
 
@@ -252,19 +283,22 @@ impl CompanyDefinition {
         // {vehicle}
         // {vehicle}/{line}
         // {vehicle}+{vehicle}+{vehicle}
+        // {vehicle}+{vehicle}!+{vehicle}
         // {vehicle}+{vehicle}+{vehicle}/line
+        // {vehicle}+{vehicle}!+{vehicle}/line
         // {line}:{vehicle}
         // {line}:{vehicle}+{vehicle}+{vehicle}
+        // {line}:{vehicle}+{vehicle}!+{vehicle}
         let valr_string = format!(
             concat!(
                 "^",
                 "(?:",
                     "(?:",
                         "(?P<vehicles>",
-                            "(?:{})",
+                            "(?:{}[!]?)",
                             "(?:",
                                 "[+]",
-                                "(?:{})",
+                                "(?:{}[!]?)",
                             ")*",
                         ")",
                         "(?:",
@@ -281,10 +315,10 @@ impl CompanyDefinition {
                         ")",
                         ":",
                         "(?P<vehicles_lv>",
-                            "(?:{})",
+                            "(?:{}[!]?)",
                             "(?:",
                                 "[+]",
-                                "(?:{})",
+                                "(?:{}[!]?)",
                             ")*",
                         ")",
                     ")",
@@ -756,7 +790,7 @@ impl BimPlugin {
         };
 
         // do not output fixed-coupling vehicles
-        last_ride_infos.vehicles.retain(|v| !v.ridden_within_fixed_coupling);
+        last_ride_infos.vehicles.retain(|v| v.coupling_mode.is_explicit());
 
         let response_str = if last_ride_infos.vehicles.len() == 1 {
             let vehicle_ride = &last_ride_infos.vehicles[0];
@@ -1806,7 +1840,7 @@ impl BimPlugin {
                 INNER JOIN bim.ride_vehicles rv ON rv.ride_id = r.id
                 WHERE
                     LOWER(r.rider_username) = LOWER($1)
-                    AND rv.as_part_of_fixed_coupling = FALSE
+                    AND rv.coupling_mode <> 'F'
                     {LOOKBACK_TIMESTAMP}
                 GROUP BY
                     r.company,
@@ -3688,7 +3722,7 @@ async fn do_update_achievements(
 
 const INSERT_VEHICLE_STMT_STR: &str = "
     INSERT INTO bim.ride_vehicles
-        (ride_id, vehicle_number, vehicle_type, spec_position, as_part_of_fixed_coupling, fixed_coupling_position)
+        (ride_id, vehicle_number, vehicle_type, spec_position, coupling_mode, fixed_coupling_position)
     VALUES
         ($1, $2, $3, $4, $5, $6)
 ";
@@ -3828,7 +3862,7 @@ pub async fn add_ride(
                 &vehicle.number.as_str(),
                 &vehicle.type_code,
                 &vehicle.spec_position,
-                &vehicle.as_part_of_fixed_coupling,
+                &vehicle.coupling_mode.as_db_str(),
                 &vehicle.fixed_coupling_position,
             ],
         ).await?;
@@ -3861,7 +3895,7 @@ async fn replace_ride_vehicles(
                 &vehicle.number.as_str(),
                 &vehicle.type_code,
                 &vehicle.spec_position,
-                &vehicle.as_part_of_fixed_coupling,
+                &vehicle.coupling_mode.as_db_str(),
                 &vehicle.fixed_coupling_position,
             ],
         ).await?;
@@ -3900,9 +3934,19 @@ fn spec_to_vehicles(
     allow_fixed_coupling_combos: bool,
 ) -> Result<Vec<NewVehicleEntry>, IncrementBySpecError> {
     let vehicle_num_strs: Vec<&str> = vehicles_str.split("+").collect();
-    let mut vehicle_nums = Vec::new();
+    let mut vehicle_nums_and_modes = Vec::new();
     for &vehicle_num in &vehicle_num_strs {
-        let vehicle_num_owned = VehicleNumber::from_string(vehicle_num.to_owned());
+        let (no_exclamation_vehicle_num, coupling_mode) = if let Some(nevn) = vehicle_num.strip_suffix("!") {
+            (nevn, CouplingMode::Ridden)
+        } else {
+            let coupling_mode = if vehicle_num_strs.len() == 1 {
+                CouplingMode::Ridden
+            } else {
+                CouplingMode::Explicit
+            };
+            (vehicle_num, coupling_mode)
+        };
+        let vehicle_num_owned = VehicleNumber::from_string(no_exclamation_vehicle_num.to_owned());
         if !allow_fixed_coupling_combos {
             if let Some(bim_database) = bim_database_opt {
                 if let Some(veh) = bim_database.get(&vehicle_num_owned) {
@@ -3914,20 +3958,20 @@ fn spec_to_vehicles(
                 }
             }
         }
-        vehicle_nums.push(vehicle_num);
+        vehicle_nums_and_modes.push((no_exclamation_vehicle_num, coupling_mode));
     }
 
     // also count vehicles ridden in a fixed coupling with the given vehicle
     let mut all_vehicles: Vec<NewVehicleEntry> = Vec::new();
-    let explicit_vehicle_num_set: HashSet<VehicleNumber> = vehicle_nums.iter()
-        .map(|vn| (*vn).to_owned().into())
+    let explicit_vehicle_num_to_mode: HashMap<VehicleNumber, CouplingMode> = vehicle_nums_and_modes.iter()
+        .map(|(vn, cm)| ((*vn).to_owned().into(), *cm))
         .collect();
     let mut seen_vehicles: HashSet<VehicleNumber> = HashSet::new();
-    for (spec_pos, &vehicle_num) in vehicle_nums.iter().enumerate() {
+    for (spec_pos, (vehicle_num, _coupling_mode)) in vehicle_nums_and_modes.iter().enumerate() {
         let mut added_fixed_coupling = false;
         let mut type_code = None;
         if let Some(bim_database) = bim_database_opt {
-            let vehicle_num_owned = VehicleNumber::from_string(vehicle_num.to_owned());
+            let vehicle_num_owned = VehicleNumber::from_string((*vehicle_num).to_owned());
             if let Some(veh) = bim_database.get(&vehicle_num_owned) {
                 type_code = Some(veh.type_code.clone());
 
@@ -3939,11 +3983,14 @@ fn spec_to_vehicles(
 
                     let fc_type_code = bim_database.get(fc)
                         .map(|veh| veh.type_code.clone());
+                    let coupling_mode = explicit_vehicle_num_to_mode.get(fc)
+                        .map(|cm| *cm)
+                        .unwrap_or(CouplingMode::FixedCoupling);
                     let vehicle = NewVehicleEntry {
                         number: fc.clone(),
                         type_code: fc_type_code,
                         spec_position: spec_pos.try_into().unwrap(),
-                        as_part_of_fixed_coupling: !explicit_vehicle_num_set.contains(fc),
+                        coupling_mode,
                         fixed_coupling_position: fc_pos.try_into().unwrap(),
                     };
                     all_vehicles.push(vehicle);
@@ -3953,18 +4000,20 @@ fn spec_to_vehicles(
         }
 
         if !added_fixed_coupling {
-            if !seen_vehicles.insert(vehicle_num.to_owned().into()) {
+            if !seen_vehicles.insert((*vehicle_num).to_owned().into()) {
                 // we've seen this vehicle before
                 continue;
             }
 
-            let vehicle_num_owned = vehicle_num.to_owned().into();
-            let as_part_of_fixed_coupling = !explicit_vehicle_num_set.contains(&vehicle_num_owned);
+            let vehicle_num_owned = (*vehicle_num).to_owned().into();
+            let coupling_mode = explicit_vehicle_num_to_mode.get(&vehicle_num_owned)
+                .map(|cm| *cm)
+                .unwrap_or(CouplingMode::FixedCoupling);
             let vehicle = NewVehicleEntry {
                 number: vehicle_num_owned,
                 type_code,
                 spec_position: spec_pos.try_into().unwrap(),
-                as_part_of_fixed_coupling,
+                coupling_mode,
                 fixed_coupling_position: 0,
             };
             all_vehicles.push(vehicle);
@@ -4043,7 +4092,7 @@ pub async fn increment_rides_by_spec(
         for (new_vehicle, (lri_opt, ori_opt)) in all_vehicles.iter().zip(ride_info_vec.drain(..)) {
             vehicle_ride_infos.push(VehicleRideInfo {
                 vehicle_number: new_vehicle.number.clone(),
-                ridden_within_fixed_coupling: new_vehicle.as_part_of_fixed_coupling,
+                coupling_mode: new_vehicle.coupling_mode,
                 last_ride: lri_opt,
                 last_ride_other_rider: ori_opt,
             });

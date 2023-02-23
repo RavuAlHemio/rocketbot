@@ -72,7 +72,7 @@
         <td class="vehicle-number numeric-field"><a href="bim-detail?company={{ ride.company|urlencode|escape }}&amp;vehicle={{ vehicle.vehicle_number }}">{{ vehicle.vehicle_number }}</a></td>
         <td class="vehicle-type">{% if let Some(vehicle_type) = vehicle.vehicle_type %}{{ vehicle_type|escape }}{% endif %}</td>
         <td class="spec-pos numeric-field">{{ vehicle.spec_position }}</td>
-        <td class="ride-type {% if vehicle.as_part_of_fixed_coupling %}coupled{% else %}explicit{% endif %}">{% if vehicle.as_part_of_fixed_coupling %}coupled{% else %}explicit{% endif %}</td>
+        <td class="ride-type {{ vehicle.coupling_mode }}">{{ vehicle.coupling_mode }}</td>
         <td class="fixed-coupling-pos numeric-field">{{ vehicle.fixed_coupling_position }}</td>
       </tr>
     {%- endfor %}
