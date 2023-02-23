@@ -444,6 +444,74 @@ AS $$
         )
 $$;
 
+CREATE OR REPLACE FUNCTION bim.current_last_rider_count_reached
+( rider character varying
+, last_rider_count bigint
+) RETURNS timestamp with time zone
+LANGUAGE plpgsql
+STABLE STRICT
+AS $$
+    DECLARE
+        comp_veh_lstrdr jsonb;
+        last_rider_to_count jsonb;
+        r_company character varying;
+        r_vehicle_number character varying;
+        r_rider character varying;
+        r_timestamp timestamp with time zone;
+        prev_last_rider character varying;
+    BEGIN
+        IF rider IS NULL THEN RETURN NULL; END IF;
+        IF last_rider_count IS NULL THEN RETURN NULL; END IF;
+
+        comp_veh_lstrdr := JSONB_BUILD_OBJECT();
+        last_rider_to_count := JSONB_BUILD_OBJECT(rider, 0);
+
+        FOR r_company, r_vehicle_number, r_rider, r_timestamp IN
+            SELECT DISTINCT company, vehicle_number, rider_username, "timestamp"
+            FROM bim.rides_and_vehicles
+            ORDER BY "timestamp"
+        LOOP
+            IF NOT last_rider_to_count ? r_rider THEN
+                last_rider_to_count := JSONB_SET(last_rider_to_count, ARRAY[r_rider], TO_JSONB(0));
+            END IF;
+
+            IF NOT comp_veh_lstrdr ? r_company THEN
+                comp_veh_lstrdr := JSONB_SET(comp_veh_lstrdr, ARRAY[r_company], JSONB_BUILD_OBJECT());
+            END IF;
+
+            IF (comp_veh_lstrdr #> ARRAY[r_company]) ? r_vehicle_number THEN
+                -- we already have a last rider for this vehicle
+                prev_last_rider := (comp_veh_lstrdr #> ARRAY[r_company]) ->> r_vehicle_number;
+                IF prev_last_rider <> r_rider THEN
+                    -- prev_last_rider is no longer the last rider of this vehicle
+                    -- reduce their count
+                    last_rider_to_count := JSONB_SET(last_rider_to_count, ARRAY[prev_last_rider], TO_JSONB(CAST((last_rider_to_count #> ARRAY[prev_last_rider]) AS bigint) - 1));
+
+                    -- r_rider is now the last rider of this vehicle
+                    -- increase their count
+                    last_rider_to_count := JSONB_SET(last_rider_to_count, ARRAY[r_rider], TO_JSONB(CAST((last_rider_to_count #> ARRAY[r_rider]) AS bigint) + 1));
+                END IF;
+                -- (if prev_last_rider = r_rider, it's a zero-sum game, so don't bother)
+            ELSE
+                -- this is the first rider in the vehicle
+                -- remember them
+                comp_veh_lstrdr := JSONB_SET(comp_veh_lstrdr, ARRAY[r_company, r_vehicle_number], TO_JSONB(r_rider));
+
+                -- directly increase their last-rider count
+                last_rider_to_count := JSONB_SET(last_rider_to_count, ARRAY[r_rider], TO_JSONB(CAST((last_rider_to_count #> ARRAY[r_rider]) AS bigint) + 1));
+            END IF;
+
+            -- check for exit condition
+            IF CAST((last_rider_to_count #> ARRAY[rider]) AS bigint) >= last_rider_count THEN
+                RETURN r_timestamp;
+            END IF;
+        END LOOP;
+
+        -- guess it never happened
+        RETURN NULL;
+    END;
+$$;
+
 CREATE TABLE IF NOT EXISTS bim.not_thursday_timestamp
 ( rider_username character varying(256)
 , "timestamp" timestamp with time zone
@@ -1490,6 +1558,27 @@ AS $$
     SELECT 105, MIN(ntt105."timestamp")
     FROM bim.not_thursday_timestamp ntt105
     WHERE ntt105.rider_username = rider
+
+    UNION ALL
+
+    -- NAME: Capture the Flag
+    -- DESCR: Be the last rider in at least 100 vehicles at the same time.
+    -- ORDER: 12,1 last rider
+    SELECT 106, bim.current_last_rider_count_reached(rider, 100)
+
+    UNION ALL
+
+    -- NAME: Always the Last One
+    -- DESCR: Be the last rider in at least 500 vehicles at the same time.
+    -- ORDER: 12,2 last rider
+    SELECT 107, bim.current_last_rider_count_reached(rider, 500)
+
+    UNION ALL
+
+    -- NAME: World Domination
+    -- DESCR: Be the last rider in at least 1000 vehicles at the same time.
+    -- ORDER: 12,3 last rider
+    SELECT 108, bim.current_last_rider_count_reached(rider, 1000)
 $$;
 
 CREATE MATERIALIZED VIEW bim.rider_achievements AS
