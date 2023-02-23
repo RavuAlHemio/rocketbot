@@ -20,7 +20,7 @@ CREATE TABLE bim.ride_vehicles
 , coupling_mode character(1) NOT NULL -- 'R' = explicit and actually ridden, 'E' = explicit, 'F' = as part of fixed coupling
 , CONSTRAINT fkey_ride_vehicles_ride_id FOREIGN KEY (ride_id) REFERENCES bim.rides (id) ON DELETE CASCADE DEFERRABLE
 , CONSTRAINT pkey_ride_vehicles PRIMARY KEY (ride_id, vehicle_number)
-, CONSTRAINT check_ride_vehicles_coupling_mode (coupling_mode IN ('R', 'E', 'F'))
+, CONSTRAINT check_ride_vehicles_coupling_mode CHECK (coupling_mode IN ('R', 'E', 'F'))
 );
 
 CREATE VIEW bim.rides_and_vehicles AS
