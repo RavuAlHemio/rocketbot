@@ -490,6 +490,8 @@ AS $$
                     -- r_rider is now the last rider of this vehicle
                     -- increase their count
                     last_rider_to_count := JSONB_SET(last_rider_to_count, ARRAY[r_rider], TO_JSONB(CAST((last_rider_to_count #> ARRAY[r_rider]) AS bigint) + 1));
+                    -- remember them
+                    comp_veh_lstrdr := JSONB_SET(comp_veh_lstrdr, ARRAY[r_company, r_vehicle_number], TO_JSONB(r_rider));
                 END IF;
                 -- (if prev_last_rider = r_rider, it's a zero-sum game, so don't bother)
             ELSE
