@@ -3765,7 +3765,7 @@ pub async fn add_ride(
                 r.company = $1
                 AND rv.vehicle_number = $2
                 AND r.rider_username <> $3
-                AND r.coupling_mode = 'R'
+                AND rv.coupling_mode = 'R'
         ",
     ).await?;
     let prev_other_ridden_row_stmt = ride_conn.prepare(
@@ -3777,7 +3777,7 @@ pub async fn add_ride(
                 r.company = $1
                 AND rv.vehicle_number = $2
                 AND r.rider_username <> $3
-                AND r.coupling_mode = 'R'
+                AND rv.coupling_mode = 'R'
             ORDER BY r.\"timestamp\" DESC
             LIMIT 1
         ",
