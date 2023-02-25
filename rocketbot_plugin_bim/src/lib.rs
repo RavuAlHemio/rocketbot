@@ -4198,7 +4198,7 @@ fn append_other_ride(
             } else {
                 write_expect!(
                     resp,
-                    ", and {} has also ridden it {}",
+                    ", and {} has ridden a different coupled vehicle {}",
                     or.rider_username,
                     BimPlugin::canonical_date_format_relative(&or.last_ride, ride_timestamp, true, false),
                 );
