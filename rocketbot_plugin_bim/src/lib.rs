@@ -202,12 +202,20 @@ pub struct OtherRiderInfo {
     pub last_ride: DateTime<Local>,
     pub last_line: Option<String>,
 }
+impl OtherRiderInfo {
+    pub fn is_same_ride(&self, other: &Self) -> bool {
+        self.rider_username == other.rider_username
+            && self.last_ride == other.last_ride
+            && self.last_line == other.last_line
+    }
+}
 
 #[derive(Clone, Debug, Hash, Eq, PartialEq)]
 pub struct VehicleRideInfo {
     pub vehicle_number: VehicleNumber,
     pub coupling_mode: CouplingMode,
     pub last_ride: Option<LastRideInfo>,
+    pub last_actual_ride_other_rider: Option<OtherRiderInfo>,
     pub last_ride_other_rider: Option<OtherRiderInfo>,
 }
 #[derive(Clone, Debug, Eq, PartialEq)]
@@ -825,43 +833,21 @@ impl BimPlugin {
                     write_expect!(&mut resp, " on line {}", ln);
                 }
                 write_expect!(&mut resp, ")");
-                if let Some(or) = &vehicle_ride.last_ride_other_rider {
-                    write_expect!(
-                        &mut resp,
-                        " and {} has also ridden it {}",
-                        or.rider_username,
-                        BimPlugin::canonical_date_format_relative(&or.last_ride, &ride_timestamp, true, false),
-                    );
-                    if let Some(ln) = &or.last_line {
-                        write_expect!(&mut resp, " on line {}", ln);
-                    }
-                    let total_ride_count = lr.ride_count + or.all_other_rider_count + 1;
-                    write_expect!(&mut resp,
-                        ", making it {} {} in total",
-                        total_ride_count,
-                        if total_ride_count == 1 { "ride" } else { "rides" },
-                    );
-                }
+                append_other_ride(
+                    &mut resp,
+                    &vehicle_ride,
+                    &ride_timestamp,
+                    false,
+                );
                 write_expect!(&mut resp, ".");
             } else {
                 write_expect!(&mut resp, "This is their first ride in this vehicle");
-                if let Some(or) = &vehicle_ride.last_ride_other_rider {
-                    write_expect!(
-                        &mut resp,
-                        ", but {} has previously ridden it {}",
-                        or.rider_username,
-                        BimPlugin::canonical_date_format_relative(&or.last_ride, &ride_timestamp, true, false),
-                    );
-                    if let Some(ln) = &or.last_line {
-                        write_expect!(&mut resp, " on line {}", ln);
-                    }
-                    let total_ride_count = or.all_other_rider_count + 1;
-                    write_expect!(&mut resp,
-                        ", making it {} {} in total",
-                        total_ride_count,
-                        if total_ride_count == 1 { "ride" } else { "rides" },
-                    );
-                }
+                append_other_ride(
+                    &mut resp,
+                    &vehicle_ride,
+                    &ride_timestamp,
+                    true,
+                );
                 write_expect!(&mut resp, "!");
             }
 
@@ -899,34 +885,20 @@ impl BimPlugin {
                     if let Some(ln) = &lr.last_line {
                         write_expect!(&mut resp, " on {}", ln);
                     }
-                    if let Some(or) = &vehicle_ride.last_ride_other_rider {
-                        write_expect!(
-                            &mut resp,
-                            " and {} {}",
-                            or.rider_username,
-                            BimPlugin::canonical_date_format_relative(&or.last_ride, &ride_timestamp, false, false),
-                        );
-                        if let Some(ln) = &or.last_line {
-                            write_expect!(&mut resp, " on {}", ln);
-                        }
-                        let total_ride_count = lr.ride_count + or.all_other_rider_count + 1;
-                        write_expect!(&mut resp, " \u{2013} {} total", total_ride_count);
-                    }
+                    append_other_ride_short(
+                        &mut resp,
+                        vehicle_ride,
+                        &ride_timestamp,
+                        false,
+                    );
                 } else {
                     write_expect!(&mut resp, "first time");
-                    if let Some(or) = &vehicle_ride.last_ride_other_rider {
-                        write_expect!(
-                            &mut resp,
-                            " since {} {}",
-                            or.rider_username,
-                            BimPlugin::canonical_date_format_relative(&or.last_ride, &ride_timestamp, false, false),
-                        );
-                        if let Some(ln) = &or.last_line {
-                            write_expect!(&mut resp, " on {}", ln);
-                        }
-                        let total_ride_count = or.all_other_rider_count + 1;
-                        write_expect!(&mut resp, " \u{2013} {} total", total_ride_count);
-                    }
+                    append_other_ride_short(
+                        &mut resp,
+                        vehicle_ride,
+                        &ride_timestamp,
+                        true,
+                    );
                     write_expect!(&mut resp, "!");
                 }
                 write_expect!(&mut resp, ")");
@@ -3735,7 +3707,7 @@ pub async fn add_ride(
     rider_username: &str,
     timestamp: DateTime<Local>,
     line: Option<&str>,
-) -> Result<(i64, Vec<(Option<LastRideInfo>, Option<OtherRiderInfo>)>), tokio_postgres::Error> {
+) -> Result<(i64, Vec<(Option<LastRideInfo>, Option<OtherRiderInfo>, Option<OtherRiderInfo>)>), tokio_postgres::Error> {
     let prev_my_count_stmt = ride_conn.prepare(
         "
             SELECT CAST(COUNT(*) AS bigint)
@@ -3784,6 +3756,32 @@ pub async fn add_ride(
             LIMIT 1
         ",
     ).await?;
+    let prev_other_ridden_count_stmt = ride_conn.prepare(
+        "
+            SELECT CAST(COUNT(*) AS bigint)
+            FROM bim.rides r
+            INNER JOIN bim.ride_vehicles rv ON rv.ride_id = r.id
+            WHERE
+                r.company = $1
+                AND rv.vehicle_number = $2
+                AND r.rider_username <> $3
+                AND r.coupling_mode = 'R'
+        ",
+    ).await?;
+    let prev_other_ridden_row_stmt = ride_conn.prepare(
+        "
+            SELECT r.\"timestamp\", r.line, r.rider_username
+            FROM bim.rides r
+            INNER JOIN bim.ride_vehicles rv ON rv.ride_id = r.id
+            WHERE
+                r.company = $1
+                AND rv.vehicle_number = $2
+                AND r.rider_username <> $3
+                AND r.coupling_mode = 'R'
+            ORDER BY r.\"timestamp\" DESC
+            LIMIT 1
+        ",
+    ).await?;
 
     let mut vehicle_results = Vec::new();
     for vehicle in vehicles {
@@ -3814,6 +3812,20 @@ pub async fn add_ride(
         let prev_other_line: Option<String> = prev_other_row_opt.as_ref().map(|r| r.get(1)).flatten();
         let prev_other_rider: Option<String> = prev_other_row_opt.as_ref().map(|r| r.get(2));
 
+        let prev_other_ridden_count_row = ride_conn.query_one(
+            &prev_other_ridden_count_stmt,
+            &[&company, &vehicle.number.as_str(), &rider_username],
+        ).await?;
+        let prev_other_ridden_count: i64 = prev_other_ridden_count_row.get(0);
+
+        let prev_other_ridden_row_opt = ride_conn.query_opt(
+            &prev_other_ridden_row_stmt,
+            &[&company, &vehicle.number.as_str(), &rider_username],
+        ).await?;
+        let prev_other_ridden_timestamp: Option<DateTime<Local>> = prev_other_ridden_row_opt.as_ref().map(|r| r.get(0));
+        let prev_other_ridden_line: Option<String> = prev_other_ridden_row_opt.as_ref().map(|r| r.get(1)).flatten();
+        let prev_other_ridden_rider: Option<String> = prev_other_ridden_row_opt.as_ref().map(|r| r.get(2));
+
         let last_info = if prev_my_count > 0 {
             let pmc_usize: usize = prev_my_count.try_into().unwrap();
             Some(LastRideInfo {
@@ -3837,7 +3849,19 @@ pub async fn add_ride(
             None
         };
 
-        vehicle_results.push((last_info, other_info));
+        let other_ridden_info = if prev_other_ridden_count > 0 {
+            let all_other_ridden_rider_count: usize = prev_other_ridden_count.try_into().unwrap();
+            Some(OtherRiderInfo {
+                all_other_rider_count: all_other_ridden_rider_count,
+                rider_username: prev_other_ridden_rider.unwrap(),
+                last_ride: prev_other_ridden_timestamp.unwrap(),
+                last_line: prev_other_ridden_line,
+            })
+        } else {
+            None
+        };
+
+        vehicle_results.push((last_info, other_info, other_ridden_info));
     }
 
     let id_row = ride_conn.query_one(
@@ -4089,12 +4113,13 @@ pub async fn increment_rides_by_spec(
             )?;
 
         let mut vehicle_ride_infos = Vec::new();
-        for (new_vehicle, (lri_opt, ori_opt)) in all_vehicles.iter().zip(ride_info_vec.drain(..)) {
+        for (new_vehicle, (lri_opt, ori_opt, ori_r_opt)) in all_vehicles.iter().zip(ride_info_vec.drain(..)) {
             vehicle_ride_infos.push(VehicleRideInfo {
                 vehicle_number: new_vehicle.number.clone(),
                 coupling_mode: new_vehicle.coupling_mode,
                 last_ride: lri_opt,
                 last_ride_other_rider: ori_opt,
+                last_actual_ride_other_rider: ori_r_opt,
             });
         }
 
@@ -4122,5 +4147,171 @@ fn get_night_owl_date<D: Datelike + Timelike>(date_time: &D) -> NaiveDate {
         naive_date.pred_opt().unwrap()
     } else {
         naive_date
+    }
+}
+
+/// Appends text describing another person's ride in the same vehicle.
+fn append_other_ride(
+    resp: &mut String,
+    vehicle_ride: &VehicleRideInfo,
+    ride_timestamp: &DateTime<Local>,
+    but: bool,
+) {
+    let self_ride_count = vehicle_ride.last_ride.as_ref()
+        .map(|lr| lr.ride_count)
+        .unwrap_or(0);
+    if let Some(orr) = &vehicle_ride.last_actual_ride_other_rider {
+        if but {
+            write_expect!(
+                resp,
+                ", but {} has ridden this very vehicle {}",
+                orr.rider_username,
+                BimPlugin::canonical_date_format_relative(&orr.last_ride, ride_timestamp, true, false),
+            );
+        } else {
+            write_expect!(
+                resp,
+                " and {} has ridden this very vehicle {}",
+                orr.rider_username,
+                BimPlugin::canonical_date_format_relative(&orr.last_ride, ride_timestamp, true, false),
+            );
+        }
+        if let Some(ln) = &orr.last_line {
+            write_expect!(resp, " on line {}", ln);
+        }
+        let total_ride_count = self_ride_count + orr.all_other_rider_count + 1;
+        write_expect!(
+            resp,
+            ", making it {} {}",
+            total_ride_count,
+            if total_ride_count == 1 { "ride" } else { "rides" },
+        );
+        if let Some(or) = &vehicle_ride.last_ride_other_rider {
+            let total_ride_count = self_ride_count + or.all_other_rider_count + 1;
+            if or.is_same_ride(orr) {
+                write_expect!(
+                    resp,
+                    " ({} {} in total)",
+                    total_ride_count,
+                    if total_ride_count == 1 { "ride" } else { "rides" },
+                );
+            } else {
+                write_expect!(
+                    resp,
+                    ", and {} has also ridden it {}",
+                    or.rider_username,
+                    BimPlugin::canonical_date_format_relative(&or.last_ride, ride_timestamp, true, false),
+                );
+                if let Some(ln) = &or.last_line {
+                    write_expect!(resp, " on line {}", ln);
+                }
+                write_expect!(
+                    resp,
+                    ", making it {} {} in total",
+                    total_ride_count,
+                    if total_ride_count == 1 { "ride" } else { "rides" },
+                );
+            }
+        }
+    } else if let Some(or) = &vehicle_ride.last_ride_other_rider {
+        if but {
+            write_expect!(
+                resp,
+                ", but {} has ridden it {}",
+                or.rider_username,
+                BimPlugin::canonical_date_format_relative(&or.last_ride, ride_timestamp, true, false),
+            );
+        } else {
+            write_expect!(
+                resp,
+                " and {} has also ridden it {}",
+                or.rider_username,
+                BimPlugin::canonical_date_format_relative(&or.last_ride, ride_timestamp, true, false),
+            );
+        }
+        if let Some(ln) = &or.last_line {
+            write_expect!(resp, " on line {}", ln);
+        }
+        let total_ride_count = self_ride_count + or.all_other_rider_count + 1;
+        write_expect!(
+            resp,
+            ", making it {} {}",
+            total_ride_count,
+            if total_ride_count == 1 { "ride" } else { "rides" },
+        );
+    }
+}
+
+/// Appends text describing another person's ride in the same vehicle (short version).
+///
+/// This short version is used in multi-vehicle rides.
+fn append_other_ride_short(
+    resp: &mut String,
+    vehicle_ride: &VehicleRideInfo,
+    ride_timestamp: &DateTime<Local>,
+    but: bool,
+) {
+    let self_ride_count = vehicle_ride.last_ride.as_ref()
+        .map(|lr| lr.ride_count)
+        .unwrap_or(0);
+    if let Some(orr) = &vehicle_ride.last_actual_ride_other_rider {
+        if but {
+            write_expect!(
+                resp,
+                " since {} exactly {}",
+                orr.rider_username,
+                BimPlugin::canonical_date_format_relative(&orr.last_ride, ride_timestamp, true, false),
+            );
+        } else {
+            write_expect!(
+                resp,
+                " and {} exactly {}",
+                orr.rider_username,
+                BimPlugin::canonical_date_format_relative(&orr.last_ride, ride_timestamp, true, false),
+            );
+        }
+        if let Some(ln) = &orr.last_line {
+            write_expect!(resp, " on {}", ln);
+        }
+        let total_ride_count = self_ride_count + orr.all_other_rider_count + 1;
+        write_expect!(resp, " \u{2013} {} total", total_ride_count);
+        if let Some(or) = &vehicle_ride.last_ride_other_rider {
+            let total_ride_count = self_ride_count + or.all_other_rider_count + 1;
+            if or.is_same_ride(orr) {
+                write_expect!(resp, ", {} grand total", total_ride_count);
+            } else {
+                write_expect!(
+                    resp,
+                    ", and {} {}",
+                    or.rider_username,
+                    BimPlugin::canonical_date_format_relative(&or.last_ride, ride_timestamp, true, false),
+                );
+                if let Some(ln) = &or.last_line {
+                    write_expect!(resp, " on {}", ln);
+                }
+                write_expect!(resp, " \u{2013} {} total", total_ride_count);
+            }
+        }
+    } else if let Some(or) = &vehicle_ride.last_ride_other_rider {
+        if but {
+            write_expect!(
+                resp,
+                " since {} {}",
+                or.rider_username,
+                BimPlugin::canonical_date_format_relative(&or.last_ride, ride_timestamp, true, false),
+            );
+        } else {
+            write_expect!(
+                resp,
+                " and {} {}",
+                or.rider_username,
+                BimPlugin::canonical_date_format_relative(&or.last_ride, ride_timestamp, true, false),
+            );
+        }
+        if let Some(ln) = &or.last_line {
+            write_expect!(resp, " on {}", ln);
+        }
+        let total_ride_count = self_ride_count + or.all_other_rider_count + 1;
+        write_expect!(resp, " \u{2013} {} total", total_ride_count);
     }
 }
