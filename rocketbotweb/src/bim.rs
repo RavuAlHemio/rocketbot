@@ -1141,8 +1141,9 @@ async fn get_company_to_vehicles_ridden(
     db_conn: &tokio_postgres::Client,
     to_date_opt: Option<DateTime<Local>>,
     rider_username_opt: Option<&str>,
+    ridden_only: bool,
 ) -> Option<(HashMap<String, HashMap<VehicleNumber, i64>>, i64)> {
-    let mut conditions: Vec<String> = Vec::with_capacity(2);
+    let mut conditions: Vec<String> = Vec::with_capacity(3);
     let mut params: Vec<&(dyn ToSql + Sync)> = Vec::with_capacity(2);
 
     if let Some(to_date) = to_date_opt.as_ref() {
@@ -1153,6 +1154,10 @@ async fn get_company_to_vehicles_ridden(
     if let Some(rider_username) = rider_username_opt.as_ref() {
         conditions.push(format!("rider_username = ${}", conditions.len() + 1));
         params.push(rider_username);
+    }
+
+    if ridden_only {
+        conditions.push("coupling_mode = 'R'".to_owned());
     }
 
     let conditions_string = if conditions.len() > 0 {
@@ -1215,6 +1220,9 @@ pub(crate) async fn handle_bim_coverage(request: &Request<Body>) -> Result<Respo
     let compare_mode = query_pairs.get("compare")
         .map(|qp| qp == "1")
         .unwrap_or(false);
+    let ridden_only = query_pairs.get("ridden-only")
+        .map(|qp| qp == "1")
+        .unwrap_or(false);
 
     let db_conn = match connect_to_db().await {
         Some(c) => c,
@@ -1248,6 +1256,7 @@ pub(crate) async fn handle_bim_coverage(request: &Request<Body>) -> Result<Respo
             &db_conn,
             to_date_opt,
             rider_username_opt,
+            ridden_only,
         ).await;
         let (company_to_vehicles_ridden, max_ride_count) = match query_res {
             Some(val) => val,
@@ -1260,6 +1269,7 @@ pub(crate) async fn handle_bim_coverage(request: &Request<Body>) -> Result<Respo
                 &db_conn,
                 to_date_opt,
                 None,
+                ridden_only,
             ).await;
             match query_res {
                 Some(val) => val,
