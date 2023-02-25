@@ -690,6 +690,7 @@ impl BimPlugin {
         let alternate_timestamp_string = command.options.get("timestamp")
             .or_else(|| command.options.get("t"));
         let utc_timestamp = command.flags.contains("utc") || command.flags.contains("u");
+        let sandbox = command.flags.contains("sandbox") || command.flags.contains("s");
 
         if (alternate_rider.is_some() || alternate_timestamp_string.is_some()) && !is_admin {
             send_channel_message!(
@@ -759,6 +760,7 @@ impl BimPlugin {
             ride_timestamp,
             &command.rest,
             config_guard.allow_fixed_coupling_combos,
+            sandbox,
         ).await;
         let mut last_ride_infos = match increment_res {
             Ok(lri) => lri,
@@ -3240,6 +3242,8 @@ impl RocketBotPlugin for BimPlugin {
                 .add_option("t", CommandValueType::String)
                 .add_flag("u")
                 .add_flag("utc")
+                .add_flag("s")
+                .add_flag("sandbox")
                 .build()
         ).await;
         my_interface.register_channel_command(
@@ -3707,6 +3711,7 @@ pub async fn add_ride(
     rider_username: &str,
     timestamp: DateTime<Local>,
     line: Option<&str>,
+    sandbox: bool,
 ) -> Result<(i64, Vec<(Option<LastRideInfo>, Option<OtherRiderInfo>, Option<OtherRiderInfo>)>), tokio_postgres::Error> {
     let prev_my_count_stmt = ride_conn.prepare(
         "
@@ -3864,33 +3869,38 @@ pub async fn add_ride(
         vehicle_results.push((last_info, other_info, other_ridden_info));
     }
 
-    let id_row = ride_conn.query_one(
-        "
-            INSERT INTO bim.rides
-                (id, company, rider_username, \"timestamp\", line)
-            VALUES
-                (DEFAULT, $1, $2, $3, $4)
-            RETURNING id
-        ",
-        &[&company, &rider_username, &timestamp, &line],
-    ).await?;
-    let ride_id: i64 = id_row.get(0);
-
-    let insert_vehicle_stmt = ride_conn.prepare(INSERT_VEHICLE_STMT_STR).await?;
-
-    for vehicle in vehicles {
-        ride_conn.execute(
-            &insert_vehicle_stmt,
-            &[
-                &ride_id,
-                &vehicle.number.as_str(),
-                &vehicle.type_code,
-                &vehicle.spec_position,
-                &vehicle.coupling_mode.as_db_str(),
-                &vehicle.fixed_coupling_position,
-            ],
+    let ride_id: i64 = if sandbox {
+        -1
+    } else {
+        let id_row = ride_conn.query_one(
+            "
+                INSERT INTO bim.rides
+                    (id, company, rider_username, \"timestamp\", line)
+                VALUES
+                    (DEFAULT, $1, $2, $3, $4)
+                RETURNING id
+            ",
+            &[&company, &rider_username, &timestamp, &line],
         ).await?;
-    }
+        let ride_id: i64 = id_row.get(0);
+
+        let insert_vehicle_stmt = ride_conn.prepare(INSERT_VEHICLE_STMT_STR).await?;
+        for vehicle in vehicles {
+            ride_conn.execute(
+                &insert_vehicle_stmt,
+                &[
+                    &ride_id,
+                    &vehicle.number.as_str(),
+                    &vehicle.type_code,
+                    &vehicle.spec_position,
+                    &vehicle.coupling_mode.as_db_str(),
+                    &vehicle.fixed_coupling_position,
+                ],
+            ).await?;
+        }
+
+        ride_id
+    };
 
     Ok((ride_id, vehicle_results))
 }
@@ -4056,6 +4066,7 @@ pub async fn increment_rides_by_spec(
     timestamp: DateTime<Local>,
     rides_spec: &str,
     allow_fixed_coupling_combos: bool,
+    sandbox: bool,
 ) -> Result<RideInfo, IncrementBySpecError> {
     let spec_no_spaces = rides_spec.replace(" ", "");
 
@@ -4107,6 +4118,7 @@ pub async fn increment_rides_by_spec(
             rider_username,
             timestamp,
             line_str_opt,
+            sandbox,
         )
             .await.map_err(|e|
                 IncrementBySpecError::DatabaseQuery(rider_username.to_owned(), all_vehicles.clone(), line_str_opt.map(|l| l.to_owned()), e)

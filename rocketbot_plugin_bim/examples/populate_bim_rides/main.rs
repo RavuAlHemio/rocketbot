@@ -79,6 +79,7 @@ async fn main() {
             timestamp,
             &message.message,
             true,
+            false,
         ).await
             .expect("failed to increment ride");
     }
