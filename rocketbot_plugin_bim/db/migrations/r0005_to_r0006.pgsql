@@ -30,4 +30,17 @@ WHERE
 
 ALTER TABLE bim.ride_vehicles DROP COLUMN as_part_of_fixed_coupling;
 
+UPDATE bim.ride_vehicles rv
+SET coupling_mode = 'R'
+WHERE
+    rv.coupling_mode = 'E'
+    AND NOT EXISTS (
+        SELECT 1
+        FROM bim.ride_vehicles rv2
+        WHERE rv2.ride_id = rv.ride_id
+        AND rv2.vehicle_number <> rv.vehicle_number
+        AND rv2.coupling_mode <> 'F'
+    )
+;
+
 UPDATE bim.schema_revision SET sch_rev=6;
