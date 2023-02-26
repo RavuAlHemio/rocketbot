@@ -1,0 +1,7 @@
+[package]
+name = "rocketbot_render_text"
+version = "0.1.0"
+edition = "2021"
+
+[dependencies]
+swash = { version = "0.1" }
