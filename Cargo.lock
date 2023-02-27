@@ -2849,6 +2849,7 @@ dependencies = [
 name = "rocketbot_render_text"
 version = "0.1.0"
 dependencies = [
+ "png",
  "swash",
 ]
 
