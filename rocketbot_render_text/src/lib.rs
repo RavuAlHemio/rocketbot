@@ -2,12 +2,12 @@ use std::collections::HashMap;
 
 use swash::FontRef;
 use swash::scale::{Render, ScaleContext, Source, StrikeWith};
-use swash::scale::image::Image;
 use swash::shape::ShapeContext;
 use swash::zeno::Vector;
 
 
 const FONT: &[u8] = include_bytes!("../data/texgyreheros-regular.otf");
+const FONT_SIZE_PX: f32 = 16.0;
 
 
 /// Renders the given text using the built-in font and returns a map of coordinates to pixel
@@ -19,11 +19,14 @@ pub fn render_text(text: &str) -> HashMap<(u32, u32), u8> {
     // load font
     let font = FontRef::from_index(FONT, 0)
         .expect("failed to load font");
+    let metrics = font.metrics(&[]);
+    let ascender_px_f32 = metrics.ascent * FONT_SIZE_PX / f32::from(metrics.units_per_em);
+    let ascender_px: i32 = ascender_px_f32.ceil() as i32;
 
     // shape text
     let mut shape_ctx = ShapeContext::new();
     let mut shaper = shape_ctx.builder(font)
-        .size(12.0)
+        .size(FONT_SIZE_PX)
         .build();
     shaper.add_str(text);
     let mut glyphs = Vec::new();
@@ -36,7 +39,7 @@ pub fn render_text(text: &str) -> HashMap<(u32, u32), u8> {
     // render text
     let mut context = ScaleContext::new();
     let mut scaler = context.builder(font)
-        .size(12.0)
+        .size(FONT_SIZE_PX)
         .hint(false)
         .build();
     let mut renderer = Render::new(&[
@@ -46,30 +49,25 @@ pub fn render_text(text: &str) -> HashMap<(u32, u32), u8> {
     ]);
     let mut pixel_values: HashMap<(u32, u32), u8> = HashMap::new();
     let mut pos_x: f32 = 0.0;
-    let mut images: Vec<(u32, Image)> = Vec::new();
     for glyph in &glyphs {
         let pos_x_int: u32 = pos_x.trunc() as u32;
         let pos_x_frac = pos_x.fract();
         renderer.offset(Vector::new(pos_x_frac, 0.0));
         let img = renderer.render(&mut scaler, glyph.id)
             .expect("failed to render glyph");
-        images.push((pos_x_int, img));
-        pos_x += glyph.advance;
-    }
-    let max_top = images.iter()
-        .map(|(_pos, m)| m.placement.top)
-        .max()
-        .unwrap_or(0);
-    for (pos_x_int, img) in images {
+
         for y in 0..img.placement.height {
             for x in 0..img.placement.width {
                 let i: usize = (y * img.placement.width + x).try_into().unwrap();
                 let b = img.data[i];
+                if b == 0 {
+                    continue;
+                }
                 let actual_x: u32 = match (img.placement.left + i32::try_from(pos_x_int + x).unwrap()).try_into() {
                     Ok(ax) => ax,
                     Err(_) => continue,
                 };
-                let actual_y: u32 = match (max_top - img.placement.top + i32::try_from(y).unwrap()).try_into() {
+                let actual_y: u32 = match (ascender_px - img.placement.top + i32::try_from(y).unwrap()).try_into() {
                     Ok(ay) => ay,
                     Err(_) => continue,
                 };
@@ -79,6 +77,8 @@ pub fn render_text(text: &str) -> HashMap<(u32, u32), u8> {
                 *pixel_ref = pixel_ref.saturating_add(b);
             }
         }
+
+        pos_x += glyph.advance;
     }
 
     pixel_values
