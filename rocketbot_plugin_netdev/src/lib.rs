@@ -84,7 +84,7 @@ fn stringify(value: &serde_json::Value) -> Cow<str> {
 fn counter_diff(older_counters: &serde_json::Value, newer_counters: &serde_json::Value, key: &str) -> Option<u64> {
     if let Some(older_value) = older_counters[key].as_u64() {
         if let Some(newer_value) = newer_counters[key].as_u64() {
-            if newer_value > older_value {
+            if newer_value >= older_value {
                 return Some(newer_value - older_value);
             } else {
                 // the counter has been reset midway
