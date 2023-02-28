@@ -235,12 +235,18 @@ pub fn draw_ride_table(
         if let Some(other_same_last) = &vehicle.other_same_last {
             other_same_names.push(render_text(&format!(" ({}", other_same_last.rider_username)));
             other_same_rides.push(render_text(&format!(" {})", other_same_last.ride.stringify(table.relative_time))));
+        } else {
+            other_same_names.push(HashMap::new());
+            other_same_rides.push(HashMap::new());
         }
 
         other_coupled_counts.push(render_text(&format!("{}\u{D7}", vehicle.other_coupled_count)));
         if let Some(other_coupled_last) = &vehicle.other_coupled_last {
             other_coupled_names.push(render_text(&format!(" ({}", other_coupled_last.rider_username)));
             other_coupled_rides.push(render_text(&format!(" {})", other_coupled_last.ride.stringify(table.relative_time))));
+        } else {
+            other_coupled_names.push(HashMap::new());
+            other_coupled_rides.push(HashMap::new());
         }
     }
 
