@@ -3,22 +3,24 @@
 //! Generally, the following structure is rendered:
 //!
 //! ```plain
-//! ┌─────────┬─────────┬───────────────────────────┬───────────────────────────────────┐
-//! │ vehicle │         │ ravu.al.hemio             │ other                             |
-//! ├─────────┼─────────┼───────────────────────────┼───────────────────────────────────┤
-//! │ 4096    │ same    │  1x (09:16/25)            │  1x (paulchen 24.02.2023 22:03/5) |
-//! │         │ coupled │ 12x (25.02.2023 22:03/25) │ 12x (Steve    23.02.2023 22:00/5) |
-//! ├─────────┼─────────┼───────────────────────────┼───────────────────────────────────┤
-//! │ 1496    │ same    │  1x (09:16/25)            │  1x (paulchen 24.02.2023 22:03/5) |
-//! │         │ coupled │ 12x (25.02.2023 22:03/25) │ 12x (Steve    23.02.2023 22:00/5) |
-//! └─────────┴─────────┴───────────────────────────┴───────────────────────────────────┘
+//! ┌─────────┬─────────┬───────────────────────────┬───────────────────────────────────┬─────┐
+//! │ vehicle │         │ ravu.al.hemio             │ other                             | Σ   |
+//! ├─────────┼─────────┼───────────────────────────┼───────────────────────────────────┼─────┤
+//! │ 4096    │ same    │  1x (09:16/25)            │  1x (paulchen 24.02.2023 22:03/5) |  2x |
+//! │         │ coupled │ 12x (25.02.2023 22:03/25) │  9x (Steve    23.02.2023 22:00/5) | 21x |
+//! │         │ Σ       │ 13x                       │ 10x                               | 23x |
+//! ├─────────┼─────────┼───────────────────────────┼───────────────────────────────────┼─────┤
+//! │ 1496    │ same    │  1x (09:16/25)            │  1x (paulchen 24.02.2023 22:03/5) |  2x |
+//! │         │ coupled │ 12x (25.02.2023 22:03/25) │ 12x (Steve    23.02.2023 22:00/5) | 24x |
+//! │         │ Σ       │ 13x                       │ 13x                               | 26x |
+//! └─────────┴─────────┴───────────────────────────┴───────────────────────────────────┴─────┘
 //! ```
 //!
 //! The data is actually arranged in the following columns for improved visual alignment:
 //!
 //! ```plain
-//! │ 4096    │ same    │ 421x (09:16/25)            │ 421x (paulchen 24.02.2023 22:03/5) |
-//!   ╰──0──╯   ╰──1──╯   ╰2r╯╰─────────3──────────╯   ╰4r╯╰───5────╯╰────────6─────────╯
+//! │ 4096    │ same    │ 421x (09:16/25)            │ 421x (paulchen 24.02.2023 22:03/5) | 842x |
+//!   ╰──0──╯   ╰──1──╯   ╰2r╯╰─────────3──────────╯   ╰4r╯╰───5────╯╰────────6─────────╯   ╰7r╯
 //! ```
 //!
 //! (Columns marked with `r` are right-aligned, the others are left-aligned.)
@@ -201,6 +203,7 @@ pub fn draw_ride_table(
     let other_heading = render_text("other");
     let same_tag = render_text("same");
     let coupled_tag = render_text("coupled");
+    let sum_heading_and_tag = render_text("\u{3A3}");
 
     let mut vehicle_numbers = Vec::with_capacity(table.vehicles.len());
     let mut my_same_counts = Vec::with_capacity(table.vehicles.len());
@@ -213,6 +216,11 @@ pub fn draw_ride_table(
     let mut other_coupled_counts = Vec::with_capacity(table.vehicles.len());
     let mut other_coupled_names = Vec::with_capacity(table.vehicles.len());
     let mut other_coupled_rides = Vec::with_capacity(table.vehicles.len());
+    let mut same_sums = Vec::with_capacity(table.vehicles.len());
+    let mut coupled_sums = Vec::with_capacity(table.vehicles.len());
+    let mut my_sums = Vec::with_capacity(table.vehicles.len());
+    let mut other_sums = Vec::with_capacity(table.vehicles.len());
+    let mut total_sums = Vec::with_capacity(table.vehicles.len());
 
     for vehicle in &table.vehicles {
         vehicle_numbers.push(render_text(&vehicle.vehicle_number));
@@ -248,6 +256,15 @@ pub fn draw_ride_table(
             other_coupled_names.push(HashMap::new());
             other_coupled_rides.push(HashMap::new());
         }
+
+        same_sums.push(render_text(&format!("{}\u{D7}", vehicle.my_same_count + vehicle.other_same_count)));
+        coupled_sums.push(render_text(&format!("{}\u{D7}", vehicle.my_coupled_count + vehicle.other_coupled_count)));
+        my_sums.push(render_text(&format!("{}\u{D7}", vehicle.my_same_count + vehicle.my_coupled_count)));
+        other_sums.push(render_text(&format!("{}\u{D7}", vehicle.other_same_count + vehicle.other_coupled_count)));
+        total_sums.push(render_text(&format!(
+            "{}\u{D7}",
+            vehicle.my_same_count + vehicle.my_coupled_count + vehicle.other_same_count + vehicle.other_coupled_count,
+        )));
     }
 
     assert_eq!(vehicle_numbers.len(), table.vehicles.len());
@@ -261,41 +278,51 @@ pub fn draw_ride_table(
     assert_eq!(other_coupled_counts.len(), table.vehicles.len());
     assert_eq!(other_coupled_names.len(), table.vehicles.len());
     assert_eq!(other_coupled_rides.len(), table.vehicles.len());
+    assert_eq!(same_sums.len(), table.vehicles.len());
+    assert_eq!(coupled_sums.len(), table.vehicles.len());
+    assert_eq!(my_sums.len(), table.vehicles.len());
+    assert_eq!(other_sums.len(), table.vehicles.len());
+    assert_eq!(total_sums.len(), table.vehicles.len());
 
     // calculate table widths
     let vehicle_number_width = calculate_width(
-        vehicle_numbers
-            .iter()
+        vehicle_numbers.iter()
             .chain(once(&vehicle_heading))
     );
     let same_coupled_width = calculate_width(
         once(&same_tag)
             .chain(once(&coupled_tag))
+            .chain(once(&sum_heading_and_tag))
     );
     let my_count_width = calculate_width(
-        my_same_counts
-            .iter()
+        my_same_counts.iter()
             .chain(&my_coupled_counts)
+            .chain(&my_sums)
     );
     let my_ride_width = calculate_width(
-        my_same_rides
-            .iter()
+        my_same_rides.iter()
             .chain(&my_coupled_rides)
     );
     let other_count_width = calculate_width(
-        other_same_counts
-            .iter()
+        other_same_counts.iter()
             .chain(&other_coupled_counts)
     );
     let other_name_width = calculate_width(
         other_same_names
             .iter()
             .chain(&other_coupled_names)
+            .chain(&other_sums)
     );
     let other_ride_width = calculate_width(
         other_same_rides
             .iter()
             .chain(&other_coupled_rides)
+    );
+    let sum_column_width = calculate_width(
+        once(&sum_heading_and_tag)
+            .chain(&same_sums)
+            .chain(&coupled_sums)
+            .chain(&total_sums)
     );
     let rider_columns_width = calculate_width(once(&rider_username_heading))
         .max(my_count_width + my_ride_width);
@@ -306,7 +333,8 @@ pub fn draw_ride_table(
         + vehicle_number_width + COLUMN_SPACING
         + same_coupled_width + COLUMN_SPACING
         + rider_columns_width + COLUMN_SPACING
-        + other_columns_width
+        + other_columns_width + COLUMN_SPACING
+        + sum_column_width
         + HORIZONTAL_MARGIN;
 
     // and now, placement
@@ -328,6 +356,8 @@ pub fn draw_ride_table(
     place_on_canvas(&mut canvas, &rider_username_heading, x_cursor, y_cursor);
     x_cursor += rider_columns_width + COLUMN_SPACING;
     place_on_canvas(&mut canvas, &other_heading, x_cursor, y_cursor);
+    x_cursor += other_columns_width + COLUMN_SPACING;
+    place_on_canvas(&mut canvas, &sum_heading_and_tag, x_cursor, y_cursor);
 
     for i in 0..table.vehicles.len() {
         draw_line(&mut canvas, &mut y_cursor, line_height, full_table_width);
@@ -352,6 +382,10 @@ pub fn draw_ride_table(
         place_on_canvas(&mut canvas, &other_same_names[i], x_cursor, y_cursor);
         x_cursor += other_name_width;
         place_on_canvas(&mut canvas, &other_same_rides[i], x_cursor, y_cursor);
+        x_cursor += other_ride_width + COLUMN_SPACING;
+        // calculation for right-alignment:
+        let this_sum_width = calculate_width(once(&same_sums[i]));
+        place_on_canvas(&mut canvas, &same_sums[i], x_cursor + sum_column_width - this_sum_width, y_cursor);
 
         y_cursor += line_height;
         x_cursor = HORIZONTAL_MARGIN;
@@ -374,6 +408,35 @@ pub fn draw_ride_table(
         place_on_canvas(&mut canvas, &other_coupled_names[i], x_cursor, y_cursor);
         x_cursor += other_name_width;
         place_on_canvas(&mut canvas, &other_coupled_rides[i], x_cursor, y_cursor);
+        x_cursor += other_ride_width + COLUMN_SPACING;
+        // calculation for right-alignment:
+        let this_sum_width = calculate_width(once(&coupled_sums[i]));
+        place_on_canvas(&mut canvas, &coupled_sums[i], x_cursor + sum_column_width - this_sum_width, y_cursor);
+
+        y_cursor += line_height;
+        x_cursor = HORIZONTAL_MARGIN;
+
+        // sum row
+        // no vehicle number here
+        x_cursor += vehicle_number_width + COLUMN_SPACING;
+        place_on_canvas(&mut canvas, &sum_heading_and_tag, x_cursor, y_cursor);
+        x_cursor += same_coupled_width + COLUMN_SPACING;
+        // calculation for right-alignment:
+        let this_my_count_width = calculate_width(once(&my_sums[i]));
+        place_on_canvas(&mut canvas, &my_sums[i], x_cursor + my_count_width - this_my_count_width, y_cursor);
+        x_cursor += my_count_width;
+        // no my ride
+        x_cursor += my_ride_width + COLUMN_SPACING;
+        // calculation for right-alignment:
+        let this_other_count_width = calculate_width(once(&other_sums[i]));
+        place_on_canvas(&mut canvas, &other_sums[i], x_cursor + other_count_width - this_other_count_width, y_cursor);
+        x_cursor += other_count_width;
+        // no other name or ride
+        x_cursor += other_name_width;
+        x_cursor += other_ride_width + COLUMN_SPACING;
+        // calculation for right-alignment:
+        let this_sum_width = calculate_width(once(&total_sums[i]));
+        place_on_canvas(&mut canvas, &total_sums[i], x_cursor + sum_column_width - this_sum_width, y_cursor);
     }
 
     canvas
