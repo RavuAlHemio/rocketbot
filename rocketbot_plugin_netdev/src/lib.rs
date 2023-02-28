@@ -1,4 +1,6 @@
+use std::borrow::Cow;
 use std::collections::{BTreeSet, HashSet};
+use std::fmt::Write;
 use std::sync::Weak;
 use std::time::Duration;
 
@@ -55,6 +57,42 @@ impl AnyMessage {
             },
         }
     }
+}
+
+
+macro_rules! write_expect {
+    ($dst:expr, $($arg:tt)*) => {
+        write!($dst, $($arg)*).expect("write failed")
+    };
+}
+
+/// Returns a string representation of the given JSON value.
+///
+/// If it is a string value, the string value is returned. If it is a different type of value, it is
+/// converted into the JSON string representation and returned. This means that strings are returned
+/// without quote marks but all other values are returned in their JSON representation.
+fn stringify(value: &serde_json::Value) -> Cow<str> {
+    if let Some(v) = value.as_str() {
+        Cow::Borrowed(v)
+    } else {
+        Cow::Owned(value.to_string())
+    }
+}
+
+
+/// Returns the difference between the values of two integer-valued counters.
+fn counter_diff(older_counters: &serde_json::Value, newer_counters: &serde_json::Value, key: &str) -> Option<u64> {
+    if let Some(older_value) = older_counters[key].as_u64() {
+        if let Some(newer_value) = newer_counters[key].as_u64() {
+            if newer_value > older_value {
+                return Some(newer_value - older_value);
+            } else {
+                // the counter has been reset midway
+                return Some(newer_value);
+            }
+        }
+    }
+    None
 }
 
 
@@ -187,8 +225,117 @@ impl NetdevPlugin {
             let switch_name = port["switch"].as_str().unwrap_or("???");
             let port_name = port["port"].as_str().unwrap_or("???");
 
-            let info_block = format!("connected to {} port {}", switch_name, port_name);
-            // TODO: add real-time info once it is available
+            let mut info_block = format!("connected to {} port {}", switch_name, port_name);
+            let physical = &port["realtime"]["physical"];
+            let aggregation = &port["realtime"]["aggregation"];
+            let realtime = if !physical.is_null() {
+                physical
+            } else if !aggregation.is_null() {
+                aggregation
+            } else {
+                &serde_json::Value::Null
+            };
+
+            if !realtime.is_null() {
+                let common = &realtime["port"]["common"];
+                let admin_status = &common["admin_status"];
+                let oper_status = &common["oper_status"];
+                let mut show_speed = false;
+                if admin_status == "up" && oper_status == "up" {
+                    write_expect!(info_block, "\nport is up");
+                    show_speed = true;
+                } else if admin_status == "up" && oper_status == "down" {
+                    write_expect!(info_block, "\nport is down");
+                } else if admin_status == "down" && oper_status == "down" {
+                    write_expect!(info_block, "\nport is shut");
+                } else {
+                    write_expect!(info_block, "\nport is administratively {}, operationally {}", stringify(admin_status), stringify(oper_status));
+                }
+
+                if let Some(dis_reason) = common["error_disabled_reason"].as_str() {
+                    write_expect!(info_block, "\nport is err-disabled; reason: {}", dis_reason);
+                }
+
+                if let Some(descr) = common["description"].as_str() {
+                    write_expect!(info_block, "\nport description: {}", descr);
+                }
+
+                if show_speed {
+                    if let Some(port_speed) = common["speed_bps"].as_u64() {
+                        const SI_PREFIXES: [&str; 11] = ["", "K", "M", "G", "T", "P", "E", "Z", "Y", "R", "Q"];
+                        let mut modified_speed = port_speed;
+                        let mut si_prefix_index = 0;
+
+                        while modified_speed % 1000 == 0 && si_prefix_index < SI_PREFIXES.len() - 1 {
+                            modified_speed /= 1000;
+                            si_prefix_index += 1;
+                        }
+                        write_expect!(info_block, "\nspeed: {} {}b/s", modified_speed, SI_PREFIXES[si_prefix_index]);
+                    }
+                }
+
+                // VLANs
+                let mut vlan_blocks = Vec::with_capacity(3);
+                if let Some(vlan_id) = common["untagged_vlan_id"].as_u64() {
+                    if vlan_id != 0 {
+                        vlan_blocks.push(format!("VLAN: {}", vlan_id));
+                    }
+                }
+                if let Some(voice_vlan_id) = common["voice_vlan_id"].as_u64() {
+                    if voice_vlan_id != 0 {
+                        vlan_blocks.push(format!("voice VLAN: {}", voice_vlan_id));
+                    }
+                }
+                if let Some(tagged) = common["tagged_vlan_ids"].as_array() {
+                    if tagged.len() > 0 {
+                        vlan_blocks.push(format!("tagged VLANs: {}", common["tagged_vlan_ids"]));
+                    }
+                }
+                if vlan_blocks.len() > 0 {
+                    write_expect!(info_block, "\n{}", vlan_blocks.join(", "));
+                } else {
+                    write_expect!(info_block, "\nno VLANs");
+                }
+
+                // counters
+                if let Some(counter_age_ms) = realtime["later_sample_delay_ms"].as_f64() {
+                    let older_counters = &common["counters"];
+                    let newer_counters = &realtime["later_counter_sample"];
+
+                    let mut counter_changes = Vec::with_capacity(6);
+                    // always show base values
+                    if let Some(incoming_delta) = counter_diff(older_counters, newer_counters, "incoming_bytes") {
+                        counter_changes.push(format!("{} B received", incoming_delta));
+                    }
+                    if let Some(outgoing_delta) = counter_diff(older_counters, newer_counters, "outgoing_bytes") {
+                        counter_changes.push(format!("{} B sent", outgoing_delta));
+                    }
+                    // only show error values if they aren't zero
+                    if let Some(incoming_discard_delta) = counter_diff(older_counters, newer_counters, "incoming_discarded_packets") {
+                        if incoming_discard_delta > 0 {
+                            counter_changes.push(format!("{} incoming packets dropped", incoming_discard_delta));
+                        }
+                    }
+                    if let Some(incoming_error_delta) = counter_diff(older_counters, newer_counters, "incoming_error_packets") {
+                        if incoming_error_delta > 0 {
+                            counter_changes.push(format!("{} incoming packets have errors", incoming_error_delta));
+                        }
+                    }
+                    if let Some(outgoing_discard_delta) = counter_diff(older_counters, newer_counters, "outgoing_discarded_packets") {
+                        if outgoing_discard_delta > 0 {
+                            counter_changes.push(format!("{} outgoing packets dropped", outgoing_discard_delta));
+                        }
+                    }
+                    if let Some(outgoing_error_delta) = counter_diff(older_counters, newer_counters, "outgoing_error_packets") {
+                        if outgoing_error_delta > 0 {
+                            counter_changes.push(format!("{} outgoing packets have errors", outgoing_error_delta));
+                        }
+                    }
+
+                    write_expect!(info_block, "\nstatistics within the last {} ms: {}", counter_age_ms, counter_changes.join(", "));
+                }
+            }
+
             info_blocks.push(info_block);
         }
 
