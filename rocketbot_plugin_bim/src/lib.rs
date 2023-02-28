@@ -3664,7 +3664,7 @@ pub async fn add_ride(
             WHERE
                 r.company = $1
                 AND rv.vehicle_number = $2
-                AND r.rider_username = $3
+                AND r.rider_username <> $3
                 AND rv.coupling_mode = 'R'
         ",
     ).await?;
@@ -3676,7 +3676,7 @@ pub async fn add_ride(
             WHERE
                 r.company = $1
                 AND rv.vehicle_number = $2
-                AND r.rider_username = $3
+                AND r.rider_username <> $3
                 AND rv.coupling_mode = 'R'
             ORDER BY r.\"timestamp\" DESC
             LIMIT 1
@@ -3690,7 +3690,7 @@ pub async fn add_ride(
             WHERE
                 r.company = $1
                 AND rv.vehicle_number = $2
-                AND r.rider_username = $3
+                AND r.rider_username <> $3
                 AND rv.coupling_mode <> 'R'
         ",
     ).await?;
@@ -3702,7 +3702,7 @@ pub async fn add_ride(
             WHERE
                 r.company = $1
                 AND rv.vehicle_number = $2
-                AND r.rider_username = $3
+                AND r.rider_username <> $3
                 AND rv.coupling_mode <> 'R'
             ORDER BY r.\"timestamp\" DESC
             LIMIT 1
