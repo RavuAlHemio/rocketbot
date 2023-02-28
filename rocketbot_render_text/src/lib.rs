@@ -98,3 +98,51 @@ pub fn map_to_dimensions(pixel_values: &HashMap<(u32, u32), u8>) -> (u32, u32) {
         .unwrap_or(0);
     (image_width, image_height)
 }
+
+/// Obtains the line height, in pixels, of the font being used.
+pub fn font_line_height() -> u32 {
+    // ascender + descender + additional leading
+    let font = FontRef::from_index(FONT, 0)
+        .expect("failed to load font");
+    let metrics = font.metrics(&[]);
+    let line_height_font_units = metrics.ascent + metrics.descent + metrics.leading;
+    let line_height_px_f32 = line_height_font_units * FONT_SIZE_PX / f32::from(metrics.units_per_em);
+    line_height_px_f32.ceil() as u32
+}
+
+/// Writes the given intensity map to a PNG file.
+#[cfg(feature = "png")]
+pub fn map_to_png<W: std::io::Write>(
+    writer: W,
+    map: &HashMap<(u32, u32), u8>,
+    top_margin: u32,
+    bottom_margin: u32,
+    left_margin: u32,
+    right_margin: u32,
+) -> Result<(), png::EncodingError> {
+    let (mut width, mut height) = map_to_dimensions(&map);
+    width += left_margin + right_margin;
+    height += top_margin + bottom_margin;
+    let width_usize = usize::try_from(width).unwrap();
+    let top_margin_usize = usize::try_from(top_margin).unwrap();
+    let left_margin_usize = usize::try_from(left_margin).unwrap();
+    let pixel_count = width_usize * usize::try_from(height).unwrap();
+
+    let mut encoder = png::Encoder::new(writer, width, height);
+    encoder.set_depth(png::BitDepth::Eight);
+    let mut writer = encoder.write_header()?;
+
+    let mut pixel_buf = vec![0u8; pixel_count];
+    for y in 0..height {
+        let y_usize = usize::try_from(y).unwrap();
+        for x in 0..width {
+            let x_usize = usize::try_from(x).unwrap();
+
+            if let Some(b) = map.get(&(x, y)) {
+                pixel_buf[(top_margin_usize + y_usize) * width_usize + (left_margin_usize + x_usize)] = *b;
+            }
+        }
+    }
+
+    writer.write_image_data(&pixel_buf)
+}
