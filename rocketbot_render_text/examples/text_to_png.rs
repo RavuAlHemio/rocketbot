@@ -3,7 +3,7 @@ use std::fs::File;
 use std::io::{Cursor, Write};
 
 use png;
-use rocketbot_render_text::{map_to_dimensions, render_text};
+use rocketbot_render_text::{DEFAULT_FONT_DATA, DEFAULT_SIZE_PX, map_to_dimensions, TextRenderer};
 
 
 fn main() {
@@ -14,7 +14,10 @@ fn main() {
         return;
     }
 
-    let text = render_text(&args[1]);
+    let renderer = TextRenderer::new(DEFAULT_FONT_DATA, DEFAULT_SIZE_PX)
+        .expect("failed to load default font");
+
+    let text = renderer.render_text(&args[1]);
     let (width, height) = map_to_dimensions(&text);
     let width_usize: usize = width.try_into().unwrap();
     let height_usize: usize = height.try_into().unwrap();

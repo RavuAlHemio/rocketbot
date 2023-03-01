@@ -33,7 +33,7 @@ use std::iter::once;
 use chrono::{DateTime, Local, TimeZone};
 use serde::{Deserialize, Serialize};
 
-use rocketbot_render_text::{font_line_height, map_to_dimensions, render_text};
+use rocketbot_render_text::{DEFAULT_FONT_DATA, DEFAULT_SIZE_PX, map_to_dimensions, TextRenderer};
 
 
 #[derive(Clone, Debug, Default, Deserialize, Eq, Hash, Ord, PartialEq, PartialOrd, Serialize)]
@@ -189,22 +189,25 @@ fn draw_line(
 pub fn draw_ride_table(
     table: &RideTableData,
 ) -> HashMap<(u32, u32), u8> {
-    let line_height = font_line_height();
+    let renderer = TextRenderer::new(DEFAULT_FONT_DATA, DEFAULT_SIZE_PX)
+        .expect("failed to load default font");
+
+    let line_height = renderer.font_line_height();
     const HORIZONTAL_MARGIN: u32 = 8;
     const COLUMN_SPACING: u32 = 16;
 
     // render each required piece
     let ride_text = if let Some(line) = &table.line {
-        render_text(&format!("ride {} (line {}):", table.ride_id, line))
+        renderer.render_text(&format!("ride {} (line {}):", table.ride_id, line))
     } else {
-        render_text(&format!("ride {}:", table.ride_id))
+        renderer.render_text(&format!("ride {}:", table.ride_id))
     };
-    let vehicle_heading = render_text("vehicle");
-    let rider_username_heading = render_text(&table.rider_username);
-    let other_heading = render_text("other");
-    let same_tag = render_text("same");
-    let coupled_tag = render_text("coupled");
-    let sum_heading_and_tag = render_text("\u{3A3}");
+    let vehicle_heading = renderer.render_text("vehicle");
+    let rider_username_heading = renderer.render_text(&table.rider_username);
+    let other_heading = renderer.render_text("other");
+    let same_tag = renderer.render_text("same");
+    let coupled_tag = renderer.render_text("coupled");
+    let sum_heading_and_tag = renderer.render_text("\u{3A3}");
 
     let mut vehicle_numbers = Vec::with_capacity(table.vehicles.len());
     let mut my_same_counts = Vec::with_capacity(table.vehicles.len());
@@ -224,45 +227,45 @@ pub fn draw_ride_table(
     let mut total_sums = Vec::with_capacity(table.vehicles.len());
 
     for vehicle in &table.vehicles {
-        vehicle_numbers.push(render_text(&vehicle.vehicle_number));
+        vehicle_numbers.push(renderer.render_text(&vehicle.vehicle_number));
 
-        my_same_counts.push(render_text(&format!("{}\u{D7}", vehicle.my_same_count)));
+        my_same_counts.push(renderer.render_text(&format!("{}\u{D7}", vehicle.my_same_count)));
         if let Some(my_same_last) = &vehicle.my_same_last {
-            my_same_rides.push(render_text(&format!(" ({})", my_same_last.stringify(table.relative_time))));
+            my_same_rides.push(renderer.render_text(&format!(" ({})", my_same_last.stringify(table.relative_time))));
         } else {
             my_same_rides.push(HashMap::new());
         }
 
-        my_coupled_counts.push(render_text(&format!("{}\u{D7}", vehicle.my_coupled_count)));
+        my_coupled_counts.push(renderer.render_text(&format!("{}\u{D7}", vehicle.my_coupled_count)));
         if let Some(my_coupled_last) = &vehicle.my_coupled_last {
-            my_coupled_rides.push(render_text(&format!(" ({})", my_coupled_last.stringify(table.relative_time))));
+            my_coupled_rides.push(renderer.render_text(&format!(" ({})", my_coupled_last.stringify(table.relative_time))));
         } else {
             my_coupled_rides.push(HashMap::new());
         }
 
-        other_same_counts.push(render_text(&format!("{}\u{D7}", vehicle.other_same_count)));
+        other_same_counts.push(renderer.render_text(&format!("{}\u{D7}", vehicle.other_same_count)));
         if let Some(other_same_last) = &vehicle.other_same_last {
-            other_same_names.push(render_text(&format!(" ({}", other_same_last.rider_username)));
-            other_same_rides.push(render_text(&format!(" {})", other_same_last.ride.stringify(table.relative_time))));
+            other_same_names.push(renderer.render_text(&format!(" ({}", other_same_last.rider_username)));
+            other_same_rides.push(renderer.render_text(&format!(" {})", other_same_last.ride.stringify(table.relative_time))));
         } else {
             other_same_names.push(HashMap::new());
             other_same_rides.push(HashMap::new());
         }
 
-        other_coupled_counts.push(render_text(&format!("{}\u{D7}", vehicle.other_coupled_count)));
+        other_coupled_counts.push(renderer.render_text(&format!("{}\u{D7}", vehicle.other_coupled_count)));
         if let Some(other_coupled_last) = &vehicle.other_coupled_last {
-            other_coupled_names.push(render_text(&format!(" ({}", other_coupled_last.rider_username)));
-            other_coupled_rides.push(render_text(&format!(" {})", other_coupled_last.ride.stringify(table.relative_time))));
+            other_coupled_names.push(renderer.render_text(&format!(" ({}", other_coupled_last.rider_username)));
+            other_coupled_rides.push(renderer.render_text(&format!(" {})", other_coupled_last.ride.stringify(table.relative_time))));
         } else {
             other_coupled_names.push(HashMap::new());
             other_coupled_rides.push(HashMap::new());
         }
 
-        same_sums.push(render_text(&format!("{}\u{D7}", vehicle.my_same_count + vehicle.other_same_count)));
-        coupled_sums.push(render_text(&format!("{}\u{D7}", vehicle.my_coupled_count + vehicle.other_coupled_count)));
-        my_sums.push(render_text(&format!("{}\u{D7}", vehicle.my_same_count + vehicle.my_coupled_count)));
-        other_sums.push(render_text(&format!("{}\u{D7}", vehicle.other_same_count + vehicle.other_coupled_count)));
-        total_sums.push(render_text(&format!(
+        same_sums.push(renderer.render_text(&format!("{}\u{D7}", vehicle.my_same_count + vehicle.other_same_count)));
+        coupled_sums.push(renderer.render_text(&format!("{}\u{D7}", vehicle.my_coupled_count + vehicle.other_coupled_count)));
+        my_sums.push(renderer.render_text(&format!("{}\u{D7}", vehicle.my_same_count + vehicle.my_coupled_count)));
+        other_sums.push(renderer.render_text(&format!("{}\u{D7}", vehicle.other_same_count + vehicle.other_coupled_count)));
+        total_sums.push(renderer.render_text(&format!(
             "{}\u{D7}",
             vehicle.my_same_count + vehicle.my_coupled_count + vehicle.other_same_count + vehicle.other_coupled_count,
         )));
