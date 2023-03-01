@@ -45,7 +45,7 @@ pub struct RideTableData {
     pub line: Option<String>,
 
     /// The name of the rider. Used as a column header.
-    pub rider_name: String,
+    pub rider_username: String,
 
     /// The vehicles ridden.
     pub vehicles: Vec<RideTableVehicle>,
@@ -200,7 +200,7 @@ pub fn draw_ride_table(
         render_text(&format!("ride {}:", table.ride_id))
     };
     let vehicle_heading = render_text("vehicle");
-    let rider_username_heading = render_text(&table.rider_name);
+    let rider_username_heading = render_text(&table.rider_username);
     let other_heading = render_text("other");
     let same_tag = render_text("same");
     let coupled_tag = render_text("coupled");

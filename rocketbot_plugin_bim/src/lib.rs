@@ -4076,7 +4076,7 @@ pub async fn increment_rides_by_spec(
     Ok(RideTableData {
         ride_id,
         line: line_str_opt.map(|l| l.to_owned()),
-        rider_name: rider_username.to_owned(),
+        rider_username: rider_username.to_owned(),
         vehicles,
         relative_time: Some(timestamp),
     })
