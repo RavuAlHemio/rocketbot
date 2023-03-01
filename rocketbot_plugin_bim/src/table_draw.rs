@@ -185,6 +185,7 @@ fn draw_line(
     *y_cursor += LINE_BELOW;
 }
 
+#[allow(unused_assignments)] // improve consistency, simplify extensibility
 pub fn draw_ride_table(
     table: &RideTableData,
 ) -> HashMap<(u32, u32), u8> {
@@ -369,20 +370,32 @@ pub fn draw_ride_table(
         x_cursor += vehicle_number_width + COLUMN_SPACING;
         place_on_canvas(&mut canvas, &same_tag, x_cursor, y_cursor);
         x_cursor += same_coupled_width + COLUMN_SPACING;
-        // calculation for right-alignment:
-        let this_my_count_width = calculate_width(once(&my_same_counts[i]));
-        place_on_canvas(&mut canvas, &my_same_counts[i], x_cursor + my_count_width - this_my_count_width, y_cursor);
-        x_cursor += my_count_width;
-        place_on_canvas(&mut canvas, &my_same_rides[i], x_cursor, y_cursor);
-        x_cursor += my_ride_width + COLUMN_SPACING;
-        // calculation for right-alignment:
-        let this_other_count_width = calculate_width(once(&other_same_counts[i]));
-        place_on_canvas(&mut canvas, &other_same_counts[i], x_cursor + other_count_width - this_other_count_width, y_cursor);
-        x_cursor += other_count_width;
-        place_on_canvas(&mut canvas, &other_same_names[i], x_cursor, y_cursor);
-        x_cursor += other_name_width;
-        place_on_canvas(&mut canvas, &other_same_rides[i], x_cursor, y_cursor);
-        x_cursor += other_ride_width + COLUMN_SPACING;
+        {
+            let mut sub_x_cursor = x_cursor;
+
+            // calculation for right-alignment:
+            let this_my_count_width = calculate_width(once(&my_same_counts[i]));
+            place_on_canvas(&mut canvas, &my_same_counts[i], sub_x_cursor + my_count_width - this_my_count_width, y_cursor);
+            sub_x_cursor += my_count_width;
+            place_on_canvas(&mut canvas, &my_same_rides[i], sub_x_cursor, y_cursor);
+            sub_x_cursor += my_ride_width;
+
+            x_cursor += rider_columns_width + COLUMN_SPACING;
+        }
+        {
+            let mut sub_x_cursor = x_cursor;
+
+            // calculation for right-alignment:
+            let this_other_count_width = calculate_width(once(&other_same_counts[i]));
+            place_on_canvas(&mut canvas, &other_same_counts[i], sub_x_cursor + other_count_width - this_other_count_width, y_cursor);
+            sub_x_cursor += other_count_width;
+            place_on_canvas(&mut canvas, &other_same_names[i], sub_x_cursor, y_cursor);
+            sub_x_cursor += other_name_width;
+            place_on_canvas(&mut canvas, &other_same_rides[i], sub_x_cursor, y_cursor);
+            sub_x_cursor += other_ride_width;
+
+            x_cursor += other_columns_width + COLUMN_SPACING;
+        }
         // calculation for right-alignment:
         let this_sum_width = calculate_width(once(&same_sums[i]));
         place_on_canvas(&mut canvas, &same_sums[i], x_cursor + sum_column_width - this_sum_width, y_cursor);
@@ -395,20 +408,32 @@ pub fn draw_ride_table(
         x_cursor += vehicle_number_width + COLUMN_SPACING;
         place_on_canvas(&mut canvas, &coupled_tag, x_cursor, y_cursor);
         x_cursor += same_coupled_width + COLUMN_SPACING;
-        // calculation for right-alignment:
-        let this_my_count_width = calculate_width(once(&my_coupled_counts[i]));
-        place_on_canvas(&mut canvas, &my_coupled_counts[i], x_cursor + my_count_width - this_my_count_width, y_cursor);
-        x_cursor += my_count_width;
-        place_on_canvas(&mut canvas, &my_coupled_rides[i], x_cursor, y_cursor);
-        x_cursor += my_ride_width + COLUMN_SPACING;
-        // calculation for right-alignment:
-        let this_other_count_width = calculate_width(once(&other_coupled_counts[i]));
-        place_on_canvas(&mut canvas, &other_coupled_counts[i], x_cursor + other_count_width - this_other_count_width, y_cursor);
-        x_cursor += other_count_width;
-        place_on_canvas(&mut canvas, &other_coupled_names[i], x_cursor, y_cursor);
-        x_cursor += other_name_width;
-        place_on_canvas(&mut canvas, &other_coupled_rides[i], x_cursor, y_cursor);
-        x_cursor += other_ride_width + COLUMN_SPACING;
+        {
+            let mut sub_x_cursor = x_cursor;
+
+            // calculation for right-alignment:
+            let this_my_count_width = calculate_width(once(&my_coupled_counts[i]));
+            place_on_canvas(&mut canvas, &my_coupled_counts[i], sub_x_cursor + my_count_width - this_my_count_width, y_cursor);
+            sub_x_cursor += my_count_width;
+            place_on_canvas(&mut canvas, &my_coupled_rides[i], sub_x_cursor, y_cursor);
+            sub_x_cursor += my_ride_width;
+
+            x_cursor += rider_columns_width + COLUMN_SPACING;
+        }
+        {
+            let mut sub_x_cursor = x_cursor;
+
+            // calculation for right-alignment:
+            let this_other_count_width = calculate_width(once(&other_coupled_counts[i]));
+            place_on_canvas(&mut canvas, &other_coupled_counts[i], sub_x_cursor + other_count_width - this_other_count_width, y_cursor);
+            sub_x_cursor += other_count_width;
+            place_on_canvas(&mut canvas, &other_coupled_names[i], sub_x_cursor, y_cursor);
+            sub_x_cursor += other_name_width;
+            place_on_canvas(&mut canvas, &other_coupled_rides[i], sub_x_cursor, y_cursor);
+            sub_x_cursor += other_ride_width;
+
+            x_cursor += other_columns_width + COLUMN_SPACING;
+        }
         // calculation for right-alignment:
         let this_sum_width = calculate_width(once(&coupled_sums[i]));
         place_on_canvas(&mut canvas, &coupled_sums[i], x_cursor + sum_column_width - this_sum_width, y_cursor);
@@ -424,16 +449,13 @@ pub fn draw_ride_table(
         // calculation for right-alignment:
         let this_my_count_width = calculate_width(once(&my_sums[i]));
         place_on_canvas(&mut canvas, &my_sums[i], x_cursor + my_count_width - this_my_count_width, y_cursor);
-        x_cursor += my_count_width;
-        // no my ride
-        x_cursor += my_ride_width + COLUMN_SPACING;
+        // skip over all the rider columns
+        x_cursor += rider_columns_width + COLUMN_SPACING;
         // calculation for right-alignment:
         let this_other_count_width = calculate_width(once(&other_sums[i]));
         place_on_canvas(&mut canvas, &other_sums[i], x_cursor + other_count_width - this_other_count_width, y_cursor);
-        x_cursor += other_count_width;
-        // no other name or ride
-        x_cursor += other_name_width;
-        x_cursor += other_ride_width + COLUMN_SPACING;
+        // skip over all the other-rider columns
+        x_cursor += other_columns_width + COLUMN_SPACING;
         // calculation for right-alignment:
         let this_sum_width = calculate_width(once(&total_sums[i]));
         place_on_canvas(&mut canvas, &total_sums[i], x_cursor + sum_column_width - this_sum_width, y_cursor);
