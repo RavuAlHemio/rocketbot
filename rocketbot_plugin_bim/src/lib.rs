@@ -3781,35 +3781,37 @@ pub async fn add_ride(
             (prev_other_coupled_timestamp, prev_other_coupled_line, prev_other_coupled_rider)
         };
 
-        vehicle_data.push(RideTableVehicle {
-            vehicle_number: vehicle.number.clone().into_string(),
-            my_same_count: prev_my_same_count,
-            my_same_last: prev_my_same_timestamp.map(|timestamp| Ride {
-                timestamp,
-                line: prev_my_same_line,
-            }),
-            my_coupled_count: prev_my_coupled_count,
-            my_coupled_last: prev_my_coupled_timestamp.map(|timestamp| Ride {
-                timestamp,
-                line: prev_my_coupled_line,
-            }),
-            other_same_count: prev_other_same_count,
-            other_same_last: prev_other_same_timestamp.map(|timestamp| UserRide {
-                rider_username: prev_other_same_rider.unwrap(),
-                ride: Ride {
+        if vehicle.coupling_mode != CouplingMode::FixedCoupling {
+            vehicle_data.push(RideTableVehicle {
+                vehicle_number: vehicle.number.clone().into_string(),
+                my_same_count: prev_my_same_count,
+                my_same_last: prev_my_same_timestamp.map(|timestamp| Ride {
                     timestamp,
-                    line: prev_other_same_line,
-                },
-            }),
-            other_coupled_count: prev_other_coupled_count,
-            other_coupled_last: prev_other_coupled_timestamp.map(|timestamp| UserRide {
-                rider_username: prev_other_coupled_rider.unwrap(),
-                ride: Ride {
+                    line: prev_my_same_line,
+                }),
+                my_coupled_count: prev_my_coupled_count,
+                my_coupled_last: prev_my_coupled_timestamp.map(|timestamp| Ride {
                     timestamp,
-                    line: prev_other_coupled_line,
-                },
-            }),
-        });
+                    line: prev_my_coupled_line,
+                }),
+                other_same_count: prev_other_same_count,
+                other_same_last: prev_other_same_timestamp.map(|timestamp| UserRide {
+                    rider_username: prev_other_same_rider.unwrap(),
+                    ride: Ride {
+                        timestamp,
+                        line: prev_other_same_line,
+                    },
+                }),
+                other_coupled_count: prev_other_coupled_count,
+                other_coupled_last: prev_other_coupled_timestamp.map(|timestamp| UserRide {
+                    rider_username: prev_other_coupled_rider.unwrap(),
+                    ride: Ride {
+                        timestamp,
+                        line: prev_other_coupled_line,
+                    },
+                }),
+            });
+        }
     }
 
     let ride_id: i64 = if sandbox {
