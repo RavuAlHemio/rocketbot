@@ -89,6 +89,7 @@ pub struct RideTableVehicle {
     pub vehicle_number: String,
 
     /// The number of times this vehicle (exactly) was ridden by the rider registering the ride.
+    #[serde(default)]
     pub my_same_count: i64,
 
     /// The last time this vehicle (exactly) was ridden by the rider registering the ride.
@@ -96,6 +97,7 @@ pub struct RideTableVehicle {
 
     /// The number of times a vehicle coupled with this one was ridden by the rider registering the
     /// ride.
+    #[serde(default)]
     pub my_coupled_count: i64,
 
     /// The timestamp and line of the last time a vehicle coupled with this one was ridden by the
@@ -103,6 +105,7 @@ pub struct RideTableVehicle {
     pub my_coupled_last: Option<Ride>,
 
     /// The number of times this vehicle (exactly) was ridden by a different rider.
+    #[serde(default)]
     pub other_same_count: i64,
 
     /// The rider's username and timestamp of the last time this vehicle (exactly) was ridden by a
@@ -111,6 +114,7 @@ pub struct RideTableVehicle {
 
     /// The number of times a vehicle coupled with this one was ridden by the rider registering the
     /// ride.
+    #[serde(default)]
     pub other_coupled_count: i64,
 
     /// The rider's username and timestamp of the last time a vehicle coupled with this one was
@@ -225,6 +229,7 @@ pub fn draw_ride_table(
     let mut my_sums = Vec::with_capacity(table.vehicles.len());
     let mut other_sums = Vec::with_capacity(table.vehicles.len());
     let mut total_sums = Vec::with_capacity(table.vehicles.len());
+    let mut vehicle_has_coupled = Vec::with_capacity(table.vehicles.len());
 
     for vehicle in &table.vehicles {
         vehicle_numbers.push(renderer.render_text(&vehicle.vehicle_number));
@@ -269,6 +274,14 @@ pub fn draw_ride_table(
             "{}\u{D7}",
             vehicle.my_same_count + vehicle.my_coupled_count + vehicle.other_same_count + vehicle.other_coupled_count,
         )));
+
+        let has_coupled =
+            vehicle.my_coupled_count > 0
+            || vehicle.my_coupled_last.is_some()
+            || vehicle.other_coupled_count > 0
+            || vehicle.other_coupled_last.is_some()
+        ;
+        vehicle_has_coupled.push(has_coupled);
     }
 
     assert_eq!(vehicle_numbers.len(), table.vehicles.len());
@@ -403,65 +416,67 @@ pub fn draw_ride_table(
         let this_sum_width = calculate_width(once(&same_sums[i]));
         place_on_canvas(&mut canvas, &same_sums[i], x_cursor + sum_column_width - this_sum_width, y_cursor);
 
-        y_cursor += line_height;
-        x_cursor = HORIZONTAL_MARGIN;
+        if vehicle_has_coupled[i] {
+            y_cursor += line_height;
+            x_cursor = HORIZONTAL_MARGIN;
 
-        // "other" row
-        // no vehicle number here
-        x_cursor += vehicle_number_width + COLUMN_SPACING;
-        place_on_canvas(&mut canvas, &coupled_tag, x_cursor, y_cursor);
-        x_cursor += same_coupled_width + COLUMN_SPACING;
-        {
-            let mut sub_x_cursor = x_cursor;
+            // "coupled" row
+            // no vehicle number here
+            x_cursor += vehicle_number_width + COLUMN_SPACING;
+            place_on_canvas(&mut canvas, &coupled_tag, x_cursor, y_cursor);
+            x_cursor += same_coupled_width + COLUMN_SPACING;
+            {
+                let mut sub_x_cursor = x_cursor;
 
+                // calculation for right-alignment:
+                let this_my_count_width = calculate_width(once(&my_coupled_counts[i]));
+                place_on_canvas(&mut canvas, &my_coupled_counts[i], sub_x_cursor + my_count_width - this_my_count_width, y_cursor);
+                sub_x_cursor += my_count_width;
+                place_on_canvas(&mut canvas, &my_coupled_rides[i], sub_x_cursor, y_cursor);
+                sub_x_cursor += my_ride_width;
+
+                x_cursor += rider_columns_width + COLUMN_SPACING;
+            }
+            {
+                let mut sub_x_cursor = x_cursor;
+
+                // calculation for right-alignment:
+                let this_other_count_width = calculate_width(once(&other_coupled_counts[i]));
+                place_on_canvas(&mut canvas, &other_coupled_counts[i], sub_x_cursor + other_count_width - this_other_count_width, y_cursor);
+                sub_x_cursor += other_count_width;
+                place_on_canvas(&mut canvas, &other_coupled_names[i], sub_x_cursor, y_cursor);
+                sub_x_cursor += other_name_width;
+                place_on_canvas(&mut canvas, &other_coupled_rides[i], sub_x_cursor, y_cursor);
+                sub_x_cursor += other_ride_width;
+
+                x_cursor += other_columns_width + COLUMN_SPACING;
+            }
             // calculation for right-alignment:
-            let this_my_count_width = calculate_width(once(&my_coupled_counts[i]));
-            place_on_canvas(&mut canvas, &my_coupled_counts[i], sub_x_cursor + my_count_width - this_my_count_width, y_cursor);
-            sub_x_cursor += my_count_width;
-            place_on_canvas(&mut canvas, &my_coupled_rides[i], sub_x_cursor, y_cursor);
-            sub_x_cursor += my_ride_width;
+            let this_sum_width = calculate_width(once(&coupled_sums[i]));
+            place_on_canvas(&mut canvas, &coupled_sums[i], x_cursor + sum_column_width - this_sum_width, y_cursor);
 
+            y_cursor += line_height;
+            x_cursor = HORIZONTAL_MARGIN;
+
+            // sum row
+            // no vehicle number here
+            x_cursor += vehicle_number_width + COLUMN_SPACING;
+            place_on_canvas(&mut canvas, &sum_heading_and_tag, x_cursor, y_cursor);
+            x_cursor += same_coupled_width + COLUMN_SPACING;
+            // calculation for right-alignment:
+            let this_my_count_width = calculate_width(once(&my_sums[i]));
+            place_on_canvas(&mut canvas, &my_sums[i], x_cursor + my_count_width - this_my_count_width, y_cursor);
+            // skip over all the rider columns
             x_cursor += rider_columns_width + COLUMN_SPACING;
-        }
-        {
-            let mut sub_x_cursor = x_cursor;
-
             // calculation for right-alignment:
-            let this_other_count_width = calculate_width(once(&other_coupled_counts[i]));
-            place_on_canvas(&mut canvas, &other_coupled_counts[i], sub_x_cursor + other_count_width - this_other_count_width, y_cursor);
-            sub_x_cursor += other_count_width;
-            place_on_canvas(&mut canvas, &other_coupled_names[i], sub_x_cursor, y_cursor);
-            sub_x_cursor += other_name_width;
-            place_on_canvas(&mut canvas, &other_coupled_rides[i], sub_x_cursor, y_cursor);
-            sub_x_cursor += other_ride_width;
-
+            let this_other_count_width = calculate_width(once(&other_sums[i]));
+            place_on_canvas(&mut canvas, &other_sums[i], x_cursor + other_count_width - this_other_count_width, y_cursor);
+            // skip over all the other-rider columns
             x_cursor += other_columns_width + COLUMN_SPACING;
+            // calculation for right-alignment:
+            let this_sum_width = calculate_width(once(&total_sums[i]));
+            place_on_canvas(&mut canvas, &total_sums[i], x_cursor + sum_column_width - this_sum_width, y_cursor);
         }
-        // calculation for right-alignment:
-        let this_sum_width = calculate_width(once(&coupled_sums[i]));
-        place_on_canvas(&mut canvas, &coupled_sums[i], x_cursor + sum_column_width - this_sum_width, y_cursor);
-
-        y_cursor += line_height;
-        x_cursor = HORIZONTAL_MARGIN;
-
-        // sum row
-        // no vehicle number here
-        x_cursor += vehicle_number_width + COLUMN_SPACING;
-        place_on_canvas(&mut canvas, &sum_heading_and_tag, x_cursor, y_cursor);
-        x_cursor += same_coupled_width + COLUMN_SPACING;
-        // calculation for right-alignment:
-        let this_my_count_width = calculate_width(once(&my_sums[i]));
-        place_on_canvas(&mut canvas, &my_sums[i], x_cursor + my_count_width - this_my_count_width, y_cursor);
-        // skip over all the rider columns
-        x_cursor += rider_columns_width + COLUMN_SPACING;
-        // calculation for right-alignment:
-        let this_other_count_width = calculate_width(once(&other_sums[i]));
-        place_on_canvas(&mut canvas, &other_sums[i], x_cursor + other_count_width - this_other_count_width, y_cursor);
-        // skip over all the other-rider columns
-        x_cursor += other_columns_width + COLUMN_SPACING;
-        // calculation for right-alignment:
-        let this_sum_width = calculate_width(once(&total_sums[i]));
-        place_on_canvas(&mut canvas, &total_sums[i], x_cursor + sum_column_width - this_sum_width, y_cursor);
     }
 
     canvas
