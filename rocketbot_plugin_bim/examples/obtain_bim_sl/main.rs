@@ -1,4 +1,6 @@
-use std::cmp::Ordering;
+//! Obtain vehicle databases from the SpotLog LocoList.
+
+
 use std::collections::{BTreeMap, HashMap};
 use std::env::args_os;
 use std::fs::File;
@@ -6,27 +8,11 @@ use std::io::Read;
 use std::path::PathBuf;
 
 use indexmap::IndexSet;
-use once_cell::sync::Lazy;
-use regex::Regex;
 use reqwest;
 use rocketbot_plugin_bim::{VehicleClass, VehicleInfo, VehicleNumber};
-use scraper::{ElementRef, Html, Selector};
 use serde::{Deserialize, Serialize};
 use serde_json;
-
-
-static DATE_RE: Lazy<Regex> = Lazy::new(|| Regex::new(concat!(
-    "(?P<first>[0-9]+)",
-    "(?:",
-        "\\.",
-        "(?P<a_month>[0-9]+)",
-        "\\.",
-        "(?P<a_year>[0-9]+)",
-    "|",
-        "/",
-        "(?P<b_year>[0-9]+)",
-    ")?",
-)).expect("failed to parse date regex"));
+use sxd_document;
 
 
 #[derive(Clone, Debug, Deserialize, Eq, Serialize, PartialEq)]
@@ -37,7 +23,12 @@ struct Config {
 
 #[derive(Clone, Debug, Deserialize, Eq, Serialize, PartialEq)]
 struct PageInfo {
-    pub url: String,
+    pub export_url: String,
+    pub web_id_to_export_class: HashMap<String, ExportClass>,
+}
+
+#[derive(Clone, Debug, Deserialize, Eq, Serialize, PartialEq)]
+struct ExportClass {
     pub type_code: String,
     pub vehicle_class: VehicleClass,
     #[serde(default)] pub other_data: BTreeMap<String, String>,
@@ -154,90 +145,6 @@ async fn obtain_page_bytes(url: &str) -> Vec<u8> {
 }
 
 
-fn trimmed_text_to_string(text: scraper::element_ref::Text) -> String {
-    let text_string: String = text
-        .map(|t| t.trim())
-        .collect();
-    text_string
-        .trim().to_owned()
-}
-
-
-fn date_tuple(s: &str) -> Option<(u64, u64, u64)> {
-    if let Some(caps) = DATE_RE.captures(s) {
-        let first_m = caps.name("first").expect("first not captured");
-        let first = match first_m.as_str().parse() {
-            Ok(f) => f,
-            Err(_) => return None,
-        };
-
-        if let Some(a_month_m) = caps.name("a_month") {
-            let a_year_m = caps.name("a_year").expect("a_month captured but a_year not");
-
-            let a_month = match a_month_m.as_str().parse() {
-                Ok(m) => m,
-                Err(_) => return None,
-            };
-            let a_year = match a_year_m.as_str().parse() {
-                Ok(y) => y,
-                Err(_) => return None,
-            };
-            Some((a_year, a_month, first))
-        } else if let Some(b_year_m) = caps.name("b_year") {
-            let b_year = match b_year_m.as_str().parse() {
-                Ok(y) => y,
-                Err(_) => return None,
-            };
-            Some((b_year, first, 0))
-        } else if first >= 1000 {
-            Some((first, 0, 0))
-        } else {
-            None
-        }
-    } else {
-        None
-    }
-}
-
-
-fn compare_date_strings(left: Option<&str>, right: Option<&str>) -> Ordering {
-    match (left, right) {
-        (None, Some(_)) => Ordering::Greater,
-        (Some(_), None) => Ordering::Less,
-        (Some(l), Some(r)) => {
-            // if one is a question mark, assume it to be older
-            if l == "?" && r != "?" {
-                return Ordering::Less;
-            } else if l != "?" && r == "?" {
-                return Ordering::Greater;
-            }
-
-            // try to interpret them as dates
-            let l_tuple = date_tuple(l);
-            let r_tuple = date_tuple(r);
-            if let Some(l_date) = l_tuple {
-                if let Some(r_date) = r_tuple {
-                    return l_date.cmp(&r_date);
-                }
-            }
-
-            // naive string comparison
-            l.cmp(r)
-        },
-        (None, None) => Ordering::Equal,
-    }
-
-}
-
-
-fn compare_age(left: &VehicleInfo, right: &VehicleInfo) -> Ordering {
-    compare_date_strings(
-        left.out_of_service_since.as_ref().map(|o| o.as_str()),
-        right.out_of_service_since.as_ref().map(|o| o.as_str()),
-    )
-}
-
-
 #[tokio::main]
 async fn main() {
     // load config
@@ -252,116 +159,129 @@ async fn main() {
             .expect("failed to parse config file")
     };
 
-    let class_data_table_sel = Selector::parse("div#classdata > table")
-        .expect("failed to parse class-data-table selector");
-    let class_data_row_sel = Selector::parse("tr")
-        .expect("failed to parse class-data-row selector");
-    let table_sel = Selector::parse("table#ClassMembersTable")
-        .expect("failed to parse vehicle-table selector");
-    let header_field_sel = Selector::parse("thead th")
-        .expect("failed to parse header field selector");
-    let vehicle_row_sel = Selector::parse("tbody tr")
-        .expect("failed to parse data row selector");
-    let td_sel = Selector::parse("td")
-        .expect("failed to parse td selector");
-
     let mut vehicles: Vec<VehicleInfo> = Vec::new();
-    for page_info in &config.pages {
-        eprintln!("fetching {}", page_info.url);
+    for page in &config.pages {
+        eprintln!("fetching {}", page.export_url);
 
-        let page_bytes = obtain_page_bytes(&page_info.url).await;
+        let page_bytes = obtain_page_bytes(&page.export_url).await;
         let page_string = String::from_utf8(page_bytes)
             .expect("failed to decode page as UTF-8");
-        let html = Html::parse_document(&page_string);
+        let package = sxd_document::parser::parse(&page_string)
+            .expect("failed to parse page as XML");
+        let document = package.as_document();
 
-        // find the common properties
-        let mut common_props = BTreeMap::new();
-        let common_table = html.root_element().select(&class_data_table_sel)
-            .nth(0);
-        if let Some(ct) = common_table {
-            for common_row in ct.select(&class_data_row_sel) {
-                let common_cells: Vec<ElementRef> = common_row.select(&td_sel).collect();
-                if common_cells.len() >= 2 {
-                    let key = trimmed_text_to_string(common_cells[0].text());
-                    let value = trimmed_text_to_string(common_cells[1].text());
-                    common_props.insert(key, value);
-                }
-            }
+        let definition = document.root()
+            .children().iter()
+            .filter_map(|c| c.element())
+            .nth(0).expect("no root element found");
+        if definition.name().local_part() != "Definition" {
+            panic!("root element is not named \"Definition\"");
         }
 
-        // find the vehicle table
-        let table = html.root_element().select(&table_sel)
-            .nth(0).expect("table not found");
+        let set = definition.children().iter()
+            .filter_map(|c| c.element())
+            .filter(|e| e.name().local_part() == "Set")
+            .nth(0).expect("no Set child of Definition found");
 
-        // find the header fields
-        let mut headers: Vec<String> = Vec::new();
-        for header_field in table.select(&header_field_sel) {
-            headers.push(trimmed_text_to_string(header_field.text()));
-        }
+        let classes = set.children().into_iter()
+            .filter_map(|c| c.element())
+            .filter(|e| e.name().local_part() == "Class");
+        for class in classes {
+            // is this class interesting for us?
+            let web_id = match class.attribute_value("Webid") {
+                Some(wi) => wi,
+                None => continue, // classes without Webid are not interesting to us
+            };
+            let class_def = match page.web_id_to_export_class.get(web_id) {
+                Some(cd) => cd,
+                None => continue, // not one of the classes we care about
+            };
 
-        // find the vehicles
-        for vehicle_row in table.select(&vehicle_row_sel) {
-            let mut kvps: HashMap<String, String> = HashMap::new();
-            for (header, data_field) in headers.iter().zip(vehicle_row.select(&td_sel)) {
-                let data_string = trimmed_text_to_string(data_field.text());
-                if data_string.len() > 0 {
-                    kvps.insert(header.clone(), data_string);
+            let builder_opt = class.attribute_value("Builder");
+            let introduced: Option<&str> = class.attribute_value("Introduced");
+            let withdrawn: Option<&str> = class.attribute_value("Withdrawn");
+
+            let locos = class.children().into_iter()
+                .filter_map(|c| c.element())
+                .filter(|e| e.name().local_part() == "Loco");
+            for loco in locos {
+                let formation_str_opt = loco.attribute_value("Form")
+                    .or_else(|| loco.attribute_value("Number"));
+                let formation_str = match formation_str_opt {
+                    Some(f) => f,
+                    None => continue,
+                };
+                let formation: IndexSet<VehicleNumber> = formation_str
+                    .split(",")
+                    .map(|s| s.to_owned().into())
+                    .collect();
+
+                let is_withdrawn = loco.attribute_value("Status")
+                    .map(|v| v == "W" || v == "X") // withdrawn or scrapped
+                    .unwrap_or(false);
+
+                // additional attributes
+                let mut my_other_data = BTreeMap::new();
+                for attrib in loco.attributes() {
+                    let name = attrib.name().local_part();
+                    if name == "id" || name == "Webid" {
+                        // SpotLog LocoList internal ID
+                        continue;
+                    }
+                    if name == "Number" || name == "Form" || name == "form" {
+                        // vehicle numbers are processed further above
+                        continue;
+                    }
+                    if name == "Status" {
+                        // status is processed above
+                        continue;
+                    }
+                    if name == "Updated" {
+                        // SpotLog LocoList internal timestamp
+                        continue;
+                    }
+
+                    if attrib.value().trim().len() == 0 {
+                        // no value, no interest
+                        continue;
+                    }
+
+                    my_other_data.insert(name.to_owned(), attrib.value().to_owned());
                 }
-            }
 
-            // do we have a formation?
-            let mut numbers: Vec<String> = Vec::new();
-            if let Some(formation) = kvps.get("Formation") {
-                if formation.len() > 0 {
-                    numbers.extend(
-                        formation.split(',')
-                            .map(|n| n.trim().to_owned())
-                    );
+                for veh in &formation {
+                    let mut vib = VehicleInfoBuilder::new();
+                    vib.number(veh.clone())
+                        .type_code(&class_def.type_code)
+                        .vehicle_class(class_def.vehicle_class);
+                    if let Some(b) = builder_opt {
+                        vib.manufacturer(b);
+                    }
+                    if let Some(i) = introduced {
+                        vib.in_service_since(i);
+                    }
+                    if is_withdrawn {
+                        if let Some(w) = withdrawn {
+                            vib.out_of_service_since(w);
+                        }
+                    }
+
+                    for (k, v) in &class_def.other_data {
+                        vib.other_data(k, v);
+                    }
+                    // my data overrides class data
+                    for (k, v) in &my_other_data {
+                        vib.other_data(k, v);
+                    }
+
+                    if formation.len() > 1 {
+                        vib.fixed_coupling(formation.clone());
+                    }
+
+                    let vehicle = vib.try_build()
+                        .expect("failed to build vehicle");
+                    vehicles.push(vehicle);
                 }
-            }
-
-            if numbers.len() == 0 {
-                // no; get the "raw" number
-                if let Some(num) = kvps.get("Number") {
-                    numbers.push(num.trim().to_owned());
-                }
-            }
-
-            // collect all properties
-            let mut vehicle_props = BTreeMap::new();
-            vehicle_props.extend(
-                common_props.iter()
-                    .map(|(k, v)| (k.clone(), v.clone()))
-            );
-            vehicle_props.extend(
-                kvps.iter()
-                    .filter(|(k, _v)| *k != "Formation" && *k != "Number")
-                    .map(|(k, v)| (k.clone(), v.clone()))
-            );
-
-            let builder_opt = vehicle_props.remove("Builder");
-
-            // insert
-            for number in &numbers {
-                let mut vehicle = VehicleInfoBuilder::new();
-                vehicle
-                    .number(number.clone().into())
-                    .type_code(&page_info.type_code)
-                    .vehicle_class(page_info.vehicle_class);
-                if numbers.len() > 1 {
-                    vehicle.fixed_coupling(numbers.iter().map(|n| n.clone().into()));
-                }
-                if let Some(builder) = &builder_opt {
-                    vehicle.manufacturer(builder);
-                }
-
-                for (k, v) in &vehicle_props {
-                    vehicle.other_data(k, v);
-                }
-
-                let finished_vehicle = vehicle.try_build()
-                    .expect("failed to build vehicle");
-                vehicles.push(finished_vehicle);
             }
         }
     }
@@ -380,15 +300,8 @@ async fn main() {
 
         if left.number == right.number {
             println!("dupe! {:?} vs. {:?}", left, right);
-            // remove the older one
-            match compare_age(left, right) {
-                Ordering::Less|Ordering::Equal => {
-                    vehicles.remove(i - 1);
-                },
-                Ordering::Greater => {
-                    vehicles.remove(i);
-                },
-            }
+            // remove the older one (assume it's the one that came first)
+            vehicles.remove(i - 1);
         } else {
             i += 1;
         }
