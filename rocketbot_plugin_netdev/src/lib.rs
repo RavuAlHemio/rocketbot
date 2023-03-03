@@ -17,6 +17,7 @@ use url::Url;
 #[derive(Clone, Debug, Eq, Hash, Ord, PartialEq, PartialOrd)]
 pub struct Config {
     pub jack_to_port_api_uri: Url,
+    pub port_api_uri: Url,
     pub authorized_usernames: BTreeSet<String>,
     pub timeout_ms: u64,
 }
@@ -96,6 +97,121 @@ fn counter_diff(older_counters: &serde_json::Value, newer_counters: &serde_json:
 }
 
 
+fn extend_with_realtime_info(info_block: &mut String, port: &serde_json::Value) {
+    let physical = &port["realtime"]["physical"];
+    let aggregation = &port["realtime"]["aggregation"];
+    let realtime = if !physical.is_null() {
+        physical
+    } else if !aggregation.is_null() {
+        aggregation
+    } else {
+        &serde_json::Value::Null
+    };
+
+    if !realtime.is_null() {
+        let common = &realtime["port"]["common"];
+        let admin_status = &common["admin_status"];
+        let oper_status = &common["oper_status"];
+        let mut show_speed = false;
+        if admin_status == "up" && oper_status == "up" {
+            write_expect!(info_block, "\nport is up");
+            show_speed = true;
+        } else if admin_status == "up" && oper_status == "down" {
+            write_expect!(info_block, "\nport is down");
+        } else if admin_status == "down" && oper_status == "down" {
+            write_expect!(info_block, "\nport is shut");
+        } else {
+            write_expect!(info_block, "\nport is administratively {}, operationally {}", stringify(admin_status), stringify(oper_status));
+        }
+
+        if let Some(dis_reason) = common["error_disabled_reason"].as_str() {
+            write_expect!(info_block, "\nport is err-disabled; reason: {}", dis_reason);
+        }
+
+        if let Some(descr) = common["description"].as_str() {
+            if descr.trim().len() > 0 {
+                write_expect!(info_block, "\nport description: {}", descr);
+            }
+        }
+
+        if show_speed {
+            if let Some(port_speed) = common["speed_bps"].as_u64() {
+                const SI_PREFIXES: [&str; 11] = ["", "K", "M", "G", "T", "P", "E", "Z", "Y", "R", "Q"];
+                let mut modified_speed = port_speed;
+                let mut si_prefix_index = 0;
+
+                while modified_speed % 1000 == 0 && si_prefix_index < SI_PREFIXES.len() - 1 {
+                    modified_speed /= 1000;
+                    si_prefix_index += 1;
+                }
+                write_expect!(info_block, "\nspeed: {} {}b/s", modified_speed, SI_PREFIXES[si_prefix_index]);
+            }
+        }
+
+        // VLANs
+        let mut vlan_blocks = Vec::with_capacity(3);
+        if let Some(vlan_id) = common["untagged_vlan_id"].as_u64() {
+            if vlan_id != 0 {
+                vlan_blocks.push(format!("VLAN: {}", vlan_id));
+            }
+        }
+        if let Some(voice_vlan_id) = common["voice_vlan_id"].as_u64() {
+            if voice_vlan_id != 0 {
+                vlan_blocks.push(format!("voice VLAN: {}", voice_vlan_id));
+            }
+        }
+        if let Some(tagged) = common["tagged_vlan_ids"].as_array() {
+            if tagged.len() > 0 {
+                vlan_blocks.push(format!("tagged VLANs: {}", common["tagged_vlan_ids"]));
+            }
+        }
+        if vlan_blocks.len() > 0 {
+            write_expect!(info_block, "\n{}", vlan_blocks.join(", "));
+        } else {
+            write_expect!(info_block, "\nno VLANs");
+        }
+
+        // counters
+        if let Some(counter_age_ms) = realtime["later_sample_delay_ms"].as_f64() {
+            let older_counters = &common["counters"];
+            let newer_counters = &realtime["later_counter_sample"];
+
+            let mut counter_changes = Vec::with_capacity(6);
+            // always show base values
+            if let Some(incoming_delta) = counter_diff(older_counters, newer_counters, "incoming_bytes") {
+                counter_changes.push(format!("{} B received", incoming_delta));
+            }
+            if let Some(outgoing_delta) = counter_diff(older_counters, newer_counters, "outgoing_bytes") {
+                counter_changes.push(format!("{} B sent", outgoing_delta));
+            }
+            // only show error values if they aren't zero
+            if let Some(incoming_discard_delta) = counter_diff(older_counters, newer_counters, "incoming_discarded_packets") {
+                if incoming_discard_delta > 0 {
+                    counter_changes.push(format!("{} incoming packets dropped", incoming_discard_delta));
+                }
+            }
+            if let Some(incoming_error_delta) = counter_diff(older_counters, newer_counters, "incoming_error_packets") {
+                if incoming_error_delta > 0 {
+                    counter_changes.push(format!("{} incoming packets have errors", incoming_error_delta));
+                }
+            }
+            if let Some(outgoing_discard_delta) = counter_diff(older_counters, newer_counters, "outgoing_discarded_packets") {
+                if outgoing_discard_delta > 0 {
+                    counter_changes.push(format!("{} outgoing packets dropped", outgoing_discard_delta));
+                }
+            }
+            if let Some(outgoing_error_delta) = counter_diff(older_counters, newer_counters, "outgoing_error_packets") {
+                if outgoing_error_delta > 0 {
+                    counter_changes.push(format!("{} outgoing packets have errors", outgoing_error_delta));
+                }
+            }
+
+            write_expect!(info_block, "\nstatistics within the last {} ms: {}", counter_age_ms, counter_changes.join(", "));
+        }
+    }
+}
+
+
 pub struct NetdevPlugin {
     interface: Weak<dyn RocketBotInterface>,
     config: RwLock<Config>,
@@ -108,6 +224,10 @@ impl NetdevPlugin {
             .as_str().ok_or("jack_to_port_api_uri missing or not a string")?;
         let jack_to_port_api_uri = Url::parse(jack_to_port_api_uri_str)
             .or(Err("jack_to_port_api_uri not a valid URL"))?;
+        let port_api_uri_str = config["port_api_uri"]
+            .as_str().ok_or("port_api_uri missing or not a string")?;
+        let port_api_uri = Url::parse(port_api_uri_str)
+            .or(Err("port_api_uri not a valid URL"))?;
         let timeout_ms = config["timeout_ms"]
             .as_u64_or_strict(5_000).ok_or("timeout_ms missing or not an unsigned 64-bit integer")?;
 
@@ -124,6 +244,7 @@ impl NetdevPlugin {
 
         Ok(Config {
             jack_to_port_api_uri,
+            port_api_uri,
             authorized_usernames,
             timeout_ms,
         })
@@ -151,6 +272,7 @@ impl NetdevPlugin {
 
         match command.name.as_str() {
             "dose" => self.handle_dose_command(message, command, &config).await,
+            "port" => self.handle_port_command(message, command, &config).await,
             _ => {},
         };
     }
@@ -226,117 +348,7 @@ impl NetdevPlugin {
             let port_name = port["port"].as_str().unwrap_or("???");
 
             let mut info_block = format!("connected to {} port {}", switch_name, port_name);
-            let physical = &port["realtime"]["physical"];
-            let aggregation = &port["realtime"]["aggregation"];
-            let realtime = if !physical.is_null() {
-                physical
-            } else if !aggregation.is_null() {
-                aggregation
-            } else {
-                &serde_json::Value::Null
-            };
-
-            if !realtime.is_null() {
-                let common = &realtime["port"]["common"];
-                let admin_status = &common["admin_status"];
-                let oper_status = &common["oper_status"];
-                let mut show_speed = false;
-                if admin_status == "up" && oper_status == "up" {
-                    write_expect!(info_block, "\nport is up");
-                    show_speed = true;
-                } else if admin_status == "up" && oper_status == "down" {
-                    write_expect!(info_block, "\nport is down");
-                } else if admin_status == "down" && oper_status == "down" {
-                    write_expect!(info_block, "\nport is shut");
-                } else {
-                    write_expect!(info_block, "\nport is administratively {}, operationally {}", stringify(admin_status), stringify(oper_status));
-                }
-
-                if let Some(dis_reason) = common["error_disabled_reason"].as_str() {
-                    write_expect!(info_block, "\nport is err-disabled; reason: {}", dis_reason);
-                }
-
-                if let Some(descr) = common["description"].as_str() {
-                    if descr.trim().len() > 0 {
-                        write_expect!(info_block, "\nport description: {}", descr);
-                    }
-                }
-
-                if show_speed {
-                    if let Some(port_speed) = common["speed_bps"].as_u64() {
-                        const SI_PREFIXES: [&str; 11] = ["", "K", "M", "G", "T", "P", "E", "Z", "Y", "R", "Q"];
-                        let mut modified_speed = port_speed;
-                        let mut si_prefix_index = 0;
-
-                        while modified_speed % 1000 == 0 && si_prefix_index < SI_PREFIXES.len() - 1 {
-                            modified_speed /= 1000;
-                            si_prefix_index += 1;
-                        }
-                        write_expect!(info_block, "\nspeed: {} {}b/s", modified_speed, SI_PREFIXES[si_prefix_index]);
-                    }
-                }
-
-                // VLANs
-                let mut vlan_blocks = Vec::with_capacity(3);
-                if let Some(vlan_id) = common["untagged_vlan_id"].as_u64() {
-                    if vlan_id != 0 {
-                        vlan_blocks.push(format!("VLAN: {}", vlan_id));
-                    }
-                }
-                if let Some(voice_vlan_id) = common["voice_vlan_id"].as_u64() {
-                    if voice_vlan_id != 0 {
-                        vlan_blocks.push(format!("voice VLAN: {}", voice_vlan_id));
-                    }
-                }
-                if let Some(tagged) = common["tagged_vlan_ids"].as_array() {
-                    if tagged.len() > 0 {
-                        vlan_blocks.push(format!("tagged VLANs: {}", common["tagged_vlan_ids"]));
-                    }
-                }
-                if vlan_blocks.len() > 0 {
-                    write_expect!(info_block, "\n{}", vlan_blocks.join(", "));
-                } else {
-                    write_expect!(info_block, "\nno VLANs");
-                }
-
-                // counters
-                if let Some(counter_age_ms) = realtime["later_sample_delay_ms"].as_f64() {
-                    let older_counters = &common["counters"];
-                    let newer_counters = &realtime["later_counter_sample"];
-
-                    let mut counter_changes = Vec::with_capacity(6);
-                    // always show base values
-                    if let Some(incoming_delta) = counter_diff(older_counters, newer_counters, "incoming_bytes") {
-                        counter_changes.push(format!("{} B received", incoming_delta));
-                    }
-                    if let Some(outgoing_delta) = counter_diff(older_counters, newer_counters, "outgoing_bytes") {
-                        counter_changes.push(format!("{} B sent", outgoing_delta));
-                    }
-                    // only show error values if they aren't zero
-                    if let Some(incoming_discard_delta) = counter_diff(older_counters, newer_counters, "incoming_discarded_packets") {
-                        if incoming_discard_delta > 0 {
-                            counter_changes.push(format!("{} incoming packets dropped", incoming_discard_delta));
-                        }
-                    }
-                    if let Some(incoming_error_delta) = counter_diff(older_counters, newer_counters, "incoming_error_packets") {
-                        if incoming_error_delta > 0 {
-                            counter_changes.push(format!("{} incoming packets have errors", incoming_error_delta));
-                        }
-                    }
-                    if let Some(outgoing_discard_delta) = counter_diff(older_counters, newer_counters, "outgoing_discarded_packets") {
-                        if outgoing_discard_delta > 0 {
-                            counter_changes.push(format!("{} outgoing packets dropped", outgoing_discard_delta));
-                        }
-                    }
-                    if let Some(outgoing_error_delta) = counter_diff(older_counters, newer_counters, "outgoing_error_packets") {
-                        if outgoing_error_delta > 0 {
-                            counter_changes.push(format!("{} outgoing packets have errors", outgoing_error_delta));
-                        }
-                    }
-
-                    write_expect!(info_block, "\nstatistics within the last {} ms: {}", counter_age_ms, counter_changes.join(", "));
-                }
-            }
+            extend_with_realtime_info(&mut info_block, port);
 
             info_blocks.push(info_block);
         }
@@ -344,6 +356,64 @@ impl NetdevPlugin {
         let mut response_text = format!("jack `{}`:", jack_name);
         for info_block in info_blocks {
             response_text.push_str("\n\n");
+            response_text.push_str(&info_block);
+        }
+
+        message.respond(&*interface, &response_text).await;
+    }
+
+    async fn handle_port_command(&self, message: AnyMessage, command: &CommandInstance, config: &Config) {
+        let interface = match self.interface.upgrade() {
+            Some(i) => i,
+            None => return,
+        };
+
+        let switch_name = &command.args[0];
+        let port_name = command.rest.trim();
+
+        let mut port_uri = config.port_api_uri.clone();
+        port_uri.query_pairs_mut()
+            .append_pair("switch", switch_name)
+            .append_pair("port", port_name);
+        let port_data_opt = self
+            .get_http_json(port_uri, Duration::from_millis(config.timeout_ms))
+            .await;
+        let port_data = match port_data_opt {
+            Some(jd) => jd,
+            None => {
+                message.respond(&*interface, "Failed to obtain jack data.").await;
+                return;
+            },
+        };
+
+        debug!("obtained port data: {}", port_data);
+
+        let mut ports = port_data["ports"].members_or_empty().peekable();
+        if ports.peek().is_none() {
+            // no entries
+            message.respond(
+                &*interface,
+                &format!("Port `{}` on switch `{}` is not known to Coruscant tools.", port_name, switch_name),
+            ).await;
+            return;
+        }
+
+        let mut info_blocks = Vec::new();
+        for port in ports {
+            let actual_switch_name = port["switch"].as_str().unwrap_or("???");
+            let actual_port_name = port["port"].as_str().unwrap_or("???");
+
+            let mut info_block = format!("switch {} port {}", actual_switch_name, actual_port_name);
+            extend_with_realtime_info(&mut info_block, port);
+
+            info_blocks.push(info_block);
+        }
+
+        let mut response_text = String::new();
+        for info_block in info_blocks {
+            if response_text.len() > 0 {
+                response_text.push_str("\n\n");
+            }
             response_text.push_str(&info_block);
         }
 
@@ -372,6 +442,14 @@ impl RocketBotPlugin for NetdevPlugin {
                 "{cpfx}dose JACK",
                 "Outputs information about a network jack and the switch port it is connected to.",
             )
+                .build(),
+            CommandDefinitionBuilder::new(
+                "port",
+                "netdev",
+                "{cpfx}port SWITCH PORT",
+                "Outputs information about a switch port.",
+            )
+                .arg_count(1)
                 .build(),
         ];
         for command in commands {
@@ -417,6 +495,8 @@ impl RocketBotPlugin for NetdevPlugin {
     async fn get_command_help(&self, command_name: &str) -> Option<String> {
         if command_name == "dose" {
             Some(include_str!("../help/dose.md").to_owned())
+        } else if command_name == "port" {
+            Some(include_str!("../help/port.md").to_owned())
         } else {
             None
         }
