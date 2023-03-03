@@ -161,8 +161,17 @@ fn extend_with_realtime_info(info_block: &mut String, port: &serde_json::Value) 
             }
         }
         if let Some(tagged) = common["tagged_vlan_ids"].as_array() {
-            if tagged.len() > 0 {
-                vlan_blocks.push(format!("tagged VLANs: {}", common["tagged_vlan_ids"]));
+            let mut tagged_nums = String::new();
+            for tagged_value in tagged {
+                if let Some(tagged_u64) = tagged_value.as_u64() {
+                    if tagged_nums.len() > 0 {
+                        tagged_nums.push_str(", ");
+                    }
+                    write_expect!(tagged_nums, "{}", tagged_u64);
+                }
+            }
+            if tagged_nums.len() > 0 {
+                vlan_blocks.push(format!("tagged VLANs: {}", tagged_nums));
             }
         }
         if vlan_blocks.len() > 0 {
