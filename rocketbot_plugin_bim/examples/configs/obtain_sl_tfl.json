@@ -1,0 +1,54 @@
+{
+  "output_path": "bims-tfl.json",
+  "pages": [
+    {
+      "export_url": "https://spotlog.org/locolist/data/export?show=TFL",
+      "web_id_to_export_class": {
+        "899": {
+          "type_code": "Tube-1962",
+          "vehicle_class": "metro"
+        },
+        "895": {
+          "type_code": "Tube-1972",
+          "vehicle_class": "metro"
+        },
+        "896": {
+          "type_code": "Tube-1973",
+          "vehicle_class": "metro"
+        },
+        "897": {
+          "type_code": "Tube-1992",
+          "vehicle_class": "metro"
+        },
+        "898": {
+          "type_code": "Tube-1995",
+          "vehicle_class": "metro"
+        },
+        "900": {
+          "type_code": "Tube-1996",
+          "vehicle_class": "metro"
+        },
+        "901": {
+          "type_code": "Tube-2009",
+          "vehicle_class": "metro"
+        },
+        "902": {
+          "type_code": "Sub-C69/77",
+          "vehicle_class": "metro"
+        },
+        "904": {
+          "type_code": "Sub-D78",
+          "vehicle_class": "metro"
+        },
+        "903": {
+          "type_code": "Sub-S7",
+          "vehicle_class": "metro"
+        },
+        "905": {
+          "type_code": "Sub-S8",
+          "vehicle_class": "metro"
+        }
+      }
+    }
+  ]
+}

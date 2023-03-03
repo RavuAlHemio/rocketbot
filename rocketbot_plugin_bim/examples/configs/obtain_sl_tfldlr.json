@@ -1,0 +1,34 @@
+{
+  "output_path": "bims-tfldlr.json",
+  "pages": [
+    {
+      "export_url": "https://spotlog.org/locolist/data/export?show=TFL",
+      "web_id_to_export_class": {
+        "929": {
+          "type_code": "B07",
+          "vehicle_class": "metro"
+        },
+        "930": {
+          "type_code": "B09",
+          "vehicle_class": "metro"
+        },
+        "13166": {
+          "type_code": "B23",
+          "vehicle_class": "metro"
+        },
+        "931": {
+          "type_code": "B90",
+          "vehicle_class": "metro"
+        },
+        "932": {
+          "type_code": "B92",
+          "vehicle_class": "metro"
+        },
+        "933": {
+          "type_code": "BK2",
+          "vehicle_class": "metro"
+        }
+      }
+    }
+  ]
+}
