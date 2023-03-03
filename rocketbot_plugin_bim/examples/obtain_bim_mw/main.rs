@@ -1,3 +1,6 @@
+//! Obtains vehicle databases from tabular MediaWiki data, e.g. from Stadtverkehr Austria Wiki.
+
+
 mod extract_info;
 
 

@@ -1,3 +1,6 @@
+//! Obtains service operator databases from tabular MediaWiki data, e.g. from Wikipedia.
+
+
 use std::collections::BTreeMap;
 use std::env::args_os;
 use std::fs::File;

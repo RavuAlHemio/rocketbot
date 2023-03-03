@@ -1,3 +1,7 @@
+//! Obtains vehicle databases from seznam-autobusu.cz (Czechia) or evidencia-dopravcov.eu
+//! (Slovakia).
+
+
 use std::cmp::Ordering;
 use std::collections::{BTreeMap, HashMap, HashSet};
 use std::env::args_os;
