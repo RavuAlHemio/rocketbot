@@ -261,9 +261,7 @@ async fn main() {
                         vib.in_service_since(i);
                     }
                     if is_withdrawn {
-                        if let Some(w) = withdrawn {
-                            vib.out_of_service_since(w);
-                        }
+                        vib.out_of_service_since(withdrawn.unwrap_or("?"));
                     }
 
                     for (k, v) in &class_def.other_data {
