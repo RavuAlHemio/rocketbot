@@ -257,7 +257,9 @@ impl NetdevPlugin {
                 }
 
                 if let Some(descr) = common["description"].as_str() {
-                    write_expect!(info_block, "\nport description: {}", descr);
+                    if descr.trim().len() > 0 {
+                        write_expect!(info_block, "\nport description: {}", descr);
+                    }
                 }
 
                 if show_speed {
