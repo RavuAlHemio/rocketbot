@@ -218,7 +218,9 @@ async fn main() {
                 .filter(|e| e.name().local_part() == "Loco");
             for loco in locos {
                 let formation_str_opt = loco.attribute_value("Form")
-                    .or_else(|| loco.attribute_value("Number"));
+                    .and_then(|f| if f.len() == 0 { None } else { Some(f) })
+                    .or_else(|| loco.attribute_value("Number"))
+                    .and_then(|f| if f.len() == 0 { None } else { Some(f) });
                 let formation_str = match formation_str_opt {
                     Some(f) => f,
                     None => continue,
