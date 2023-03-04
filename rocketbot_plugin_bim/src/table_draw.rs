@@ -88,6 +88,9 @@ pub struct RideTableVehicle {
     /// The number of this vehicle.
     pub vehicle_number: String,
 
+    /// The type of this vehicle, if known.
+    pub vehicle_type: Option<String>,
+
     /// The number of times this vehicle (exactly) was ridden by the rider registering the ride.
     #[serde(default)]
     pub my_same_count: i64,
@@ -214,6 +217,7 @@ pub fn draw_ride_table(
     let sum_heading_and_tag = renderer.render_text("\u{3A3}");
 
     let mut vehicle_numbers = Vec::with_capacity(table.vehicles.len());
+    let mut vehicle_types = Vec::with_capacity(table.vehicles.len());
     let mut my_same_counts = Vec::with_capacity(table.vehicles.len());
     let mut my_same_rides = Vec::with_capacity(table.vehicles.len());
     let mut my_coupled_counts = Vec::with_capacity(table.vehicles.len());
@@ -233,6 +237,12 @@ pub fn draw_ride_table(
 
     for vehicle in &table.vehicles {
         vehicle_numbers.push(renderer.render_text(&vehicle.vehicle_number));
+
+        if let Some(vt) = &vehicle.vehicle_type {
+            vehicle_types.push(renderer.render_text(&format!("({})", vt)));
+        } else {
+            vehicle_types.push(HashMap::new());
+        }
 
         my_same_counts.push(renderer.render_text(&format!("{}\u{D7}", vehicle.my_same_count)));
         if let Some(my_same_last) = &vehicle.my_same_last {
@@ -285,6 +295,7 @@ pub fn draw_ride_table(
     }
 
     assert_eq!(vehicle_numbers.len(), table.vehicles.len());
+    assert_eq!(vehicle_types.len(), table.vehicles.len());
     assert_eq!(my_same_counts.len(), table.vehicles.len());
     assert_eq!(my_same_rides.len(), table.vehicles.len());
     assert_eq!(my_coupled_counts.len(), table.vehicles.len());
@@ -304,6 +315,7 @@ pub fn draw_ride_table(
     // calculate table widths
     let vehicle_number_width = calculate_width(
         vehicle_numbers.iter()
+            .chain(&vehicle_types)
             .chain(once(&vehicle_heading))
     );
     let same_coupled_width = calculate_width(
@@ -421,7 +433,8 @@ pub fn draw_ride_table(
             x_cursor = HORIZONTAL_MARGIN;
 
             // "coupled" row
-            // no vehicle number here
+            // vehicle type instead of vehicle number
+            place_on_canvas(&mut canvas, &vehicle_types[i], x_cursor, y_cursor);
             x_cursor += vehicle_number_width + COLUMN_SPACING;
             place_on_canvas(&mut canvas, &coupled_tag, x_cursor, y_cursor);
             x_cursor += same_coupled_width + COLUMN_SPACING;
@@ -476,6 +489,12 @@ pub fn draw_ride_table(
             // calculation for right-alignment:
             let this_sum_width = calculate_width(once(&total_sums[i]));
             place_on_canvas(&mut canvas, &total_sums[i], x_cursor + sum_column_width - this_sum_width, y_cursor);
+        } else if vehicle_types[i].len() > 0 {
+            // add vehicle type below
+            y_cursor += line_height;
+            x_cursor = HORIZONTAL_MARGIN;
+
+            place_on_canvas(&mut canvas, &vehicle_types[i], x_cursor, y_cursor);
         }
     }
 

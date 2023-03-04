@@ -3784,6 +3784,7 @@ pub async fn add_ride(
         if vehicle.coupling_mode != CouplingMode::FixedCoupling {
             vehicle_data.push(RideTableVehicle {
                 vehicle_number: vehicle.number.clone().into_string(),
+                vehicle_type: vehicle.type_code.clone(),
                 my_same_count: prev_my_same_count,
                 my_same_last: prev_my_same_timestamp.map(|timestamp| Ride {
                     timestamp,
