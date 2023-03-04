@@ -6,6 +6,7 @@ use std::env::args_os;
 use std::fs::File;
 use std::io::Read;
 use std::path::PathBuf;
+use std::time::Duration;
 
 use indexmap::IndexSet;
 use reqwest;
@@ -24,6 +25,7 @@ struct Config {
 #[derive(Clone, Debug, Deserialize, Eq, Serialize, PartialEq)]
 struct PageInfo {
     pub export_url: String,
+    pub timeout_ms: Option<u64>,
     pub web_id_to_export_class: HashMap<String, ExportClass>,
 }
 
@@ -126,7 +128,7 @@ impl VehicleInfoBuilder {
 }
 
 
-async fn obtain_page_bytes(url: &str) -> Vec<u8> {
+async fn obtain_page_bytes(url: &str, timeout: Option<Duration>) -> Vec<u8> {
     if let Some(file_path) = url.strip_prefix("file://") {
         // it's a local file
         let mut f = File::open(file_path)
@@ -136,7 +138,15 @@ async fn obtain_page_bytes(url: &str) -> Vec<u8> {
             .expect("failed to read local page");
         buf
     } else {
-        let response = reqwest::get(url).await
+        let mut client_builder = reqwest::Client::builder();
+        if let Some(to) = timeout {
+            client_builder = client_builder.timeout(to);
+        }
+        let client = client_builder.build()
+            .expect("failed to build client");
+        let request = client.get(url)
+            .build().expect("failed to build request");
+        let response = client.execute(request).await
             .expect("failed to obtain response");
         let response_bytes = response.bytes().await
             .expect("failed to obtain response bytes");
@@ -163,7 +173,9 @@ async fn main() {
     for page in &config.pages {
         eprintln!("fetching {}", page.export_url);
 
-        let page_bytes = obtain_page_bytes(&page.export_url).await;
+        let timeout = page.timeout_ms.map(|ms| Duration::from_millis(ms));
+
+        let page_bytes = obtain_page_bytes(&page.export_url, timeout).await;
         let page_string = String::from_utf8(page_bytes)
             .expect("failed to decode page as UTF-8");
         let package = sxd_document::parser::parse(&page_string)
