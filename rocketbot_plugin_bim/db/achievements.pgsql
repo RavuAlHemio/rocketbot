@@ -855,7 +855,7 @@ AS $$
     FROM bim.rides_and_numeric_vehicles rav30
     WHERE rav30.rider_username = rider
     AND rav30.vehicle_number > 99
-    AND bim.is_in_sequence(rav30.vehicle_number, TRUE)
+    AND bim.is_in_sequence(rav30.vehicle_number, FALSE)
 
     UNION ALL
 
@@ -866,7 +866,7 @@ AS $$
     FROM bim.rides_and_numeric_vehicles rav31
     WHERE rav31.rider_username = rider
     AND rav31.vehicle_number > 99
-    AND bim.is_in_sequence(rav31.vehicle_number, FALSE)
+    AND bim.is_in_sequence(rav31.vehicle_number, TRUE)
 
     UNION ALL
 
