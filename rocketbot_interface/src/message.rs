@@ -23,12 +23,6 @@ fn write_joined<T: fmt::Display, I: IntoIterator<Item = T>>(f: &mut fmt::Formatt
 fn write_concatenated<T: fmt::Display, I: IntoIterator<Item = T>>(f: &mut fmt::Formatter<'_>, pieces: I) -> fmt::Result {
     write_joined(f, pieces, "")
 }
-fn concat_fragments(frags: &[InlineFragment]) -> String {
-    let strings: Vec<String> = frags.iter()
-        .map(|f| f.to_string())
-        .collect();
-    strings.concat()
-}
 
 
 #[derive(Clone, Debug, Eq, Hash, PartialEq)]
@@ -48,12 +42,21 @@ impl fmt::Display for InlineFragment {
         match self {
             InlineFragment::PlainText(pt)
                 => write!(f, "{}", pt),
-            InlineFragment::Bold(b)
-                => write!(f, "*{}*", concat_fragments(b)),
-            InlineFragment::Strike(s)
-                => write!(f, "~{}~", concat_fragments(s)),
-            InlineFragment::Italic(i)
-                => write!(f, "_{}_", concat_fragments(i)),
+            InlineFragment::Bold(fragments) => {
+                write!(f, "*")?;
+                write_concatenated(f, fragments)?;
+                write!(f, "*")
+            },
+            InlineFragment::Strike(fragments) => {
+                write!(f, "~")?;
+                write_concatenated(f, fragments)?;
+                write!(f, "~")
+            },
+            InlineFragment::Italic(fragments) => {
+                write!(f, "_")?;
+                write_concatenated(f, fragments)?;
+                write!(f, "_")
+            },
             InlineFragment::Link(target, label_fragments) => {
                 write!(f, "[")?;
                 write_concatenated(f, label_fragments)?;
@@ -80,10 +83,7 @@ impl fmt::Display for Checkbox {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         let checkmark = if self.checked { 'x' } else { ' ' };
         write!(f, "- [{}] ", checkmark)?;
-        for part in &self.label {
-            write!(f, "{}", part)?;
-        }
-        Ok(())
+        write_concatenated(f, &self.label)
     }
 }
 
@@ -93,10 +93,7 @@ pub struct ListItem {
 }
 impl fmt::Display for ListItem {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        for part in &self.label {
-            write!(f, "{}", part)?;
-        }
-        Ok(())
+        write_concatenated(f, &self.label)
     }
 }
 
@@ -114,44 +111,33 @@ pub enum MessageFragment {
 impl fmt::Display for MessageFragment {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
-            MessageFragment::BigEmoji(emoji) => {
-                let wrapped_emoji: Vec<String> = emoji.iter()
-                    .map(|moji| moji.to_string())
-                    .collect();
-                let emoji_string = wrapped_emoji.join(" ");
-                write!(f, "{}", emoji_string)
-            },
-            MessageFragment::UnorderedList(items) => {
-                let item_strings: Vec<String> = items.iter()
-                    .map(|item| item.to_string())
-                    .collect();
-                write!(f, "{}", item_strings.join("\n"))
-            },
-            MessageFragment::Quote(paragraphs) => {
-                let para_strings: Vec<String> = paragraphs.iter()
-                    .map(|para| format!(">{}", para))
-                    .collect();
-                write!(f, "{}", para_strings.join("\n"))
-            },
-            MessageFragment::Tasks(tasks) => {
-                let task_strings: Vec<String> = tasks.iter()
-                    .map(|task| task.to_string())
-                    .collect();
-                write!(f, "{}", task_strings.join("\n"))
-            },
+            MessageFragment::BigEmoji(emoji)
+                => write_joined(f, emoji, " "),
+            MessageFragment::UnorderedList(items)
+                => write_joined(f, items, "\n"),
+            MessageFragment::Quote(paragraphs)
+                => write_joined_mapped(
+                    f,
+                    paragraphs,
+                    "\n",
+                    |f, para| write!(f, ">{}", para),
+                ),
+            MessageFragment::Tasks(tasks)
+                => write_joined(f, tasks, "\n"),
             MessageFragment::OrderedList(items) => {
-                let item_strings: Vec<String> = items.iter()
-                    .enumerate()
-                    .map(|(i, item)| format!("{}. {}", i, item))
-                    .collect();
-                write!(f, "{}", item_strings.join("\n"))
+                let mut i = 0usize;
+                write_joined_mapped(
+                    f,
+                    items,
+                    "\n",
+                    |f, item| {
+                        i += 1;
+                        write!(f, "{}. {}", i, item)
+                    },
+                )
             },
-            MessageFragment::Paragraph(pieces) => {
-                for piece in pieces {
-                    write!(f, "{}", piece)?;
-                }
-                Ok(())
-            },
+            MessageFragment::Paragraph(pieces)
+                => write_concatenated(f, pieces),
             MessageFragment::Code(language, lines) => {
                 write!(f, "```{}\n", language)?;
                 for line in lines {
@@ -164,9 +150,7 @@ impl fmt::Display for MessageFragment {
                     write!(f, "#")?;
                 }
                 write!(f, " ")?;
-                for piece in pieces {
-                    write!(f, "{}", piece)?;
-                }
+                write_concatenated(f, pieces)?;
                 write!(f, "\n")
             },
         }
