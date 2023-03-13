@@ -2167,17 +2167,16 @@ fn message_from_json(message_json: &serde_json::Value) -> Option<Message> {
     let parsed_message: Option<Vec<MessageFragment>> = if message_json["md"].is_null() {
         None
     } else {
-        let parsed = match parse_message(&message_json["md"]) {
-            Ok(pm) => pm,
+        match parse_message(&message_json["md"]) {
+            Ok(pm) => Some(pm),
             Err(e) => {
                 error!(
                     "failed to parse message {:?} from structure {:?}: {}",
                     raw_message, message_json["md"].to_string(), e,
                 );
-                return None;
+                None
             }
-        };
-        Some(parsed)
+        }
     };
 
     let timestamp_rocket = match message_json["ts"]["$date"].as_i64() {
