@@ -1,6 +1,28 @@
 use std::fmt;
 
 
+fn write_joined_mapped<T, I, F>(f: &mut fmt::Formatter<'_>, pieces: I, glue: &str, mut format_item: F) -> fmt::Result
+    where
+        T: fmt::Display,
+        I: IntoIterator<Item = T>,
+        F: FnMut(&mut fmt::Formatter<'_>, &T) -> fmt::Result {
+    let mut first = true;
+    for piece in pieces.into_iter() {
+        if first {
+            first = false;
+        } else {
+            write!(f, "{}", glue)?;
+        }
+        format_item(f, &piece)?;
+    }
+    Ok(())
+}
+fn write_joined<T: fmt::Display, I: IntoIterator<Item = T>>(f: &mut fmt::Formatter<'_>, pieces: I, glue: &str) -> fmt::Result {
+    write_joined_mapped(f, pieces, glue, |f, piece| write!(f, "{}", piece))
+}
+fn write_concatenated<T: fmt::Display, I: IntoIterator<Item = T>>(f: &mut fmt::Formatter<'_>, pieces: I) -> fmt::Result {
+    write_joined(f, pieces, "")
+}
 fn concat_fragments(frags: &[InlineFragment]) -> String {
     let strings: Vec<String> = frags.iter()
         .map(|f| f.to_string())
@@ -15,7 +37,7 @@ pub enum InlineFragment {
     Bold(Vec<InlineFragment>),
     Strike(Vec<InlineFragment>),
     Italic(Vec<InlineFragment>),
-    Link(String, Box<InlineFragment>),
+    Link(String, Vec<InlineFragment>),
     MentionChannel(String),
     MentionUser(String),
     Emoji(Emoji),
@@ -32,8 +54,11 @@ impl fmt::Display for InlineFragment {
                 => write!(f, "~{}~", concat_fragments(s)),
             InlineFragment::Italic(i)
                 => write!(f, "_{}_", concat_fragments(i)),
-            InlineFragment::Link(target, label)
-                => write!(f, "[{}]({})", label, target),
+            InlineFragment::Link(target, label_fragments) => {
+                write!(f, "[")?;
+                write_concatenated(f, label_fragments)?;
+                write!(f, "]({})", target)
+            },
             InlineFragment::MentionChannel(tgt)
                 => write!(f, "#{}", tgt),
             InlineFragment::MentionUser(tgt)
@@ -178,12 +203,12 @@ pub fn collect_inline_urls<'a, I: Iterator<Item = &'a InlineFragment>>(fragments
                 let mut inline_urls = collect_inline_urls(ilfs.iter());
                 urls.append(&mut inline_urls);
             },
-            InlineFragment::Link(url, label_ilf) => {
+            InlineFragment::Link(url, label_ilfs) => {
                 // this is where the magic happens
                 urls.push(url.clone());
 
                 // you never know
-                let mut inline_urls = collect_inline_urls(std::iter::once(label_ilf.as_ref()));
+                let mut inline_urls = collect_inline_urls(label_ilfs.iter());
                 urls.append(&mut inline_urls);
             },
             InlineFragment::MentionChannel(_channel) => {},

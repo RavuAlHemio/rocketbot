@@ -38,9 +38,12 @@ fn parse_inline_fragment(inline: &serde_json::Value) -> Result<InlineFragment, M
                 .ok_or(MessageParsingError::LinkValuePlainTextNotString)?
                 .to_owned();
 
-            let label = parse_inline_fragment(&inline["value"]["label"])?;
+            let mut label_fragments: Vec<InlineFragment> = Vec::new();
+            for fragment in inline["value"]["label"].members().ok_or(MessageParsingError::InnerValueNotList)? {
+                label_fragments.push(parse_inline_fragment(fragment)?);
+            }
 
-            Ok(InlineFragment::Link(url, Box::new(label)))
+            Ok(InlineFragment::Link(url, label_fragments))
         },
         "MENTION_CHANNEL"|"MENTION_USER"|"EMOJI"|"INLINE_CODE" => {
             if inline_type == "EMOJI" && inline["unicode"].is_string() {
@@ -264,10 +267,12 @@ mod tests {
                                 "type": "PLAIN_TEXT",
                                 "value": "//english.stackexchange.com..."
                             },
-                            "label": {
-                                "type": "PLAIN_TEXT",
-                                "value": "english.stackexchange.com..."
-                            }
+                            "label": [
+                                {
+                                    "type": "PLAIN_TEXT",
+                                    "value": "english.stackexchange.com..."
+                                }
+                            ]
                         }
                     }
                 ]
@@ -292,7 +297,8 @@ mod tests {
             _ => panic!("not link"),
         };
         assert_eq!(url, "//english.stackexchange.com...");
-        let link_text = match link_body.as_ref() {
+        assert_eq!(link_body.len(), 1);
+        let link_text = match &link_body[0] {
             InlineFragment::PlainText(plain) => plain,
             _ => panic!("link body not plain"),
         };
@@ -356,5 +362,67 @@ mod tests {
         };
         assert_eq!(em.chars().count(), 1);
         assert_eq!(em.chars().nth(0).unwrap() as u32, 0x1F346);
+    }
+
+    #[test]
+    fn parse_embedded_link() {
+        let msg = json!([
+            {
+                "type": "PARAGRAPH",
+                "value": [
+                    {
+                        "type": "PLAIN_TEXT",
+                        "value": "!fixurls ",
+                    },
+                    {
+                        "type": "LINK",
+                        "value": {
+                            "label": [
+                                {
+                                    "type": "PLAIN_TEXT",
+                                    "value": "https://xover.mud.at/~tramway/stvkr-a-wiki/index.php?title=Type_500_(WLB",
+                                },
+                            ],
+                            "src": {
+                                "type": "PLAIN_TEXT",
+                                "value": "https://xover.mud.at/~tramway/stvkr-a-wiki/index.php?title=Type_500_(WLB",
+                            },
+                        }
+                    },
+                    {
+                        "type": "PLAIN_TEXT",
+                        "value": ")&action=history",
+                    },
+                ],
+            },
+        ]);
+        let mut parsed = parse_message(&msg).unwrap();
+        assert_eq!(parsed.len(), 1);
+        let mut fragments = match parsed.remove(0) {
+            MessageFragment::Paragraph(frags) => frags,
+            _ => panic!("not a paragraph"),
+        };
+        assert_eq!(fragments.len(), 3);
+        let plain_prefix = match fragments.remove(0) {
+            InlineFragment::PlainText(pt) => pt,
+            _ => panic!("prefix not plain text"),
+        };
+        assert_eq!(plain_prefix, "!fixurls ");
+        let (link_target, mut link_label) = match fragments.remove(0) {
+            InlineFragment::Link(target, label) => (target, label),
+            _ => panic!("not a link"),
+        };
+        assert_eq!(link_target, "https://xover.mud.at/~tramway/stvkr-a-wiki/index.php?title=Type_500_(WLB");
+        assert_eq!(link_label.len(), 1);
+        let link_label_plain = match link_label.remove(0) {
+            InlineFragment::PlainText(lbl) => lbl,
+            _ => panic!("link label not plain"),
+        };
+        assert_eq!(link_label_plain, "https://xover.mud.at/~tramway/stvkr-a-wiki/index.php?title=Type_500_(WLB");
+        let suffix = match fragments.remove(0) {
+            InlineFragment::PlainText(pt) => pt,
+            _ => panic!("suffix not plain text"),
+        };
+        assert_eq!(suffix, ")&action=history");
     }
 }
