@@ -1,4 +1,5 @@
 use std::collections::{HashMap, HashSet};
+use std::fmt::Write;
 use std::sync::{Arc, Weak};
 
 use async_trait::async_trait;
@@ -13,10 +14,19 @@ use rocketbot_interface::sync::{Mutex, RwLock};
 use serde_json;
 
 
+#[derive(Clone, Debug, Eq, Hash, Ord, PartialEq, PartialOrd)]
+struct MadLibsCommand {
+    /// Argument count except rest.
+    arg_count: usize,
+
+    response_templates: Vec<String>,
+}
+
 #[derive(Clone, Debug, Eq, PartialEq)]
 struct Config {
     commands_responses: HashMap<String, Vec<String>>,
     nicknamable_commands_responses: HashMap<String, Vec<String>>,
+    mad_libs_commands: HashMap<String, MadLibsCommand>,
 }
 
 pub struct TextCommandsPlugin {
@@ -73,6 +83,25 @@ impl TextCommandsPlugin {
         interface.register_channel_command(&command).await;
     }
 
+    async fn register_mad_libs_command<I: RocketBotInterface + ?Sized>(interface: &I, name: &str, cmd: &MadLibsCommand) {
+        let mut usage = format!("{{cpfx}}{}", name);
+        for i in 0..cmd.arg_count {
+            write!(usage, " ARG{}", i).unwrap();
+        }
+        write!(usage, " TEXT").unwrap();
+        let description = "Responds to the given text command, filling predefined placeholders.";
+
+        let command = CommandDefinitionBuilder::new(
+            name,
+            "text_commands",
+            usage,
+            description,
+        )
+            .arg_count(cmd.arg_count)
+            .build();
+        interface.register_channel_command(&command).await;
+    }
+
     fn try_get_config(config: serde_json::Value) -> Result<Config, &'static str> {
         let commands_responses = Self::collect_commands(
             &config["commands_responses"],
@@ -81,9 +110,33 @@ impl TextCommandsPlugin {
             &config["nicknamable_commands_responses"],
         )?;
 
+        let mut mad_libs_commands = HashMap::new();
+        for (cmd_name, cmd_def) in config["mad_libs_commands"].entries_or_empty() {
+            let arg_count = match cmd_def["arg_count"].as_usize() {
+                Some(ac) => ac,
+                None => continue,
+            };
+            let mut response_templates = Vec::new();
+            for rt in cmd_def["response_templates"].members_or_empty() {
+                if let Some(s) = rt.as_str() {
+                    response_templates.push(s.to_owned());
+                }
+            }
+            if response_templates.len() == 0 {
+                continue;
+            }
+
+            let command = MadLibsCommand {
+                arg_count,
+                response_templates,
+            };
+            mad_libs_commands.insert(cmd_name.clone(), command);
+        }
+
         Ok(Config {
             commands_responses,
             nicknamable_commands_responses,
+            mad_libs_commands,
         })
     }
 }
@@ -103,6 +156,9 @@ impl RocketBotPlugin for TextCommandsPlugin {
         }
         for command in config_object.nicknamable_commands_responses.keys() {
             Self::register_text_command(Arc::clone(&my_interface), command, true).await;
+        }
+        for (cmd_name, cmd_def) in config_object.mad_libs_commands.iter() {
+            Self::register_mad_libs_command(&*my_interface, cmd_name, cmd_def).await;
         }
 
         let config_lock = RwLock::new(
@@ -191,6 +247,28 @@ impl RocketBotPlugin for TextCommandsPlugin {
                 &channel_message.channel.name,
                 &message_with_target,
             ).await;
+        } else if let Some(mad_libs_def) = config_guard.mad_libs_commands.get(&command.name) {
+            if mad_libs_def.response_templates.len() == 0 {
+                return;
+            }
+
+            let mut outgoing = {
+                let mut rng_guard = self.rng.lock().await;
+                let index = rng_guard.gen_range(0..mad_libs_def.response_templates.len());
+                mad_libs_def.response_templates[index].clone()
+            };
+
+            for (i, replacement) in command.args.iter().enumerate() {
+                let placeholder = format!("{}ARG{}{}", "{{", i, "}}");
+                outgoing = outgoing.replace(&placeholder, replacement);
+            }
+            outgoing = outgoing.replace("{{TEXT}}", &command.rest);
+
+            send_channel_message!(
+                interface,
+                &channel_message.channel.name,
+                &outgoing,
+            ).await;
         }
     }
 
@@ -200,6 +278,8 @@ impl RocketBotPlugin for TextCommandsPlugin {
             Some(include_str!("../help/textcommand.md").to_owned())
         } else if config_guard.nicknamable_commands_responses.contains_key(command_name) {
             Some(include_str!("../help/nicktextcommand.md").to_owned())
+        } else if config_guard.mad_libs_commands.contains_key(command_name) {
+            Some(include_str!("../help/madlibscommand.md").to_owned())
         } else {
             None
         }
@@ -225,6 +305,9 @@ impl RocketBotPlugin for TextCommandsPlugin {
                 for command_name in config_guard.nicknamable_commands_responses.keys() {
                     interface.unregister_channel_command(command_name).await;
                 }
+                for command_name in config_guard.mad_libs_commands.keys() {
+                    interface.unregister_channel_command(command_name).await;
+                }
 
                 // replace config
                 *config_guard = c;
@@ -235,6 +318,9 @@ impl RocketBotPlugin for TextCommandsPlugin {
                 }
                 for command_name in config_guard.nicknamable_commands_responses.keys() {
                     Self::register_text_command(Arc::clone(&interface), command_name, true).await;
+                }
+                for (cmd_name, cmd_def) in config_guard.mad_libs_commands.iter() {
+                    Self::register_mad_libs_command(&*interface, cmd_name, cmd_def).await;
                 }
 
                 true
