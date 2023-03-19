@@ -17,6 +17,8 @@ use async_trait::async_trait;
 use chrono::{DateTime, TimeZone, Utc};
 use log::error;
 use num_bigint::BigUint;
+use once_cell::sync::Lazy;
+use regex::Regex;
 use rocketbot_interface::{JsonValueExtensions, ResultExtensions, send_channel_message};
 use rocketbot_interface::commands::{CommandBehaviors, CommandDefinitionBuilder, CommandInstance};
 use rocketbot_interface::interfaces::{RocketBotInterface, RocketBotPlugin};
@@ -30,6 +32,19 @@ use crate::factor::{PrimeCache, PrimeFactors};
 use crate::grimoire::{get_canonical_constants, get_canonical_functions};
 use crate::parsing::parse_full_expression;
 use crate::units::{StoredUnitDatabase, UnitDatabase};
+
+
+static FRACTION_RE: Lazy<Regex> = Lazy::new(|| Regex::new(concat!(
+    "^",
+    "\\s*",
+    "(?P<numer>[0-9_]+)",
+    "\\s*",
+    "/",
+    "\\s*",
+    "(?P<denom>[0-9_]+)",
+    "\\s*",
+    "$",
+)).expect("failed to compile fraction regex"));
 
 
 #[derive(Clone, Debug)]
@@ -255,6 +270,65 @@ impl CalcPlugin {
         ).await;
     }
 
+    async fn handle_redfrac(&self, channel_message: &ChannelMessage, command: &CommandInstance) {
+        let interface = match self.interface.upgrade() {
+            None => return,
+            Some(i) => i,
+        };
+
+        let caps = match FRACTION_RE.captures(&command.rest) {
+            Some(c) => c,
+            None => {
+                send_channel_message!(
+                    interface,
+                    &channel_message.channel.name,
+                    "Failed to parse fraction.",
+                ).await;
+                return;
+            },
+        };
+
+        let numerator: BigUint = caps
+            .name("numer").expect("missing numerator capture")
+            .as_str()
+            .replace("_", "")
+            .parse().expect("failed to parse numerator");
+        let denominator: BigUint = caps
+            .name("denom").expect("missing denominator capture")
+            .as_str()
+            .replace("_", "")
+            .parse().expect("failed to parse denominator");
+
+        let zero = BigUint::from(0u8);
+
+        if denominator == zero {
+            send_channel_message!(
+                interface,
+                &channel_message.channel.name,
+                "lol.",
+            ).await;
+            return;
+        }
+
+        // Euclidean
+        let mut a = numerator.clone();
+        let mut b = denominator.clone();
+        while b > zero {
+            let a_mod_b = a % &b;
+            a = b;
+            b = a_mod_b;
+        }
+
+        let new_numerator = numerator / &a;
+        let new_denominator = denominator / &a;
+
+        send_channel_message!(
+            interface,
+            &channel_message.channel.name,
+            &format!("{}/{}", new_numerator, new_denominator),
+        ).await;
+    }
+
     fn try_get_config(config: serde_json::Value) -> Result<Config, &'static str> {
         let timeout_seconds = config["timeout_seconds"].as_f64()
             .ok_or("timeout_seconds missing or not representable as f64")?;
@@ -351,6 +425,15 @@ impl RocketBotPlugin for CalcPlugin {
                 .add_flag("c").add_flag("code")
                 .build()
         ).await;
+        my_interface.register_channel_command(
+            &CommandDefinitionBuilder::new(
+                "redfrac",
+                "calc",
+                "{cpfx}redfrac NUMERATOR/DENOMINATOR",
+                "Reduces the given fraction.",
+            )
+                .build()
+        ).await;
 
         CalcPlugin {
             interface,
@@ -373,6 +456,8 @@ impl RocketBotPlugin for CalcPlugin {
             self.handle_calcfunc(channel_message, command).await
         } else if command.name == "factor" {
             self.handle_factor(channel_message, command).await
+        } else if command.name == "redfrac" {
+            self.handle_redfrac(channel_message, command).await
         }
     }
 
@@ -385,6 +470,8 @@ impl RocketBotPlugin for CalcPlugin {
             Some(include_str!("../help/calcfunc.md").to_owned())
         } else if command_name == "factor" {
             Some(include_str!("../help/factor.md").to_owned())
+        } else if command_name == "redfrac" {
+            Some(include_str!("../help/redfrac.md").to_owned())
         } else {
             None
         }
