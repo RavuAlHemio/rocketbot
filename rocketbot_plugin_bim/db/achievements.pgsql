@@ -1581,6 +1581,16 @@ AS $$
     -- DESCR: Be the last rider in at least 1000 vehicles at the same time.
     -- ORDER: 12,3 last rider
     SELECT 108, bim.current_last_rider_count_reached(rider, 1000)
+
+    UNION ALL
+
+    -- NAME: Beverly Hills
+    -- DESCR: Ride a vehicle (of any company) with the number 90210.
+    -- ORDER: 1,17 special vehicle numbers
+    SELECT 109, MIN(rav109."timestamp")
+    FROM bim.rides_and_numeric_vehicles rav109
+    WHERE rav109.rider_username = rider
+    AND rav109.vehicle_number = 90210
 $$;
 
 CREATE MATERIALIZED VIEW bim.rider_achievements AS
