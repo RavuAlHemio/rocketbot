@@ -5,6 +5,7 @@ use std::io::Cursor;
 use std::sync::Weak;
 
 use async_trait::async_trait;
+use chrono::Local;
 use log::error;
 use regex::Regex;
 use rocketbot_interface::interfaces::{RocketBotInterface, RocketBotPlugin};
@@ -46,6 +47,14 @@ impl RocketBotPlugin for DegreesPlugin {
             None => return,
             Some(b) => b,
         };
+
+        // don't trigger if Serious Mode is active
+        let behavior_flags = serde_json::Value::Object(interface.obtain_behavior_flags().await);
+        if let Some(serious_mode_until) = behavior_flags["srs"][&channel_message.channel.id].as_i64() {
+            if serious_mode_until > Local::now().timestamp() {
+                return;
+            }
+        }
 
         let (cap_names, caps) = {
             let matcher_regex_guard = self.matcher_regex
