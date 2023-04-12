@@ -260,6 +260,11 @@ impl StoredUnitDatabase {
     }
 }
 
+/// Expands a single power of the given unit in the given number.
+///
+/// For example, if `ft` is defined in terms of `in` and `in` is defined in terms of `m`, calling
+/// the equivalent of `expand_number_unit("1#ft2", "ft", &database)` will return the equivalent of
+/// `12#ft#in`.
 pub(crate) fn expand_number_unit(num: &Number, unit_letters: &str, database: &UnitDatabase) -> Number {
     let unit = match database.get_derived_unit(unit_letters) {
         Some(u) => u,
@@ -720,5 +725,36 @@ mod tests {
         assert_eq!(2, km_hx1.units.len());
         assert_eq!(Some(&BigInt::from(1)), km_hx1.units.get("km"));
         assert_eq!(Some(&BigInt::from(-1)), km_hx1.units.get("h"));
+    }
+
+    #[test]
+    fn test_expand_number_unit() {
+        let database = make_database();
+
+        let mut ft2_units = NumberUnits::new();
+        ft2_units.insert("ft".to_owned(), BigInt::from(2));
+        let ft2 = Number::new(NumberValue::Float(1.0), ft2_units);
+
+        let in_ft = expand_number_unit(&ft2, "ft", &database);
+        assert_eq!(in_ft.value, NumberValue::Float(12.0));
+        assert_eq!(in_ft.units.len(), 2);
+        assert_eq!(in_ft.units.get("ft"), Some(&BigInt::from(1)));
+        assert_eq!(in_ft.units.get("in"), Some(&BigInt::from(1)));
+
+        let in2 = expand_number_unit(&in_ft, "ft", &database);
+        assert_eq!(in2.value, NumberValue::Float(144.0));
+        assert_eq!(in2.units.len(), 1);
+        assert_eq!(in2.units.get("in"), Some(&BigInt::from(2)));
+
+        let in_m = expand_number_unit(&in2, "in", &database);
+        assert_eq!(in_m.value, NumberValue::Float(3.6576));
+        assert_eq!(in_m.units.len(), 2);
+        assert_eq!(in_m.units.get("in"), Some(&BigInt::from(1)));
+        assert_eq!(in_m.units.get("m"), Some(&BigInt::from(1)));
+
+        let m2 = expand_number_unit(&in_m, "in", &database);
+        assert_eq!(m2.value, NumberValue::Float(0.09290303999999999));
+        assert_eq!(m2.units.len(), 1);
+        assert_eq!(m2.units.get("m"), Some(&BigInt::from(2)));
     }
 }
