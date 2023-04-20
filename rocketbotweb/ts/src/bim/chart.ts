@@ -1,4 +1,7 @@
 import { Chart, ChartData, ChartDataset, LineControllerChartOptions } from 'chart.js/auto';
+import { SankeyController, Flow } from 'chartjs-chart-sankey';
+
+Chart.register(SankeyController, Flow);
 
 interface ByDayOfWeekData {
     riders: string[];
@@ -9,6 +12,12 @@ interface ByRideCountGroupData {
     riders: string[];
     rideCountGroupNames: string[];
     riderToGroupToCount: { [rider: string]: number[] };
+}
+
+interface LatestRiderSankeyData {
+    from: string;
+    to: string;
+    count: number;
 }
 
 export module RocketBotWeb.Bim.Charting {
@@ -87,11 +96,46 @@ export module RocketBotWeb.Bim.Charting {
         }
     }
 
+    function doSetUpLatestRiderCount() {
+        const canvas = <HTMLCanvasElement|null>document.getElementById("sankey-canvas");
+        if (canvas === null) {
+            return;
+        }
+
+        const dataString = document.getElementById("sankey-data")?.textContent;
+        if (dataString === null || dataString === undefined) {
+            return;
+        }
+        const data: LatestRiderSankeyData[] = JSON.parse(dataString);
+        let labels = {};
+        for (let datum of data) {
+            // labels: strip leading Enter and Escape symbols from from and to values
+            labels[datum.from] = datum.from.substring(1);
+            labels[datum.to] = datum.to.substring(1);
+        }
+
+        const chart = new Chart(canvas, {
+            type: "sankey",
+            data: {
+                datasets: [
+                    {
+                        data: data,
+                        labels: labels,
+                    },
+                ],
+            },
+        });
+    }
+
     export function setUpByDayOfWeek() {
         document.addEventListener("DOMContentLoaded", doSetUpByDayOfWeek);
     }
 
     export function setUpByRideCountGroup() {
         document.addEventListener("DOMContentLoaded", doSetUpByRideCountGroup);
+    }
+
+    export function setUpLatestRiderCount() {
+        document.addEventListener("DOMContentLoaded", doSetUpLatestRiderCount);
     }
 }

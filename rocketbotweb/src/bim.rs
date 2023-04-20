@@ -519,6 +519,20 @@ impl ChartColor {
 #[template(path = "bimlatestridercount.html")]
 struct BimLatestRiderCountTemplate {
     pub riders: Vec<GraphRiderPart>,
+    pub from_to_count: BTreeMap<(String, String), u64>,
+}
+impl BimLatestRiderCountTemplate {
+    fn sankey_json_data(&self) -> String {
+        let json_object: Vec<serde_json::Value> = self.from_to_count.iter()
+            .map(|((f, t), count)| serde_json::json!({
+                "from": format!("\u{238B}{}", f),
+                "to": format!("\u{2386}{}", t),
+                "flow": count,
+            }))
+            .collect();
+        serde_json::to_string(&json_object)
+            .expect("failed to serialize Sankey JSON?!")
+    }
 }
 
 #[derive(Clone, Debug, Default, Eq, Hash, Ord, PartialEq, PartialOrd, Serialize)]
@@ -2586,8 +2600,46 @@ pub(crate) async fn handle_bim_latest_rider_count_over_time(request: &Request<Bo
         });
     }
 
+    let rides_res = db_conn.query(
+        "
+            SELECT
+                rav.company, rav.vehicle_number, rav.rider_username
+            FROM bim.rides_and_vehicles rav
+            ORDER BY
+                rav.\"timestamp\", rav.id
+        ",
+        &[],
+    ).await;
+    let ride_rows = match rides_res {
+        Ok(r) => r,
+        Err(e) => {
+            error!("failed to query riders: {}", e);
+            return return_500();
+        },
+    };
+
+    let mut comp_veh_to_last_rider: HashMap<(String, String), String> = HashMap::new();
+    let mut from_to_count: BTreeMap<(String, String), u64> = BTreeMap::new();
+    for ride_row in ride_rows {
+        let company: String = ride_row.get(0);
+        let vehicle_number: String = ride_row.get(1);
+        let rider_username: String = ride_row.get(2);
+
+        if let Some(previous_rider) = comp_veh_to_last_rider.get(&(company.clone(), vehicle_number.clone())) {
+            if previous_rider != &rider_username {
+                let count_ref = from_to_count
+                    .entry((previous_rider.clone(), rider_username.clone()))
+                    .or_insert(0);
+                *count_ref += 1;
+            }
+        }
+
+        comp_veh_to_last_rider.insert((company, vehicle_number), rider_username);
+    }
+
     let template = BimLatestRiderCountTemplate {
         riders,
+        from_to_count,
     };
     match render_response(&template, &query_pairs, 200, vec![]).await {
         Some(r) => Ok(r),

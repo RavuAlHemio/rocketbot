@@ -2,6 +2,11 @@
 
 {% block title %}Public Transport Latest Rider Vehicle Count over Time{% endblock %}
 
+{% block scripts %}
+<script src="static/rocketbotweb.js?{{ "{{VERSION}}" }}"></script>
+<script>RocketBotWeb.Bim.Charting.setUpLatestRiderCount();</script>
+{% endblock %}
+
 {% block content %}
 <main class="bim-details">
 
@@ -21,6 +26,11 @@
         {% endfor %}
     </ul>
 </p>
+
+<p>
+    <canvas id="sankey-canvas"></canvas>
+</p>
+<script type="application/json" id="sankey-data">{{ self.sankey_json_data()|safe }}</script>
 
 </main>
 {% endblock %}
