@@ -398,6 +398,26 @@ pub(crate) fn coerce_to_unit(
     ))
 }
 
+/// Coerces the number to base units.
+///
+/// Base units are those declared as base units in the unit database.
+pub(crate) fn coerce_to_base_units(
+    number: &Number,
+    database: &UnitDatabase,
+) -> Number {
+    let mut result = number.clone();
+    loop {
+        let current_units = result.units.clone();
+        for unit_letters in current_units.keys() {
+            result = expand_number_unit(&result, unit_letters, database);
+        }
+        if result.units == current_units {
+            break;
+        }
+    }
+    result
+}
+
 mod number_units_serde {
     use super::NumberUnits;
     use std::collections::BTreeMap;

@@ -8,7 +8,7 @@ use crate::ast::{
     SimplificationState,
 };
 use crate::numbers::{Number, NumberValue};
-use crate::units::{coerce_to_unit, NumberUnits};
+use crate::units::{coerce_to_base_units, coerce_to_unit, NumberUnits};
 
 
 pub const GOLDEN_RATIO: f64 = 1.6180339887498948482045868344;
@@ -55,6 +55,7 @@ pub(crate) fn get_canonical_functions() -> HashMap<String, BuiltInFunction> {
 
     prepared.insert("coerce", Box::new(coerce));
     prepared.insert("setunit", Box::new(set_unit));
+    prepared.insert("baseunits", Box::new(to_base_units));
     prepared.insert("c2f", f64_f64("c2f", |f| f * 9.0/5.0 + 32.0));
     prepared.insert("f2c", f64_f64("f2c", |f| (f - 32.0) * 5.0/9.0));
 
@@ -204,4 +205,20 @@ fn set_unit(_state: &SimplificationState, operands: &[AstNodeAtLocation]) -> Bui
         left_number.value.clone(),
         right_number.units.clone(),
     )))
+}
+
+/// Takes a single operand and returns its value converted to base units.
+fn to_base_units(state: &SimplificationState, operands: &[AstNodeAtLocation]) -> BuiltInFuncResult {
+    if operands.len() != 1 {
+        return Err(SimplificationError::IncorrectArgCount("baseunits".to_owned(), 1, operands.len()));
+    }
+
+    let number = match &operands[0].node {
+        AstNode::Number(n) => n,
+        other => return Err(SimplificationError::UnexpectedOperandType(format!("{:?}", other))),
+    };
+
+    let result = coerce_to_base_units(number, &state.units);
+
+    Ok(AstNode::Number(result))
 }
