@@ -63,6 +63,8 @@ pub(crate) async fn load_plugins(iface: Weak<dyn RocketBotInterface>) -> Vec<Plu
                 Box::new(rocketbot_plugin_grammargen::GrammarGenPlugin::new(iface_weak, inner_config).await)
             } else if plugin_config.name == "group_pressure" {
                 Box::new(rocketbot_plugin_group_pressure::GroupPressurePlugin::new(iface_weak, inner_config).await)
+            } else if plugin_config.name == "hackernews" {
+                Box::new(rocketbot_plugin_hackernews::HackernewsPlugin::new(iface_weak, inner_config).await)
             } else if plugin_config.name == "help" {
                 Box::new(rocketbot_plugin_help::HelpPlugin::new(iface_weak, inner_config).await)
             } else if plugin_config.name == "link_react" {

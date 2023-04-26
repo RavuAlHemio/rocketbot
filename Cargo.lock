@@ -2062,6 +2062,7 @@ dependencies = [
  "rocketbot_plugin_fortune",
  "rocketbot_plugin_grammargen",
  "rocketbot_plugin_group_pressure",
+ "rocketbot_plugin_hackernews",
  "rocketbot_plugin_help",
  "rocketbot_plugin_link_react",
  "rocketbot_plugin_logger",
@@ -2429,6 +2430,20 @@ dependencies = [
  "async-trait",
  "chrono",
  "log",
+ "rocketbot_interface",
+ "serde_json",
+]
+
+[[package]]
+name = "rocketbot_plugin_hackernews"
+version = "0.1.0"
+dependencies = [
+ "async-trait",
+ "chrono",
+ "log",
+ "md-5",
+ "regex",
+ "reqwest",
  "rocketbot_interface",
  "serde_json",
 ]

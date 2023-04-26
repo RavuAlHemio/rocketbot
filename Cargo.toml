@@ -24,6 +24,7 @@ members = [
     "rocketbot_plugin_fortune",
     "rocketbot_plugin_grammargen",
     "rocketbot_plugin_group_pressure",
+    "rocketbot_plugin_hackernews",
     "rocketbot_plugin_help",
     "rocketbot_plugin_link_react",
     "rocketbot_plugin_logger",
