@@ -42,7 +42,7 @@ impl HackernewsPlugin {
             },
         };
 
-        let n_gate_url: String = match &config["hacker_news_regex"] {
+        let n_gate_url: String = match &config["n_gate_url"] {
             serde_json::Value::String(s) => s.clone(),
             serde_json::Value::Null => "http://n-gate.com/".to_owned(),
             _ => {
