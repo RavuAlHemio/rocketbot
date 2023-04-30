@@ -50,7 +50,6 @@ use crate::string_utils::{Token, tokenize};
 static LOGIN_MESSAGE_ID: &'static str = "login4242";
 static GET_SETTINGS_MESSAGE_ID: &'static str = "settings4242";
 static GET_ROOMS_MESSAGE_ID: &'static str = "rooms4242";
-static GET_CUSTOM_EMOJI_MESSAGE_ID: &'static str = "customemoji4242";
 static SUBSCRIBE_ROOMS_MESSAGE_ID: &'static str = "roomchanges4242";
 static SEND_MESSAGE_MESSAGE_ID: &'static str = "sendmessage4242";
 static ID_ALPHABET: &'static str = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789";
@@ -1687,14 +1686,18 @@ async fn handle_received(body: &serde_json::Value, mut state: &mut ConnectionSta
             .expect("failed to enqueue room list message");
 
         // get the list of custom emoji
-        let custom_emoji_list_body = serde_json::json!({
-            "msg": "method",
-            "method": "listEmojiCustom",
-            "id": GET_CUSTOM_EMOJI_MESSAGE_ID,
-            "params": [],
-        });
-        state.shared_state.outgoing_sender.send(custom_emoji_list_body)
-            .expect("failed to enqueue custom emoji list message");
+        // (via the REST API, since listEmojiCustom in the realtime API is deprecated)
+        let mut custom_emoji = obtain_custom_emoji(&state.shared_state).await;
+
+        {
+            let mut emoji_guard = state.shared_state.emoji
+                .write().await;
+            emoji_guard.append(&mut custom_emoji);
+
+            for emoji in emoji_guard.iter() {
+                debug!("emoji: {:?}", emoji);
+            }
+        }
 
         // set our status (via the REST API, since this is apparently broken with the realtime API)
         let no_query_options: [(&str, Option<&str>); 0] = [];
@@ -1810,34 +1813,6 @@ async fn handle_received(body: &serde_json::Value, mut state: &mut ConnectionSta
             };
 
             channel_left(&mut state, room_id).await;
-        }
-    } else if body["msg"] == "result" && body["id"] == GET_CUSTOM_EMOJI_MESSAGE_ID {
-        let mut custom_emoji = Vec::new();
-        for (i, custom_emoji_json) in body["result"].members_or_empty().enumerate() {
-            let name = match custom_emoji_json["name"].as_str() {
-                Some(n) => n.to_owned(),
-                None => {
-                    error!("custom emoji with index {}: name is not a string", i);
-                    continue;
-                },
-            };
-            let emoji = Emoji::new(
-                "custom".to_owned(),
-                i,
-                name,
-                false, // assume custom emoji are generic
-            );
-            custom_emoji.push(emoji);
-        }
-
-        {
-            let mut emoji_guard = state.shared_state.emoji
-                .write().await;
-            emoji_guard.append(&mut custom_emoji);
-
-            for emoji in emoji_guard.iter() {
-                debug!("emoji: {:?}", emoji);
-            }
         }
     } else if body["msg"] == "changed" && body["collection"] == "stream-room-messages" {
         // we got a message! (probably)
@@ -2776,6 +2751,44 @@ async fn obtain_builtin_emoji(state: &ConnectionState) -> Vec<Emoji> {
     }
 
     emoji
+}
+
+async fn obtain_custom_emoji(shared_state: &SharedConnectionState) -> Vec<Emoji> {
+    let no_query_options: [(&str, Option<&str>); 0] = [];
+    let mut custom_emoji = Vec::new();
+    let mut offset: usize = 0;
+    loop {
+        let custom_emoji_response = get_api_json(
+            shared_state,
+            &format!("api/v1/emoji-custom.all?offset={}", offset),
+            no_query_options,
+        )
+            .await.expect("failed to obtain custom emoji");
+        let mut obtained_count: usize = 0;
+        for (i, custom_emoji_json) in custom_emoji_response["emojis"].members_or_empty().enumerate() {
+            obtained_count += 1;
+            let name = match custom_emoji_json["name"].as_str() {
+                Some(n) => n.to_owned(),
+                None => {
+                    error!("custom emoji with index {}: name is not a string", i);
+                    continue;
+                },
+            };
+            let emoji = Emoji::new(
+                "custom".to_owned(),
+                i,
+                name,
+                false, // assume custom emoji are generic
+            );
+            custom_emoji.push(emoji);
+        }
+
+        if obtained_count == 0 {
+            break;
+        }
+        offset += obtained_count;
+    }
+    custom_emoji
 }
 
 async fn do_config_reload(state: &mut ConnectionState) {
