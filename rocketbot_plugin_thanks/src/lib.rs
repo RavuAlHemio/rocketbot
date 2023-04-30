@@ -456,7 +456,7 @@ impl RocketBotPlugin for ThanksPlugin {
         let thanks_command = CommandDefinitionBuilder::new(
             "thanks",
             "thanks",
-            "{cpfx}thanks|{cpfx}thank|{cpfx}thx USERNAME [REASON]",
+            "{cpfx}{cmd} USERNAME [REASON]",
             "Thanks a user.",
         )
             .arg_count(1)
