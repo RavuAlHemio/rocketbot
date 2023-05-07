@@ -37,6 +37,7 @@ jobs:
             target/debug/examples/obtain_bim_mw
             target/debug/examples/obtain_bim_sa
             target/debug/examples/obtain_bim_sl
+            target/debug/examples/obtain_bim_xlsx
             target/debug/examples/fetch_ops_mw
             rocketbot_plugin_calc/data/unitdb.toml
             rocketbot_plugin_grammargen/grammars/*.grammar
@@ -81,6 +82,7 @@ jobs:
             target/release/examples/obtain_bim_mw
             target/release/examples/obtain_bim_sa
             target/release/examples/obtain_bim_sl
+            target/release/examples/obtain_bim_xlsx
             target/release/examples/fetch_ops_mw
             rocketbot_plugin_calc/data/unitdb.toml
             rocketbot_plugin_grammargen/grammars/*.grammar
@@ -134,6 +136,7 @@ jobs:
             target/release/examples/obtain_bim_mw
             target/release/examples/obtain_bim_sa
             target/release/examples/obtain_bim_sl
+            target/release/examples/obtain_bim_xlsx
             target/release/examples/fetch_ops_mw
             rocketbot_plugin_calc/data/unitdb.toml
             rocketbot_plugin_grammargen/grammars/*.grammar

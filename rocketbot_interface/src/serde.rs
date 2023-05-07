@@ -38,3 +38,32 @@ pub mod serde_opt_regex {
             .serialize(serializer)
     }
 }
+
+pub mod serde_vec_regex {
+    use regex::Regex;
+    use serde::{Deserialize, Deserializer, Serialize, Serializer};
+    use serde::de::Error as DeError;
+
+    pub fn deserialize<'de, D: Deserializer<'de>>(deserializer: D) -> Result<Vec<Regex>, D::Error> {
+        let strings: Vec<String> = Vec::deserialize(deserializer)?;
+        let mut ret = Vec::with_capacity(strings.len());
+        for string in strings {
+            match Regex::new(&string) {
+                Ok(r) => {
+                    ret.push(r);
+                },
+                Err(e) => return Err(DeError::custom(e)),
+            }
+        }
+        Ok(ret)
+    }
+
+    pub fn serialize<S: Serializer>(regex: &Vec<Regex>, serializer: S) -> Result<S::Ok, S::Error> {
+        let strings: Vec<&str> = regex
+            .iter()
+            .map(|r| r.as_str())
+            .collect();
+        strings
+            .serialize(serializer)
+    }
+}
