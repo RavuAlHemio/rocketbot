@@ -6,7 +6,16 @@
 <h1>Public Transport Coverage</h1>
 
 <form method="get">
-  <p><label for="bimcoverage=rider">Pick a rider!</label></p>
+  <p><label for="bimcoverage-country">Pick a country!</label></p>
+  <p>
+    <select id="bimcoverage-country" name="country" required="required">
+      {% for country in countries %}
+        <option value="{{ country|escape }}">{{ country|escape }}</option>
+      {% endfor %}
+    </select>
+  </p>
+
+  <p><label for="bimcoverage-rider">Pick a rider!</label></p>
   <p>
     <select id="bimcoverage-rider" name="rider" required="required">
       <option value="!ALL" selected="selected">all</option>

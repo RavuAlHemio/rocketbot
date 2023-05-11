@@ -307,6 +307,7 @@ impl CoverageVehiclePart {
 #[template(path = "bimcoverage-pickrider.html")]
 struct BimCoveragePickRiderTemplate {
     pub riders: BTreeSet<String>,
+    pub countries: BTreeSet<String>,
 }
 
 #[derive(Clone, Debug, Eq, PartialEq, Serialize, Template)]
@@ -596,7 +597,7 @@ fn cow_empty_to_none<'a, 'b>(val: Option<&'a Cow<'b, str>>) -> Option<&'a Cow<'b
 }
 
 
-async fn obtain_company_to_bim_database() -> Option<BTreeMap<String, Option<BTreeMap<VehicleNumber, serde_json::Value>>>> {
+async fn obtain_bim_plugin_config() -> Option<serde_json::Value> {
     let bot_config = match get_bot_config().await {
         Some(bc) => bc,
         None => return None,
@@ -623,14 +624,29 @@ async fn obtain_company_to_bim_database() -> Option<BTreeMap<String, Option<BTre
             return None;
         },
     };
+    Some(bim_plugin.clone())
+}
+
+
+async fn obtain_company_to_definition() -> Option<BTreeMap<String, serde_json::Value>> {
+    let bim_plugin = obtain_bim_plugin_config().await?;
 
     let company_to_definition = match bim_plugin["config"]["company_to_definition"].as_object() {
         Some(ctd) => ctd,
         None => {
-            warn!("no company_to_definition value found in bot config");
+            warn!("no company_to_definition object found in bim plugin config");
             return None;
         },
     };
+    let company_to_definition_set = company_to_definition
+        .iter()
+        .map(|(k, v)| (k.clone(), v.clone()))
+        .collect();
+    Some(company_to_definition_set)
+}
+
+
+fn obtain_company_to_bim_database(company_to_definition: &BTreeMap<String, serde_json::Value>) -> Option<BTreeMap<String, Option<BTreeMap<VehicleNumber, serde_json::Value>>>> {
     let mut company_to_database = BTreeMap::new();
     for (company, definition) in company_to_definition.iter() {
         let bim_database_path_object = &definition["bim_database_path"];
@@ -693,7 +709,10 @@ async fn obtain_vehicle_extract() -> VehicleDatabaseExtract {
     let mut company_to_vehicle_to_fixed_coupling = HashMap::new();
     let mut company_to_vehicle_to_type = HashMap::new();
 
-    let company_to_bim_database = match obtain_company_to_bim_database().await {
+    let company_to_bim_database_opt = obtain_company_to_definition().await
+        .as_ref()
+        .and_then(|ctd| obtain_company_to_bim_database(ctd));
+    let company_to_bim_database = match company_to_bim_database_opt {
         Some(ctbd) => ctbd,
         None => return VehicleDatabaseExtract::default(),
     };
@@ -848,7 +867,10 @@ pub(crate) async fn handle_bim_types(request: &Request<Body>) -> Result<Response
         Some(c) => c,
         None => return return_500(),
     };
-    let company_to_bim_database = match obtain_company_to_bim_database().await {
+    let company_to_bim_database_opt = obtain_company_to_definition().await
+        .as_ref()
+        .and_then(|ctd| obtain_company_to_bim_database(ctd));
+    let company_to_bim_database = match company_to_bim_database_opt {
         Some(ctbdb) => ctbdb,
         None => return return_500(),
     };
@@ -962,7 +984,10 @@ pub(crate) async fn handle_bim_vehicles(request: &Request<Body>) -> Result<Respo
         Some(c) => c,
         None => return return_500(),
     };
-    let company_to_bim_database_opts = match obtain_company_to_bim_database().await {
+    let company_to_bim_database_opt = obtain_company_to_definition().await
+        .as_ref()
+        .and_then(|ctd| obtain_company_to_bim_database(ctd));
+    let company_to_bim_database_opts = match company_to_bim_database_opt {
         Some(ctbdb) => ctbdb,
         None => return return_500(),
     };
@@ -1249,6 +1274,7 @@ pub(crate) async fn handle_bim_coverage(request: &Request<Body>) -> Result<Respo
         } else {
             Some(rider_name.as_ref())
         };
+        let country_code_opt = query_pairs.get("country");
 
         let mut to_date_opt: Option<DateTime<Local>> = None;
         if let Some(date_str) = cow_empty_to_none(query_pairs.get("to-date")) {
@@ -1293,8 +1319,23 @@ pub(crate) async fn handle_bim_coverage(request: &Request<Body>) -> Result<Respo
             (HashMap::new(), 0)
         };
 
-        // get vehicle database
-        let company_to_bim_database_opts = match obtain_company_to_bim_database().await {
+        // get company definitions
+        let mut company_to_definition = match obtain_company_to_definition().await {
+            Some(ctd) => ctd,
+            None => return return_500(),
+        };
+
+        // drop those that don't match the country
+        if let Some(country_code) = country_code_opt {
+            company_to_definition.retain(|_name, definition|
+                definition["country"]
+                    .as_str()
+                    .map(|def_country| def_country == country_code)
+                    .unwrap_or(true) // keep companies where no country is set
+            );
+        }
+
+        let company_to_bim_database_opts = match obtain_company_to_bim_database(&company_to_definition) {
             Some(ctbdb) => ctbdb,
             None => return return_500(),
         };
@@ -1380,6 +1421,20 @@ pub(crate) async fn handle_bim_coverage(request: &Request<Body>) -> Result<Respo
             None => return_500(),
         }
     } else {
+        // obtain countries
+        let company_to_definition = match obtain_company_to_definition().await {
+            Some(ctd) => ctd,
+            None => return return_500(),
+        };
+        let mut countries = BTreeSet::new();
+        for company_definition in company_to_definition.values() {
+            let country = match company_definition["country"].as_str() {
+                Some(c) => c,
+                None => continue,
+            };
+            countries.insert(country.to_owned());
+        }
+
         // list riders
         let riders_res = db_conn.query("SELECT DISTINCT rider_username FROM bim.rides", &[]).await;
         let rider_rows = match riders_res {
@@ -1397,6 +1452,7 @@ pub(crate) async fn handle_bim_coverage(request: &Request<Body>) -> Result<Respo
 
         let template = BimCoveragePickRiderTemplate {
             riders,
+            countries,
         };
         match render_response(&template, &query_pairs, 200, vec![]).await {
             Some(r) => Ok(r),
@@ -1425,7 +1481,10 @@ pub(crate) async fn handle_bim_detail(request: &Request<Body>) -> Result<Respons
         Err(_) => return return_400("invalid parameter value for \"vehicle\"", &query_pairs).await,
     };
 
-    let company_to_bim_database_opts = match obtain_company_to_bim_database().await {
+    let company_to_bim_database_opt = obtain_company_to_definition().await
+        .as_ref()
+        .and_then(|ctd| obtain_company_to_bim_database(ctd));
+    let company_to_bim_database_opts = match company_to_bim_database_opt {
         Some(ctbdb) => ctbdb,
         None => return return_500(),
     };
@@ -1930,7 +1989,10 @@ pub(crate) async fn handle_bim_coverage_field(request: &Request<Body>) -> Result
         _ => return return_400("GET parameter \"company\" is required", &query_pairs).await,
     };
 
-    let company_to_bim_database_opts = match obtain_company_to_bim_database().await {
+    let company_to_bim_database_opt = obtain_company_to_definition().await
+        .as_ref()
+        .and_then(|ctd| obtain_company_to_bim_database(ctd));
+    let company_to_bim_database_opts = match company_to_bim_database_opt {
         Some(ctbdb) => ctbdb,
         None => return return_500(),
     };
