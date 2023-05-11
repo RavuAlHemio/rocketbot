@@ -471,15 +471,30 @@ fn process_sheet<F: Read + Seek>(
                         Vec::new()
                     };
 
+                    let mut my_edited_other_fields;
+                    let my_other_fields = if let Some(type_additional_key) = &config.original_type_additional_field {
+                        my_edited_other_fields = other_fields.clone();
+                        my_edited_other_fields.insert(type_additional_key.clone(), type_code.clone());
+                        &my_edited_other_fields
+                    } else {
+                        &other_fields
+                    };
+
+                    let my_type_code = if let Some(overridden_type) = &conversion.overridden_type {
+                        overridden_type
+                    } else {
+                        &type_code
+                    };
+
                     for generated_name in &generated_names {
                         let vehicle = serde_json::json!({
                             "number": generated_name,
                             "vehicle_class": conversion.vehicle_class,
-                            "type_code": type_code,
+                            "type_code": my_type_code,
                             "in_service_since": "?",
                             "out_of_service_since": if out_of_order { Some("?") } else { None },
                             "manufacturer": serde_json::Value::Null,
-                            "other_data": other_fields,
+                            "other_data": my_other_fields,
                             "fixed_coupling": fixed_coupling,
                         });
                         if grouped_vehicles {
