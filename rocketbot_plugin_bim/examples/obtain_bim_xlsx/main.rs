@@ -145,6 +145,7 @@ struct Config {
     pub grouped_code_column: ColumnSpec,
     #[serde(with = "rocketbot_interface::serde::serde_vec_regex")]
     pub ignore_column_names: Vec<Regex>,
+    pub full_code_additional_field: Option<String>,
     pub original_type_additional_field: Option<String>,
 
     pub background_colors: HashSet<RgbaColor>,

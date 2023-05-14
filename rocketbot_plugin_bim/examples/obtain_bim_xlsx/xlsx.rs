@@ -472,9 +472,14 @@ fn process_sheet<F: Read + Seek>(
                     };
 
                     let mut my_edited_other_fields;
-                    let my_other_fields = if let Some(type_additional_key) = &config.original_type_additional_field {
+                    let my_other_fields = if config.full_code_additional_field.is_some() || config.original_type_additional_field.is_some() {
                         my_edited_other_fields = other_fields.clone();
-                        my_edited_other_fields.insert(type_additional_key.clone(), type_code.clone());
+                        if let Some(full_code_key) = &config.full_code_additional_field {
+                            my_edited_other_fields.insert(full_code_key.clone(), vehicle_code.clone());
+                        }
+                        if let Some(type_additional_key) = &config.original_type_additional_field {
+                            my_edited_other_fields.insert(type_additional_key.clone(), type_code.clone());
+                        }
                         &my_edited_other_fields
                     } else {
                         &other_fields
