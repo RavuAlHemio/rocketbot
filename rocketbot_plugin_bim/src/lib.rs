@@ -4,6 +4,7 @@ pub mod table_draw;
 
 
 use std::collections::{BTreeMap, BTreeSet, HashMap, HashSet};
+use std::collections::hash_map;
 use std::fmt::{self, Write};
 use std::fs::File;
 use std::io::Cursor;
@@ -2893,6 +2894,175 @@ impl BimPlugin {
         ).await;
     }
 
+    async fn channel_command_recentbimrides(&self, channel_message: &ChannelMessage, _command: &CommandInstance) {
+        let interface = match self.interface.upgrade() {
+            None => return,
+            Some(i) => i,
+        };
+
+        let config_guard = self.config.read().await;
+
+        let ride_conn = match connect_ride_db(&config_guard).await {
+            Ok(c) => c,
+            Err(_) => {
+                send_channel_message!(
+                    interface,
+                    &channel_message.channel.name,
+                    "Failed to open database connection. :disappointed:",
+                ).await;
+                return;
+            },
+        };
+
+        let ride_rows_res = ride_conn.query(
+            "
+                SELECT
+                    \"timestamp\", rider_username, line, vehicle_number,
+                    id, coupling_mode
+                FROM
+                    bim.rides_and_vehicles
+                WHERE
+                    \"timestamp\" >= CURRENT_TIMESTAMP - CAST('P1D' AS interval)
+                ORDER BY
+                    \"timestamp\", id, spec_position, fixed_coupling_position
+            ",
+            &[],
+        ).await;
+        let ride_rows = match ride_rows_res {
+            Ok(rr) => rr,
+            Err(e) => {
+                error!("failed to obtain recent rides: {}", e);
+                send_channel_message!(
+                    interface,
+                    &channel_message.channel.name,
+                    "Failed to obtain recent rides. :disappointed:",
+                ).await;
+                return;
+            },
+        };
+        if ride_rows.len() == 0 {
+            send_channel_message!(
+                interface,
+                &channel_message.channel.name,
+                "No recent rides. :disappointed:",
+            ).await;
+            return;
+        }
+        let mut id_to_ride: HashMap<i64, (DateTime<Local>, String, Option<String>, String)> = HashMap::with_capacity(ride_rows.len());
+        for ride_row in ride_rows {
+            let timestamp: DateTime<Local> = ride_row.get(0);
+            let rider_username: String = ride_row.get(1);
+            let line: Option<String> = ride_row.get(2);
+            let vehicle_number: String = ride_row.get(3);
+            let ride_id: i64 = ride_row.get(4);
+            let coupling_mode: String = ride_row.get(5);
+
+            match id_to_ride.entry(ride_id) {
+                hash_map::Entry::Occupied(mut oe) => {
+                    if coupling_mode == "R" {
+                        let vehicle_numbers = &mut oe.get_mut().3;
+                        if vehicle_numbers.len() > 0 {
+                            vehicle_numbers.push('+');
+                        }
+                        vehicle_numbers.push_str(&vehicle_number);
+                    }
+                },
+                hash_map::Entry::Vacant(ve) => {
+                    let vehicles = if coupling_mode == "R" {
+                        vehicle_number
+                    } else {
+                        String::new()
+                    };
+                    ve.insert((
+                        timestamp,
+                        rider_username,
+                        line,
+                        vehicles,
+                    ));
+                },
+            }
+        }
+
+        // find field lengths for beautiful alignment
+        let max_username_len = id_to_ride.values()
+            .map(|tuple| tuple.1.len())
+            .max()
+            .unwrap();
+        let max_line_len = id_to_ride.values()
+            .filter_map(|tuple| tuple.2.as_ref().map(|line| line.chars().count()))
+            .max()
+            .unwrap_or(0);
+        let max_vehicles_len = id_to_ride.values()
+            .map(|tuple| tuple.3.len())
+            .max()
+            .unwrap();
+
+        let mut rides_sorted: Vec<_> = id_to_ride.iter()
+            .map(|(k, v)| (
+                *k,
+                &v.0,
+                v.1.as_str(),
+                v.2.as_ref().map(|r| r.as_str()),
+                v.3.as_str(),
+            ))
+            .collect();
+        // sort by timestamp, then by ID
+        rides_sorted.sort_by_key(|tuple| (tuple.1, tuple.0));
+
+        // assemble ride lines
+        let mut ride_lines = String::from("```");
+        for ride in rides_sorted.iter() {
+            let (id, timestamp, rider, line, vehicles) = ride;
+            write!(ride_lines, "\n{}: ", timestamp.format("%H:%M")).unwrap();
+
+            write!(ride_lines, "{}, ", rider).unwrap();
+            for _ in 0..(max_username_len - rider.len()) {
+                ride_lines.push(' ');
+            }
+
+            if let Some(ln) = line {
+                write!(ride_lines, "{}, ", ln).unwrap();
+                for _ in 0..(max_line_len - ln.len()) {
+                    ride_lines.push(' ');
+                }
+            } else {
+                if max_line_len > 0 {
+                    // skip this field, including trailing comma and space
+                    ride_lines.push_str("  ");
+                    for _ in 0..max_line_len {
+                        ride_lines.push(' ');
+                    }
+                }
+                // otherwise, there is no line, so don't bother
+            }
+
+            if vehicles.len() > 0 {
+                write!(ride_lines, "{}, ", vehicles).unwrap();
+                for _ in 0..(max_vehicles_len - vehicles.len()) {
+                    ride_lines.push(' ');
+                }
+            } else {
+                if max_vehicles_len > 0 {
+                    // skip this field, including trailing comma and space
+                    ride_lines.push_str("  ");
+                    for _ in 0..max_vehicles_len {
+                        ride_lines.push(' ');
+                    }
+                }
+            }
+
+            write!(ride_lines, "ride {}", id).unwrap();
+        }
+
+        ride_lines.push_str("\n```");
+
+        send_channel_message!(
+            interface,
+            &channel_message.channel.name,
+            &ride_lines,
+        ).await;
+    }
+
     #[inline]
     fn weekday_abbr2(weekday: Weekday) -> &'static str {
         match weekday {
@@ -3321,6 +3491,15 @@ impl RocketBotPlugin for BimPlugin {
             )
                 .build()
         ).await;
+        my_interface.register_channel_command(
+            &CommandDefinitionBuilder::new(
+                "recentbimrides",
+                "bim",
+                "{cpfx}recentbimrides",
+                "A list of recent rides.",
+            )
+                .build()
+        ).await;
 
         // set up the achievement update loop
         let (achievement_update_sender, mut achievement_update_receiver) = mpsc::unbounded_channel();
@@ -3408,6 +3587,8 @@ impl RocketBotPlugin for BimPlugin {
             self.channel_command_lastbims(channel_message, command).await
         } else if command.name == "lonebims" {
             self.channel_command_lonebims(channel_message, command).await
+        } else if command.name == "recentbimrides" {
+            self.channel_command_recentbimrides(channel_message, command).await
         }
     }
 
@@ -3452,6 +3633,8 @@ impl RocketBotPlugin for BimPlugin {
             Some(include_str!("../help/lastbims.md").to_owned())
         } else if command_name == "lonebims" {
             Some(include_str!("../help/lonebims.md").to_owned())
+        } else if command_name == "recentbimrides" {
+            Some(include_str!("../help/recentbimrides.md").to_owned())
         } else {
             None
         }
