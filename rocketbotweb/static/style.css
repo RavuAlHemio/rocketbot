@@ -29,8 +29,8 @@ table.top-quotes .score {
 table.top-quotes tr.quote .body,
 table.quotes-votes tr.quote .body,
 table.quotes-votes .votes,
-table.booktable.booktable-airy th,
-table.booktable.booktable-airy td {
+table.booktable.booktable-airy > * > tr > th,
+table.booktable.booktable-airy > * > tr > td {
   padding: 0.6em 0.3em;
 }
 
@@ -42,15 +42,15 @@ table.bim-vehicles th,
 table.bim-vehicles td,
 main.bim-details table th,
 main.bim-details table td,
-table.booktable th,
-table.booktable td {
+table.booktable > * > tr > th,
+table.booktable > * > tr > td {
   padding: 0.3em 0.6em;
 }
 
 table.bim-types th,
 table.bim-types td,
-table.booktable.booktable-spaced th,
-table.booktable.booktable-spaced td {
+table.booktable.booktable-spaced > * > tr > th,
+table.booktable.booktable-spaced > * > tr > td {
   padding: 0.6em;
 }
 
@@ -65,8 +65,8 @@ table.bim-vehicles tr:first-child th,
 table.bim-vehicles tr:first-child td,
 main.bim-details table tr:first-child th,
 main.bim-details table tr:first-child td,
-table.booktable tr:first-child th,
-table.booktable tr:first-child td {
+table.booktable > * > tr:first-child > th,
+table.booktable > * > tr:first-child > td {
   border-top: 2px solid black;
   padding-top: 0.6em;
 }
@@ -77,14 +77,14 @@ table.quotes-votes td,
 table.nicks-and-aliases td.alias,
 table.nicks-and-aliases td.nick.changed,
 table.bim-types tr td,
-table.booktable tr th,
-table.booktable tr td {
+table.booktable > * > tr > th,
+table.booktable > * > tr > td {
   border-top: 1px solid black;
 }
 
 table.top-quotes tr:first-child td.score.changed,
 table.nicks-and-aliases tr:first-child td.nick.changed,
-table.booktable tr.new-section td {
+table.booktable > * > tr.new-section > td {
   border-top: 2px solid black;
   padding-top: 0.6em;
 }
@@ -92,8 +92,8 @@ table.booktable tr.new-section td {
 table.top-quotes tr:last-child td,
 table.quotes-votes tr:last-child td,
 table.nicks-and-aliases tr:last-child td,
-table.booktable.booktable-airy tr:last-child th,
-table.booktable.booktable-airy tr:last-child td {
+table.booktable.booktable-airy > * > tr:last-child > th,
+table.booktable.booktable-airy > * > tr:last-child > td {
   border-bottom: 2px solid black;
   padding-bottom: 0.3em;
 }
@@ -106,8 +106,8 @@ table.bim-vehicles tr:last-child th,
 table.bim-vehicles tr:last-child td,
 main.bim-details table tr:last-child th,
 main.bim-details table tr:last-child td,
-table.booktable tr:last-child th,
-table.booktable tr:last-child td {
+table.booktable > * > tr:last-child > th,
+table.booktable > * > tr:last-child > td {
   border-bottom: 2px solid black;
   padding-bottom: 0.6em;
 }
