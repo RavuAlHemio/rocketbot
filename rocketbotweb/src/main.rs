@@ -33,9 +33,9 @@ use crate::bim::{
     handle_bim_achievements, handle_bim_coverage, handle_bim_coverage_field, handle_bim_detail,
     handle_bim_histogram_by_day_of_week, handle_bim_histogram_by_line_ride_count_group,
     handle_bim_histogram_by_vehicle_ride_count_group, handle_bim_latest_rider_count_over_time,
-    handle_bim_latest_rider_count_over_time_image, handle_bim_line_detail, handle_bim_ride_by_id,
-    handle_bim_rides, handle_bim_types, handle_bim_vehicles, handle_explorer_bims, handle_top_bims,
-    handle_top_bim_lines, handle_wide_bims,
+    handle_bim_latest_rider_count_over_time_image, handle_bim_line_detail, handle_bim_query,
+    handle_bim_ride_by_id, handle_bim_rides, handle_bim_types, handle_bim_vehicles,
+    handle_explorer_bims, handle_top_bims, handle_top_bim_lines, handle_wide_bims,
 };
 use crate::config::WebConfig;
 use crate::quotes::{handle_quotes_votes, handle_top_quotes};
@@ -251,6 +251,7 @@ async fn handle_request(request: Request<Body>) -> Result<Response<Body>, Infall
         "/bim-histogram-day-of-week" => handle_bim_histogram_by_day_of_week(&request).await,
         "/bim-histogram-vehicle-ride-count-group" => handle_bim_histogram_by_vehicle_ride_count_group(&request).await,
         "/bim-histogram-line-ride-count-group" => handle_bim_histogram_by_line_ride_count_group(&request).await,
+        "/bim-query" => handle_bim_query(&request).await,
         _ => {
             let query_pairs = get_query_pairs(&request);
             return_404(&query_pairs).await

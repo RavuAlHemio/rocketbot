@@ -267,3 +267,7 @@ main.bim-details td.fixed-coupling-pos {
 td.numeric-field {
   text-align: right;
 }
+
+table.bim-ride-query table.vehicles td.type {
+  padding-right: 0.5em;
+}

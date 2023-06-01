@@ -1,0 +1,84 @@
+{% extends "base.html" %}
+
+{% block title %}Find a Public Transport Ride{% endblock %}
+
+{% block content %}
+<main>
+
+<h1>Find a Public Transport Ride</h1>
+
+<form action="" method="get">
+
+<table class="bim-ride-query booktable">
+  <tr class="header">
+    <th class="id">Ride</th>
+    <th class="timestamp">Timestamp</th>
+    <th class="rider">Rider</th>
+    <th class="company">Company</th>
+    <th class="line">Line</th>
+    <th class="vehicles">Vehicles</th>
+    <th class="button"></th>
+  </tr>
+  <tr class="form">
+    <td class="id"></td>
+    <td class="timestamp"><input type="date" name="timestamp"{% if let Some(timestamp) = filters.timestamp %} value="{{ timestamp }}"{% endif %} /></td>
+    <td class="rider">
+      <select name="rider">
+        <option value=""{% if filters.rider_username.is_none() %} selected="selected"{% endif %}></option>
+        {% for rider in all_riders %}
+        <option value="{{ rider }}"{% if filters.rider_username.as_ref() == Some(rider) %} selected="selected"{% endif %}>{{ rider }}</option>
+        {% endfor %}
+      </select>
+    </td>
+    <td class="company">
+      <select name="company">
+        <option value=""{% if filters.company.is_none() %} selected="selected"{% endif %}></option>
+        {% for company in all_companies %}
+        <option value="{{ company }}"{% if filters.company.as_ref() == Some(company) %} selected="selected"{% endif %}>{{ company }}</option>
+        {% endfor %}
+      </select>
+    </td>
+    <td class="line"><input type="text" name="line"{% if let Some(line) = filters.line %} value="{{ line }}"{% endif %} /></td>
+    <td class="vehicles"><input type="text" name="vehicle"{% if let Some(vehicle) = filters.vehicle %} value="{{ vehicle }}"{% endif %} /></td>
+    <td class="button"><input type="submit" value="apply filter" /></td>
+  </tr>
+  {% for ride in rides %}
+    <tr class="ride">
+      <td class="id"><a href="bim-ride-by-id?id={{ ride.id }}">{{ ride.id }}</a></td>
+      <td class="timestamp">{{ ride.timestamp.format("%d.%m.%Y %H:%M:%S") }}</td>
+      <td class="rider">{{ ride.rider_username }}</td>
+      <td class="company">{{ ride.company }}</td>
+      <td class="line{% if ride.line.is_none() %} null{% endif %}">{% if let Some(line) = ride.line %}{{ line }}{% endif %}</td>
+      <td class="vehicles">
+        <table class="vehicles">
+          {% for vehicle in ride.vehicles %}
+          <tr class="vehicle">
+            {% if ride.at_least_one_vehicle_has_type() %}
+              <td class="type{% if vehicle.vehicle_type.is_none() %} null{% endif %}">{% if let Some(vehicle_type) = vehicle.vehicle_type %}{{ vehicle_type }}{% endif %}</td>
+            {% endif %}
+            <td class="number">{{ vehicle.vehicle_number }}</td>
+          </tr>
+          {% endfor %}
+        </table>
+      </td>
+      <td class="button"></td>
+    </tr>
+  {% endfor %}
+</table>
+
+</form>
+
+<p class="table-nav">
+  {% if let Some(pp) = prev_page %}
+    <a class="prev" href="?{{ filter_query_and }}page={{ pp }}">&lt; Prev page</a>
+  {% endif %}
+  {% if prev_page.is_some() && next_page.is_some() %}
+  &middot;
+  {% endif %}
+  {% if let Some(np) = next_page %}
+    <a class="next" href="?{{ filter_query_and }}page={{ np }}">Next page &gt;</a>
+  {% endif %}
+</p>
+
+</main>
+{% endblock %}
