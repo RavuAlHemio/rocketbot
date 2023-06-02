@@ -3179,7 +3179,10 @@ pub(crate) async fn handle_bim_query(request: &Request<Body>) -> Result<Response
         "
             SELECT
                 rav.id, rav.company, rav.rider_username, rav.timestamp, rav.line,
-                jsonb_agg(row(rav.vehicle_number, rav.vehicle_type, rav.spec_position, rav.coupling_mode, rav.fixed_coupling_position)) vehicles_json
+                jsonb_agg(
+                    row(rav.vehicle_number, rav.vehicle_type, rav.spec_position, rav.coupling_mode, rav.fixed_coupling_position)
+                    ORDER BY rav.spec_position, rav.fixed_coupling_position
+                ) vehicles_json
             FROM
                 bim.rides_and_vehicles rav
             {} {}
