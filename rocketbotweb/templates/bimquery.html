@@ -57,6 +57,9 @@
               <td class="type{% if vehicle.vehicle_type.is_none() %} null{% endif %}">{% if let Some(vehicle_type) = vehicle.vehicle_type %}{{ vehicle_type }}{% endif %}</td>
             {% endif %}
             <td class="number">{{ vehicle.vehicle_number }}</td>
+            {% if ride.at_least_one_vehicle_ridden() %}
+              <td class="actually-ridden {% if let Some(cm) = vehicle.coupling_mode %}coupling-mode-{{ cm }}{% else %}no-coupling-mode{% endif %}">{% if vehicle.coupling_mode == Some('R') %}&#8226;{% endif %}</td>
+            {% endif %}
           </tr>
           {% endfor %}
         </table>

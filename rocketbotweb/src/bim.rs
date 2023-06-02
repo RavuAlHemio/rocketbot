@@ -626,6 +626,12 @@ impl QueriedRidePart {
             .iter()
             .any(|veh| veh.vehicle_type.is_some())
     }
+
+    pub fn at_least_one_vehicle_ridden(&self) -> bool {
+        self.vehicles
+            .iter()
+            .any(|veh| veh.coupling_mode.is_some())
+    }
 }
 
 #[derive(Clone, Debug, Default, Eq, Hash, Ord, PartialEq, PartialOrd, Serialize)]
@@ -633,6 +639,7 @@ struct QueriedRideVehiclePart {
     pub vehicle_number: String,
     pub vehicle_type: Option<String>,
     pub spec_position: i64,
+    pub coupling_mode: Option<char>,
     pub fixed_coupling_position: i64,
 }
 
@@ -3229,13 +3236,15 @@ pub(crate) async fn handle_bim_query(request: &Request<Body>) -> Result<Response
                 let vehicle_number = veh["f1"].as_str().expect("vehicle.f1 (vehicle number) is not a string").to_owned();
                 let vehicle_type = veh["f2"].as_str().map(|v| v.to_owned());
                 let spec_position = veh["f3"].as_i64().expect("vehicle.f3 (spec position) is not an i64");
-                // f4 = coupling_mode, not currently used
+                let coupling_mode = veh["f4"].as_str().expect("vehicle.f4 (coupling mode) is not a string")
+                    .chars().nth(0);
                 let fixed_coupling_position = veh["f5"].as_i64().expect("vehicle.f5 (fixed coupling position) is not an i64");
 
                 QueriedRideVehiclePart {
                     vehicle_number,
                     vehicle_type,
                     spec_position,
+                    coupling_mode,
                     fixed_coupling_position,
                 }
             })
