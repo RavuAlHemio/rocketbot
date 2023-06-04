@@ -8,6 +8,7 @@ use swash::zeno::Vector;
 
 pub const DEFAULT_FONT_DATA: &[u8] = include_bytes!("../data/texgyreheros-regular.otf");
 pub const DEFAULT_BOLD_FONT_DATA: &[u8] = include_bytes!("../data/texgyreheros-bold.otf");
+pub const DEFAULT_ITALIC_FONT_DATA: &[u8] = include_bytes!("../data/texgyreheros-italic.otf");
 pub const DEFAULT_SIZE_PX: f32 = 16.0;
 
 
