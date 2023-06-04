@@ -16,9 +16,12 @@
 //! └─────────┴─────────┴───────────────────────────┴───────────────────────────────────┴─────┘
 //! ```
 //!
-//! The data is actually arranged in the following columns for improved visual alignment:
+//! The headers and data are actually arranged in the following columns for improved visual
+//! alignment:
 //!
 //! ```plain
+//!   ╭──0──╮   ╭──1──╮   ╭──────────2+3───────────╮   ╭─────────────4+5+6──────────────╮   ╭7─╮
+//! │ vehicle │         │ ravu.al.hemio              │ other                              | Σ    |
 //! │ 4096    │ same    │ 421x (09:16/25)            │ 421x (paulchen 24.02.2023 22:03/5) | 842x |
 //!   ╰──0──╯   ╰──1──╯   ╰2r╯╰─────────3──────────╯   ╰4r╯╰───5────╯╰────────6─────────╯   ╰7r╯
 //! ```
@@ -33,7 +36,9 @@ use std::iter::once;
 use chrono::{DateTime, Local, TimeZone};
 use serde::{Deserialize, Serialize};
 
-use rocketbot_render_text::{DEFAULT_FONT_DATA, DEFAULT_SIZE_PX, map_to_dimensions, TextRenderer};
+use rocketbot_render_text::{
+    DEFAULT_FONT_DATA, DEFAULT_ITALIC_FONT_DATA, DEFAULT_SIZE_PX, map_to_dimensions, TextRenderer,
+};
 
 
 #[derive(Clone, Debug, Default, Deserialize, Eq, Hash, Ord, PartialEq, PartialOrd, Serialize)]
@@ -72,6 +77,10 @@ impl Ride {
             format_timestamp(self.timestamp, anchor_timestamp)
         }
     }
+
+    /// Returns the timestamp of this ride. Provided for structural equivalence with [`UserRide`].
+    #[inline]
+    pub fn timestamp(&self) -> &DateTime<Local> { &self.timestamp }
 }
 
 #[derive(Clone, Debug, Default, Deserialize, Eq, Hash, Ord, PartialEq, PartialOrd, Serialize)]
@@ -123,6 +132,42 @@ pub struct RideTableVehicle {
     /// The rider's username and timestamp of the last time a vehicle coupled with this one was
     /// ridden by a different rider.
     pub other_coupled_last: Option<UserRide>,
+}
+impl UserRide {
+    /// Returns the timestamp of this ride. Provided for structural equivalence with [`Ride`].
+    #[inline]
+    pub fn timestamp(&self) -> &DateTime<Local> { &self.ride.timestamp }
+}
+
+macro_rules! define_is_most_recent {
+    ($name:ident, $cmp_base:ident $(, $cmp_target:ident)+) => {
+        pub fn $name(&self) -> bool {
+            let cmp_base = match &self.$cmp_base {
+                Some(cb) => cb,
+                None => {
+                    // if the comparison base is None, it cannot be the most recent ride
+                    return false;
+                },
+            };
+
+            $(
+                if let Some(cmp_target) = &self.$cmp_target {
+                    if cmp_base.timestamp() < cmp_target.timestamp() {
+                        return false;
+                    }
+                }
+            )+
+
+            true
+        }
+    };
+}
+
+impl RideTableVehicle {
+    define_is_most_recent!(is_my_same_most_recent, my_same_last, my_coupled_last, other_same_last, other_coupled_last);
+    define_is_most_recent!(is_my_coupled_most_recent, my_coupled_last, my_same_last, other_same_last, other_coupled_last);
+    define_is_most_recent!(is_other_same_most_recent, other_same_last, my_same_last, my_coupled_last, other_coupled_last);
+    define_is_most_recent!(is_other_coupled_most_recent, other_coupled_last, my_same_last, my_coupled_last, other_same_last);
 }
 
 
@@ -198,6 +243,8 @@ pub fn draw_ride_table(
 ) -> HashMap<(u32, u32), u8> {
     let renderer = TextRenderer::new(DEFAULT_FONT_DATA, DEFAULT_SIZE_PX)
         .expect("failed to load default font");
+    let italic_renderer = TextRenderer::new(DEFAULT_ITALIC_FONT_DATA, DEFAULT_SIZE_PX)
+        .expect("failed to load italic font");
 
     let line_height = renderer.font_line_height();
     const HORIZONTAL_MARGIN: u32 = 8;
@@ -246,22 +293,47 @@ pub fn draw_ride_table(
 
         my_same_counts.push(renderer.render_text(&format!("{}\u{D7}", vehicle.my_same_count)));
         if let Some(my_same_last) = &vehicle.my_same_last {
-            my_same_rides.push(renderer.render_text(&format!(" ({})", my_same_last.stringify(table.relative_time))));
+            let render_me = format!(" ({})", my_same_last.stringify(table.relative_time));
+            let rendered = if vehicle.is_my_same_most_recent() {
+                italic_renderer.render_text(&render_me)
+            } else {
+                renderer.render_text(&render_me)
+            };
+            my_same_rides.push(rendered);
         } else {
             my_same_rides.push(HashMap::new());
         }
 
         my_coupled_counts.push(renderer.render_text(&format!("{}\u{D7}", vehicle.my_coupled_count)));
         if let Some(my_coupled_last) = &vehicle.my_coupled_last {
-            my_coupled_rides.push(renderer.render_text(&format!(" ({})", my_coupled_last.stringify(table.relative_time))));
+            let render_me = format!(" ({})", my_coupled_last.stringify(table.relative_time));
+            let rendered = if vehicle.is_my_coupled_most_recent() {
+                italic_renderer.render_text(&render_me)
+            } else {
+                renderer.render_text(&render_me)
+            };
+            my_coupled_rides.push(rendered);
         } else {
             my_coupled_rides.push(HashMap::new());
         }
 
         other_same_counts.push(renderer.render_text(&format!("{}\u{D7}", vehicle.other_same_count)));
         if let Some(other_same_last) = &vehicle.other_same_last {
-            other_same_names.push(renderer.render_text(&format!(" ({}", other_same_last.rider_username)));
-            other_same_rides.push(renderer.render_text(&format!(" {})", other_same_last.ride.stringify(table.relative_time))));
+            let render_me_name = format!(" ({}", other_same_last.rider_username);
+            let render_me_ride = format!(" {})", other_same_last.ride.stringify(table.relative_time));
+            let (rendered_name, rendered_ride) = if vehicle.is_other_same_most_recent() {
+                (
+                    italic_renderer.render_text(&render_me_name),
+                    italic_renderer.render_text(&render_me_ride),
+                )
+            } else {
+                (
+                    renderer.render_text(&render_me_name),
+                    renderer.render_text(&render_me_ride),
+                )
+            };
+            other_same_names.push(rendered_name);
+            other_same_rides.push(rendered_ride);
         } else {
             other_same_names.push(HashMap::new());
             other_same_rides.push(HashMap::new());
@@ -269,8 +341,21 @@ pub fn draw_ride_table(
 
         other_coupled_counts.push(renderer.render_text(&format!("{}\u{D7}", vehicle.other_coupled_count)));
         if let Some(other_coupled_last) = &vehicle.other_coupled_last {
-            other_coupled_names.push(renderer.render_text(&format!(" ({}", other_coupled_last.rider_username)));
-            other_coupled_rides.push(renderer.render_text(&format!(" {})", other_coupled_last.ride.stringify(table.relative_time))));
+            let render_me_name = format!(" ({}", other_coupled_last.rider_username);
+            let render_me_ride = format!(" {})", other_coupled_last.ride.stringify(table.relative_time));
+            let (rendered_name, rendered_ride) = if vehicle.is_other_coupled_most_recent() {
+                (
+                    italic_renderer.render_text(&render_me_name),
+                    italic_renderer.render_text(&render_me_ride),
+                )
+            } else {
+                (
+                    renderer.render_text(&render_me_name),
+                    renderer.render_text(&render_me_ride),
+                )
+            };
+            other_coupled_names.push(rendered_name);
+            other_coupled_rides.push(rendered_ride);
         } else {
             other_coupled_names.push(HashMap::new());
             other_coupled_rides.push(HashMap::new());
