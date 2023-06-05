@@ -23,8 +23,6 @@ jobs:
         run: sh ./cicd/cargo_fetch.sh
       - name: run debug build
         run: cargo build --all-targets
-      - name: compile sedify
-        run: 'sh -c "cd rocketbot_plugin_sed/contrib/sedify && tsc"'
       - name: run debug tests
         run: cargo test
       - name: generate CountryCodes.json
@@ -43,10 +41,6 @@ jobs:
             target/debug/examples/fetch_ops_mw
             rocketbot_plugin_calc/data/unitdb.toml
             rocketbot_plugin_grammargen/grammars/*.grammar
-            rocketbot_plugin_sed/contrib/sedify/*.html
-            rocketbot_plugin_sed/contrib/sedify/*.js
-            rocketbot_plugin_sed/contrib/sedify/*.js.map
-            rocketbot_plugin_sed/contrib/sedify/*.ts
             rocketbot_plugin_syllable/rules/*.toml
             rocketbot_plugin_transliterate/languages/*.json
             rocketbotweb/static/*
@@ -74,8 +68,6 @@ jobs:
         run: sh ./cicd/cargo_fetch.sh
       - name: run release build
         run: cargo build --all-targets --release
-      - name: compile sedify
-        run: 'sh -c "cd rocketbot_plugin_sed/contrib/sedify && tsc"'
       - name: run release tests
         run: cargo test --release
       - name: generate CountryCodes.json
@@ -94,15 +86,34 @@ jobs:
             target/release/examples/fetch_ops_mw
             rocketbot_plugin_calc/data/unitdb.toml
             rocketbot_plugin_grammargen/grammars/*.grammar
-            rocketbot_plugin_sed/contrib/sedify/*.html
-            rocketbot_plugin_sed/contrib/sedify/*.js
-            rocketbot_plugin_sed/contrib/sedify/*.js.map
-            rocketbot_plugin_sed/contrib/sedify/*.ts
             rocketbot_plugin_syllable/rules/*.toml
             rocketbot_plugin_transliterate/languages/*.json
             rocketbotweb/static/*
             rocketbotweb/ts/dist/*
             CountryCodes.json
+  build-sedify:
+    runs-on: ubuntu-latest
+    container: archlinux:base-devel
+    steps:
+      - name: update packages
+        run: pacman -Syu --noconfirm
+      - name: install packages
+        run: pacman -S --needed --noconfirm git typescript
+      - name: trust repo directory
+        run: git config --global --add safe.directory /__w/rocketbot/rocketbot
+      - name: check out repository code
+        uses: actions/checkout@v3
+      - name: compile sedify
+        run: 'sh -c "cd rocketbot_plugin_sed/contrib/sedify && tsc"'
+      - name: upload sedify artifacts
+        uses: actions/upload-artifact@v3
+        with:
+          name: rocketbot-sedify
+          path: |
+            rocketbot_plugin_sed/contrib/sedify/*.html
+            rocketbot_plugin_sed/contrib/sedify/*.js
+            rocketbot_plugin_sed/contrib/sedify/*.js.map
+            rocketbot_plugin_sed/contrib/sedify/*.ts
   build-ubuntu-focal-release:
     runs-on: ubuntu-latest
     container: ubuntu:focal
