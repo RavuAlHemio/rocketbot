@@ -1,0 +1,36 @@
+<!DOCTYPE html>
+<html xmlns="http://www.w3.org/1999/xhtml">
+<head>
+<meta charset="utf-8" />
+<title>Sedify</title>
+<style type="text/css">body { font-family: sans-serif; }</style>
+<script type="text/javascript" src="sedify.js"></script>
+</head>
+<body>
+  <h1>Sedify</h1>
+  <form id="sedify-form">
+    <p>
+      <label>
+        From:
+        <input type="text" id="sedify-from" />
+      </label>
+    </p>
+    <p>
+      <label>
+        To:
+        <input type="text" id="sedify-to" />
+      </label>
+    </p>
+    <p>
+      <label>
+        <input type="checkbox" id="sedify-dots" checked="checked" />
+        Dots except for most common character
+      </label>
+    </p>
+    <p>
+      <input type="submit" value="Sedify" />
+    </p>
+    <pre id="sedify-result"></pre>
+  </form>
+</body>
+</html>

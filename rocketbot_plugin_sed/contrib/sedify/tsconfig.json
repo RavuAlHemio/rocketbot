@@ -1,0 +1,12 @@
+{
+  "include": ["*.ts"],
+  "compilerOptions": {
+    "target": "ES5",
+    "module": "ES6",
+    "sourceMap": true,
+    "strictBindCallApply": true,
+    "strictFunctionTypes": true,
+    "strictNullChecks": true,
+    "strictPropertyInitialization": true
+  }
+}
