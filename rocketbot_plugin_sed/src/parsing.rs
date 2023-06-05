@@ -252,6 +252,7 @@ fn transform_replacement_string(replacement_string_sed: &str, cap_group_count: u
         } else if c == 'g' && escaping && parsing_group == '\0' {
             // parse numeric group ("\g123;")
             parsing_group = 'g';
+            parsing_group_value = 0;
             escaping = false;
         } else if parsing_group == 'g' {
             if c >= '0' && c <= '9' {
@@ -857,6 +858,10 @@ mod tests {
         assert_eq!(
             transform_replacement_string("four\\g12;$\\3", 13).unwrap(),
             "four${12}$$${3}",
+        );
+        assert_eq!(
+            transform_replacement_string("four\\g12;$\\3\\g4;", 13).unwrap(),
+            "four${12}$$${3}${4}",
         );
     }
 }
