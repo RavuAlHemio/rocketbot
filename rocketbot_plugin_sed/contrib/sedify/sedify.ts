@@ -185,6 +185,12 @@ namespace Sedify {
                 }
             }
 
+            // fold wrap sequences of periods
+            searchString = searchString.replace(
+                /[.]{2,}/g,
+                matchedPart => `.{${matchedPart.length}}`,
+            );
+
             return `s/${searchString}/${replacementString}/`;
         }
     }
