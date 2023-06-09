@@ -185,9 +185,11 @@ namespace Sedify {
                 }
             }
 
-            // fold wrap sequences of periods
+            // fold sequences of periods;
+            // shortest definition is ".{n}", which is 4 characters long
+            // => only fold sequences of 5 and more
             searchString = searchString.replace(
-                /[.]{2,}/g,
+                /[.]{5,}/g,
                 matchedPart => `.{${matchedPart.length}}`,
             );
 
