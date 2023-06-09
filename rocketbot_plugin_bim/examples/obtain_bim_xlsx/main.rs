@@ -1,7 +1,7 @@
 mod xlsx;
 
 
-use std::collections::HashSet;
+use std::collections::{BTreeMap, HashSet};
 use std::env;
 use std::ffi::OsString;
 use std::fmt;
@@ -125,6 +125,7 @@ struct CodeConversion {
     pub code_replacements: Vec<String>,
     pub vehicle_class: String,
     pub overridden_type: Option<String>,
+    pub common_props: BTreeMap<String, String>,
 }
 
 

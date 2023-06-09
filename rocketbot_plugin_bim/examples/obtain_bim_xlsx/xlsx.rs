@@ -459,61 +459,62 @@ fn process_sheet<F: Read + Seek>(
         }
 
         for conversion in &config.code_conversions {
-            if conversion.code_extractor_regex.is_match(&vehicle_code) {
-                if conversion.code_replacements.len() > 0 {
-                    let mut generated_names = Vec::with_capacity(conversion.code_replacements.len());
-                    for replacement in &conversion.code_replacements {
-                        generated_names.push(conversion.code_extractor_regex.replace_all(&vehicle_code, replacement));
-                    }
-                    let fixed_coupling = if conversion.code_replacements.len() > 1 {
-                        generated_names.clone()
-                    } else {
-                        Vec::new()
-                    };
+            if !conversion.code_extractor_regex.is_match(&vehicle_code) {
+                continue;
+            }
 
-                    let mut my_edited_other_fields;
-                    let my_other_fields = if config.full_code_additional_field.is_some() || config.original_type_additional_field.is_some() {
-                        my_edited_other_fields = other_fields.clone();
-                        if let Some(full_code_key) = &config.full_code_additional_field {
-                            my_edited_other_fields.insert(full_code_key.clone(), vehicle_code.clone());
-                        }
-                        if let Some(type_additional_key) = &config.original_type_additional_field {
-                            my_edited_other_fields.insert(type_additional_key.clone(), type_code.clone());
-                        }
-                        &my_edited_other_fields
-                    } else {
-                        &other_fields
-                    };
+            if conversion.code_replacements.len() > 0 {
+                let mut generated_names = Vec::with_capacity(conversion.code_replacements.len());
+                for replacement in &conversion.code_replacements {
+                    generated_names.push(conversion.code_extractor_regex.replace_all(&vehicle_code, replacement));
+                }
+                let fixed_coupling = if conversion.code_replacements.len() > 1 {
+                    generated_names.clone()
+                } else {
+                    Vec::new()
+                };
 
-                    let my_type_code = if let Some(overridden_type) = &conversion.overridden_type {
-                        overridden_type
-                    } else {
-                        &type_code
-                    };
-
-                    for generated_name in &generated_names {
-                        let vehicle = serde_json::json!({
-                            "number": generated_name,
-                            "vehicle_class": conversion.vehicle_class,
-                            "type_code": my_type_code,
-                            "in_service_since": "?",
-                            "out_of_service_since": if out_of_order { Some("?") } else { None },
-                            "manufacturer": serde_json::Value::Null,
-                            "other_data": my_other_fields,
-                            "fixed_coupling": fixed_coupling,
-                        });
-                        if grouped_vehicles {
-                            this_group_vehicles.push(vehicle);
-                        } else {
-                            vehicles.push(vehicle);
-                        }
-                    }
-                    have_vehicles = true;
+                let mut my_other_fields = other_fields.clone();
+                if let Some(full_code_key) = &config.full_code_additional_field {
+                    my_other_fields.insert(full_code_key.clone(), vehicle_code.clone());
+                }
+                if let Some(type_additional_key) = &config.original_type_additional_field {
+                    my_other_fields.insert(type_additional_key.clone(), type_code.clone());
+                }
+                for (k, v) in &conversion.common_props {
+                    my_other_fields
+                        .entry(k.clone())
+                        .or_insert_with(|| v.clone());
                 }
 
-                // if we have no code replacements, this is a throwaway type but still valid; keep going
-                continue 'row_loop;
+                let my_type_code = if let Some(overridden_type) = &conversion.overridden_type {
+                    overridden_type
+                } else {
+                    &type_code
+                };
+
+                for generated_name in &generated_names {
+                    let vehicle = serde_json::json!({
+                        "number": generated_name,
+                        "vehicle_class": conversion.vehicle_class,
+                        "type_code": my_type_code,
+                        "in_service_since": "?",
+                        "out_of_service_since": if out_of_order { Some("?") } else { None },
+                        "manufacturer": serde_json::Value::Null,
+                        "other_data": my_other_fields,
+                        "fixed_coupling": fixed_coupling,
+                    });
+                    if grouped_vehicles {
+                        this_group_vehicles.push(vehicle);
+                    } else {
+                        vehicles.push(vehicle);
+                    }
+                }
+                have_vehicles = true;
             }
+
+            // if we have no code replacements, this is a throwaway type but still valid; keep going
+            continue 'row_loop;
         }
         panic!("unmatched vehicle code {:?}", vehicle_code);
     }
