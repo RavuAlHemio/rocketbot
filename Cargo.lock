@@ -2764,9 +2764,11 @@ dependencies = [
  "regex",
  "reqwest",
  "rocketbot_interface",
+ "serde",
  "serde_json",
  "sxd-document",
  "sxd-xpath",
+ "tokio",
 ]
 
 [[package]]

@@ -1,3 +1,6 @@
+mod html_entities;
+
+
 use std::sync::Weak;
 
 use async_trait::async_trait;
@@ -61,6 +64,12 @@ impl SloganPlugin {
             response_text = clean_regex.regex
                 .replace_all(&response_text, &clean_regex.replacement)
                 .into_owned();
+        }
+
+        // replace HTML entities
+        let entities = html_entities::get_entities();
+        for (html_entity, num_entity) in &entities {
+            response_text = response_text.replace(html_entity, num_entity);
         }
 
         // parse
