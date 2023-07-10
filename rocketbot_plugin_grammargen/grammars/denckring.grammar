@@ -2,7 +2,9 @@
 // Georg Philipp Harsd\u00F6rffer
 // Philosophische und Mathematische Erquickstunden, N\u00FCrnberg 1651
 
-denckring   : vorsilbe anfangsbuchstabe mittelbuchstabe endbuchstabe nachsilbe ;
+denckring   : wort " " wort " " wort " " wort " " wort " " wort " " wort " " wort " " wort " " wort ;
+
+wort    : vorsilbe anfangsbuchstabe mittelbuchstabe endbuchstabe nachsilbe ;
 
 vorsilbe
     : "Ab"
