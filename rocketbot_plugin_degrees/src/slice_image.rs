@@ -41,6 +41,10 @@ impl SliceImage {
     }
 
     pub fn draw_angle(&mut self, radians: f64) {
+        if !radians.is_finite() {
+            return;
+        }
+
         // start by drawing the zero line
         let y0 = self.height() / 2;
         for x0 in self.width()/2..=self.width() {
