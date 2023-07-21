@@ -374,7 +374,7 @@ RETURNING quote_id
             Some(i) => i,
         };
         let mut quotes_lock = self.quotes_state.lock().await;
-        let mut quotes_state = &mut *quotes_lock;
+        let quotes_state = &mut *quotes_lock;
 
         let config_guard = self.config.read().await;
 
@@ -419,7 +419,7 @@ RETURNING quote_id
             Some(i) => i,
         };
         let mut quotes_lock = self.quotes_state.lock().await;
-        let mut quotes_state = &mut *quotes_lock;
+        let quotes_state = &mut *quotes_lock;
 
         let config_guard = self.config.read().await;
 
