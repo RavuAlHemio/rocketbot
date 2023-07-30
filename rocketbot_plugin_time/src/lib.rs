@@ -1,7 +1,7 @@
 use std::sync::Weak;
 
 use async_trait::async_trait;
-use chrono::{Datelike, Timelike, Utc};
+use chrono::{Datelike, Offset, Timelike, Utc};
 use chrono_tz::TZ_VARIANTS;
 use log::error;
 use rocketbot_geocoding::Geocoder;
@@ -102,9 +102,10 @@ impl TimePlugin {
             ("", y)
         };
         let response = format!(
-            "The time in {} is {}{:04}-{:02}-{:02} {:02}:{:02}:{:02}.",
+            "The time in {} is {}{:04}-{:02}-{:02} {:02}:{:02}:{:02} ({}).",
             loc.place,
             minus, abs_y, m, d, h, min, s,
+            time.offset().fix(),
         );
 
         send_channel_message!(
