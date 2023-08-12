@@ -39,7 +39,16 @@
       </select>
     </td>
     <td class="line"><input type="text" name="line"{% if let Some(line) = filters.line %} value="{{ line }}"{% endif %} /></td>
-    <td class="vehicles"><input type="text" name="vehicle"{% if let Some(vehicle) = filters.vehicle %} value="{{ vehicle }}"{% endif %} /></td>
+    <td class="vehicles">
+      <select name="vehicle-type">
+        <option value=""{% if filters.vehicle_type.is_none() %} selected="selected"{% endif %}></option>
+        <option value="&#x18;"{% if filters.want_missing_vehicle_types() %} selected="selected"{% endif %}>(none)</option>
+        {% for vehicle_type in all_vehicle_types %}
+        <option value="{{ vehicle_type }}"{% if filters.vehicle_type.as_ref() == Some(vehicle_type) %} selected="selected"{% endif %}>{{ vehicle_type }}</option>
+        {% endfor %}
+      </select>
+      <input type="text" name="vehicle-number"{% if let Some(vehicle_number) = filters.vehicle_number %} value="{{ vehicle_number }}"{% endif %} aria-label="vehicle number" />
+    </td>
     <td class="button"><input type="submit" value="apply filter" /></td>
   </tr>
   {% for ride in rides %}

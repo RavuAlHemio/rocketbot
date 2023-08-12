@@ -595,6 +595,7 @@ struct QueryTemplate {
     pub filters: QueryFiltersPart,
     pub all_riders: BTreeSet<String>,
     pub all_companies: BTreeSet<String>,
+    pub all_vehicle_types: BTreeSet<String>,
     pub rides: Vec<QueriedRidePart>,
 
     pub prev_page: Option<i64>,
@@ -608,7 +609,16 @@ struct QueryFiltersPart {
     pub rider_username: Option<String>,
     pub company: Option<String>,
     pub line: Option<String>,
-    pub vehicle: Option<String>,
+    pub vehicle_number: Option<String>,
+    pub vehicle_type: Option<String>,
+}
+impl QueryFiltersPart {
+    pub fn want_missing_vehicle_types(&self) -> bool {
+        self.vehicle_type
+            .as_ref()
+            .map(|vt| vt == "\u{18}")
+            .unwrap_or(false)
+    }
 }
 
 #[derive(Clone, Debug, Default, Eq, Hash, Ord, PartialEq, PartialOrd, Serialize)]
@@ -3111,14 +3121,16 @@ pub(crate) async fn handle_bim_query(request: &Request<Body>) -> Result<Response
         let rider_username = cow_to_owned_or_empty_to_none(query_pairs.get("rider"));
         let company = cow_to_owned_or_empty_to_none(query_pairs.get("company"));
         let line = cow_to_owned_or_empty_to_none(query_pairs.get("line"));
-        let vehicle = cow_to_owned_or_empty_to_none(query_pairs.get("vehicle"));
+        let vehicle_number = cow_to_owned_or_empty_to_none(query_pairs.get("vehicle-number"));
+        let vehicle_type = cow_to_owned_or_empty_to_none(query_pairs.get("vehicle-type"));
 
         QueryFiltersPart {
             timestamp,
             rider_username,
             company,
             line,
-            vehicle,
+            vehicle_number,
+            vehicle_type,
         }
     };
     let page: i64 = match query_pairs.get("page") {
@@ -3163,13 +3175,24 @@ pub(crate) async fn handle_bim_query(request: &Request<Body>) -> Result<Response
         filter_values.push(line);
         append_to_query(&mut filter_query_and, "line", line);
     }
-    if let Some(vehicle_number) = &filters.vehicle {
+    if let Some(vehicle_number) = &filters.vehicle_number {
         // filtering on vehicle_number directly would limit output to only the filtered vehicle number
         // instead, check if the ride generally contains the vehicle number
         filter_pieces.push(format!("EXISTS (SELECT 1 FROM bim.rides_and_vehicles rav_veh WHERE rav_veh.id = rav.id AND rav_veh.vehicle_number = ${})", next_filter_index));
         next_filter_index += 1;
         filter_values.push(vehicle_number);
-        append_to_query(&mut filter_query_and, "vehicle", vehicle_number);
+        append_to_query(&mut filter_query_and, "vehicle-number", vehicle_number);
+    }
+    if filters.want_missing_vehicle_types() {
+        // same caveat as with vehicle number
+        filter_pieces.push(format!("EXISTS (SELECT 1 FROM bim.rides_and_vehicles rav_vehtp WHERE rav_vehtp.id = rav.id AND rav_vehtp.vehicle_type IS NULL)"));
+        // no value here
+    } else if let Some(vehicle_type) = &filters.vehicle_type {
+        // same caveat as with vehicle number
+        filter_pieces.push(format!("EXISTS (SELECT 1 FROM bim.rides_and_vehicles rav_vehtp WHERE rav_vehtp.id = rav.id AND rav_vehtp.vehicle_type = ${})", next_filter_index));
+        next_filter_index += 1;
+        filter_values.push(vehicle_type);
+        append_to_query(&mut filter_query_and, "vehicle-type", vehicle_type);
     }
 
     let filter_string = filter_pieces.join(" AND ");
@@ -3294,6 +3317,23 @@ pub(crate) async fn handle_bim_query(request: &Request<Body>) -> Result<Response
         all_companies.insert(company);
     }
 
+    let all_type_rows_res = db_conn.query(
+        "SELECT DISTINCT vehicle_type FROM bim.ride_vehicles WHERE vehicle_type IS NOT NULL",
+        &[],
+    ).await;
+    let all_type_rows = match all_type_rows_res {
+        Ok(acr) => acr,
+        Err(e) => {
+            error!("failed to query vehicle types: {}", e);
+            return return_500();
+        },
+    };
+    let mut all_vehicle_types = BTreeSet::new();
+    for type_row in all_type_rows {
+        let vehicle_type: String = type_row.get(0);
+        all_vehicle_types.insert(vehicle_type);
+    }
+
     let prev_page = if page > 1 { Some(page - 1) } else { None };
     let next_page = if rides.len() > 0 { Some(page + 1) } else { None };
     let template = QueryTemplate {
@@ -3301,6 +3341,7 @@ pub(crate) async fn handle_bim_query(request: &Request<Body>) -> Result<Response
         rides,
         all_riders,
         all_companies,
+        all_vehicle_types,
         prev_page,
         next_page,
         filter_query_and,
