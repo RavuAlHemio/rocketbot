@@ -1,3 +1,9 @@
+#[cfg(windows)]
+mod windows_version;
+
+
+use std::borrow::Cow;
+use std::fmt::Write;
 use std::sync::Weak;
 
 use async_trait::async_trait;
@@ -6,12 +12,75 @@ use rocketbot_interface::{send_channel_message, send_private_message};
 use rocketbot_interface::commands::{CommandDefinitionBuilder, CommandInstance};
 use rocketbot_interface::interfaces::{RocketBotInterface, RocketBotPlugin};
 use rocketbot_interface::model::{ChannelMessage, PrivateMessage};
+use rustc_version_runtime;
 use serde_json;
 
 
 // should be filled in by CI/CD during a build
 const VERSION_STRING: &str = "{{VERSION}}";
 const COMMIT_MESSAGE_SHORT: &str = "{{COMMIT_MESSAGE_SHORT}}";
+
+
+fn bot_revision() -> Cow<'static, str> {
+    // use concat! to hide this string from CI/CD, lest it be replaced too
+    let unset_version_string = concat!("{{", "VERSION", "}}");
+
+    if VERSION_STRING == unset_version_string {
+        warn!("version requested but unknown!");
+        Cow::Borrowed("unknown")
+    } else {
+        Cow::Owned(format!("`{}` _{}_", VERSION_STRING, COMMIT_MESSAGE_SHORT))
+    }
+}
+
+
+fn compiler_version() -> String {
+    format!("rustc {}", rustc_version_runtime::version())
+}
+
+
+#[cfg(unix)]
+fn operating_system_version() -> Option<String> {
+    use std::ffi::{c_char, CStr};
+    use libc::{uname, utsname};
+
+    fn stringify(buf: &[c_char]) -> Cow<str> {
+        unsafe { CStr::from_ptr(buf.as_ptr()) }.to_string_lossy()
+    }
+
+    let mut buf: utsname = unsafe { std::mem::zeroed() };
+    unsafe { uname(&mut buf) };
+
+    Some(format!(
+        "{} {} {} {} {}",
+        stringify(&buf.sysname),
+        stringify(&buf.nodename),
+        stringify(&buf.release),
+        stringify(&buf.version),
+        stringify(&buf.machine),
+    ))
+}
+
+
+#[cfg(windows)]
+fn operating_system_version() -> Option<String> {
+    Some(crate::windows_version::version())
+}
+
+#[cfg(not(any(unix, windows)))]
+fn operating_system_version() -> Option<String> {
+    None
+}
+
+
+fn assemble_version() -> String {
+    let mut full_version = format!("rocketbot revision {}", bot_revision());
+    if let Some(os_ver) = operating_system_version() {
+        write!(full_version, "\nrunning on {}", os_ver).unwrap();
+    }
+    write!(full_version, "\ncompiled by {}", compiler_version()).unwrap();
+    full_version
+}
 
 
 pub struct VersionPlugin {
@@ -54,20 +123,12 @@ impl RocketBotPlugin for VersionPlugin {
             return;
         }
 
-        // use concat! to hide this string from CI/CD, lest it be replaced too
-        let unset_version_string = concat!("{{", "VERSION", "}}");
-
-        let this_version = if VERSION_STRING == unset_version_string {
-            warn!("version requested but unknown!");
-            "unknown".to_owned()
-        } else {
-            format!("`{}` _{}_", VERSION_STRING, COMMIT_MESSAGE_SHORT)
-        };
+        let version_string = assemble_version();
 
         send_channel_message!(
             interface,
             &channel_message.channel.name,
-            &format!("rocketbot revision {}", this_version),
+            &version_string,
         ).await;
     }
 
@@ -81,20 +142,12 @@ impl RocketBotPlugin for VersionPlugin {
             return;
         }
 
-        // use concat! to hide this string from CI/CD, lest it be replaced too
-        let unset_version_string = concat!("{{", "VERSION", "}}");
-
-        let this_version = if VERSION_STRING == unset_version_string {
-            warn!("version requested but unknown!");
-            "unknown".to_owned()
-        } else {
-            format!("`{}` _{}_", VERSION_STRING, COMMIT_MESSAGE_SHORT)
-        };
+        let version_string = assemble_version();
 
         send_private_message!(
             interface,
             &private_message.conversation.id,
-            &format!("rocketbot revision {}", this_version),
+            &version_string,
         ).await;
     }
 
