@@ -2894,10 +2894,20 @@ impl BimPlugin {
         ).await;
     }
 
-    async fn channel_command_recentbimrides(&self, channel_message: &ChannelMessage, _command: &CommandInstance) {
+    async fn channel_command_recentbimrides(&self, channel_message: &ChannelMessage, command: &CommandInstance) {
         let interface = match self.interface.upgrade() {
             None => return,
             Some(i) => i,
+        };
+
+        let rider_username_input = command.rest.trim();
+        let rider_username_opt = if rider_username_input.len() == 0 {
+            None
+        } else {
+            match interface.resolve_username(rider_username_input).await {
+                Some(ru) => Some(ru),
+                None => Some(rider_username_input.to_owned()),
+            }
         };
 
         let config_guard = self.config.read().await;
@@ -2914,19 +2924,30 @@ impl BimPlugin {
             },
         };
 
+        let mut query_values: Vec<&(dyn ToSql + Sync)> = Vec::with_capacity(1);
+        let query_addendum = if let Some(rider_username) = &rider_username_opt {
+            query_values.push(rider_username);
+            "AND rider_username = $1"
+        } else {
+            ""
+        };
         let ride_rows_res = ride_conn.query(
-            "
-                SELECT
-                    \"timestamp\", rider_username, line, vehicle_number,
-                    id, coupling_mode
-                FROM
-                    bim.rides_and_vehicles
-                WHERE
-                    \"timestamp\" >= CURRENT_TIMESTAMP - CAST('P1D' AS interval)
-                ORDER BY
-                    \"timestamp\", id, spec_position, fixed_coupling_position
-            ",
-            &[],
+            &format!(
+                "
+                    SELECT
+                        \"timestamp\", rider_username, line, vehicle_number,
+                        id, coupling_mode
+                    FROM
+                        bim.rides_and_vehicles
+                    WHERE
+                        \"timestamp\" >= CURRENT_TIMESTAMP - CAST('P1D' AS interval)
+                        {}
+                    ORDER BY
+                        \"timestamp\", id, spec_position, fixed_coupling_position
+                ",
+                query_addendum,
+            ),
+            &query_values,
         ).await;
         let ride_rows = match ride_rows_res {
             Ok(rr) => rr,
@@ -3495,7 +3516,7 @@ impl RocketBotPlugin for BimPlugin {
             &CommandDefinitionBuilder::new(
                 "recentbimrides",
                 "bim",
-                "{cpfx}recentbimrides",
+                "{cpfx}recentbimrides [USERNAME]",
                 "A list of recent rides.",
             )
                 .build()
