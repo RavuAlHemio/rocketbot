@@ -3313,7 +3313,7 @@ impl RocketBotPlugin for BimPlugin {
             &CommandDefinitionBuilder::new(
                 "bimride",
                 "bim",
-                "{cpfx}bimride VEHICLE[+VEHICLE...][/LINE]",
+                "{cpfx}bimride VEHICLE[!][+VEHICLE[!]...][/LINE]",
                 "Registers a ride with the given vehicle(s) on the given line.",
             )
                 .add_option("company", CommandValueType::String)
@@ -3393,7 +3393,7 @@ impl RocketBotPlugin for BimPlugin {
             &CommandDefinitionBuilder::new(
                 "bimridertypes",
                 "bim",
-                "{cpfx}bimridertypes [-n] USERNAME",
+                "{cpfx}bimridertypes [{sopfx}n] USERNAME",
                 "Returns the types of vehicles ridden by a rider.",
             )
                 .add_flag("n")
@@ -3405,7 +3405,7 @@ impl RocketBotPlugin for BimPlugin {
             &CommandDefinitionBuilder::new(
                 "bimriderlines",
                 "bim",
-                "{cpfx}bimriderlines [-n] USERNAME",
+                "{cpfx}bimriderlines [{sopfx}n] USERNAME",
                 "Returns the lines ridden by a rider.",
             )
                 .add_flag("n")
@@ -3417,7 +3417,7 @@ impl RocketBotPlugin for BimPlugin {
             &CommandDefinitionBuilder::new(
                 "bimranges",
                 "bim",
-                "{cpfx}bimranges [-p] [-c COMPANY]",
+                "{cpfx}bimranges [{sopfx}p] [{sopfx}c COMPANY]",
                 "Returns the number ranges of each vehicle type.",
             )
                 .add_flag("precise")
@@ -3430,7 +3430,7 @@ impl RocketBotPlugin for BimPlugin {
             &CommandDefinitionBuilder::new(
                 "bimtypes",
                 "bim",
-                "{cpfx}bimtypes [-c COMPANY] [USERNAME]",
+                "{cpfx}bimtypes [{sopfx}c COMPANY] [USERNAME]",
                 "Returns statistics about vehicle types.",
             )
                 .add_option("company", CommandValueType::String)
