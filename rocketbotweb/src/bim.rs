@@ -1333,6 +1333,73 @@ async fn get_company_to_vehicles_ridden(
     Some((company_to_vehicles_ridden, max_ride_count))
 }
 
+async fn get_company_to_vehicles_is_last_rider(
+    db_conn: &tokio_postgres::Client,
+    to_date_opt: Option<DateTime<Local>>,
+    rider_username: &str,
+    ridden_only: bool,
+    negate: bool,
+) -> Option<(HashMap<String, HashMap<VehicleNumber, i64>>, i64)> {
+    let mut conditions: Vec<String> = Vec::with_capacity(3);
+    let mut params: Vec<&(dyn ToSql + Sync)> = Vec::with_capacity(2);
+
+    if let Some(to_date) = to_date_opt.as_ref() {
+        conditions.push(format!("AND \"timestamp\" <= ${}", conditions.len() + 1));
+        params.push(to_date);
+    }
+
+    if ridden_only {
+        conditions.push("AND coupling_mode = 'R'".to_owned());
+    }
+
+    let conditions_string = if conditions.len() > 0 {
+        conditions.join(" ")
+    } else {
+        String::new()
+    };
+
+    let query = format!(
+        "
+            SELECT rav.company, rav.vehicle_number, rav.rider_username
+            FROM bim.rides_and_vehicles rav
+            WHERE NOT EXISTS (
+                SELECT 1
+                FROM bim.rides_and_vehicles rav2
+                WHERE rav2.company = rav.company
+                AND rav2.vehicle_number = rav.vehicle_number
+                AND rav2.\"timestamp\" > rav.\"timestamp\"
+            )
+            {}
+        ",
+        conditions_string,
+    );
+
+    // get ridden vehicles for rider
+    let vehicles_res = db_conn.query(&query, &params).await;
+    let vehicle_rows = match vehicles_res {
+        Ok(r) => r,
+        Err(e) => {
+            error!("failed to query vehicles: {}", e);
+            return None;
+        },
+    };
+    let mut company_to_vehicles_ridden: HashMap<String, HashMap<VehicleNumber, i64>> = HashMap::new();
+    for vehicle_row in vehicle_rows {
+        let company: String = vehicle_row.get(0);
+        let vehicle_number = VehicleNumber::from_string(vehicle_row.get(1));
+        let vehicle_rider_username: String = vehicle_row.get(2);
+        let mut count_value = if vehicle_rider_username == rider_username { 1 } else { 0 };
+        if negate { count_value = 1 - count_value; }
+        company_to_vehicles_ridden
+            .entry(company)
+            .or_insert_with(|| HashMap::new())
+            .insert(vehicle_number, count_value);
+    }
+
+    // use 2 as the max value to lead to lighter colors in the web interface
+    Some((company_to_vehicles_ridden, 2))
+}
+
 pub(crate) async fn handle_bim_coverage(request: &Request<Body>) -> Result<Response<Body>, Infallible> {
     let query_pairs = get_query_pairs(request);
 
@@ -1352,6 +1419,9 @@ pub(crate) async fn handle_bim_coverage(request: &Request<Body>) -> Result<Respo
     let ridden_only = query_pairs.get("ridden-only")
         .map(|qp| qp == "1")
         .unwrap_or(false);
+    let last_rider = query_pairs.get("last-rider")
+        .map(|qp| qp == "1")
+        .unwrap_or(false);
 
     let db_conn = match connect_to_db().await {
         Some(c) => c,
@@ -1365,6 +1435,10 @@ pub(crate) async fn handle_bim_coverage(request: &Request<Body>) -> Result<Respo
             Some(rider_name.as_ref())
         };
         let country_code_opt = query_pairs.get("country");
+
+        if last_rider && rider_username_opt.is_none() {
+            return return_400("last-rider mode requires a specific rider to be chosen", &query_pairs).await;
+        }
 
         let mut to_date_opt: Option<DateTime<Local>> = None;
         if let Some(date_str) = cow_empty_to_none(query_pairs.get("to-date")) {
@@ -1382,12 +1456,22 @@ pub(crate) async fn handle_bim_coverage(request: &Request<Body>) -> Result<Respo
                 None => return return_400("failed to convert timestamp to local time", &query_pairs).await,
             };
         }
-        let query_res = get_company_to_vehicles_ridden(
-            &db_conn,
-            to_date_opt,
-            rider_username_opt,
-            ridden_only,
-        ).await;
+        let query_res = if last_rider {
+            get_company_to_vehicles_is_last_rider(
+                &db_conn,
+                to_date_opt,
+                rider_username_opt.as_ref().unwrap(),
+                ridden_only,
+                false,
+            ).await
+        } else {
+            get_company_to_vehicles_ridden(
+                &db_conn,
+                to_date_opt,
+                rider_username_opt,
+                ridden_only,
+            ).await
+        };
         let (company_to_vehicles_ridden, max_ride_count) = match query_res {
             Some(val) => val,
             None => return return_500(),
@@ -1395,12 +1479,22 @@ pub(crate) async fn handle_bim_coverage(request: &Request<Body>) -> Result<Respo
 
         let (all_riders_company_to_vehicles_ridden, everybody_max_ride_count) = if compare_mode {
             // get ridden vehicles for all riders
-            let query_res = get_company_to_vehicles_ridden(
-                &db_conn,
-                to_date_opt,
-                None,
-                ridden_only,
-            ).await;
+            let query_res = if last_rider {
+                get_company_to_vehicles_is_last_rider(
+                    &db_conn,
+                    to_date_opt,
+                    rider_username_opt.as_ref().unwrap(),
+                    ridden_only,
+                    true,
+                ).await
+            } else {
+                get_company_to_vehicles_ridden(
+                    &db_conn,
+                    to_date_opt,
+                    None,
+                    ridden_only,
+                ).await
+            };
             match query_res {
                 Some(val) => val,
                 None => return return_500(),
