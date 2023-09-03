@@ -2,5 +2,5 @@
 config.json
 
 # CI/CDed:
-rocketbot_bim_achievements/src/definitions.rs
+rocketbot_bim_common/src/achievements/definitions.rs
 rocketbot_plugin_grammargen/grammars/sprichwort.grammar

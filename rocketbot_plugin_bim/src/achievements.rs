@@ -1,7 +1,7 @@
 use std::collections::BTreeMap;
 
 use chrono::{DateTime, Local};
-use rocketbot_bim_achievements::AchievementState;
+use rocketbot_bim_common::achievements::AchievementState;
 use tokio_postgres;
 
 

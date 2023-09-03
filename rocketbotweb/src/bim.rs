@@ -12,7 +12,7 @@ use hyper::{Body, Method, Request, Response};
 use indexmap::IndexSet;
 use log::{error, warn};
 use png;
-use rocketbot_bim_achievements::{AchievementDef, ACHIEVEMENT_DEFINITIONS};
+use rocketbot_bim_common::achievements::{AchievementDef, ACHIEVEMENT_DEFINITIONS};
 use rocketbot_date_time::DateTimeLocalWithWeekday;
 use rocketbot_string::NatSortedString;
 use serde::{Deserialize, Serialize, Serializer};

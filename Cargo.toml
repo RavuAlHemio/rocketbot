@@ -2,7 +2,7 @@
 members = [
     "rocketbot",
     "rocketbot_barcode",
-    "rocketbot_bim_achievements",
+    "rocketbot_bim_common",
     "rocketbot_date_time",
     "rocketbot_geocoding",
     "rocketbot_interface",

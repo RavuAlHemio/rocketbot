@@ -2219,7 +2219,7 @@ dependencies = [
 ]
 
 [[package]]
-name = "rocketbot_bim_achievements"
+name = "rocketbot_bim_common"
 version = "0.1.0"
 dependencies = [
  "regex",
@@ -2348,7 +2348,7 @@ dependencies = [
  "rand 0.8.5",
  "regex",
  "reqwest",
- "rocketbot_bim_achievements",
+ "rocketbot_bim_common",
  "rocketbot_interface",
  "rocketbot_mediawiki_parsing",
  "rocketbot_render_text",
@@ -3017,7 +3017,7 @@ dependencies = [
  "log",
  "once_cell",
  "png",
- "rocketbot_bim_achievements",
+ "rocketbot_bim_common",
  "rocketbot_date_time",
  "rocketbot_string",
  "serde",

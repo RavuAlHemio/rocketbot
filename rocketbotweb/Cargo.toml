@@ -13,7 +13,7 @@ indexmap = { version = "1.8", features = ["serde-1"] }
 log = { version = "0.4" }
 once_cell = { version = "1.10" }
 png = { version = "0.17" }
-rocketbot_bim_achievements = { path = "../rocketbot_bim_achievements" }
+rocketbot_bim_common = { path = "../rocketbot_bim_common" }
 rocketbot_date_time = { path = "../rocketbot_date_time" }
 rocketbot_string = { path = "../rocketbot_string", features = ["serde"] }
 serde = { version = "1.0", features = ["derive"] }

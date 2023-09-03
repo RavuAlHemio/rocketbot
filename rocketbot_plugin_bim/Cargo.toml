@@ -12,7 +12,7 @@ once_cell = { version = "1.10" }
 png = { version = "0.17" }
 rand = { version = "0.8" }
 regex = { version = "1.5" }
-rocketbot_bim_achievements = { path = "../rocketbot_bim_achievements" }
+rocketbot_bim_common = { path = "../rocketbot_bim_common" }
 rocketbot_interface = { path = "../rocketbot_interface" }
 rocketbot_render_text = { path = "../rocketbot_render_text", features = ["png"] }
 rocketbot_string = { path = "../rocketbot_string", features = ["serde"] }

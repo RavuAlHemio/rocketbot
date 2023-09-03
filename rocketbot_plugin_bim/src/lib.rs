@@ -21,7 +21,7 @@ use log::{error, info};
 use once_cell::sync::OnceCell;
 use rand::{Rng, thread_rng};
 use regex::Regex;
-use rocketbot_bim_achievements::ACHIEVEMENT_DEFINITIONS;
+use rocketbot_bim_common::achievements::ACHIEVEMENT_DEFINITIONS;
 use rocketbot_interface::{JsonValueExtensions, phrase_join, ResultExtensions, send_channel_message};
 use rocketbot_interface::commands::{CommandDefinitionBuilder, CommandInstance, CommandValueType};
 use rocketbot_interface::interfaces::{RocketBotInterface, RocketBotPlugin};

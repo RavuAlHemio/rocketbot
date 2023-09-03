@@ -4,7 +4,7 @@ mod definitions;
 use rocketbot_date_time::DateTimeLocalWithWeekday;
 use serde::Serialize;
 
-pub use crate::definitions::ACHIEVEMENT_DEFINITIONS;
+pub use crate::achievements::definitions::ACHIEVEMENT_DEFINITIONS;
 
 
 #[derive(Clone, Copy, Debug, Eq, Hash, Ord, PartialEq, PartialOrd, Serialize)]

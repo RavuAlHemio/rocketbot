@@ -83,14 +83,14 @@ fn main() {
 
     {
         // write achievements to Rust file
-        let mut f = File::create("src/definitions.rs")
-            .expect("failed to create src/definitions.rs");
+        let mut f = File::create("src/achievements/definitions.rs")
+            .expect("failed to create src/achievements/definitions.rs");
 
         writeln!(f, "// This file has been automatically generated from .../rocketbot_plugin_bim/db/achievements.pgsql.").unwrap();
         writeln!(f, "// Manual changes will be lost.").unwrap();
         writeln!(f).unwrap();
         writeln!(f).unwrap();
-        writeln!(f, "use crate::AchievementDef;").unwrap();
+        writeln!(f, "use crate::achievements::AchievementDef;").unwrap();
         writeln!(f).unwrap();
         writeln!(f).unwrap();
         writeln!(f, "pub static ACHIEVEMENT_DEFINITIONS: [AchievementDef; {}] = [", defs.len()).unwrap();
