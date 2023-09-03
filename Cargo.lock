@@ -2222,8 +2222,10 @@ dependencies = [
 name = "rocketbot_bim_common"
 version = "0.1.0"
 dependencies = [
+ "indexmap",
  "regex",
  "rocketbot_date_time",
+ "rocketbot_string",
  "serde",
 ]
 

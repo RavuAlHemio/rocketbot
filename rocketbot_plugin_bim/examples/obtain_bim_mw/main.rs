@@ -12,9 +12,9 @@ use std::time::Duration;
 
 use indexmap::IndexMap;
 use regex::Regex;
+use rocketbot_bim_common::{VehicleClass, VehicleInfo};
 use rocketbot_interface::serde::{serde_opt_regex, serde_regex};
 use rocketbot_mediawiki_parsing::WikiParser;
-use rocketbot_plugin_bim::{VehicleClass, VehicleInfo};
 use serde::{Deserialize, Serialize};
 use serde_json;
 

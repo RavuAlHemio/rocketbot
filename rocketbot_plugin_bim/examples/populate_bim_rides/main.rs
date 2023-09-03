@@ -4,7 +4,8 @@ use std::ffi::OsString;
 use std::fs::File;
 
 use chrono::{Local, NaiveDateTime, TimeZone};
-use rocketbot_plugin_bim::{CompanyDefinition, increment_rides_by_spec, VehicleInfo, VehicleNumber};
+use rocketbot_bim_common::{VehicleInfo, VehicleNumber};
+use rocketbot_plugin_bim::{CompanyDefinition, increment_rides_by_spec};
 use serde::{Deserialize, Serialize};
 use serde_json;
 use tokio;

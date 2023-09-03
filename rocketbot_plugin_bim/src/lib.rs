@@ -16,11 +16,11 @@ use chrono::{
     Datelike, DateTime, Duration, Local, LocalResult, NaiveDate, NaiveDateTime, Timelike, TimeZone,
     Weekday,
 };
-use indexmap::IndexSet;
 use log::{error, info};
 use once_cell::sync::OnceCell;
 use rand::{Rng, thread_rng};
 use regex::Regex;
+use rocketbot_bim_common::{CouplingMode, VehicleInfo, VehicleNumber};
 use rocketbot_bim_common::achievements::ACHIEVEMENT_DEFINITIONS;
 use rocketbot_interface::{JsonValueExtensions, phrase_join, ResultExtensions, send_channel_message};
 use rocketbot_interface::commands::{CommandDefinitionBuilder, CommandInstance, CommandValueType};
@@ -29,7 +29,6 @@ use rocketbot_interface::model::{Attachment, ChannelMessage, OutgoingMessageWith
 use rocketbot_interface::serde::serde_opt_regex;
 use rocketbot_interface::sync::RwLock;
 use rocketbot_render_text::map_to_png;
-use rocketbot_string::NatSortedString;
 use serde::{Deserialize, Serialize};
 use serde_json;
 use tokio::sync::mpsc;
@@ -92,7 +91,6 @@ impl AddLookbackFlags for CommandDefinitionBuilder {
 }
 
 
-pub type VehicleNumber = NatSortedString;
 pub type RegionToLineToOperator = HashMap<String, HashMap<String, LineOperatorInfo>>;
 
 
@@ -100,96 +98,6 @@ macro_rules! write_expect {
     ($dst:expr, $($arg:tt)*) => {
         write!($dst, $($arg)*).expect("write failed")
     };
-}
-
-
-#[derive(Clone, Copy, Debug, Deserialize, Eq, Hash, PartialEq, Serialize)]
-#[serde(rename_all = "kebab-case")]
-pub enum VehicleClass {
-    Tram,
-    Metro,
-    PreMetro,
-    Bus,
-    ElectricBus,
-    Trolleybus,
-    BatteryTrolleybus,
-    TramTrain,
-    RegionalTrain,
-    LongDistanceTrain,
-}
-impl fmt::Display for VehicleClass {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        match self {
-            Self::Tram => write!(f, "tram"),
-            Self::Metro => write!(f, "metro"),
-            Self::PreMetro => write!(f, "premetro"),
-            Self::Bus => write!(f, "bus"),
-            Self::ElectricBus => write!(f, "electric bus"),
-            Self::Trolleybus => write!(f, "trolleybus"),
-            Self::BatteryTrolleybus => write!(f, "battery trolleybus"),
-            Self::TramTrain => write!(f, "tram-train"),
-            Self::RegionalTrain => write!(f, "train (regional)"),
-            Self::LongDistanceTrain => write!(f, "train (long-distance)"),
-        }
-    }
-}
-
-
-/// Specifies whether a vehicle has actually been ridden or was simply coupled to one that was ridden.
-#[derive(Clone, Copy, Debug, Deserialize, Eq, Hash, Ord, PartialEq, PartialOrd, Serialize)]
-#[serde(rename_all = "kebab-case")]
-pub enum CouplingMode {
-    /// Explicitly specified and actually ridden.
-    Ridden,
-
-    /// Explicitly specified but only coupled to the vehicle actually ridden.
-    Explicit,
-
-    /// Not specified, but fixed-coupled to the vehicle actually ridden.
-    FixedCoupling,
-}
-impl CouplingMode {
-    pub fn as_db_str(&self) -> &'static str {
-        match self {
-            Self::Ridden => "R",
-            Self::Explicit => "E",
-            Self::FixedCoupling => "F",
-        }
-    }
-
-    pub fn is_explicit(&self) -> bool {
-        match self {
-            Self::Ridden|Self::Explicit => true,
-            _ => false,
-        }
-    }
-}
-
-
-#[derive(Clone, Debug, Deserialize, Eq, PartialEq, Serialize)]
-pub struct VehicleInfo {
-    pub number: VehicleNumber,
-    pub vehicle_class: VehicleClass,
-    pub type_code: String,
-    pub in_service_since: Option<String>,
-    pub out_of_service_since: Option<String>,
-    pub manufacturer: Option<String>,
-    pub other_data: BTreeMap<String, String>,
-    pub fixed_coupling: IndexSet<VehicleNumber>,
-}
-impl VehicleInfo {
-    pub fn new(number: VehicleNumber, vehicle_class: VehicleClass, type_code: String) -> Self {
-        Self {
-            number,
-            vehicle_class,
-            type_code,
-            in_service_since: None,
-            out_of_service_since: None,
-            manufacturer: None,
-            other_data: BTreeMap::new(),
-            fixed_coupling: IndexSet::new(),
-        }
-    }
 }
 
 

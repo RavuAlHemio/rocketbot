@@ -10,7 +10,7 @@ use std::time::Duration;
 
 use indexmap::IndexSet;
 use reqwest;
-use rocketbot_plugin_bim::{VehicleClass, VehicleInfo, VehicleNumber};
+use rocketbot_bim_common::{VehicleClass, VehicleInfo, VehicleNumber};
 use serde::{Deserialize, Serialize};
 use serde_json;
 use sxd_document;

@@ -13,7 +13,7 @@ use indexmap::IndexSet;
 use once_cell::sync::Lazy;
 use regex::Regex;
 use reqwest;
-use rocketbot_plugin_bim::{VehicleClass, VehicleInfo, VehicleNumber};
+use rocketbot_bim_common::{VehicleClass, VehicleInfo, VehicleNumber};
 use scraper::{ElementRef, Html, Node, Selector};
 use serde::{Deserialize, Serialize};
 use serde_json;
