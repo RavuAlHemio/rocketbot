@@ -9,9 +9,9 @@ use askama::Template;
 use chrono::{DateTime, Local, NaiveDate, TimeZone};
 use form_urlencoded;
 use hyper::{Body, Method, Request, Response};
-use indexmap::IndexSet;
 use log::{error, warn};
 use png;
+use rocketbot_bim_common::VehicleInfo;
 use rocketbot_bim_common::achievements::{AchievementDef, ACHIEVEMENT_DEFINITIONS};
 use rocketbot_date_time::DateTimeLocalWithWeekday;
 use rocketbot_string::NatSortedString;
@@ -315,7 +315,7 @@ struct BimCoveragePickRiderTemplate {
 #[template(path = "bimdetails.html")]
 struct BimDetailsTemplate {
     pub company: String,
-    pub vehicle: Option<VehicleDetailsPart>,
+    pub vehicle: Option<VehicleInfo>,
     pub rides: Vec<BimDetailsRidePart>,
 }
 
@@ -325,58 +325,6 @@ struct BimAchievementsTemplate {
     pub achievement_to_rider_to_timestamp: HashMap<i64, HashMap<String, DateTimeLocalWithWeekday>>,
     pub all_achievements: Vec<AchievementDef>,
     pub all_riders: BTreeSet<String>,
-}
-
-#[derive(Clone, Debug, Eq, PartialEq, Serialize)]
-struct VehicleDetailsPart {
-    pub number: VehicleNumber,
-    pub type_code: String,
-    pub vehicle_class: String,
-    pub in_service_since: Option<String>,
-    pub out_of_service_since: Option<String>,
-    pub manufacturer: Option<String>,
-    pub other_data: BTreeMap<String, String>,
-    pub fixed_coupling: IndexSet<VehicleNumber>,
-}
-impl VehicleDetailsPart {
-    pub fn try_from_json(vehicle: &serde_json::Value) -> Option<Self> {
-        let number: VehicleNumber = vehicle["number"].as_str()?.to_owned().into();
-        let type_code = vehicle["type_code"].as_str()?.to_owned();
-        let vehicle_class = vehicle["vehicle_class"].as_str()?.to_owned();
-        let in_service_since = vehicle["in_service_since"]
-            .as_str().map(|s| s.to_owned());
-        let out_of_service_since = vehicle["out_of_service_since"]
-            .as_str().map(|s| s.to_owned());
-        let manufacturer = vehicle["manufacturer"]
-            .as_str().map(|s| s.to_owned());
-
-        let other_data_map = vehicle["other_data"]
-            .as_object()?;
-        let mut other_data = BTreeMap::new();
-        for (key, val_val) in other_data_map {
-            let val = val_val.as_str()?;
-            other_data.insert(key.clone(), val.to_owned());
-        }
-
-        let fixed_coupling_array = vehicle["fixed_coupling"]
-            .as_array()?;
-        let mut fixed_coupling = IndexSet::new();
-        for fc_value in fixed_coupling_array {
-            let fc_number: VehicleNumber = fc_value.as_str()?.to_owned().into();
-            fixed_coupling.insert(fc_number);
-        }
-
-        Some(Self {
-            number,
-            type_code,
-            vehicle_class,
-            in_service_since,
-            out_of_service_since,
-            manufacturer,
-            other_data,
-            fixed_coupling,
-        })
-    }
 }
 
 #[derive(Clone, Debug, Eq, PartialEq, Serialize, Template)]
@@ -736,7 +684,7 @@ async fn obtain_company_to_definition() -> Option<BTreeMap<String, serde_json::V
 }
 
 
-fn obtain_company_to_bim_database(company_to_definition: &BTreeMap<String, serde_json::Value>) -> Option<BTreeMap<String, Option<BTreeMap<VehicleNumber, serde_json::Value>>>> {
+fn obtain_company_to_bim_database(company_to_definition: &BTreeMap<String, serde_json::Value>) -> Option<BTreeMap<String, Option<BTreeMap<VehicleNumber, VehicleInfo>>>> {
     let mut company_to_database = BTreeMap::new();
     for (company, definition) in company_to_definition.iter() {
         let bim_database_path_object = &definition["bim_database_path"];
@@ -759,31 +707,17 @@ fn obtain_company_to_bim_database(company_to_definition: &BTreeMap<String, serde
                 continue;
             },
         };
-        let bim_database: serde_json::Value = match serde_json::from_reader(file) {
+        let bim_database: Vec<VehicleInfo> = match serde_json::from_reader(file) {
             Ok(bd) => bd,
             Err(e) => {
                 error!("failed to parse bim database file {:?}: {}", bim_database_path, e);
                 continue;
             }
         };
-        let bim_array = match bim_database.as_array() {
-            Some(ba) => ba,
-            None => {
-                error!("bim database file {:?} not a list", bim_database_path);
-                continue;
-            },
-        };
 
-        let mut bim_map: BTreeMap<VehicleNumber, serde_json::Value> = BTreeMap::new();
-        for bim in bim_array {
-            let number: VehicleNumber = match bim["number"].as_str() {
-                Some(bn) => bn.to_owned().into(),
-                None => {
-                    error!("number in {} in {:?} bim database file {:?} not a string", bim, company, bim_database_path);
-                    continue;
-                },
-            };
-            bim_map.insert(number, bim.clone());
+        let mut bim_map: BTreeMap<VehicleNumber, VehicleInfo> = BTreeMap::new();
+        for bim in bim_database {
+            bim_map.insert(bim.number.clone(), bim.clone());
         }
         company_to_database.insert(
             company.clone(),
@@ -814,31 +748,14 @@ async fn obtain_vehicle_extract() -> VehicleDatabaseExtract {
         };
 
         for (number, bim) in database {
-            if let Some(type_code) = bim["type_code"].as_str() {
-                company_to_vehicle_to_type.entry(company.clone())
-                    .or_insert_with(|| HashMap::new())
-                    .insert(number.to_owned(), type_code.to_owned());
-            };
+            company_to_vehicle_to_type.entry(company.clone())
+                .or_insert_with(|| HashMap::new())
+                .insert(number.to_owned(), bim.type_code.to_owned());
 
-            let fixed_coupling = match bim["fixed_coupling"].as_array() {
-                Some(fc) => fc,
-                None => {
-                    error!("fixed_coupling in {} in {:?} bim database file not an array", bim, company);
-                    continue;
-                },
-            };
-            let mut fixed_coupling_vns: Vec<VehicleNumber> = Vec::new();
-            for fixed_coupling_value in fixed_coupling {
-                let fc: VehicleNumber = match fixed_coupling_value.as_str() {
-                    Some(n) => n.to_owned().into(),
-                    None => {
-                        error!("fixed coupling value {} in {:?} bim database file not a string", fixed_coupling_value, company);
-                        continue;
-                    },
-                };
-                fixed_coupling_vns.push(fc);
-            }
-            if fixed_coupling_vns.len() > 0 {
+            if bim.fixed_coupling.len() > 0 {
+                let fixed_coupling_vns: Vec<VehicleNumber> = bim.fixed_coupling.iter()
+                    .map(|fc| fc.clone())
+                    .collect();
                 company_to_vehicle_to_fixed_coupling.entry(company.clone())
                     .or_insert_with(|| HashMap::new())
                     .insert(number.to_owned(), fixed_coupling_vns);
@@ -1004,13 +921,9 @@ pub(crate) async fn handle_bim_types(request: &Request<Body>) -> Result<Response
 
         if let Some(bims) = bims_opt {
             for (bim_number, bim_data) in bims {
-                let type_code = match bim_data["type_code"].as_str() {
-                    Some(tc) => tc,
-                    None => continue,
-                };
                 let is_active =
-                    !bim_data["in_service_since"].is_null()
-                    && bim_data["out_of_service_since"].is_null()
+                    bim_data.in_service_since.is_some()
+                    && bim_data.out_of_service_since.is_none()
                 ;
 
                 let riders = vehicle_to_riders
@@ -1018,8 +931,8 @@ pub(crate) async fn handle_bim_types(request: &Request<Body>) -> Result<Response
                     .unwrap_or_else(|| BTreeSet::new());
 
                 let type_stats = stats.type_to_stats
-                    .entry(type_code.to_owned())
-                    .or_insert_with(|| TypeStats::new(type_code.to_owned(), all_riders.iter()));
+                    .entry(bim_data.type_code.clone())
+                    .or_insert_with(|| TypeStats::new(bim_data.type_code.clone(), all_riders.iter()));
 
                 type_stats.total_count += 1;
                 if is_active {
@@ -1081,7 +994,7 @@ pub(crate) async fn handle_bim_vehicles(request: &Request<Body>) -> Result<Respo
         Some(ctbdb) => ctbdb,
         None => return return_500(),
     };
-    let mut company_to_bim_database: BTreeMap<String, BTreeMap<VehicleNumber, serde_json::Value>> = BTreeMap::new();
+    let mut company_to_bim_database: BTreeMap<String, BTreeMap<VehicleNumber, VehicleInfo>> = BTreeMap::new();
     for (company, bim_database_opt) in company_to_bim_database_opts.into_iter() {
         company_to_bim_database.insert(company, bim_database_opt.unwrap_or_else(|| BTreeMap::new()));
     }
@@ -1190,20 +1103,6 @@ pub(crate) async fn handle_bim_vehicles(request: &Request<Body>) -> Result<Respo
             .or_insert_with(|| BTreeMap::new());
 
         for (vn, bim_value) in bim_database {
-            let type_code = bim_value["type_code"].as_str().map(|s| s.to_owned());
-            let active_from = bim_value["in_service_since"].as_str().map(|s| s.to_owned());
-            let active_to = bim_value["out_of_service_since"].as_str().map(|s| s.to_owned());
-            let manufacturer = bim_value["manufacturer"].as_str().map(|s| s.to_owned());
-
-            let mut add_info = BTreeMap::new();
-            if let Some(od) = bim_value["other_data"].as_object() {
-                for (k, v) in od {
-                    if let Some(v_str) = v.as_str() {
-                        add_info.insert(k.clone(), v_str.to_owned());
-                    }
-                }
-            }
-
             let (ride_count, rider_to_ride_count, first_ride_opt, latest_ride_opt) = company_to_vehicle_to_ride_info
                 .get(company)
                 .map(|vtri| vtri.get(vn))
@@ -1217,11 +1116,11 @@ pub(crate) async fn handle_bim_vehicles(request: &Request<Body>) -> Result<Respo
                 .unwrap_or((0, BTreeMap::new(), None, None));
 
             let profile = VehicleProfile {
-                type_code,
-                manufacturer,
-                active_from,
-                active_to,
-                add_info,
+                type_code: Some(bim_value.type_code.clone()),
+                manufacturer: bim_value.manufacturer.clone(),
+                active_from: bim_value.in_service_since.clone(),
+                active_to: bim_value.out_of_service_since.clone(),
+                add_info: bim_value.other_data.clone(),
                 ride_count,
                 rider_to_ride_count,
                 first_ride: first_ride_opt,
@@ -1523,7 +1422,7 @@ pub(crate) async fn handle_bim_coverage(request: &Request<Body>) -> Result<Respo
             Some(ctbdb) => ctbdb,
             None => return return_500(),
         };
-        let company_to_bim_database: BTreeMap<String, BTreeMap<VehicleNumber, serde_json::Value>> = company_to_bim_database_opts.iter()
+        let company_to_bim_database: BTreeMap<String, BTreeMap<VehicleNumber, VehicleInfo>> = company_to_bim_database_opts.iter()
             .filter_map(|(comp, db_opt)| {
                 if let Some(db) = db_opt.as_ref() {
                     Some((comp.clone(), db.clone()))
@@ -1552,19 +1451,15 @@ pub(crate) async fn handle_bim_coverage(request: &Request<Body>) -> Result<Respo
                     ("", full_number_str.as_str())
                 };
 
-                let type_code = match vehicle["type_code"].as_str() {
-                    Some(tc) => tc.to_owned(),
-                    None => continue,
-                };
                 let type_code_key = if merge_types {
                     String::new()
                 } else {
-                    type_code.clone()
+                    vehicle.type_code.clone()
                 };
 
                 // is the vehicle active?
-                let from_known = vehicle["in_service_since"].is_string();
-                let to_known = vehicle["out_of_service_since"].is_string();
+                let from_known = vehicle.in_service_since.is_some();
+                let to_known = vehicle.out_of_service_since.is_some();
                 let is_active = from_known && !to_known;
                 let ride_count = ridden_vehicles.get(number).map(|c| *c).unwrap_or(0);
                 let everybody_ride_count = all_riders_ridden_vehicles.get(number).map(|c| *c)
@@ -1577,7 +1472,7 @@ pub(crate) async fn handle_bim_coverage(request: &Request<Body>) -> Result<Respo
                 let vehicle_data = CoverageVehiclePart {
                     block_str: block_str.to_owned(),
                     number_str: number_str.to_owned(),
-                    type_code,
+                    type_code: vehicle.type_code.clone(),
                     full_number_str: full_number_str.clone(),
                     is_active,
                     ride_count,
@@ -1672,7 +1567,7 @@ pub(crate) async fn handle_bim_detail(request: &Request<Body>) -> Result<Respons
         Some(ctbdb) => ctbdb,
         None => return return_500(),
     };
-    let mut company_to_bim_database: BTreeMap<String, BTreeMap<VehicleNumber, serde_json::Value>> = BTreeMap::new();
+    let mut company_to_bim_database: BTreeMap<String, BTreeMap<VehicleNumber, VehicleInfo>> = BTreeMap::new();
     for (company, bim_database_opt) in company_to_bim_database_opts.into_iter() {
         company_to_bim_database.insert(company, bim_database_opt.unwrap_or_else(|| BTreeMap::new()));
     }
@@ -1688,8 +1583,7 @@ pub(crate) async fn handle_bim_detail(request: &Request<Body>) -> Result<Respons
     };
 
     let vehicle = company_bim_database.get(&vehicle_number)
-        .map(|v| VehicleDetailsPart::try_from_json(v))
-        .flatten();
+        .map(|v| v.clone());
 
     // query rides
     let ride_rows_res = db_conn.query(
@@ -2180,7 +2074,7 @@ pub(crate) async fn handle_bim_coverage_field(request: &Request<Body>) -> Result
         Some(ctbdb) => ctbdb,
         None => return return_500(),
     };
-    let mut company_to_bim_database: BTreeMap<String, BTreeMap<VehicleNumber, serde_json::Value>> = BTreeMap::new();
+    let mut company_to_bim_database: BTreeMap<String, BTreeMap<VehicleNumber, VehicleInfo>> = BTreeMap::new();
     for (company, bim_database_opt) in company_to_bim_database_opts.into_iter() {
         if let Some(bd) = bim_database_opt {
             company_to_bim_database.insert(company, bd);
@@ -2233,8 +2127,7 @@ pub(crate) async fn handle_bim_coverage_field(request: &Request<Body>) -> Result
 
     let mut pixels = Vec::with_capacity(bim_database.len());
     for vehicle in bim_database.values() {
-        let number = vehicle["number"].as_str().unwrap().to_owned().into();
-        pixels.push(vehicles.contains(&number));
+        pixels.push(vehicles.contains(&vehicle.number));
     }
 
     let image_side = (pixels.len() as f64).sqrt() as usize;
