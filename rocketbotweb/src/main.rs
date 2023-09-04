@@ -12,7 +12,6 @@ use std::convert::Infallible;
 use std::env;
 use std::ffi::OsString;
 use std::fs::File;
-use std::io::Read;
 use std::path::PathBuf;
 
 use askama::Template;
@@ -273,12 +272,9 @@ async fn main() {
     };
 
     let config: WebConfig = {
-        let mut file = File::open(config_path)
-            .expect("failed to open config file");
-        let mut bytes = Vec::new();
-        file.read_to_end(&mut bytes)
+        let s = std::fs::read_to_string(config_path)
             .expect("failed to read config file");
-        toml::from_slice(&bytes)
+        toml::from_str(&s)
             .expect("failed to parse config file")
     };
     let listen_address = config.listen.clone();

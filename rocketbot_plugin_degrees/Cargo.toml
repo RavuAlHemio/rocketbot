@@ -8,7 +8,7 @@ async-trait = { version = "0.1" }
 chrono = { version = "0.4" }
 log = { version = "0.4" }
 png = { version = "0.17" }
-regex = { version = "1.5" }
+regex = { version = "1.9" }
 rocketbot_interface = { path = "../rocketbot_interface" }
 serde_json = { version = "1.0" }
 tokio = { version = "1.17" }

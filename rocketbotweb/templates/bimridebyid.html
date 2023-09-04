@@ -21,11 +21,11 @@
 
   <p class="ride-not-found">Ride not found.</p>
 
-{%- elseif let RideInfoState::Invalid = ride_state %}
+{%- else if let RideInfoState::Invalid = ride_state %}
 
   <p class="ride-id-invalid">Invalid ride ID.</p>
 
-{%- elseif let RideInfoState::Found(ride) = ride_state %}
+{%- else if let RideInfoState::Found(ride) = ride_state %}
 
   <table class="bim-ride-general booktable">
 

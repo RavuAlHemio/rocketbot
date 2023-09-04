@@ -1,6 +1,4 @@
 use std::collections::{HashMap, HashSet, VecDeque};
-use std::fs::File;
-use std::io::Read;
 use std::sync::Weak;
 
 use async_trait::async_trait;
@@ -91,12 +89,9 @@ impl SyllablePlugin {
         let rules_path = config["rules_path"]
             .as_str().ok_or("rules_path not a string")?;
         let rules: Vec<SyllableRule> = {
-            let mut f = File::open(rules_path)
-                .or_msg("failed to open rules file")?;
-            let mut buf = Vec::new();
-            f.read_to_end(&mut buf)
+            let buf = std::fs::read_to_string(rules_path)
                 .or_msg("failed to read rules file")?;
-            let toml_value: toml::Value = toml::from_slice(&buf)
+            let toml_value: toml::Value = toml::from_str(&buf)
                 .or_msg("failed to parse rules file")?;
             toml_value["rules"].clone().try_into()
                 .or_msg("failed to decode rules")?

@@ -8,8 +8,6 @@ mod parsing;
 mod units;
 
 
-use std::fs::File;
-use std::io::Read;
 use std::sync::{Arc, Weak};
 use std::time::{Duration, Instant};
 
@@ -343,12 +341,9 @@ impl CalcPlugin {
         } else {
             let unit_db_file = unit_db_file_value.as_str()
                 .ok_or("unit_database_file not a string")?;
-            let mut f = File::open(unit_db_file)
-                .or_msg("failed to open unit_database_file")?;
-            let mut unit_db_toml = Vec::new();
-            f.read_to_end(&mut unit_db_toml)
+            let unit_db_toml = std::fs::read_to_string(unit_db_file)
                 .or_msg("failed to read unit_database_file")?;
-            let unit_db: StoredUnitDatabase = toml::from_slice(&unit_db_toml)
+            let unit_db: StoredUnitDatabase = toml::from_str(&unit_db_toml)
                 .or_msg("failed to load unit_database_file")?;
             unit_db.to_unit_database()
                 .or_msg("failed to process unit database file")?

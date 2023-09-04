@@ -10,5 +10,5 @@ log = { version = "0.4" }
 rand = { version = "0.8" }
 rocketbot_interface = { path = "../rocketbot_interface" }
 serde_json = { version = "1.0" }
-tokio = { version = "1.17", features = ["rt"] }
+tokio = { version = "1.32", features = ["rt"] }
 tokio-postgres = { version = "0.7", features = ["with-chrono-0_4"] }

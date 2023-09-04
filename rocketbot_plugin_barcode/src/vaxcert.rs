@@ -155,7 +155,7 @@ pub(crate) fn encode_vax(vax_info: &VaxInfo) -> String {
     }
 
     // base45-encode
-    let mut b45 = base45::encode_from_buffer(zlib_data);
+    let mut b45 = base45::encode(zlib_data);
 
     // prefix with "HC1:"
     b45.insert_str(0, "HC1:");

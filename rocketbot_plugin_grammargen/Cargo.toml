@@ -9,14 +9,14 @@ either = { version = "1.6" }
 log = { version = "0.4" }
 num-bigint = { version = "0.4", features = ["rand"] }
 num-traits = { version = "0.2" }
-once_cell = { version = "1.10" }
+once_cell = { version = "1.18" }
 pest = { version = "2.1" }
 pest_derive = { version = "2.1" }
 rand = { version = "0.8" }
-regex = { version = "1.5" }
+regex = { version = "1.9" }
 rocketbot_interface = { path = "../rocketbot_interface" }
 serde_json = { version = "1.0" }
 
 [dev-dependencies]
 clap = { version = "4.0", features = ["derive"] }
-tokio = { version = "1.17", features = ["macros", "rt-multi-thread"] }
+tokio = { version = "1.32", features = ["macros", "rt-multi-thread"] }

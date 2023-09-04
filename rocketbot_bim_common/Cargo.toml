@@ -4,10 +4,10 @@ version = "0.1.0"
 edition = "2021"
 
 [dependencies]
-indexmap = { version = "1.8", features = ["serde-1"] }
+indexmap = { version = "2.0", features = ["serde"] }
 rocketbot_date_time = { path = "../rocketbot_date_time" }
 rocketbot_string = { path = "../rocketbot_string" }
 serde = { version = "1.0", features = ["derive"] }
 
 [build-dependencies]
-regex = { version = "1.5" }
+regex = { version = "1.9" }
