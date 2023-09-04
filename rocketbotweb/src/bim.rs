@@ -1235,15 +1235,22 @@ async fn get_company_to_vehicles_ridden(
 async fn get_company_to_vehicles_is_last_rider(
     db_conn: &tokio_postgres::Client,
     to_date_opt: Option<DateTime<Local>>,
-    rider_username: &str,
+    rider_username_opt: Option<&str>,
     ridden_only: bool,
-    negate: bool,
 ) -> Option<(HashMap<String, HashMap<VehicleNumber, i64>>, i64)> {
+    let mut inner_conditions: Vec<String> = Vec::with_capacity(1);
     let mut conditions: Vec<String> = Vec::with_capacity(3);
-    let mut params: Vec<&(dyn ToSql + Sync)> = Vec::with_capacity(2);
+    let mut params: Vec<&(dyn ToSql + Sync)> = Vec::with_capacity(3);
+
+    if let Some(rider_username) = rider_username_opt.as_ref() {
+        conditions.push(format!("AND rav.rider_username = ${}", params.len() + 1));
+        params.push(rider_username);
+    }
 
     if let Some(to_date) = to_date_opt.as_ref() {
-        conditions.push(format!("AND \"timestamp\" <= ${}", conditions.len() + 1));
+        inner_conditions.push(format!("AND rav2.\"timestamp\" <= ${}", params.len() + 1));
+        params.push(to_date);
+        conditions.push(format!("AND rav.\"timestamp\" <= ${}", params.len() + 1));
         params.push(to_date);
     }
 
@@ -1251,15 +1258,12 @@ async fn get_company_to_vehicles_is_last_rider(
         conditions.push("AND coupling_mode = 'R'".to_owned());
     }
 
-    let conditions_string = if conditions.len() > 0 {
-        conditions.join(" ")
-    } else {
-        String::new()
-    };
+    let inner_conditions_string = conditions.join(" ");
+    let conditions_string = conditions.join(" ");
 
     let query = format!(
         "
-            SELECT rav.company, rav.vehicle_number, rav.rider_username
+            SELECT rav.company, rav.vehicle_number
             FROM bim.rides_and_vehicles rav
             WHERE NOT EXISTS (
                 SELECT 1
@@ -1267,9 +1271,11 @@ async fn get_company_to_vehicles_is_last_rider(
                 WHERE rav2.company = rav.company
                 AND rav2.vehicle_number = rav.vehicle_number
                 AND rav2.\"timestamp\" > rav.\"timestamp\"
+                {}
             )
             {}
         ",
+        inner_conditions_string,
         conditions_string,
     );
 
@@ -1286,13 +1292,10 @@ async fn get_company_to_vehicles_is_last_rider(
     for vehicle_row in vehicle_rows {
         let company: String = vehicle_row.get(0);
         let vehicle_number = VehicleNumber::from_string(vehicle_row.get(1));
-        let vehicle_rider_username: String = vehicle_row.get(2);
-        let mut count_value = if vehicle_rider_username == rider_username { 1 } else { 0 };
-        if negate { count_value = 1 - count_value; }
         company_to_vehicles_ridden
             .entry(company)
             .or_insert_with(|| HashMap::new())
-            .insert(vehicle_number, count_value);
+            .insert(vehicle_number, 1);
     }
 
     // use 2 as the max value to lead to lighter colors in the web interface
@@ -1359,9 +1362,8 @@ pub(crate) async fn handle_bim_coverage(request: &Request<Body>) -> Result<Respo
             get_company_to_vehicles_is_last_rider(
                 &db_conn,
                 to_date_opt,
-                rider_username_opt.as_ref().unwrap(),
+                rider_username_opt,
                 ridden_only,
-                false,
             ).await
         } else {
             get_company_to_vehicles_ridden(
@@ -1382,9 +1384,8 @@ pub(crate) async fn handle_bim_coverage(request: &Request<Body>) -> Result<Respo
                 get_company_to_vehicles_is_last_rider(
                     &db_conn,
                     to_date_opt,
-                    rider_username_opt.as_ref().unwrap(),
+                    None,
                     ridden_only,
-                    true,
                 ).await
             } else {
                 get_company_to_vehicles_ridden(
@@ -1401,6 +1402,18 @@ pub(crate) async fn handle_bim_coverage(request: &Request<Body>) -> Result<Respo
         } else {
             (HashMap::new(), 0)
         };
+
+        // DEBUG
+        if let Some(me_wlb) = company_to_vehicles_ridden.get("wlb") {
+            for (vehicle, ridden) in me_wlb {
+                log::warn!("ME : {} => {}", vehicle, ridden);
+            }
+        }
+        if let Some(all_wlb) = all_riders_company_to_vehicles_ridden.get("wlb") {
+            for (vehicle, ridden) in all_wlb {
+                log::warn!("ALL: {} => {}", vehicle, ridden);
+            }
+        }
 
         // get company definitions
         let mut company_to_definition = match obtain_company_to_definition().await {
