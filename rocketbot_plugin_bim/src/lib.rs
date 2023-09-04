@@ -324,7 +324,7 @@ impl BimPlugin {
                 return None;
             },
         };
-        let mut vehicles: Vec<VehicleInfo> = match serde_json::from_reader(f) {
+        let mut vehicles: Vec<VehicleInfo> = match ciborium::from_reader(f) {
             Ok(v) => v,
             Err(e) => {
                 error!("failed to parse bim database: {}", e);

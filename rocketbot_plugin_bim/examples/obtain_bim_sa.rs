@@ -9,6 +9,7 @@ use std::fs::File;
 use std::io::Read;
 use std::path::PathBuf;
 
+use ciborium;
 use indexmap::IndexSet;
 use once_cell::sync::Lazy;
 use regex::Regex;
@@ -568,7 +569,7 @@ async fn main() {
     {
         let f = File::create(config.output_path)
             .expect("failed to open output file");
-        serde_json::to_writer_pretty(f, &vehicles)
+        ciborium::into_writer(&vehicles, f)
             .expect("failed to write vehicles");
     }
 }

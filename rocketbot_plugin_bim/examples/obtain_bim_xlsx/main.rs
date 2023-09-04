@@ -9,6 +9,7 @@ use std::fs::File;
 use std::io::Read;
 use std::str::FromStr;
 
+use ciborium;
 use regex::Regex;
 use serde::{Deserialize, Deserializer, Serialize, Serializer};
 use serde::de::Error;
@@ -196,7 +197,7 @@ async fn main() {
     {
         let output = File::create(&config.output_path)
             .expect("failed to open output file");
-        serde_json::to_writer_pretty(output, &vehicles)
+        ciborium::into_writer(&vehicles, output)
             .expect("failed to write output file");
     }
 }

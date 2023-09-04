@@ -8,6 +8,7 @@ use std::io::Read;
 use std::path::PathBuf;
 use std::time::Duration;
 
+use ciborium;
 use indexmap::IndexSet;
 use reqwest;
 use rocketbot_bim_common::{VehicleClass, VehicleInfo, VehicleNumber};
@@ -323,7 +324,7 @@ async fn main() {
     {
         let f = File::create(config.output_path)
             .expect("failed to open output file");
-        serde_json::to_writer_pretty(f, &vehicles)
+        ciborium::into_writer(&vehicles, f)
             .expect("failed to write vehicles");
     }
 }

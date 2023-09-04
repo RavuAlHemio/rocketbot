@@ -707,7 +707,7 @@ fn obtain_company_to_bim_database(company_to_definition: &BTreeMap<String, serde
                 continue;
             },
         };
-        let bim_database: Vec<VehicleInfo> = match serde_json::from_reader(file) {
+        let bim_database: Vec<VehicleInfo> = match ciborium::from_reader(file) {
             Ok(bd) => bd,
             Err(e) => {
                 error!("failed to parse bim database file {:?}: {}", bim_database_path, e);
