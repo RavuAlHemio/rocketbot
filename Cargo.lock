@@ -2376,6 +2376,7 @@ dependencies = [
  "async-trait",
  "chrono",
  "ciborium",
+ "clap",
  "form_urlencoded",
  "indexmap",
  "log",
