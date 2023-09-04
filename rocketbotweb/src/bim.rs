@@ -1403,18 +1403,6 @@ pub(crate) async fn handle_bim_coverage(request: &Request<Body>) -> Result<Respo
             (HashMap::new(), 0)
         };
 
-        // DEBUG
-        if let Some(me_wlb) = company_to_vehicles_ridden.get("wlb") {
-            for (vehicle, ridden) in me_wlb {
-                log::warn!("ME : {} => {}", vehicle, ridden);
-            }
-        }
-        if let Some(all_wlb) = all_riders_company_to_vehicles_ridden.get("wlb") {
-            for (vehicle, ridden) in all_wlb {
-                log::warn!("ALL: {} => {}", vehicle, ridden);
-            }
-        }
-
         // get company definitions
         let mut company_to_definition = match obtain_company_to_definition().await {
             Some(ctd) => ctd,
