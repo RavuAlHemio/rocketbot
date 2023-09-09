@@ -52,6 +52,7 @@ pub(crate) struct PageConfig {
     #[serde(default)] pub common_props: IndexMap<String, String>,
     #[serde(default)] pub common_type_code: Option<String>,
     #[serde(default)] pub specific_type_code_property: Option<String>,
+    #[serde(default)] pub type_code_matcher: Option<MatcherTransformerConfig>,
 }
 
 #[derive(Clone, Debug, Deserialize, Serialize)]

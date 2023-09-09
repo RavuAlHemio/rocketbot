@@ -84,11 +84,21 @@ pub(crate) fn row_data_to_trams(page_config: &PageConfig, row_data: Vec<(String,
     let mut vehicles = BTreeMap::new();
     let mut vehicle = VehicleInfo::new("0".to_owned().into(), page_config.vehicle_class, page_config.type_code.clone());
 
-    let all_rows = page_config.common_props.iter()
-        .chain(row_data.iter().map(|(k, v)| (k, v)));
+    let all_props: Vec<(&String, &String)> = page_config.common_props.iter()
+        .chain(row_data.iter().map(|(k, v)| (k, v)))
+        .collect();
+
+    let mut type_code = page_config.type_code.clone();
+    if let Some(type_code_matcher) = &page_config.type_code_matcher {
+        for (key, val) in &all_props {
+            if let Some(matched_type_code) = value_match(type_code_matcher, key, val) {
+                type_code = matched_type_code;
+            }
+        }
+    }
 
     let mut numbers_types: Vec<(VehicleNumber, String)> = Vec::new();
-    for (key, val) in all_rows {
+    for (key, val) in &all_props {
         if val.len() == 0 {
             continue;
         }
@@ -100,6 +110,7 @@ pub(crate) fn row_data_to_trams(page_config: &PageConfig, row_data: Vec<(String,
                 is_matched = true;
                 let vehicle_numbers = parse_vehicle_numbers(&number_text, &page_config.number_separator_regex);
                 for vehicle_number in vehicle_numbers {
+                    // type-specific matcher type code trumps general type code
                     numbers_types.push((vehicle_number, number_matcher.type_code.clone()));
                 }
                 break;
@@ -112,7 +123,7 @@ pub(crate) fn row_data_to_trams(page_config: &PageConfig, row_data: Vec<(String,
                     is_matched = true;
                     let vehicle_numbers = parse_vehicle_numbers(&number_text, &page_config.number_separator_regex);
                     for vehicle_number in vehicle_numbers {
-                        numbers_types.push((vehicle_number, page_config.type_code.clone()));
+                        numbers_types.push((vehicle_number, type_code.clone()));
                     }
                 }
             }
@@ -146,7 +157,7 @@ pub(crate) fn row_data_to_trams(page_config: &PageConfig, row_data: Vec<(String,
         }
 
         if !is_matched {
-            vehicle.other_data.insert(key.clone(), val.clone());
+            vehicle.other_data.insert((*key).clone(), (*val).clone());
         }
     }
 
