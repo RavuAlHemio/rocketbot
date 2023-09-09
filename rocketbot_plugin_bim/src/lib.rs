@@ -2914,7 +2914,7 @@ impl BimPlugin {
 
         // find field lengths for beautiful alignment
         let max_username_len = id_to_ride.values()
-            .map(|tuple| tuple.1.len())
+            .map(|tuple| tuple.1.chars().count())
             .max()
             .unwrap();
         let max_line_len = id_to_ride.values()
@@ -2922,7 +2922,7 @@ impl BimPlugin {
             .max()
             .unwrap_or(0);
         let max_vehicles_len = id_to_ride.values()
-            .map(|tuple| tuple.3.len())
+            .map(|tuple| tuple.3.chars().count())
             .max()
             .unwrap();
 
@@ -2945,13 +2945,13 @@ impl BimPlugin {
             write!(ride_lines, "\n{}: ", timestamp.format("%H:%M")).unwrap();
 
             write!(ride_lines, "{}, ", rider).unwrap();
-            for _ in 0..(max_username_len - rider.len()) {
+            for _ in 0..(max_username_len - rider.chars().count()) {
                 ride_lines.push(' ');
             }
 
             if let Some(ln) = line {
                 write!(ride_lines, "{}, ", ln).unwrap();
-                for _ in 0..(max_line_len - ln.len()) {
+                for _ in 0..(max_line_len - ln.chars().count()) {
                     ride_lines.push(' ');
                 }
             } else {
@@ -2967,7 +2967,7 @@ impl BimPlugin {
 
             if vehicles.len() > 0 {
                 write!(ride_lines, "{}, ", vehicles).unwrap();
-                for _ in 0..(max_vehicles_len - vehicles.len()) {
+                for _ in 0..(max_vehicles_len - vehicles.chars().count()) {
                     ride_lines.push(' ');
                 }
             } else {
