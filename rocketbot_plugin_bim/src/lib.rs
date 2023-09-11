@@ -2999,6 +2999,7 @@ impl BimPlugin {
         };
 
         let config_guard = self.config.read().await;
+        let sender_username = channel_message.message.sender.username.as_str();
         let is_admin = config_guard.admin_usernames.contains(sender_username);
         if !is_admin {
             send_channel_message!(
