@@ -601,6 +601,21 @@ struct QueriedRideVehiclePart {
     pub fixed_coupling_position: i64,
 }
 
+#[derive(Clone, Debug, Default, Eq, Hash, Ord, PartialEq, PartialOrd, Serialize, Template)]
+#[template(path = "bimlastriderpie.html")]
+struct LastRiderPieTemplate {
+    pub company_to_type_to_rider_to_last_count: BTreeMap<String, BTreeMap<String, BTreeMap<String, i64>>>,
+}
+impl LastRiderPieTemplate {
+    pub fn json_data(&self) -> String {
+        let value = serde_json::json!({
+            "companyToTypeToLastRiderToCount": self.company_to_type_to_rider_to_last_count,
+        });
+        serde_json::to_string(&value)
+            .expect("failed to JSON-encode graph data")
+    }
+}
+
 #[inline]
 fn cow_empty_to_none<'a, 'b>(val: Option<&'a Cow<'b, str>>) -> Option<&'a Cow<'b, str>> {
     match val {
@@ -3333,6 +3348,86 @@ pub(crate) async fn handle_bim_query(request: &Request<Body>) -> Result<Response
         prev_page,
         next_page,
         filter_query_and,
+    };
+    match render_response(&template, &query_pairs, 200, vec![]).await {
+        Some(r) => Ok(r),
+        None => return_500(),
+    }
+}
+
+pub(crate) async fn handle_bim_last_rider_pie(request: &Request<Body>) -> Result<Response<Body>, Infallible> {
+    let query_pairs = get_query_pairs(request);
+    if request.method() != Method::GET {
+        return return_405(&query_pairs).await;
+    }
+
+    let db_conn = match connect_to_db().await {
+        Some(c) => c,
+        None => return return_500(),
+    };
+    let riders_res = db_conn.query(
+        "
+            WITH last_riders(company, vehicle_number, vehicle_type, rider_username) AS (
+                SELECT
+                    rav.company,
+                    rav.vehicle_number,
+                    rav.vehicle_type,
+                    rav.rider_username
+                FROM
+                    bim.rides_and_vehicles rav
+                WHERE
+                    NOT EXISTS (
+                        SELECT 1
+                        FROM bim.rides_and_vehicles rav2
+                        WHERE
+                            rav2.company = rav.company
+                            AND rav2.vehicle_number = rav.vehicle_number
+                            AND rav2.\"timestamp\" > rav.\"timestamp\"
+                    )
+                    AND rav.coupling_mode = 'R'
+                    AND rav.vehicle_type IS NOT NULL
+            )
+            SELECT
+                lr.company,
+                lr.vehicle_type,
+                lr.rider_username,
+                CAST(COUNT(*) AS bigint)
+            FROM
+                last_riders lr
+            GROUP BY
+                lr.company,
+                lr.vehicle_type,
+                lr.rider_username
+        ",
+        &[],
+    ).await;
+    let rider_rows = match riders_res {
+        Ok(r) => r,
+        Err(e) => {
+            error!("failed to query rides: {}", e);
+            return return_500();
+        },
+    };
+
+    let mut company_to_type_to_rider_to_last_count: BTreeMap<String, BTreeMap<String, BTreeMap<String, i64>>> = BTreeMap::new();
+    for row in &rider_rows {
+        let company: String = row.get(0);
+        let vehicle_type: String = row.get(1);
+        let rider_username: String = row.get(2);
+        let ride_count: i64 = row.get(3);
+
+        let count_per_rider = company_to_type_to_rider_to_last_count
+            .entry(company)
+            .or_insert_with(|| BTreeMap::new())
+            .entry(vehicle_type)
+            .or_insert_with(|| BTreeMap::new())
+            .entry(rider_username)
+            .or_insert(0);
+        *count_per_rider += ride_count;
+    }
+
+    let template = LastRiderPieTemplate {
+        company_to_type_to_rider_to_last_count,
     };
     match render_response(&template, &query_pairs, 200, vec![]).await {
         Some(r) => Ok(r),
