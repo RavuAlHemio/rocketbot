@@ -18,8 +18,9 @@ use askama::Template;
 use form_urlencoded;
 use hyper::{Body, Method, Request, Response, Server};
 use hyper::service::{make_service_fn, service_fn};
-use log::error;
-use once_cell::sync::OnceCell;
+use log::{debug, error};
+use once_cell::sync::{Lazy, OnceCell};
+use regex::Regex;
 use serde::{Serialize, Deserialize};
 use serde_json;
 use tokio;
@@ -43,6 +44,19 @@ use crate::thanks::handle_thanks;
 
 
 pub(crate) static CONFIG: OnceCell<RwLock<WebConfig>> = OnceCell::new();
+
+static STATIC_FILE_REGEX: Lazy<Regex> = Lazy::new(|| Regex::new(concat!(
+    "^",
+    "/static/",
+    "(?P<static_filename>",
+        "[A-Za-z0-9_-]+",
+        "(?:",
+            "[.]",
+            "[a-z0-9]+",
+        ")+",
+    ")",
+    "$",
+)).expect("failed to compile static file regex"));
 
 
 #[derive(Clone, Copy, Debug, Deserialize, Eq, Hash, PartialEq, Serialize, Template)]
@@ -223,6 +237,55 @@ async fn handle_index(request: &Request<Body>) -> Result<Response<Body>, Infalli
     }
 }
 
+async fn handle_static(request: &Request<Body>, caps: &regex::Captures<'_>) -> Result<Response<Body>, Infallible> {
+    let query_pairs = get_query_pairs(&request);
+    let filename = caps.name("static_filename")
+        .expect("failed to match static_filename")
+        .as_str();
+
+    let mut static_path = {
+        let config_guard = CONFIG
+            .get().expect("CONFIG not set?!")
+            .read().await;
+        config_guard.static_path.clone()
+    };
+    static_path.push(filename);
+
+    if !static_path.is_file() {
+        return return_404(&query_pairs).await;
+    }
+    let static_data = match std::fs::read(&static_path) {
+        Ok(sd) => sd,
+        Err(e) => {
+            error!("failed to read static file {:?}: {}", static_path, e);
+            return return_500();
+        },
+    };
+
+    // filename must have an extension because regex matches a dot
+    let extension = filename.split('.').last();
+    let content_type = match extension {
+        Some("js") => "text/javascript",
+        Some("ts") => "application/x-typescript",
+        Some("css") => "text/css",
+        Some("json") => "application/json",
+        Some("txt") => "text/plain",
+        _ => "application/octet-stream",
+    };
+
+    let response_res = Response::builder()
+        .status(200)
+        .header("Content-Type", content_type)
+        .body(Body::from(static_data));
+    match response_res {
+        Ok(r) => Ok(r),
+        Err(e) => {
+            error!("failed to construct static response: {}", e);
+            return return_500();
+        },
+    }
+}
+
 
 async fn handle_request(request: Request<Body>) -> Result<Response<Body>, Infallible> {
     match request.uri().path() {
@@ -252,8 +315,16 @@ async fn handle_request(request: Request<Body>) -> Result<Response<Body>, Infall
         "/bim-histogram-line-ride-count-group" => handle_bim_histogram_by_line_ride_count_group(&request).await,
         "/bim-query" => handle_bim_query(&request).await,
         _ => {
-            let query_pairs = get_query_pairs(&request);
-            return_404(&query_pairs).await
+            if let Some(caps) = STATIC_FILE_REGEX.captures(request.uri().path()) {
+                debug!(
+                    "serving static file {:?}; you want to configure your web server to bypass the application for this",
+                    caps.name("static_filename").expect("failed to capture static_filename").as_str(),
+                );
+                handle_static(&request, &caps).await
+            } else {
+                let query_pairs = get_query_pairs(&request);
+                return_404(&query_pairs).await
+            }
         },
     }
 }
