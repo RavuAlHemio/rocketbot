@@ -118,6 +118,14 @@ pub(crate) fn row_data_to_trams(page_config: &PageConfig, row_data: Vec<(String,
         }
 
         if !is_matched {
+            if let Some(type_code_matcher) = &page_config.type_code_matcher {
+                if let Some(_type_code) = value_match(&type_code_matcher, &key, &val) {
+                    is_matched = true;
+                }
+            }
+        }
+
+        if !is_matched {
             if let Some(nm) = &page_config.number_matcher {
                 if let Some(number_text) = value_match(&nm, &key, &val) {
                     is_matched = true;
