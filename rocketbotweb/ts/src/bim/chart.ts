@@ -20,14 +20,17 @@ interface LatestRiderSankeyData {
     count: number;
 }
 
-interface LastRiderPieData {
-    companyToTypeToLastRiderToCount: {
-        [company: string]: {
-            [vehicleType: string]: {
-                [lastRider: string]: number
-            }
+type CompanyToTypeToRiderToCount = {
+    [company: string]: {
+        [vehicleType: string]: {
+            [rider: string]: number
         }
-    };
+    }
+};
+
+interface LastRiderPieData {
+    companyToTypeToLastRiderToCount: CompanyToTypeToRiderToCount;
+    companyToTypeToLastRiderToCountRidden: CompanyToTypeToRiderToCount;
 }
 
 export module RocketBotWeb.Bim.Charting {
@@ -160,6 +163,15 @@ export module RocketBotWeb.Bim.Charting {
         typeLabel.appendChild(typeSelect);
         controls.appendChild(typeLabel);
 
+        controls.appendChild(document.createTextNode(" \u00B7 "));
+
+        const riddenOnlyLabel = document.createElement("label");
+        const riddenOnlyCheckbox = document.createElement("input");
+        riddenOnlyCheckbox.type = "checkbox";
+        riddenOnlyLabel.appendChild(riddenOnlyCheckbox);
+        riddenOnlyLabel.appendChild(document.createTextNode(" ridden only"));
+        controls.appendChild(riddenOnlyLabel);
+
         // load data
         const dataString = document.getElementById("chart-data")?.textContent;
         if (dataString === null || dataString === undefined) {
@@ -221,6 +233,7 @@ export module RocketBotWeb.Bim.Charting {
         function updateChart(
             chart: Chart<"pie">, data: LastRiderPieData,
             companySelect: HTMLSelectElement, typeSelect: HTMLSelectElement,
+            riddenOnlyCheckbox: HTMLInputElement,
             allCompanies: string[], allTypes: string[],
         ) {
             const considerCompanies: string[] = (companySelect.value === ALL_VALUE)
@@ -229,10 +242,13 @@ export module RocketBotWeb.Bim.Charting {
             const considerTypes: string[] = (typeSelect.value === ALL_VALUE)
                 ? allTypes
                 : [typeSelect.value];
+            const companyToTypeToLastRiderToCount = riddenOnlyCheckbox.checked
+                ? data.companyToTypeToLastRiderToCountRidden
+                : data.companyToTypeToLastRiderToCount;
 
             // does the selected company even have this type?
             if (considerCompanies.length === 1 && considerTypes.length === 1) {
-                const companyTypes = Object.keys(data.companyToTypeToLastRiderToCount[considerCompanies[0]]);
+                const companyTypes = Object.keys(companyToTypeToLastRiderToCount[considerCompanies[0]]);
                 if (companyTypes.indexOf(considerTypes[0]) === -1) {
                     // no; switch over to "all types"
                     considerTypes.length = 0;
@@ -251,7 +267,7 @@ export module RocketBotWeb.Bim.Charting {
 
             const consideredTypes: string[] = [];
             for (let companyName of considerCompanies) {
-                let companyTypes: string[] = Object.keys(data.companyToTypeToLastRiderToCount[companyName]);
+                let companyTypes: string[] = Object.keys(companyToTypeToLastRiderToCount[companyName]);
                 for (let tp of companyTypes) {
                     if (consideredTypes.indexOf(tp) === -1) {
                         consideredTypes.push(tp);
@@ -275,7 +291,7 @@ export module RocketBotWeb.Bim.Charting {
             // collect the counts
             const riderToLastVehicleCount: { [rider: string]: number } = {};
             for (let companyName of considerCompanies) {
-                const typeToLastRiderToCount = data.companyToTypeToLastRiderToCount[companyName];
+                const typeToLastRiderToCount = companyToTypeToLastRiderToCount[companyName];
                 for (let tp of considerTypes) {
                     const lastRiderToCount = typeToLastRiderToCount[tp];
                     if (lastRiderToCount === undefined) {
@@ -307,11 +323,28 @@ export module RocketBotWeb.Bim.Charting {
         }
 
         // link up events
-        companySelect.addEventListener("change", () => updateChart(chart, data, companySelect, typeSelect, allCompanies, allTypes));
-        typeSelect.addEventListener("change", () => updateChart(chart, data, companySelect, typeSelect, allCompanies, allTypes));
+        companySelect.addEventListener("change", () => updateChart(
+            chart, data,
+            companySelect, typeSelect, riddenOnlyCheckbox,
+            allCompanies, allTypes,
+        ));
+        typeSelect.addEventListener("change", () => updateChart(
+            chart, data,
+            companySelect, typeSelect, riddenOnlyCheckbox,
+            allCompanies, allTypes,
+        ));
+        riddenOnlyCheckbox.addEventListener("change", () => updateChart(
+            chart, data,
+            companySelect, typeSelect, riddenOnlyCheckbox,
+            allCompanies, allTypes,
+        ));
 
         // perform initial chart update
-        updateChart(chart, data, companySelect, typeSelect, allCompanies, allTypes);
+        updateChart(
+            chart, data,
+            companySelect, typeSelect, riddenOnlyCheckbox,
+            allCompanies, allTypes,
+        );
     }
 
     export function setUpByDayOfWeek() {
