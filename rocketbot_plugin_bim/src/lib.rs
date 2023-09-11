@@ -2998,6 +2998,17 @@ impl BimPlugin {
             Some(i) => i,
         };
 
+        let config_guard = self.config.read().await;
+        let is_admin = config_guard.admin_usernames.contains(sender_username);
+        if !is_admin {
+            send_channel_message!(
+                interface,
+                &channel_message.channel.name,
+                "Only `bim` admins can use this command.",
+            ).await;
+            return;
+        }
+
         let mut ride_ids = Vec::new();
         for ride_id_str_raw in command.rest.split(",") {
             let ride_id_str = ride_id_str_raw.trim();
@@ -3014,8 +3025,6 @@ impl BimPlugin {
             };
             ride_ids.push(ride_id);
         }
-
-        let config_guard = self.config.read().await;
 
         let mut ride_conn = match connect_ride_db(&config_guard).await {
             Ok(c) => c,
