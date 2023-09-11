@@ -16,7 +16,7 @@ use chrono::{
     Datelike, DateTime, Duration, Local, LocalResult, NaiveDate, NaiveDateTime, Timelike, TimeZone,
     Weekday,
 };
-use log::{error, info};
+use log::{debug, error, info};
 use once_cell::sync::OnceCell;
 use rand::{Rng, thread_rng};
 use regex::Regex;
@@ -2992,6 +2992,187 @@ impl BimPlugin {
         ).await;
     }
 
+    async fn channel_command_bimfreshen(&self, channel_message: &ChannelMessage, command: &CommandInstance) {
+        let interface = match self.interface.upgrade() {
+            None => return,
+            Some(i) => i,
+        };
+
+        let mut ride_ids = Vec::new();
+        for ride_id_str_raw in command.rest.split(",") {
+            let ride_id_str = ride_id_str_raw.trim();
+            let ride_id: i64 = match ride_id_str.parse() {
+                Ok(ri) => ri,
+                Err(_) => {
+                    send_channel_message!(
+                        interface,
+                        &channel_message.channel.name,
+                        &format!("failed to decode ride ID `{}`", ride_id_str),
+                    ).await;
+                    return;
+                },
+            };
+            ride_ids.push(ride_id);
+        }
+
+        let config_guard = self.config.read().await;
+
+        let mut ride_conn = match connect_ride_db(&config_guard).await {
+            Ok(c) => c,
+            Err(_) => {
+                send_channel_message!(
+                    interface,
+                    &channel_message.channel.name,
+                    "Failed to open database connection. :disappointed:",
+                ).await;
+                return;
+            },
+        };
+
+        let ride_txn = match ride_conn.transaction().await {
+            Ok(txn) => txn,
+            Err(e) => {
+                error!("failed to open database transaction: {}", e);
+                send_channel_message!(
+                    interface,
+                    &channel_message.channel.name,
+                    "Failed to open database transaction. :disappointed:",
+                ).await;
+                return;
+            },
+        };
+
+        let select_ride_res = ride_txn.prepare(
+            "
+                SELECT id, company, vehicle_number, coupling_mode FROM bim.rides_and_vehicles
+                WHERE id = $1
+                AND coupling_mode <> 'F' -- ignore fixed coupling; this will be taken from the vehicle database
+                ORDER BY spec_position
+            "
+        ).await;
+        let select_ride = match select_ride_res {
+            Ok(sr) => sr,
+            Err(e) => {
+                error!("failed to prepare select-ride statement: {}", e);
+                send_channel_message!(
+                    interface,
+                    &channel_message.channel.name,
+                    "Failed to prepare select-ride query. :disappointed:",
+                ).await;
+                return;
+            }
+        };
+
+        let mut ride_to_company: BTreeMap<i64, String> = BTreeMap::new();
+        let mut ride_to_vehicle_spec: BTreeMap<i64, String> = BTreeMap::new();
+        for ride_id in ride_ids {
+            // query this ride
+            let ride_rows = match ride_txn.query(&select_ride, &[&ride_id]).await {
+                Ok(rr) => rr,
+                Err(e) => {
+                    error!("failed to query ride {}: {}", ride_id, e);
+                    send_channel_message!(
+                        interface,
+                        &channel_message.channel.name,
+                        "Failed to query a ride. :disappointed:",
+                    ).await;
+                    return;
+                },
+            };
+
+            for ride_row in ride_rows {
+                let id: i64 = ride_row.get(0);
+                let company: String = ride_row.get(1);
+                let vehicle_number_str: String = ride_row.get(2);
+                let coupling_mode: String = ride_row.get(3);
+
+                let vehicle_number: VehicleNumber = vehicle_number_str.into();
+
+                assert!(coupling_mode == "R" || coupling_mode == "E");
+                let explicitly_ridden = coupling_mode == "R";
+
+                ride_to_company.insert(id, company);
+                let vehicle_spec = ride_to_vehicle_spec
+                    .entry(id)
+                    .or_insert_with(|| String::new());
+                if vehicle_spec.len() > 0 {
+                    vehicle_spec.push('+');
+                }
+                vehicle_spec.push_str(vehicle_number.as_str());
+                if explicitly_ridden {
+                    vehicle_spec.push('!');
+                }
+            }
+        }
+
+        let mut company_to_bim_database: HashMap<String, Option<_>> = HashMap::new();
+
+        // run through each ride
+        for (ride_id, company) in &ride_to_company {
+            let vehicle_spec = ride_to_vehicle_spec.get(ride_id)
+                .expect("ride has company but no vehicle spec");
+
+            debug!("freshening ride {} of company {:?} with vehicle spec {:?}", ride_id, company, vehicle_spec);
+
+            if !company_to_bim_database.contains_key(company) {
+                let bim_database = self.load_bim_database(&config_guard, company);
+                company_to_bim_database.insert(company.clone(), bim_database);
+            }
+            let bim_database_opt = company_to_bim_database.get(company).unwrap();
+            let vehicles_res = spec_to_vehicles(
+                vehicle_spec,
+                bim_database_opt.as_ref(),
+                config_guard.allow_fixed_coupling_combos,
+            );
+            let vehicles = match vehicles_res {
+                Ok(veh) => veh,
+                Err(e) => {
+                    error!("failed to reconstruct vehicles of ride {} from {:?}: {}", ride_id, vehicle_spec, e);
+                    send_channel_message!(
+                        interface,
+                        &channel_message.channel.name,
+                        &format!("Failed to reconstruct vehicles of ride {}.", ride_id),
+                    ).await;
+                    return;
+                },
+            };
+            if let Err(e) = replace_ride_vehicles(&ride_txn, *ride_id, &vehicles).await {
+                error!("failed to replace vehicles of ride {}: {}", ride_id, e);
+                send_channel_message!(
+                    interface,
+                    &channel_message.channel.name,
+                    &format!("Failed to replace vehicles of ride {}.", ride_id),
+                ).await;
+                return;
+            }
+        }
+
+        if let Err(e) = ride_txn.commit().await {
+            error!("failed to commit transaction: {}", e);
+            send_channel_message!(
+                interface,
+                &channel_message.channel.name,
+                &format!("Failed to commit transaction."),
+            ).await;
+            return;
+        }
+
+        send_channel_message!(
+            interface,
+            &channel_message.channel.name,
+            &format!("Rides refreshed."),
+        ).await;
+
+        // enqueue achievement recalculation
+        if config_guard.achievements_active {
+            let data = UpdateAchievementsData {
+                channel: channel_message.channel.name.clone(),
+                explicit: false,
+            };
+            let _ = self.achievement_update_sender.send(data);
+        }
+    }
+
     #[inline]
     fn weekday_abbr2(weekday: Weekday) -> &'static str {
         match weekday {
@@ -3429,6 +3610,15 @@ impl RocketBotPlugin for BimPlugin {
             )
                 .build()
         ).await;
+        my_interface.register_channel_command(
+            &CommandDefinitionBuilder::new(
+                "bimfreshen",
+                "bim",
+                "{cpfx}bimfreshen RIDEID[,RIDEID...]",
+                "Updates the given rides' vehicle information according to the current vehicle database.",
+            )
+                .build()
+        ).await;
 
         // set up the achievement update loop
         let (achievement_update_sender, mut achievement_update_receiver) = mpsc::unbounded_channel();
@@ -3518,6 +3708,8 @@ impl RocketBotPlugin for BimPlugin {
             self.channel_command_lonebims(channel_message, command).await
         } else if command.name == "recentbimrides" {
             self.channel_command_recentbimrides(channel_message, command).await
+        } else if command.name == "bimfreshen" {
+            self.channel_command_bimfreshen(channel_message, command).await
         }
     }
 
@@ -3564,6 +3756,8 @@ impl RocketBotPlugin for BimPlugin {
             Some(include_str!("../help/lonebims.md").to_owned())
         } else if command_name == "recentbimrides" {
             Some(include_str!("../help/recentbimrides.md").to_owned())
+        } else if command_name == "bimfreshen" {
+            Some(include_str!("../help/bimfreshen.md").to_owned())
         } else {
             None
         }
