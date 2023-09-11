@@ -3192,6 +3192,7 @@ pub(crate) async fn handle_bim_query(request: &Request<Body>) -> Result<Response
         // same caveat as with vehicle number
         filter_pieces.push(format!("EXISTS (SELECT 1 FROM bim.rides_and_vehicles rav_vehtp WHERE rav_vehtp.id = rav.id AND rav_vehtp.vehicle_type IS NULL)"));
         // no value here
+        append_to_query(&mut filter_query_and, "vehicle-type", "\u{18}");
     } else if let Some(vehicle_type) = &filters.vehicle_type {
         // same caveat as with vehicle number
         filter_pieces.push(format!("EXISTS (SELECT 1 FROM bim.rides_and_vehicles rav_vehtp WHERE rav_vehtp.id = rav.id AND rav_vehtp.vehicle_type = ${})", next_filter_index));
