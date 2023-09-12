@@ -234,6 +234,12 @@ async fn run() -> ExitCode {
         }
     }
 
+    // write out updated state
+    let state_json = serde_json::to_string(&state)
+        .expect("failed to serialize state");
+    std::fs::write(&config.state_file, state_json.as_bytes())
+        .expect("failed to write state file");
+
     if is_ok { ExitCode::SUCCESS } else { ExitCode::FAILURE }
 }
 
