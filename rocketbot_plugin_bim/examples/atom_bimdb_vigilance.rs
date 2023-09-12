@@ -139,7 +139,9 @@ async fn process_url(url: &UrlConfig, config: &Config, state: &mut State) -> boo
         let entry_id = child_element_text(&entry_element, &atom_id);
         let entry_title = child_element_text(&entry_element, &atom_title);
 
-        latest_entry_id_opt = Some(entry_id.clone());
+        if latest_entry_id_opt.is_none() {
+            latest_entry_id_opt = Some(entry_id.clone());
+        }
 
         // have we reached this one before?
         let entry_already_known = state.url_to_latest_item
