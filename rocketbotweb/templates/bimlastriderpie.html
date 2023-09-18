@@ -1,15 +1,16 @@
-<!DOCTYPE html>
-<html xmlns="https://www.w3.org/1999/xhtml">
-<head>
-<title>Public Transport Last Rider Pie Chart</title>
+{% extends "base.html" %}
+
+{% block title %}Public Transport Last Rider Pie Chart{% endblock %}
+
+{% block scripts %}
 <script src="static/rocketbotweb.js?{{ "{{VERSION}}" }}"></script>
 <script>RocketBotWeb.Bim.Charting.setUpLastRiderPie();</script>
-</head>
-<body>
+{% endblock %}
+
+{% block content %}
 <p id="pie-controls"></p>
 <p>
     <canvas id="chart-canvas"></canvas>
 </p>
 <script type="application/json" id="chart-data">{{ self.json_data()|safe }}</script>
-</body>
-</html>
+{% endblock %}

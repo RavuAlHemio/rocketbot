@@ -1,14 +1,15 @@
-<!DOCTYPE html>
-<html xmlns="https://www.w3.org/1999/xhtml">
-<head>
-<title>Public Transport Ride Count by Day of Week</title>
+{% extends "base.html" %}
+
+{% block title %}Public Transport Ride Count by Day of Week{% endblock %}
+
+{% block scripts %}
 <script src="static/rocketbotweb.js?{{ "{{VERSION}}" }}"></script>
 <script>RocketBotWeb.Bim.Charting.setUpByDayOfWeek();</script>
-</head>
-<body>
+{% endblock %}
+
+{% block content %}
 <p>
     <canvas id="chart-canvas"></canvas>
 </p>
 <script type="application/json" id="chart-data">{{ self.json_data()|safe }}</script>
-</body>
-</html>
+{% endblock %}

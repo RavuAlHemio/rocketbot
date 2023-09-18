@@ -1,15 +1,16 @@
-<!DOCTYPE html>
-<html xmlns="https://www.w3.org/1999/xhtml">
-<head>
-<title>Public Transport {{ what|escape }} Count Groups by Ride Count Group</title>
+{% extends "base.html" %}
+
+{% block title %}Public Transport {{ what|escape }} Count Groups by Ride Count Group{% endblock %}
+
+{% block scripts %}
 <script src="static/rocketbotweb.js?{{ "{{VERSION}}" }}"></script>
 <script>RocketBotWeb.Bim.Charting.setUpByRideCountGroup();</script>
-</head>
-<body>
+{% endblock %}
+
+{% block content %}
 <p><label><input type="checkbox" id="bim-charting-log-plot-checkbox" /> log plot</label></p>
 <p>
     <canvas id="chart-canvas"></canvas>
 </p>
 <script type="application/json" id="chart-data">{{ self.json_data()|safe }}</script>
-</body>
-</html>
+{% endblock %}
