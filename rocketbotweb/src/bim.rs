@@ -280,8 +280,14 @@ struct BimVehicleTemplate {
 struct BimCoverageTemplate {
     pub max_ride_count: i64,
     pub everybody_max_ride_count: i64,
-    pub company_to_type_to_block_to_vehicles: BTreeMap<String, BTreeMap<String, BTreeMap<String, Vec<CoverageVehiclePart>>>>,
-    pub merge_types: bool,
+    pub name_to_company: BTreeMap<String, CoverageCompany>,
+    pub merge_mode: MergeMode,
+}
+
+#[derive(Clone, Debug, Eq, Hash, PartialEq, Serialize)]
+struct CoverageCompany {
+    pub uncoupled_type_to_block_name_to_vehicles: BTreeMap<String, BTreeMap<String, Vec<CoverageVehiclePart>>>,
+    pub coupled_sequences: Vec<Vec<CoverageVehiclePart>>,
 }
 
 #[derive(Clone, Debug, Eq, Hash, PartialEq, Serialize)]
@@ -301,6 +307,40 @@ impl CoverageVehiclePart {
 
     pub fn has_everybody_ride(&self) -> bool {
         self.everybody_ride_count > 0
+    }
+
+    pub fn from_vehicle_info(
+        vehicle: &VehicleInfo,
+        ridden_vehicles: &HashMap<VehicleNumber, i64>,
+        all_riders_ridden_vehicles: &HashMap<VehicleNumber, i64>,
+        use_number_blocks: bool,
+    ) -> Self {
+        let full_number_str = vehicle.number.to_string();
+        let (block_str, number_str) = if use_number_blocks && full_number_str.len() >= 6 {
+            full_number_str.split_at(4)
+        } else {
+            ("", full_number_str.as_str())
+        };
+
+        let from_known = vehicle.in_service_since.is_some();
+        let to_known = vehicle.out_of_service_since.is_some();
+        let is_active = from_known && !to_known;
+        let ride_count = ridden_vehicles.get(&vehicle.number)
+            .map(|c| *c)
+            .unwrap_or(0);
+        let everybody_ride_count = all_riders_ridden_vehicles.get(&vehicle.number)
+            .map(|c| *c)
+            .unwrap_or(0);
+
+        Self {
+            block_str: block_str.to_owned(),
+            number_str: number_str.to_owned(),
+            type_code: vehicle.type_code.clone(),
+            full_number_str: full_number_str.clone(),
+            is_active,
+            ride_count,
+            everybody_ride_count,
+        }
     }
 }
 
@@ -616,6 +656,35 @@ impl LastRiderPieTemplate {
         serde_json::to_string(&value)
             .expect("failed to JSON-encode graph data")
     }
+}
+
+#[derive(Clone, Debug, Eq, Hash, Ord, PartialEq, PartialOrd, Serialize)]
+enum MergeMode {
+    SplitTypes,
+    MergeTypes,
+    MergeTypesGroupFixedCoupling,
+}
+impl MergeMode {
+    #[inline]
+    pub const fn merge_types(&self) -> bool {
+        match self {
+            Self::SplitTypes => false,
+            Self::MergeTypes => true,
+            Self::MergeTypesGroupFixedCoupling => true,
+        }
+    }
+
+    pub fn try_from_str(s: &str) -> Option<MergeMode> {
+        match s {
+            "S" => Some(Self::SplitTypes),
+            "M" => Some(Self::MergeTypes),
+            "F" => Some(Self::MergeTypesGroupFixedCoupling),
+            _ => None,
+        }
+    }
+}
+impl Default for MergeMode {
+    fn default() -> Self { Self::SplitTypes }
 }
 
 #[inline]
@@ -1326,9 +1395,10 @@ pub(crate) async fn handle_bim_coverage(request: &Request<Body>) -> Result<Respo
         return return_405(&query_pairs).await;
     }
 
-    let merge_types = query_pairs.get("merge-types")
-        .map(|qp| qp == "1")
-        .unwrap_or(false);
+    let merge_mode = query_pairs.get("merge-mode")
+        .map(|qp| MergeMode::try_from_str(qp))
+        .flatten()
+        .unwrap_or(MergeMode::SplitTypes);
     let hide_inactive = query_pairs.get("hide-inactive")
         .map(|qp| qp == "1")
         .unwrap_or(false);
@@ -1451,7 +1521,7 @@ pub(crate) async fn handle_bim_coverage(request: &Request<Body>) -> Result<Respo
             .collect();
 
         // run through vehicles
-        let mut company_to_type_to_block_to_vehicles: BTreeMap<String, BTreeMap<String, BTreeMap<String, Vec<CoverageVehiclePart>>>> = BTreeMap::new();
+        let mut name_to_company: BTreeMap<String, CoverageCompany> = BTreeMap::new();
         let no_ridden_vehicles = HashMap::new();
         for (company, number_to_vehicle) in &company_to_bim_database {
             let ridden_vehicles = company_to_vehicles_ridden.get(company)
@@ -1459,59 +1529,95 @@ pub(crate) async fn handle_bim_coverage(request: &Request<Body>) -> Result<Respo
             let all_riders_ridden_vehicles = all_riders_company_to_vehicles_ridden.get(company)
                 .unwrap_or(&no_ridden_vehicles);
 
-            let mut type_to_block_to_vehicles = BTreeMap::new();
-            for (number, vehicle) in number_to_vehicle {
-                let full_number_str = number.to_string();
-                let (block_str, number_str) = if full_number_str.len() >= 6 {
-                    // assume first four digits are block
-                    full_number_str.split_at(4)
-                } else {
-                    ("", full_number_str.as_str())
-                };
+            let mut uncoupled_type_to_block_name_to_vehicles: BTreeMap<String, BTreeMap<String, Vec<CoverageVehiclePart>>> = BTreeMap::new();
+            for vehicle in number_to_vehicle.values() {
+                if merge_mode == MergeMode::MergeTypesGroupFixedCoupling {
+                    if vehicle.fixed_coupling.len() > 0 {
+                        // we handle vehicles with fixed couplings later
+                        continue;
+                    }
+                }
 
-                let type_code_key = if merge_types {
-                    String::new()
-                } else {
-                    vehicle.type_code.clone()
-                };
+                let vehicle_data = CoverageVehiclePart::from_vehicle_info(
+                    vehicle,
+                    ridden_vehicles,
+                    all_riders_ridden_vehicles,
+                    true,
+                );
 
-                // is the vehicle active?
-                let from_known = vehicle.in_service_since.is_some();
-                let to_known = vehicle.out_of_service_since.is_some();
-                let is_active = from_known && !to_known;
-                let ride_count = ridden_vehicles.get(number).map(|c| *c).unwrap_or(0);
-                let everybody_ride_count = all_riders_ridden_vehicles.get(number).map(|c| *c)
-                    .unwrap_or(0);
-
-                if hide_inactive && !is_active && ride_count == 0 {
+                if hide_inactive && !vehicle_data.is_active && vehicle_data.ride_count == 0 {
                     continue;
                 }
 
-                let vehicle_data = CoverageVehiclePart {
-                    block_str: block_str.to_owned(),
-                    number_str: number_str.to_owned(),
-                    type_code: vehicle.type_code.clone(),
-                    full_number_str: full_number_str.clone(),
-                    is_active,
-                    ride_count,
-                    everybody_ride_count,
+                let type_code_key = if merge_mode == MergeMode::SplitTypes {
+                    vehicle.type_code.clone()
+                } else {
+                    String::new()
                 };
-                type_to_block_to_vehicles
+
+                uncoupled_type_to_block_name_to_vehicles
                     .entry(type_code_key)
                     .or_insert_with(|| BTreeMap::new())
-                    .entry(block_str.to_owned())
+                    .entry(vehicle_data.block_str.clone())
                     .or_insert_with(|| Vec::new())
                     .push(vehicle_data);
             }
 
-            company_to_type_to_block_to_vehicles.insert(company.clone(), type_to_block_to_vehicles);
+            let coupled_sequences: Vec<Vec<CoverageVehiclePart>> = if merge_mode == MergeMode::MergeTypesGroupFixedCoupling {
+                // now, handle all the fixed couplings
+                let mut fixed_coupling_to_vehicles = BTreeMap::new();
+                for vehicle in number_to_vehicle.values() {
+                    if vehicle.fixed_coupling.len() == 0 {
+                        // vehicles without fixed couplings were already handled
+                        continue;
+                    }
+
+                    let fixed_coupling: Vec<VehicleNumber> = vehicle.fixed_coupling.iter()
+                        .map(|nss| nss.clone())
+                        .collect();
+                    if fixed_coupling_to_vehicles.contains_key(&fixed_coupling) {
+                        // we've already done this one
+                        continue;
+                    }
+
+                    let coupling_vehicles: Vec<VehicleInfo> = fixed_coupling.iter()
+                        .filter_map(|vn| number_to_vehicle.get(vn))
+                        .map(|v| v.clone())
+                        .collect();
+
+                    fixed_coupling_to_vehicles.insert(fixed_coupling, coupling_vehicles);
+                }
+
+                fixed_coupling_to_vehicles.values()
+                    .map(|vehicles|
+                        vehicles.into_iter()
+                            .map(|vehicle| CoverageVehiclePart::from_vehicle_info(
+                                vehicle,
+                                ridden_vehicles,
+                                all_riders_ridden_vehicles,
+                                false,
+                            ))
+                            .collect()
+                    )
+                    .collect()
+            } else {
+                Vec::with_capacity(0)
+            };
+
+            name_to_company.insert(
+                company.clone(),
+                CoverageCompany {
+                    uncoupled_type_to_block_name_to_vehicles,
+                    coupled_sequences,
+                },
+            );
         }
 
         let template = BimCoverageTemplate {
             max_ride_count,
             everybody_max_ride_count,
-            company_to_type_to_block_to_vehicles,
-            merge_types,
+            name_to_company,
+            merge_mode,
         };
         match render_response(&template, &query_pairs, 200, vec![]).await {
             Some(r) => Ok(r),

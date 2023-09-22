@@ -28,7 +28,16 @@
   <p><label for="bimcoverage-to-date">Optionally, pick a cutoff date:</label></p>
   <p><input type="date" id="bimcoverage-to-date" name="to-date" /></p>
 
-  <p><label><input type="checkbox" name="merge-types" value="1" /> Merge types</label></p>
+  <p>
+    <label>
+      Merge mode:
+      <select name="merge-mode">
+        <option value="S">Split types</option>
+        <option value="M">Merge types</option>
+        <option value="F">Group fixed couplings</option>
+      </select>
+    </label>
+  </p>
 
   <p><label><input type="checkbox" name="hide-inactive" value="1" /> Hide inactive, unridden vehicles</label></p>
 

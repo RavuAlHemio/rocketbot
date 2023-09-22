@@ -1,5 +1,17 @@
 {% extends "base.html" %}
 
+{% macro output_vehicle(company_name, vehicle) -%}
+<a href="bim-detail?company={{ company_name|urlencode|escape }}&amp;vehicle={{ vehicle.full_number_str|urlencode|escape }}"><div
+  class="vehicle floaty {% if vehicle.is_active %}active{% else %}inactive{% endif %} {% if vehicle.ride_count > 0 %}ridden{% else %}unridden{% endif %} {% if vehicle.everybody_ride_count > 0 %}other-ridden{% else %}other-unridden{% endif %}" data-full-number="{{ vehicle.full_number_str|escape }}"
+  {% if vehicle.has_ride() -%}
+    style="background-color:{% if vehicle.is_active %}{{ vehicle.ride_count|mix_color(0, max_ride_count, "#eeffee", "#00ff00") }}{% else %}{{ vehicle.ride_count|mix_color(0, max_ride_count, "#ffffee", "#ffff00") }}{% endif %}"
+  {%- else if vehicle.has_everybody_ride() -%}
+    style="background-color:{% if vehicle.is_active %}{{ vehicle.everybody_ride_count|mix_color(0, everybody_max_ride_count, "#ccccff", "#6666ff") }}{% else %}{{ vehicle.everybody_ride_count|mix_color(0, everybody_max_ride_count, "#ffeeee", "#ff6666") }}{% endif %}"
+  {%- endif %}
+  data-ride-count="{{ vehicle.ride_count }}"
+>{{ vehicle.number_str|escape }}</div></a>
+{%- endmacro %}
+
 {% block title %}Public Transport Coverage{% endblock %}
 
 {% block content %}
@@ -8,69 +20,84 @@
 <h1>Public Transport Coverage</h1>
 
 <section class="skiplinks">
-  {% if merge_types -%}
+  {% if merge_mode.merge_types() -%}
     <p>
-      {% for (company, type_to_block_to_vehicles) in company_to_type_to_block_to_vehicles -%}
+      {% for (company_name, company) in name_to_company -%}
         {% if !loop.first -%}
           &middot;
         {% endif -%}
-        <a class="company" href="#c-{{ company|slugify }}">{{ company|escape }}</a>
-      {% endfor -%}
+        <a class="company" href="#c-{{ company_name|slugify }}">{{ company_name|escape }}</a>
+      {% endfor -%}{# name_to_company #}
     </p>
   {% else -%}
-    {% for (company, type_to_block_to_vehicles) in company_to_type_to_block_to_vehicles -%}
+    {% for (company_name, company) in name_to_company -%}
       <p>
-        <span class="company">{{ company|escape }}</span>:
-        {% for (type, block_to_vehicles) in type_to_block_to_vehicles -%}
+        <span class="company">{{ company_name|escape }}</span>:
+        {% for (type_name, block_name_to_vehicles) in company.uncoupled_type_to_block_name_to_vehicles -%}
           {% if !loop.first -%}
             &middot;
           {% endif -%}
-          <a class="type" href="#c-{{ company|slugify }}-t-{{ type|slugify }}">{{ type|escape }}</a>
-        {% endfor -%}
+          <a class="type" href="#c-{{ company_name|slugify }}-t-{{ type_name|slugify }}">{{ type_name|escape }}</a>
+        {% endfor -%}{# uncoupled_type_to_block_name_to_vehicles #}
+        {% if company.coupled_sequences.len() > 0 %}
+          {% if company.uncoupled_type_to_block_name_to_vehicles.len() > 0 %}
+            &middot;
+          {% endif %}
+          <a href="#c-{{ company_name|slugify }}-coupled" class="coupled-group-link">coupled</a>
+        {% endif %}
       </p>
-    {% endfor -%}
+    {% endfor -%}{# name_to_company #}
   {% endif -%}
 </section>
 
-{% for (company, type_to_block_to_vehicles) in company_to_type_to_block_to_vehicles %}
-<section class="company" id="c-{{ company|slugify }}">
-<h2>{{ company|escape }}</h2>
+{% for (company_name, company) in name_to_company %}
+<section class="company" id="c-{{ company_name|slugify }}">
+<h2>{{ company_name|escape }}</h2>
 
-{% for (type, block_to_vehicles) in type_to_block_to_vehicles %}
-<section class="vehicle-type" id="c-{{ company|slugify }}-t-{{ type|slugify }}">
-{% if type != "" %}<h3 class="vehicle-type">{{ type|escape }}</h3>{% endif %}
+{% for (type_name, block_name_to_vehicles) in company.uncoupled_type_to_block_name_to_vehicles %}
+<section class="vehicle-type" id="c-{{ company_name|slugify }}-t-{{ type_name|slugify }}">
+{% if type_name != "" %}<h3 class="vehicle-type">{{ type_name|escape }}</h3>{% endif %}
 
-{% for (blk, vehicles) in block_to_vehicles %}
-<section class="vehicle-block">
+{% for (block_name, vehicles) in block_name_to_vehicles %}
+<section class="vehicle-block uncoupled">
 
 <div class="vehicles-box">
 
-{% if blk.len() > 0 %}
-<div class="block-name floaty">{{ blk|escape }}</div>
+{% if block_name.len() > 0 %}
+<div class="block-name floaty">{{ block_name|escape }}</div>
 {% endif %}
 
 {% for vehicle in vehicles -%}
-<a href="bim-detail?company={{ company|urlencode|escape }}&amp;vehicle={{ vehicle.full_number_str|urlencode|escape }}"><div
-    class="vehicle floaty {% if vehicle.is_active %}active{% else %}inactive{% endif %} {% if vehicle.ride_count > 0 %}ridden{% else %}unridden{% endif %} {% if vehicle.everybody_ride_count > 0 %}other-ridden{% else %}other-unridden{% endif %}" data-full-number="{{ vehicle.full_number_str|escape }}"
-    {% if vehicle.has_ride() -%}
-      style="background-color:{% if vehicle.is_active %}{{ vehicle.ride_count|mix_color(0, max_ride_count, "#eeffee", "#00ff00") }}{% else %}{{ vehicle.ride_count|mix_color(0, max_ride_count, "#ffffee", "#ffff00") }}{% endif %}"
-    {%- else if vehicle.has_everybody_ride() -%}
-      style="background-color:{% if vehicle.is_active %}{{ vehicle.everybody_ride_count|mix_color(0, everybody_max_ride_count, "#ccccff", "#6666ff") }}{% else %}{{ vehicle.everybody_ride_count|mix_color(0, everybody_max_ride_count, "#ffeeee", "#ff6666") }}{% endif %}"
-    {%- endif %}
-    data-ride-count="{{ vehicle.ride_count }}"
->{{ vehicle.number_str|escape }}</div></a>
+  {% call output_vehicle(company_name, vehicle) %}
 {%- endfor %}
 
 </div>
 
-</section> {#- end of vehicle block #}
-{% endfor %}
+</section>{# vehicle-block #}
+{% endfor %}{# block_name_to_vehicles #}
 
-</section> {#- end of vehicle type #}
-{% endfor %}
+</section>{# vehicle-type #}
+{% endfor %}{# uncoupled_type_to_block_name_to_vehicles #}
 
-</section> {#- end of company #}
-{% endfor %}
+{% if company.coupled_sequences.len() > 0 %}
+<section class="vehicle-block coupled" id="c-{{ company_name|slugify }}-coupled">
+<h3 class="coupled-sequences">Coupled sequences</h3>
+
+{% for coupled_sequence in company.coupled_sequences %}
+
+<div class="vehicles-box coupled-sequence">
+  {% for vehicle in coupled_sequence -%}
+    {% call output_vehicle(company_name, vehicle) %}
+  {%- endfor %}{# vehicle #}
+</div>
+
+{% endfor %}{# coupled_sequences #}
+
+</section>{# vehicle-block coupled #}
+{% endif %}
+
+</section>{# company #}
+{% endfor %}{# name_to_company #}
 
 </main>
 
