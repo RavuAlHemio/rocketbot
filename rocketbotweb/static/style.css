@@ -257,6 +257,11 @@ main.bim-coverage .vehicles-box .vehicle.unridden.other-unridden.inactive {
   background-color: #000;
   color: #fff;
 }
+main.bim-coverage .vehicles-box .coupled-sequence {
+  display: inline-block;
+  margin-right: 0.3em;
+  margin-bottom: 0.3em;
+}
 
 main.bim-details td.id,
 main.bim-details td.spec-pos,

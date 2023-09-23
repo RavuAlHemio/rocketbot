@@ -83,15 +83,19 @@
 <section class="vehicle-block coupled" id="c-{{ company_name|slugify }}-coupled">
 <h3 class="coupled-sequences">Coupled sequences</h3>
 
+<div class="vehicles-box">
+
 {% for coupled_sequence in company.coupled_sequences %}
 
-<div class="vehicles-box coupled-sequence">
+<div class="coupled-sequence">
   {% for vehicle in coupled_sequence -%}
     {% call output_vehicle(company_name, vehicle) %}
   {%- endfor %}{# vehicle #}
 </div>
 
 {% endfor %}{# coupled_sequences #}
+
+</div>
 
 </section>{# vehicle-block coupled #}
 {% endif %}
