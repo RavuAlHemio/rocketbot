@@ -33,6 +33,12 @@ interface LastRiderPieData {
     companyToTypeToLastRiderToCountRidden: CompanyToTypeToRiderToCount;
 }
 
+type FixedCouplingData = {
+    [frontVehicleType: string]: {
+        [rider: string]: number[]
+    }
+};
+
 export module RocketBotWeb.Bim.Charting {
     function doSetUpByDayOfWeek() {
         const canvas = <HTMLCanvasElement|null>document.getElementById("chart-canvas");
@@ -347,6 +353,108 @@ export module RocketBotWeb.Bim.Charting {
         );
     }
 
+    function doSetUpFixedCouplingMemberUsage() {
+        const ALL_VALUE: string = "\u0018";
+
+        // set up controls
+        const controls = <HTMLParagraphElement|null>document.getElementById("histogram-controls");
+        if (controls === null) {
+            return;
+        }
+
+        const typeLabel = document.createElement("label");
+        typeLabel.appendChild(document.createTextNode("Front type: "));
+        const typeSelect = document.createElement("select");
+        typeLabel.appendChild(typeSelect);
+        controls.appendChild(typeLabel);
+
+        // load data
+        const dataString = document.getElementById("chart-data")?.textContent;
+        if (dataString === null || dataString === undefined) {
+            return;
+        }
+        const frontVehicleTypeToRiderToCounts: FixedCouplingData = JSON.parse(dataString);
+
+        const allFrontVehicleTypes: string[] = Object.keys(frontVehicleTypeToRiderToCounts);
+        allFrontVehicleTypes.sort();
+
+        // pre-populate options
+        for (let frontVehicleType of allFrontVehicleTypes) {
+            const typeOption = document.createElement("option");
+            typeOption.value = frontVehicleType;
+            typeOption.textContent = frontVehicleType;
+            typeSelect.appendChild(typeOption);
+        }
+        typeSelect.selectedIndex = 0;
+
+        // set up empty chart
+        const canvas = <HTMLCanvasElement|null>document.getElementById("chart-canvas");
+        if (canvas === null) {
+            return;
+        }
+        const chart = new Chart(canvas, {
+            type: "bar",
+            data: {
+                datasets: [],
+            },
+            options: {
+                scales: {
+                    y: {
+                        ticks: {
+                            format: {
+                                minimumFractionDigits: 0,
+                            }
+                        }
+                    },
+                },
+            },
+        });
+
+        // define update function
+        function updateChart(
+            chart: Chart<"bar">, frontVehicleTypeToRiderToCounts: FixedCouplingData,
+            typeSelect: HTMLSelectElement,
+        ) {
+            const riderToNumbers = frontVehicleTypeToRiderToCounts[typeSelect.value];
+            const typeRiders = Object.keys(riderToNumbers);
+            typeRiders.sort();
+
+            // collect the counts
+            const datasets: object[] = [];
+            const labels: string[] = [];
+            for (let rider of typeRiders) {
+                const riderName = (rider === ALL_VALUE) ? "(all)" : rider;
+                const numbers = riderToNumbers[rider];
+
+                while (labels.length < numbers.length) {
+                    labels.push(`vehicle ${labels.length + 1}`);
+                }
+
+                datasets.push({
+                    label: riderName,
+                    data: numbers,
+                });
+            }
+
+            // give this data to the chart
+            chart.data = {
+                datasets: datasets,
+                labels: labels,
+            };
+            chart.update();
+        }
+
+        // link up events
+        typeSelect.addEventListener("change", () => updateChart(
+            chart, frontVehicleTypeToRiderToCounts, typeSelect,
+        ));
+
+        // perform initial chart update
+        updateChart(
+            chart, frontVehicleTypeToRiderToCounts, typeSelect,
+        );
+    }
+
     export function setUpByDayOfWeek() {
         document.addEventListener("DOMContentLoaded", doSetUpByDayOfWeek);
     }
@@ -361,5 +469,9 @@ export module RocketBotWeb.Bim.Charting {
 
     export function setUpLastRiderPie() {
         document.addEventListener("DOMContentLoaded", doSetUpLastRiderPie);
+    }
+
+    export function setUpFixedCouplingMemberUsage() {
+        document.addEventListener("DOMContentLoaded", doSetUpFixedCouplingMemberUsage);
     }
 }

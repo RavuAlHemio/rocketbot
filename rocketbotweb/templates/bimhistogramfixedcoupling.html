@@ -1,0 +1,16 @@
+{% extends "base.html" %}
+
+{% block title %}Public Transport Fixed Coupling Member Usage{% endblock %}
+
+{% block scripts %}
+<script src="static/rocketbotweb.js?{{ "{{VERSION}}" }}"></script>
+<script>RocketBotWeb.Bim.Charting.setUpFixedCouplingMemberUsage();</script>
+{% endblock %}
+
+{% block content %}
+<p id="histogram-controls"></p>
+<p>
+    <canvas id="chart-canvas"></canvas>
+</p>
+<script type="application/json" id="chart-data">{{ self.json_data()|safe }}</script>
+{% endblock %}

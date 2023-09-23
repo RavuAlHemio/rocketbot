@@ -658,6 +658,18 @@ impl LastRiderPieTemplate {
     }
 }
 
+#[derive(Clone, Debug, Default, Eq, Hash, Ord, PartialEq, PartialOrd, Serialize, Template)]
+#[template(path = "bimhistogramfixedcoupling.html")]
+struct HistogramFixedCouplingTemplate {
+    front_vehicle_type_to_rider_to_counts: BTreeMap<String, BTreeMap<String, Vec<i64>>>,
+}
+impl HistogramFixedCouplingTemplate {
+    pub fn json_data(&self) -> String {
+        serde_json::to_string(&self.front_vehicle_type_to_rider_to_counts)
+            .expect("failed to JSON-encode graph data")
+    }
+}
+
 #[derive(Clone, Debug, Eq, Hash, Ord, PartialEq, PartialOrd, Serialize)]
 enum MergeMode {
     SplitTypes,
@@ -3547,6 +3559,124 @@ pub(crate) async fn handle_bim_last_rider_pie(request: &Request<Body>) -> Result
     let template = LastRiderPieTemplate {
         company_to_type_to_rider_to_last_count,
         company_to_type_to_rider_to_last_count_ridden,
+    };
+    match render_response(&template, &query_pairs, 200, vec![]).await {
+        Some(r) => Ok(r),
+        None => return_500(),
+    }
+}
+
+pub(crate) async fn handle_bim_histogram_fixed_coupling(request: &Request<Body>) -> Result<Response<Body>, Infallible> {
+    let query_pairs = get_query_pairs(request);
+    if request.method() != Method::GET {
+        return return_405(&query_pairs).await;
+    }
+
+    let db_conn = match connect_to_db().await {
+        Some(c) => c,
+        None => return return_500(),
+    };
+
+    // obtain database extract
+    let database_extract = obtain_vehicle_extract().await;
+    if database_extract.company_to_vehicle_to_fixed_coupling.len() == 0 {
+        return return_500();
+    }
+
+    let mut company_to_vehnum_to_rider_to_count: BTreeMap<String, BTreeMap<VehicleNumber, BTreeMap<String, i64>>> = BTreeMap::new();
+    let mut company_to_vehnum_to_total_count: BTreeMap<String, BTreeMap<VehicleNumber, i64>> = BTreeMap::new();
+    let rider_rows_res = db_conn.query(
+        "
+            SELECT
+                rav.company,
+                rav.vehicle_number,
+                rav.rider_username,
+                CAST(COUNT(*) AS bigint)
+            FROM
+                bim.rides_and_vehicles rav
+            WHERE
+                rav.coupling_mode = 'R'
+            GROUP BY
+                rav.company,
+                rav.vehicle_number,
+                rav.rider_username
+        ",
+        &[],
+    ).await;
+    let rider_rows = match rider_rows_res {
+        Ok(r) => r,
+        Err(e) => {
+            error!("failed to query rides: {}", e);
+            return return_500();
+        },
+    };
+    for row in &rider_rows {
+        let company: String = row.get(0);
+        let vehicle_number_string: String = row.get(1);
+        let rider_username: String = row.get(2);
+        let ride_count: i64 = row.get(3);
+
+        let vehicle_number = VehicleNumber::from(vehicle_number_string);
+
+        let count_per_rider = company_to_vehnum_to_rider_to_count
+            .entry(company.clone())
+            .or_insert_with(|| BTreeMap::new())
+            .entry(vehicle_number.clone())
+            .or_insert_with(|| BTreeMap::new())
+            .entry(rider_username)
+            .or_insert(0);
+        *count_per_rider += ride_count;
+
+        let total_count = company_to_vehnum_to_total_count
+            .entry(company.clone())
+            .or_insert_with(|| BTreeMap::new())
+            .entry(vehicle_number.clone())
+            .or_insert(0);
+        *total_count += ride_count;
+    }
+
+    let mut front_vehicle_type_to_rider_to_counts = BTreeMap::new();
+    let empty_map = BTreeMap::new();
+    for (company, vehicle_to_fixed_coupling) in &database_extract.company_to_vehicle_to_fixed_coupling {
+        let Some(vehicle_to_type) = database_extract.company_to_vehicle_to_type.get(company) else { continue };
+        let Some(vehicle_to_rider_to_count) = company_to_vehnum_to_rider_to_count.get(company) else { continue };
+        let Some(vehicle_to_total_count) = company_to_vehnum_to_total_count.get(company) else { continue };
+        for (look_vehicle, fixed_coupling) in vehicle_to_fixed_coupling {
+            if fixed_coupling.len() == 0 {
+                continue;
+            }
+            if look_vehicle != &fixed_coupling[0] {
+                // only pass each fixed coupling once
+                // (when we are looking at the front vehicle)
+                continue;
+            }
+            let Some(front_vehicle_type) = vehicle_to_type.get(&fixed_coupling[0]) else { continue };
+
+            let full_front_vehicle_type = format!("{}/{}", company, front_vehicle_type);
+            let rider_to_counts = front_vehicle_type_to_rider_to_counts
+                .entry(full_front_vehicle_type)
+                .or_insert_with(|| BTreeMap::new());
+            for (i, vehicle) in fixed_coupling.iter().enumerate() {
+                let rider_to_count = vehicle_to_rider_to_count
+                    .get(vehicle).unwrap_or(&empty_map);
+                let total_count = vehicle_to_total_count
+                    .get(vehicle).map(|tc| *tc).unwrap_or(0);
+
+                let all_counts = rider_to_counts.entry("\u{18}".to_owned())
+                    .or_insert_with(|| vec![0; fixed_coupling.len()]);
+                all_counts[i] += total_count;
+
+                for (rider, count) in rider_to_count {
+                    let this_count = rider_to_counts.entry(rider.clone())
+                        .or_insert_with(|| vec![0; fixed_coupling.len()]);
+                    this_count[i] += *count;
+                }
+            }
+        }
+    }
+
+    let template = HistogramFixedCouplingTemplate {
+        front_vehicle_type_to_rider_to_counts,
     };
     match render_response(&template, &query_pairs, 200, vec![]).await {
         Some(r) => Ok(r),
