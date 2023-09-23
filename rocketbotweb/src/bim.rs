@@ -3663,12 +3663,18 @@ pub(crate) async fn handle_bim_histogram_fixed_coupling(request: &Request<Body>)
                     .get(vehicle).map(|tc| *tc).unwrap_or(0);
 
                 let all_counts = rider_to_counts.entry("\u{18}".to_owned())
-                    .or_insert_with(|| vec![0; fixed_coupling.len()]);
+                    .or_insert_with(|| Vec::with_capacity(fixed_coupling.len()));
+                while i >= all_counts.len() {
+                    all_counts.push(0);
+                }
                 all_counts[i] += total_count;
 
                 for (rider, count) in rider_to_count {
                     let this_count = rider_to_counts.entry(rider.clone())
-                        .or_insert_with(|| vec![0; fixed_coupling.len()]);
+                        .or_insert_with(|| Vec::with_capacity(fixed_coupling.len()));
+                    while i >= this_count.len() {
+                        this_count.push(0);
+                    }
                     this_count[i] += *count;
                 }
             }
