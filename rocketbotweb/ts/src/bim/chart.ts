@@ -52,18 +52,52 @@ export module RocketBotWeb.Bim.Charting {
         }
         const data: ByDayOfWeekData = JSON.parse(dataString);
         const datasets: ChartDataset[] = [];
+        const totalWeekdayToCount: number[] = [];
         for (const rider of data.riders) {
+            const weekdayToCount = data.riderToWeekdayToCount[rider];
+            while (totalWeekdayToCount.length < weekdayToCount.length) {
+                totalWeekdayToCount.push(0);
+            }
+            for (let i = 0; i < weekdayToCount.length; i++) {
+                totalWeekdayToCount[i] += weekdayToCount[i];
+            }
             datasets.push({
                 label: rider,
-                data: data.riderToWeekdayToCount[rider],
+                data: weekdayToCount,
+                yAxisID: "yRegular",
             });
         }
+        datasets.push({
+            label: "(total)",
+            data: totalWeekdayToCount,
+            yAxisID: "yTotal",
+        });
 
         new Chart(canvas, {
             type: "bar",
             data: {
                 labels: ["Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday", "Sunday"],
                 datasets: datasets,
+            },
+            options: {
+                scales: {
+                    "yRegular": {
+                        display: true,
+                        position: "left",
+                        title: {
+                            display: true,
+                            text: "rides (single rider)",
+                        },
+                    },
+                    "yTotal": {
+                        display: true,
+                        position: "right",
+                        title: {
+                            display: true,
+                            text: "rides (total)",
+                        },
+                    },
+                },
             },
         });
     }
@@ -399,12 +433,29 @@ export module RocketBotWeb.Bim.Charting {
             },
             options: {
                 scales: {
-                    y: {
+                    "yRegular": {
+                        position: "left",
+                        title: {
+                            display: true,
+                            text: "rides (single rider)",
+                        },
                         ticks: {
                             format: {
                                 minimumFractionDigits: 0,
-                            }
-                        }
+                            },
+                        },
+                    },
+                    "yAll": {
+                        position: "right",
+                        title: {
+                            display: true,
+                            text: "rides (all riders)",
+                        },
+                        ticks: {
+                            format: {
+                                minimumFractionDigits: 0,
+                            },
+                        },
                     },
                 },
             },
@@ -433,6 +484,7 @@ export module RocketBotWeb.Bim.Charting {
                 datasets.push({
                     label: riderName,
                     data: numbers,
+                    yAxisID: (rider === ALL_VALUE) ? "yAll" : "yRegular",
                 });
             }
 
