@@ -1,7 +1,8 @@
 pub mod achievements;
 
 
-use std::{fmt, collections::BTreeMap};
+use std::collections::BTreeMap;
+use std::fmt;
 
 use indexmap::IndexSet;
 use rocketbot_string::NatSortedString;
@@ -57,6 +58,15 @@ pub enum CouplingMode {
     FixedCoupling,
 }
 impl CouplingMode {
+    pub fn try_from_db_str(db_str: &str) -> Option<Self> {
+        match db_str {
+            "R" => Some(Self::Ridden),
+            "E" => Some(Self::Explicit),
+            "F" => Some(Self::FixedCoupling),
+            _ => None,
+        }
+    }
+
     pub fn as_db_str(&self) -> &'static str {
         match self {
             Self::Ridden => "R",
@@ -69,6 +79,15 @@ impl CouplingMode {
         match self {
             Self::Ridden|Self::Explicit => true,
             _ => false,
+        }
+    }
+}
+impl fmt::Display for CouplingMode {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match self {
+            Self::Ridden => write!(f, "ridden"),
+            Self::Explicit => write!(f, "explicit"),
+            Self::FixedCoupling => write!(f, "coupled"),
         }
     }
 }
