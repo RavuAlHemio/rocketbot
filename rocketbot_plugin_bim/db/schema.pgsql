@@ -216,7 +216,23 @@ AS  OPERATOR 1 bim.<~<
 ,   FUNCTION 1 bim.natural_compare
 ;
 
+CREATE OR REPLACE FUNCTION bim.to_transport_date
+( tstamp timestamp with time zone
+) RETURNS date
+LANGUAGE sql
+IMMUTABLE LEAKPROOF STRICT
+PARALLEL SAFE
+AS $$
+    -- times before 04:00 are counted towards the previous day
+    SELECT
+        CASE
+            WHEN tstamp IS NULL THEN NULL
+            WHEN EXTRACT(HOUR FROM tstamp) < 4 THEN CAST(tstamp - INTERVAL 'P1D' AS date)
+            ELSE CAST(tstamp AS date)
+        END transport_date
+$$;
+
 CREATE TABLE bim.schema_revision
 ( sch_rev bigint NOT NULL
 );
-INSERT INTO bim.schema_revision (sch_rev) VALUES (6);
+INSERT INTO bim.schema_revision (sch_rev) VALUES (7);
