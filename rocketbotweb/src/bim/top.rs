@@ -7,6 +7,7 @@ use log::error;
 use rocketbot_bim_common::VehicleNumber;
 use rocketbot_string::NatSortedString;
 use serde::Serialize;
+use tokio_postgres::types::ToSql;
 
 use crate::{get_query_pairs, render_response, return_405, return_500};
 use crate::bim::connect_to_db;
@@ -404,19 +405,31 @@ pub(crate) async fn handle_top_bim_lines(request: &Request<Body>) -> Result<Resp
         .flatten()
         .filter(|tc| *tc > 0)
         .unwrap_or(10);
+    let username_opt = query_pairs.get("username")
+        .and_then(|u| if u.len() == 0 { None } else { Some(u) });
 
     let db_conn = match connect_to_db().await {
         Some(c) => c,
         None => return return_500(),
     };
 
+    let mut ride_counts_criteria = Vec::new();
+    let mut query_params: Vec<&(dyn ToSql + Sync)> = Vec::new();
+    query_params.push(&top_count);
+
+    if let Some(username) = username_opt {
+        ride_counts_criteria.push(format!("AND r.rider_username = ${}", query_params.len() + 1));
+        query_params.push(username);
+    }
+
     // query rides
-    let ride_rows_res = db_conn.query(
+    let query = format!(
         "
             WITH ride_counts(company, line, ride_count) AS (
                 SELECT r.company, r.line, COUNT(*)
                 FROM bim.rides r
                 WHERE r.line IS NOT NULL
+                {}
                 GROUP BY r.company, r.line
             ),
             top_ride_counts(ride_count) AS (
@@ -433,8 +446,9 @@ pub(crate) async fn handle_top_bim_lines(request: &Request<Body>) -> Result<Resp
                 WHERE trc.ride_count = rc.ride_count
             )
         ",
-        &[&top_count],
-    ).await;
+        ride_counts_criteria.join(" "),
+    );
+    let ride_rows_res = db_conn.query(&query, &query_params).await;
     let ride_rows = match ride_rows_res {
         Ok(rs) => rs,
         Err(e) => {
