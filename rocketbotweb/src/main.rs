@@ -31,17 +31,18 @@ use toml;
 use crate::aliases::{handle_nicks_aliases, handle_plaintext_aliases_for_nick};
 use crate::bim::achievements::handle_bim_achievements;
 use crate::bim::charts::{
-    handle_bim_histogram_by_day_of_week, handle_bim_histogram_by_line_ride_count_group,
-    handle_bim_histogram_by_vehicle_ride_count_group, handle_bim_histogram_fixed_coupling,
-    handle_bim_latest_rider_count_over_time, handle_bim_latest_rider_count_over_time_image,
-    handle_bim_last_rider_pie,
+    handle_bim_global_stats, handle_bim_histogram_by_day_of_week,
+    handle_bim_histogram_by_line_ride_count_group, handle_bim_histogram_by_vehicle_ride_count_group,
+    handle_bim_histogram_fixed_coupling, handle_bim_latest_rider_count_over_time,
+    handle_bim_latest_rider_count_over_time_image, handle_bim_last_rider_pie,
 };
 use crate::bim::coverage::{handle_bim_coverage, handle_bim_coverage_field};
 use crate::bim::details::{handle_bim_detail, handle_bim_line_detail, handle_bim_ride_by_id};
 use crate::bim::query::handle_bim_query;
 use crate::bim::tables::{handle_bim_rides, handle_bim_types, handle_bim_vehicles};
 use crate::bim::top::{
-    handle_explorer_bims, handle_top_bim_lines, handle_top_bims, handle_wide_bims,
+    handle_explorer_bims, handle_top_bim_days, handle_top_bim_lines, handle_top_bims,
+    handle_wide_bims,
 };
 use crate::config::WebConfig;
 use crate::quotes::{handle_quotes_votes, handle_top_quotes};
@@ -322,6 +323,8 @@ async fn handle_request(request: Request<Body>) -> Result<Response<Body>, Infall
         "/bim-query" => handle_bim_query(&request).await,
         "/bim-last-rider-pie" => handle_bim_last_rider_pie(&request).await,
         "/bim-histogram-fixed-coupling" => handle_bim_histogram_fixed_coupling(&request).await,
+        "/bim-global-stats" => handle_bim_global_stats(&request).await,
+        "/top-bim-days" => handle_top_bim_days(&request).await,
         _ => {
             if let Some(caps) = STATIC_FILE_REGEX.captures(request.uri().path()) {
                 debug!(

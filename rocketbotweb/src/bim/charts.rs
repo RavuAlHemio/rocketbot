@@ -148,6 +148,23 @@ impl HistogramFixedCouplingTemplate {
     }
 }
 
+#[derive(Clone, Debug, Default, Eq, Hash, Ord, PartialEq, PartialOrd, Serialize, Template)]
+#[template(path = "bimglobalstats.html")]
+struct GlobalStatsTemplate {
+    pub total_rides: i64,
+    pub company_to_total_rides: BTreeMap<String, i64>,
+}
+impl GlobalStatsTemplate {
+    pub fn json_data(&self) -> String {
+        let value = serde_json::json!({
+            "totalRides": self.total_rides,
+            "companyToTotalRides": self.company_to_total_rides,
+        });
+        serde_json::to_string(&value)
+            .expect("failed to JSON-encode graph data")
+    }
+}
+
 
 pub(crate) async fn handle_bim_latest_rider_count_over_time_image(request: &Request<Body>) -> Result<Response<Body>, Infallible> {
     let query_pairs = get_query_pairs(request);
@@ -976,6 +993,56 @@ pub(crate) async fn handle_bim_histogram_fixed_coupling(request: &Request<Body>)
 
     let template = HistogramFixedCouplingTemplate {
         front_vehicle_type_to_rider_to_counts,
+    };
+    match render_response(&template, &query_pairs, 200, vec![]).await {
+        Some(r) => Ok(r),
+        None => return_500(),
+    }
+}
+
+pub(crate) async fn handle_bim_global_stats(request: &Request<Body>) -> Result<Response<Body>, Infallible> {
+    let query_pairs = get_query_pairs(request);
+    if request.method() != Method::GET {
+        return return_405(&query_pairs).await;
+    }
+
+    let db_conn = match connect_to_db().await {
+        Some(c) => c,
+        None => return return_500(),
+    };
+
+    let mut company_to_total_rides: BTreeMap<String, i64> = BTreeMap::new();
+    let company_rows_res = db_conn.query(
+        "
+            SELECT
+                r.company,
+                CAST(COUNT(*) AS bigint)
+            FROM
+                bim.rides r
+            GROUP BY
+                r.company
+        ",
+        &[],
+    ).await;
+    let company_rows = match company_rows_res {
+        Ok(r) => r,
+        Err(e) => {
+            error!("failed to query rides: {}", e);
+            return return_500();
+        },
+    };
+    let mut total_rides = 0;
+    for row in &company_rows {
+        let company: String = row.get(0);
+        let ride_count: i64 = row.get(1);
+
+        company_to_total_rides.insert(company, ride_count);
+        total_rides += ride_count;
+    }
+
+    let template = GlobalStatsTemplate {
+        total_rides,
+        company_to_total_rides,
     };
     match render_response(&template, &query_pairs, 200, vec![]).await {
         Some(r) => Ok(r),

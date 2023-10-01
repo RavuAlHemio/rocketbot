@@ -39,6 +39,11 @@ type FixedCouplingData = {
     }
 };
 
+interface GlobalStatsData {
+    totalRides: number;
+    companyToTotalRides: { [company: string]: number };
+}
+
 export module RocketBotWeb.Bim.Charting {
     function doSetUpByDayOfWeek() {
         const canvas = <HTMLCanvasElement|null>document.getElementById("chart-canvas");
@@ -507,6 +512,57 @@ export module RocketBotWeb.Bim.Charting {
         );
     }
 
+    function doSetUpGlobalStats() {
+        // load data
+        const dataString = document.getElementById("chart-data")?.textContent;
+        if (dataString === null || dataString === undefined) {
+            return;
+        }
+        const data: GlobalStatsData = JSON.parse(dataString);
+
+        // filter out companies with less than a hundredth of the rides of the largest company
+        const reducedCompanies: { [company: string]: number } = {};
+        let otherRides: number = 0;
+        const rideCounts = Object.keys(data.companyToTotalRides)
+            .map(c => data.companyToTotalRides[c]);
+        if (rideCounts.length === 0) {
+            return;
+        }
+        rideCounts.sort((a, b) => a - b);
+        const maxValue = rideCounts[rideCounts.length - 1];
+        const minValue = maxValue / 500;
+        for (let company of Object.keys(data.companyToTotalRides)) {
+            const rides = data.companyToTotalRides[company];
+            if (rides >= minValue) {
+                reducedCompanies[company] = rides;
+            } else {
+                otherRides += rides;
+            }
+        }
+        const reducedCompanyNames: string[] = Object.keys(reducedCompanies);
+        reducedCompanyNames.sort((l, r) => reducedCompanies[r] - reducedCompanies[l]);
+        const reducedCompanyValues: number[] = reducedCompanyNames.map(c => reducedCompanies[c]);
+        reducedCompanyNames.push("(other)");
+        reducedCompanyValues.push(otherRides);
+
+        // set up empty chart
+        const canvas = <HTMLCanvasElement|null>document.getElementById("chart-canvas");
+        if (canvas === null) {
+            return;
+        }
+        const chart = new Chart(canvas, {
+            type: "pie",
+            data: {
+                datasets: [
+                    {
+                        data: reducedCompanyValues,
+                    },
+                ],
+                labels: reducedCompanyNames,
+            },
+        });
+    }
+
     export function setUpByDayOfWeek() {
         document.addEventListener("DOMContentLoaded", doSetUpByDayOfWeek);
     }
@@ -525,5 +581,9 @@ export module RocketBotWeb.Bim.Charting {
 
     export function setUpFixedCouplingMemberUsage() {
         document.addEventListener("DOMContentLoaded", doSetUpFixedCouplingMemberUsage);
+    }
+
+    export function setUpGlobalStats() {
+        document.addEventListener("DOMContentLoaded", doSetUpGlobalStats);
     }
 }

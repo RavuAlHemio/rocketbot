@@ -2,6 +2,7 @@ use std::collections::{BTreeMap, BTreeSet, HashMap};
 use std::convert::Infallible;
 
 use askama::Template;
+use chrono::NaiveDate;
 use hyper::{Body, Method, Request, Response};
 use log::error;
 use rocketbot_bim_common::VehicleNumber;
@@ -11,6 +12,7 @@ use tokio_postgres::types::ToSql;
 
 use crate::{get_query_pairs, render_response, return_405, return_500};
 use crate::bim::connect_to_db;
+use crate::templating::filters;
 
 
 #[derive(Clone, Debug, Eq, Hash, PartialEq, Serialize)]
@@ -49,6 +51,23 @@ struct LinePart {
     pub line: NatSortedString,
 }
 
+#[derive(Clone, Debug, Eq, Hash, Ord, PartialEq, PartialOrd, Serialize)]
+struct DayCountPart {
+    pub day: NaiveDate,
+    pub total_count: i64,
+    pub rider_to_count: BTreeMap<String, i64>,
+}
+impl DayCountPart {
+    pub fn riders_and_counts_desc(&self) -> Vec<(&str, i64)> {
+        let mut ret: Vec<(&str, i64)> = self.rider_to_count
+            .iter()
+            .map(|(r, c)| (r.as_str(), *c))
+            .collect();
+        ret.sort_unstable_by_key(|(_r, c)| -(*c));
+        ret
+    }
+}
+
 
 #[derive(Clone, Debug, Eq, Hash, PartialEq, Serialize, Template)]
 #[template(path = "topbims.html")]
@@ -74,6 +93,12 @@ struct ExplorerBimsTemplate {
 #[template(path = "topbimlines.html")]
 struct TopBimLinesTemplate {
     pub counts_lines: Vec<CountLinesPart>,
+}
+
+#[derive(Clone, Debug, Eq, Hash, PartialEq, Serialize, Template)]
+#[template(path = "topbimdays.html")]
+struct TopDaysTemplate {
+    pub counts_and_days: Vec<(i64, BTreeSet<DayCountPart>)>,
 }
 
 
@@ -487,6 +512,118 @@ pub(crate) async fn handle_top_bim_lines(request: &Request<Body>) -> Result<Resp
 
     let template = TopBimLinesTemplate {
         counts_lines,
+    };
+    match render_response(&template, &query_pairs, 200, vec![]).await {
+        Some(r) => Ok(r),
+        None => return_500(),
+    }
+}
+
+pub(crate) async fn handle_top_bim_days(request: &Request<Body>) -> Result<Response<Body>, Infallible> {
+    let query_pairs = get_query_pairs(request);
+
+    if request.method() != Method::GET {
+        return return_405(&query_pairs).await;
+    }
+
+    let top_count: i64 = query_pairs.get("count")
+        .map(|c_str| c_str.parse().ok())
+        .flatten()
+        .filter(|tc| *tc > 0)
+        .unwrap_or(10);
+    let username_opt = query_pairs.get("username")
+        .and_then(|u| if u.len() == 0 { None } else { Some(u) });
+
+    let db_conn = match connect_to_db().await {
+        Some(c) => c,
+        None => return return_500(),
+    };
+
+    let mut ride_counts_criteria = Vec::new();
+    let mut main_criteria = Vec::new();
+    let mut query_params: Vec<&(dyn ToSql + Sync)> = Vec::new();
+    query_params.push(&top_count);
+
+    if let Some(username) = username_opt {
+        ride_counts_criteria.push(format!("r.rider_username = ${}", query_params.len() + 1));
+        query_params.push(username);
+
+        main_criteria.push(format!("AND r.rider_username = ${}", query_params.len() + 1));
+        query_params.push(username);
+    }
+
+    // query rides
+    let query = format!(
+        "
+            WITH ride_counts(ride_date, ride_count) AS (
+                SELECT bim.to_transport_date(r.\"timestamp\"), COUNT(*)
+                FROM bim.rides r
+                {} {}
+                GROUP BY bim.to_transport_date(r.\"timestamp\")
+            ),
+            top_ride_counts(ride_count) AS (
+                SELECT DISTINCT ride_count
+                FROM ride_counts
+                ORDER BY ride_count DESC
+                LIMIT $1
+            )
+            SELECT rc.ride_date, r.rider_username, rc.ride_count, CAST(COUNT(*) AS bigint)
+            FROM bim.rides r
+            INNER JOIN ride_counts rc
+                ON rc.ride_date = bim.to_transport_date(r.\"timestamp\")
+            WHERE EXISTS (
+                SELECT 1
+                FROM top_ride_counts trc
+                WHERE trc.ride_count = rc.ride_count
+            )
+            {}
+            GROUP BY rc.ride_date, r.rider_username, rc.ride_count
+        ",
+        if ride_counts_criteria.len() > 0 { "WHERE" } else { "" },
+        ride_counts_criteria.join(" AND "),
+        main_criteria.join(" "),
+    );
+    let ride_rows_res = db_conn.query(&query, &query_params).await;
+    let ride_rows = match ride_rows_res {
+        Ok(rs) => rs,
+        Err(e) => {
+            error!("error querying vehicle rides: {}", e);
+            return return_500();
+        },
+    };
+
+    let mut day_to_day_count: BTreeMap<NaiveDate, DayCountPart> = BTreeMap::new();
+    for ride_row in ride_rows {
+        let ride_date: NaiveDate = ride_row.get(0);
+        let rider_username: String = ride_row.get(1);
+        let total_count: i64 = ride_row.get(2);
+        let rider_count: i64 = ride_row.get(3);
+
+        day_to_day_count
+            .entry(ride_date)
+            .or_insert_with(|| DayCountPart {
+                day: ride_date,
+                total_count,
+                rider_to_count: BTreeMap::new(),
+            })
+            .rider_to_count.insert(rider_username, rider_count);
+    }
+
+    let mut count_to_days: BTreeMap<i64, BTreeSet<DayCountPart>> = BTreeMap::new();
+    for day_count in day_to_day_count.values() {
+        count_to_days
+            .entry(day_count.total_count)
+            .or_insert_with(|| BTreeSet::new())
+            .insert(day_count.clone());
+    }
+
+    let mut counts_and_days: Vec<(i64, BTreeSet<DayCountPart>)> = count_to_days.iter()
+        .map(|(c, d)| (*c, d.clone()))
+        .collect();
+    counts_and_days.sort_unstable_by_key(|(c, _d)| -(*c));
+
+    let template = TopDaysTemplate {
+        counts_and_days,
     };
     match render_response(&template, &query_pairs, 200, vec![]).await {
         Some(r) => Ok(r),

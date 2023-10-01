@@ -1,0 +1,44 @@
+{% extends "base.html" %}
+
+{% block title %}Most-Active Public Transport Days{% endblock %}
+
+{% block content %}
+<main class="top-bim-days">
+
+<h1>Most-Active Public Transport Days</h1>
+
+{% for (count, days) in self.counts_and_days %}
+<section class="count" data-count="{{ count }}">
+
+<h2>{{ count }} {% if count|unref == 1 %}ride{% else %}rides{% endif %}</h2>
+
+{% for day in days %}
+
+<section class="day" data-date="{{ day.day }}">
+
+<h3>{{ day.day }}</h3>
+
+<table class="riders booktable">
+    <tr>
+        <th class="rider">rider</th>
+        <th class="rides">rides</th>
+    </tr>
+    {% for (rider, count) in day.riders_and_counts_desc() %}
+    <tr>
+        <td class="rider">{{ rider }}</td>
+        <td class="rides">{{ count }}</td>
+    </tr>
+    {% endfor %}
+</table>
+
+</section>
+
+{% endfor %}
+
+</section>
+
+{% endfor %}
+
+</main>
+
+{% endblock %}
