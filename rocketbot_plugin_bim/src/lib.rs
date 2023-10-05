@@ -3231,7 +3231,7 @@ impl BimPlugin {
                 WITH previous_ride(company, vehicle_number, current_ride_id, previous_ride_id) AS (
                     SELECT prrav1.company, prrav1.vehicle_number, prrav1.id, prrav2.id
                     FROM bim.rides_and_vehicles prrav1
-                    INNER JOIN bim.rides_and_vehicles prrav2
+                    LEFT OUTER JOIN bim.rides_and_vehicles prrav2
                         ON prrav2.company = prrav1.company
                         AND prrav2.vehicle_number = prrav1.vehicle_number
                         AND (
@@ -3266,7 +3266,7 @@ impl BimPlugin {
                 )
                 SELECT prev_ride.rider_username, now_ride.rider_username
                 FROM previous_ride pr
-                INNER JOIN bim.rides prev_ride ON prev_ride.id = pr.previous_ride_id
+                LEFT OUTER JOIN bim.rides prev_ride ON prev_ride.id = pr.previous_ride_id
                 INNER JOIN bim.rides now_ride ON now_ride.id = pr.current_ride_id
                 {} {}
                 ORDER BY now_ride.\"timestamp\"
@@ -3289,17 +3289,19 @@ impl BimPlugin {
 
         let mut rider_to_balance: BTreeMap<String, i64> = BTreeMap::new();
         for ride in rides {
-            let prev_rider: String = ride.get(0);
+            let prev_rider: Option<String> = ride.get(0);
             let now_rider: String = ride.get(1);
 
-            if prev_rider == now_rider {
-                continue;
-            }
+            if let Some(pr) = prev_rider {
+                if pr == now_rider {
+                    continue;
+                }
 
-            let prev_balance = rider_to_balance
-                .entry(prev_rider)
-                .or_insert(0);
-            *prev_balance -= 1;
+                let prev_balance = rider_to_balance
+                    .entry(pr)
+                    .or_insert(0);
+                *prev_balance -= 1;
+            }
 
             let now_balance = rider_to_balance
                 .entry(now_rider)

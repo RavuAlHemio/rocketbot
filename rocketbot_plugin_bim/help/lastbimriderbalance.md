@@ -2,7 +2,7 @@
 
 Outputs the last-rider balance for all participating riders.
 
-The last-rider balance is increased by 1 if a rider rides a vehicle that was previously ridden by a different rider, and decreased by 1 if a different rider rides a vehicle that was previously ridden by this rider. For performance reasons, being the first rider in a vehicle overall does not have an effect on the last-rider balance.
+The last-rider balance is increased by 1 if a rider rides a vehicle that was previously ridden by a different rider, and decreased by 1 if a different rider rides a vehicle that was previously ridden by this rider. Being the first rider in a vehicle overall also increases the last-rider balance by 1. Only actually-ridden vehicles are counted.
 
 The output is sorted by the rider's username by default. Passing `{sopfx}n` or `{lopfx}sort-by-number` sorts it by the balance in descending order instead.
 

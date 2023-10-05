@@ -188,6 +188,7 @@ pub(crate) async fn handle_bim_latest_rider_count_over_time_image(request: &Requ
             SELECT
                 rav.id, rav.company, rav.vehicle_number, rav.rider_username
             FROM bim.rides_and_vehicles rav
+            WHERE rav.coupling_mode = 'R'
             ORDER BY
                 rav.\"timestamp\", rav.id
         ",
@@ -443,6 +444,7 @@ pub(crate) async fn handle_bim_latest_rider_count_over_time(request: &Request<Bo
             SELECT
                 rav.company, rav.vehicle_number, rav.rider_username
             FROM bim.rides_and_vehicles rav
+            WHERE rav.coupling_mode = 'R'
             ORDER BY
                 rav.\"timestamp\", rav.id
         ",

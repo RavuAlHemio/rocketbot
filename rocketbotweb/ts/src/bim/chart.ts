@@ -213,6 +213,7 @@ export module RocketBotWeb.Bim.Charting {
         const riddenOnlyLabel = document.createElement("label");
         const riddenOnlyCheckbox = document.createElement("input");
         riddenOnlyCheckbox.type = "checkbox";
+        riddenOnlyCheckbox.checked = true;
         riddenOnlyLabel.appendChild(riddenOnlyCheckbox);
         riddenOnlyLabel.appendChild(document.createTextNode(" ridden only"));
         controls.appendChild(riddenOnlyLabel);
