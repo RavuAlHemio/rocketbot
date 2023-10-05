@@ -3222,54 +3222,16 @@ impl BimPlugin {
         let mut criteria = Vec::new();
         let mut query_params: Vec<&(dyn ToSql + Sync)> = Vec::with_capacity(1);
         if let Some(lookback_start) = &lookback_start_opt {
-            criteria.push(format!("now_ride.\"timestamp\" >= ${}", query_params.len() + 1));
+            criteria.push(format!("rvto.\"timestamp\" >= ${}", query_params.len() + 1));
             query_params.push(lookback_start);
         }
 
         let query = format!(
             "
-                WITH previous_ride(company, vehicle_number, current_ride_id, previous_ride_id) AS (
-                    SELECT prrav1.company, prrav1.vehicle_number, prrav1.id, prrav2.id
-                    FROM bim.rides_and_vehicles prrav1
-                    LEFT OUTER JOIN bim.rides_and_vehicles prrav2
-                        ON prrav2.company = prrav1.company
-                        AND prrav2.vehicle_number = prrav1.vehicle_number
-                        AND (
-                            -- and prrav2 is before prrav1 (break ties using ride ID)
-                            prrav2.\"timestamp\" < prrav1.\"timestamp\"
-                            OR (
-                                prrav2.\"timestamp\" = prrav1.\"timestamp\"
-                                AND prrav2.id < prrav1.id
-                            )
-                        )
-                        AND NOT EXISTS (
-                            -- and there is no other ride of the same vehicle in between
-                            SELECT 1
-                            FROM bim.rides_and_vehicles prrav3
-                            WHERE prrav3.company = prrav1.company
-                            AND prrav3.vehicle_number = prrav1.vehicle_number
-                            AND (
-                                prrav3.\"timestamp\" < prrav1.\"timestamp\"
-                                OR (
-                                    prrav3.\"timestamp\" = prrav1.\"timestamp\"
-                                    AND prrav3.id < prrav1.id
-                                )
-                            )
-                            AND (
-                                prrav3.\"timestamp\" > prrav2.\"timestamp\"
-                                OR (
-                                    prrav3.\"timestamp\" = prrav2.\"timestamp\"
-                                    AND prrav3.id > prrav2.id
-                                )
-                            )
-                        )
-                )
-                SELECT prev_ride.rider_username, now_ride.rider_username
-                FROM previous_ride pr
-                LEFT OUTER JOIN bim.rides prev_ride ON prev_ride.id = pr.previous_ride_id
-                INNER JOIN bim.rides now_ride ON now_ride.id = pr.current_ride_id
+                SELECT rvto.old_rider, rvto.new_rider
+                FROM bim.ridden_vehicles_taken_over() rvto
                 {} {}
-                ORDER BY now_ride.\"timestamp\"
+                ORDER BY rvto.\"timestamp\"
             ",
             if criteria.len() > 0 { "WHERE" } else { "" },
             criteria.join(" AND "),
