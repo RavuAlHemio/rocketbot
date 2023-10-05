@@ -185,12 +185,9 @@ pub(crate) async fn handle_bim_latest_rider_count_over_time_image(request: &Requ
     };
     let ride_res = db_conn.query(
         "
-            SELECT
-                rav.id, rav.company, rav.vehicle_number, rav.rider_username
-            FROM bim.rides_and_vehicles rav
-            WHERE rav.coupling_mode = 'R'
-            ORDER BY
-                rav.\"timestamp\", rav.id
+            SELECT rvto.id, rvto.old_rider, rvto.new_rider
+            FROM bim.ridden_vehicles_taken_over() rvto
+            ORDER BY rvto.\"timestamp\", rvto.id
         ",
         &[],
     ).await;
@@ -203,37 +200,42 @@ pub(crate) async fn handle_bim_latest_rider_count_over_time_image(request: &Requ
     };
 
     let mut all_riders = HashSet::new();
-    let mut vehicle_to_latest_rider: HashMap<(String, String), String> = HashMap::new();
-    let mut ride_id_to_rider_to_latest_vehicle_count: HashMap<i64, HashMap<String, usize>> = HashMap::new();
-    let mut ride_ids_in_order: Vec<i64> = Vec::new();
+    let mut ride_id_and_rider_to_latest_vehicle_count: Vec<(i64, HashMap<String, usize>)> = Vec::new();
     for row in &ride_rows {
         let ride_id: i64 = row.get(0);
-        let company: String = row.get(1);
-        let vehicle_number: String = row.get(2);
-        let rider_username: String = row.get(3);
+        let old_rider: Option<String> = row.get(1);
+        let new_rider: String = row.get(2);
 
-        all_riders.insert(rider_username.clone());
-
-        if ride_ids_in_order.last() != Some(&ride_id) {
-            ride_ids_in_order.push(ride_id);
+        if let Some(or) = old_rider.as_ref() {
+            all_riders.insert(or.clone());
         }
+        all_riders.insert(new_rider.clone());
 
-        vehicle_to_latest_rider.insert((company, vehicle_number), rider_username);
-
-        let rider_to_latest_vehicle_count = ride_id_to_rider_to_latest_vehicle_count
-            .entry(ride_id)
-            .or_insert_with(|| HashMap::new());
-
-        // reset all numbers -- only keep the last entry per ride ID
-        for rider_username in &all_riders {
-            rider_to_latest_vehicle_count.insert(rider_username.clone(), 0);
+        let last_ride_id = ride_id_and_rider_to_latest_vehicle_count.last()
+            .map(|(ride_id, _rtlvc)| *ride_id);
+        if last_ride_id != Some(ride_id) {
+            // different ride
+            // clone to new entry (or create a completely new map)
+            let new_rider_to_latest_vehicle_count = ride_id_and_rider_to_latest_vehicle_count.last()
+            .map(|(_ride_id, rtlvc)| rtlvc.clone())
+            .unwrap_or_else(|| HashMap::new());
+            ride_id_and_rider_to_latest_vehicle_count.push((ride_id, new_rider_to_latest_vehicle_count));
         }
-        for latest_rider in vehicle_to_latest_rider.values() {
-            *rider_to_latest_vehicle_count.get_mut(latest_rider).unwrap() += 1;
+        let rider_to_latest_vehicle_count = &mut ride_id_and_rider_to_latest_vehicle_count
+            .last_mut().unwrap()
+            .1;
+
+        if let Some(or) = &old_rider {
+            let old_rider_count = rider_to_latest_vehicle_count
+                .entry(or.clone())
+                .or_insert(0);
+            *old_rider_count -= 1;
         }
+        let new_rider_count = rider_to_latest_vehicle_count
+            .entry(new_rider.clone())
+            .or_insert(0);
+        *new_rider_count += 1;
     }
-
-    let ride_count = ride_ids_in_order.len();
 
     let mut rider_names: Vec<String> = all_riders
         .iter()
@@ -254,11 +256,8 @@ pub(crate) async fn handle_bim_latest_rider_count_over_time_image(request: &Requ
             tsv_output.push_str(rider);
         }
 
-        for ride_id in &ride_ids_in_order {
+        for (_ride_id, rider_to_latest_vehicle_count) in &ride_id_and_rider_to_latest_vehicle_count {
             tsv_output.push('\n');
-
-            let rider_to_latest_vehicle_count = ride_id_to_rider_to_latest_vehicle_count
-                .get(ride_id).unwrap();
 
             let mut first_rider = true;
             for rider in &rider_names {
@@ -287,9 +286,10 @@ pub(crate) async fn handle_bim_latest_rider_count_over_time_image(request: &Requ
         }
     }
 
-    let max_count = ride_id_to_rider_to_latest_vehicle_count
-        .values()
-        .flat_map(|rtlvc_row| rtlvc_row.values())
+    let ride_count = ride_id_and_rider_to_latest_vehicle_count.len();
+    let max_count = ride_id_and_rider_to_latest_vehicle_count
+        .iter()
+        .flat_map(|(_ride_id, rtlvc)| rtlvc.values())
         .map(|val| *val)
         .max()
         .unwrap_or(0);
@@ -337,10 +337,7 @@ pub(crate) async fn handle_bim_latest_rider_count_over_time_image(request: &Requ
     }
 
     // now draw the data
-    for (graph_x, ride_id) in ride_ids_in_order.iter().enumerate() {
-        let rider_to_latest_vehicle_count = ride_id_to_rider_to_latest_vehicle_count
-            .get(ride_id).unwrap();
-
+    for (graph_x, (_ride_id, rider_to_latest_vehicle_count)) in ride_id_and_rider_to_latest_vehicle_count.iter().enumerate() {
         let x = 1 + graph_x;
         for (i, rider) in rider_names.iter().enumerate() {
             let vehicle_count = rider_to_latest_vehicle_count
@@ -441,12 +438,10 @@ pub(crate) async fn handle_bim_latest_rider_count_over_time(request: &Request<Bo
 
     let rides_res = db_conn.query(
         "
-            SELECT
-                rav.company, rav.vehicle_number, rav.rider_username
-            FROM bim.rides_and_vehicles rav
-            WHERE rav.coupling_mode = 'R'
-            ORDER BY
-                rav.\"timestamp\", rav.id
+            SELECT rvto.old_rider, rvto.new_rider, CAST(COUNT(*) AS bigint) pair_count
+            FROM bim.ridden_vehicles_taken_over() rvto
+            WHERE rvto.old_rider IS NOT NULL
+            GROUP BY rvto.old_rider, rvto.new_rider
         ",
         &[],
     ).await;
@@ -458,23 +453,15 @@ pub(crate) async fn handle_bim_latest_rider_count_over_time(request: &Request<Bo
         },
     };
 
-    let mut comp_veh_to_last_rider: HashMap<(String, String), String> = HashMap::new();
     let mut from_to_count: BTreeMap<(String, String), u64> = BTreeMap::new();
     for ride_row in ride_rows {
-        let company: String = ride_row.get(0);
-        let vehicle_number: String = ride_row.get(1);
-        let rider_username: String = ride_row.get(2);
+        let from_rider: String = ride_row.get(0);
+        let to_rider: String = ride_row.get(1);
+        let pair_count: i64 = ride_row.get(2);
 
-        if let Some(previous_rider) = comp_veh_to_last_rider.get(&(company.clone(), vehicle_number.clone())) {
-            if previous_rider != &rider_username {
-                let count_ref = from_to_count
-                    .entry((previous_rider.clone(), rider_username.clone()))
-                    .or_insert(0);
-                *count_ref += 1;
-            }
-        }
+        let pair_count_u64: u64 = pair_count.try_into().unwrap();
 
-        comp_veh_to_last_rider.insert((company, vehicle_number), rider_username);
+        from_to_count.insert((from_rider, to_rider), pair_count_u64);
     }
 
     let template = BimLatestRiderCountTemplate {

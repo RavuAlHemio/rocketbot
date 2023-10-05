@@ -236,7 +236,8 @@ CREATE INDEX IF NOT EXISTS idx_ride_vehicles_ridden ON bim.ride_vehicles (ride_i
 
 CREATE OR REPLACE FUNCTION bim.ridden_vehicles_taken_over
 () RETURNS TABLE
-( company character varying(256)
+( id bigint
+, company character varying(256)
 , vehicle_number character varying(256)
 , "timestamp" timestamp with time zone
 , old_rider character varying(256)
@@ -251,8 +252,9 @@ DECLARE
     company_and_vehicle character varying;
 BEGIN
     company_and_vehicle_to_last_rider := jsonb_build_object();
-    FOR rv IN SELECT * FROM bim.rides_and_vehicles WHERE coupling_mode = 'R' ORDER BY "timestamp", id
+    FOR rv IN SELECT rav.id, rav.company, rav.vehicle_number, rav."timestamp", rav.rider_username FROM bim.rides_and_vehicles rav WHERE rav.coupling_mode = 'R' ORDER BY rav."timestamp", rav.id
     LOOP
+        id := rv.id;
         company := rv.company;
         vehicle_number := rv.vehicle_number;
         timestamp := rv."timestamp";
@@ -272,4 +274,4 @@ $$;
 CREATE TABLE bim.schema_revision
 ( sch_rev bigint NOT NULL
 );
-INSERT INTO bim.schema_revision (sch_rev) VALUES (9);
+INSERT INTO bim.schema_revision (sch_rev) VALUES (10);
