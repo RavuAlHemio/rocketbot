@@ -232,7 +232,9 @@ AS $$
         END transport_date
 $$;
 
+CREATE INDEX IF NOT EXISTS idx_ride_vehicles_ridden ON bim.ride_vehicles (ride_id, vehicle_number) WHERE coupling_mode = 'R';
+
 CREATE TABLE bim.schema_revision
 ( sch_rev bigint NOT NULL
 );
-INSERT INTO bim.schema_revision (sch_rev) VALUES (7);
+INSERT INTO bim.schema_revision (sch_rev) VALUES (8);
