@@ -3183,6 +3183,143 @@ impl BimPlugin {
         }
     }
 
+    async fn channel_command_lastbimriderbalance(&self, channel_message: &ChannelMessage, command: &CommandInstance) {
+        let interface = match self.interface.upgrade() {
+            None => return,
+            Some(i) => i,
+        };
+
+        let lookback_range = match Self::lookback_range_from_command(command) {
+            Some(lr) => lr,
+            None => {
+                send_channel_message!(
+                    interface,
+                    &channel_message.channel.name,
+                    "Hey, no mixing options that mean different time ranges!",
+                ).await;
+                return;
+            },
+        };
+        let lookback_start_opt = lookback_range.start_timestamp();
+
+        let config_guard = self.config.read().await;
+        let ride_conn = match connect_ride_db(&config_guard).await {
+            Ok(c) => c,
+            Err(_) => {
+                send_channel_message!(
+                    interface,
+                    &channel_message.channel.name,
+                    "Failed to open database connection. :disappointed:",
+                ).await;
+                return;
+            },
+        };
+
+        let mut criteria = Vec::new();
+        let mut query_params: Vec<&(dyn ToSql + Sync)> = Vec::with_capacity(1);
+        if let Some(lookback_start) = &lookback_start_opt {
+            criteria.push(format!("now_ride.\"timestamp\" >= ${}", query_params.len() + 1));
+            query_params.push(lookback_start);
+        }
+
+        let query = format!(
+            "
+                WITH previous_ride(company, vehicle_number, current_ride_id, previous_ride_id) AS (
+                    SELECT prrav1.company, prrav1.vehicle_number, prrav1.id, prrav2.id
+                    FROM bim.rides_and_vehicles prrav1
+                    INNER JOIN bim.rides_and_vehicles prrav2
+                        ON prrav2.company = prrav1.company
+                        AND prrav2.vehicle_number = prrav1.vehicle_number
+                        AND (
+                            -- and prrav2 is before prrav1 (break ties using ride ID)
+                            prrav2.\"timestamp\" < prrav1.\"timestamp\"
+                            OR (
+                                prrav2.\"timestamp\" = prrav1.\"timestamp\"
+                                AND prrav2.id < prrav1.id
+                            )
+                        )
+                        AND NOT EXISTS (
+                            -- and there is no other ride of the same vehicle in between
+                            SELECT 1
+                            FROM bim.rides_and_vehicles prrav3
+                            WHERE prrav3.company = prrav1.company
+                            AND prrav3.vehicle_number = prrav1.vehicle_number
+                            AND (
+                                prrav3.\"timestamp\" < prrav1.\"timestamp\"
+                                OR (
+                                    prrav3.\"timestamp\" = prrav1.\"timestamp\"
+                                    AND prrav3.id < prrav1.id
+                                )
+                            )
+                            AND (
+                                prrav3.\"timestamp\" > prrav2.\"timestamp\"
+                                OR (
+                                    prrav3.\"timestamp\" = prrav2.\"timestamp\"
+                                    AND prrav3.id > prrav2.id
+                                )
+                            )
+                        )
+                )
+                SELECT prev_ride.rider_username, now_ride.rider_username
+                FROM previous_ride pr
+                INNER JOIN bim.rides prev_ride ON prev_ride.id = pr.previous_ride_id
+                INNER JOIN bim.rides now_ride ON now_ride.id = pr.current_ride_id
+                {} {}
+                ORDER BY now_ride.\"timestamp\"
+            ",
+            if criteria.len() > 0 { "WHERE" } else { "" },
+            criteria.join(" AND "),
+        );
+        let rides = match ride_conn.query(&query, &query_params).await {
+            Ok(r) => r,
+            Err(e) => {
+                error!("failed to execute ride query: {}", e);
+                send_channel_message!(
+                    interface,
+                    &channel_message.channel.name,
+                    "Failed to execute ride query. :disappointed:",
+                ).await;
+                return;
+            },
+        };
+
+        let mut rider_to_balance: BTreeMap<String, i64> = BTreeMap::new();
+        for ride in rides {
+            let prev_rider: String = ride.get(0);
+            let now_rider: String = ride.get(1);
+
+            if prev_rider == now_rider {
+                continue;
+            }
+
+            let prev_balance = rider_to_balance
+                .entry(prev_rider)
+                .or_insert(0);
+            *prev_balance -= 1;
+
+            let now_balance = rider_to_balance
+                .entry(now_rider)
+                .or_insert(0);
+            *now_balance += 1;
+        }
+
+        let response_body = if rider_to_balance.len() > 0 {
+            let mut ret = "Last-rider balances:".to_owned();
+            for (rider, balance) in &rider_to_balance {
+                write_expect!(ret, "\n{}: {:+}", rider, balance);
+            }
+            ret
+        } else {
+            "Nothing much has changed...".to_owned()
+        };
+
+        send_channel_message!(
+            interface,
+            &channel_message.channel.name,
+            &response_body,
+        ).await;
+    }
+
     #[inline]
     fn weekday_abbr2(weekday: Weekday) -> &'static str {
         match weekday {
@@ -3629,6 +3766,16 @@ impl RocketBotPlugin for BimPlugin {
             )
                 .build()
         ).await;
+        my_interface.register_channel_command(
+            &CommandDefinitionBuilder::new(
+                "lastbimriderbalance",
+                "bim",
+                "{cpfx}lastbimriderbalance",
+                "A list of the last-rider status balances.",
+            )
+                .add_lookback_flags()
+                .build()
+        ).await;
 
         // set up the achievement update loop
         let (achievement_update_sender, mut achievement_update_receiver) = mpsc::unbounded_channel();
@@ -3720,6 +3867,8 @@ impl RocketBotPlugin for BimPlugin {
             self.channel_command_recentbimrides(channel_message, command).await
         } else if command.name == "bimfreshen" {
             self.channel_command_bimfreshen(channel_message, command).await
+        } else if command.name == "lastbimriderbalance" {
+            self.channel_command_lastbimriderbalance(channel_message, command).await
         }
     }
 
@@ -3768,6 +3917,8 @@ impl RocketBotPlugin for BimPlugin {
             Some(include_str!("../help/recentbimrides.md").to_owned())
         } else if command_name == "bimfreshen" {
             Some(include_str!("../help/bimfreshen.md").to_owned())
+        } else if command_name == "lastbimriderbalance" {
+            Some(include_str!("../help/lastbimriderbalance.md").to_owned())
         } else {
             None
         }
