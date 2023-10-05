@@ -3189,6 +3189,10 @@ impl BimPlugin {
             Some(i) => i,
         };
 
+        let sort_by_number =
+            command.flags.contains("n")
+            || command.flags.contains("sort-by-number")
+        ;
         let lookback_range = match Self::lookback_range_from_command(command) {
             Some(lr) => lr,
             None => {
@@ -3303,9 +3307,16 @@ impl BimPlugin {
             *now_balance += 1;
         }
 
-        let response_body = if rider_to_balance.len() > 0 {
+        let mut riders_and_balances: Vec<(String, i64)> = rider_to_balance.iter()
+            .map(|(r, bal)| (r.clone(), *bal))
+            .collect();
+        if sort_by_number {
+            riders_and_balances.sort_unstable_by_key(|(r, bal)| (-bal, r.clone()));
+        }
+
+        let response_body = if riders_and_balances.len() > 0 {
             let mut ret = "Last-rider balances:".to_owned();
-            for (rider, balance) in &rider_to_balance {
+            for (rider, balance) in &riders_and_balances {
                 write_expect!(ret, "\n{}: {:+}", rider, balance);
             }
             ret
@@ -3773,6 +3784,8 @@ impl RocketBotPlugin for BimPlugin {
                 "{cpfx}lastbimriderbalance",
                 "A list of the last-rider status balances.",
             )
+                .add_flag("n")
+                .add_flag("sort-by-number")
                 .add_lookback_flags()
                 .build()
         ).await;
