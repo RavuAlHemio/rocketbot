@@ -3250,6 +3250,7 @@ impl BimPlugin {
         };
 
         let mut rider_to_balance: BTreeMap<String, i64> = BTreeMap::new();
+        let mut first_ride_count: u64 = 0;
         for ride in rides {
             let prev_rider: Option<String> = ride.get(0);
             let now_rider: String = ride.get(1);
@@ -3263,6 +3264,8 @@ impl BimPlugin {
                     .entry(pr)
                     .or_insert(0);
                 *prev_balance -= 1;
+            } else {
+                first_ride_count += 1;
             }
 
             let now_balance = rider_to_balance
@@ -3282,6 +3285,9 @@ impl BimPlugin {
             let mut ret = "Last-rider balances:".to_owned();
             for (rider, balance) in &riders_and_balances {
                 write_expect!(ret, "\n{}: {:+}", rider, balance);
+            }
+            if first_ride_count > 0 {
+                write_expect!(ret, "\n({} first rides)", first_ride_count);
             }
             ret
         } else {
