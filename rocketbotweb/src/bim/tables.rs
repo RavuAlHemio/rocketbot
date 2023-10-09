@@ -1,4 +1,4 @@
-use std::collections::{BTreeMap, BTreeSet, HashMap, HashSet};
+use std::collections::{BTreeMap, BTreeSet, HashMap};
 use std::convert::Infallible;
 
 use askama::Template;
@@ -12,7 +12,6 @@ use serde::ser::SerializeStruct;
 use crate::{get_query_pairs, render_response, return_405, return_500};
 use crate::bim::{
     connect_to_db, obtain_company_to_bim_database, obtain_company_to_definition,
-    obtain_vehicle_extract,
 };
 use crate::templating::filters;
 
@@ -145,7 +144,7 @@ struct RideInfo {
 struct RideRow {
     company: String,
     vehicle_type_opt: Option<String>,
-    vehicle_numbers: Vec<VehicleNumber>,
+    vehicle_number: VehicleNumber,
     ride_count: i64,
     last_line: Option<String>,
 }
@@ -153,14 +152,14 @@ impl RideRow {
     pub fn new(
         company: String,
         vehicle_type_opt: Option<String>,
-        vehicle_numbers: Vec<VehicleNumber>,
+        vehicle_number: VehicleNumber,
         ride_count: i64,
         last_line: Option<String>,
     ) -> Self {
         Self {
             company,
             vehicle_type_opt,
-            vehicle_numbers,
+            vehicle_number,
             ride_count,
             last_line,
         }
@@ -171,7 +170,6 @@ impl RideRow {
 #[derive(Clone, Debug, Deserialize, Eq, Hash, PartialEq, Serialize, Template)]
 #[template(path = "bimrides.html")]
 struct BimRidesTemplate {
-    pub has_any_vehicle_type: bool,
     pub rides: Vec<RideRow>,
 }
 
@@ -202,15 +200,13 @@ pub(crate) async fn handle_bim_rides(request: &Request<Body>) -> Result<Response
         Some(c) => c,
         None => return return_500(),
     };
-    let vehicle_extract = obtain_vehicle_extract()
-        .await;
 
     let query_res = db_conn.query("
-        SELECT r.company, rv.vehicle_number, CAST(COUNT(*) AS bigint), MAX(r.line)
+        SELECT r.company, rv.vehicle_number, rv.vehicle_type, CAST(COUNT(*) AS bigint), MAX(r.line)
         FROM bim.rides r
         INNER JOIN bim.ride_vehicles rv ON rv.ride_id = r.id
-        WHERE rv.fixed_coupling_position = 0
-        GROUP BY r.company, rv.vehicle_number
+        WHERE rv.coupling_mode = 'R'
+        GROUP BY r.company, rv.vehicle_number, rv.vehicle_type
     ", &[]).await;
     let rows = match query_res {
         Ok(r) => r,
@@ -219,62 +215,25 @@ pub(crate) async fn handle_bim_rides(request: &Request<Body>) -> Result<Response
             return return_500();
         },
     };
-    let mut company_to_known_fixed_couplings: HashMap<String, HashSet<Vec<VehicleNumber>>> = HashMap::new();
     let mut rides: Vec<RideRow> = Vec::new();
-    let mut has_any_vehicle_type = false;
     for row in rows {
         let company: String = row.get(0);
         let vehicle_number = VehicleNumber::from_string(row.get(1));
-        let ride_count: i64 = row.get(2);
-        let last_line: Option<String> = row.get(3);
-
-        let vehicle_type_opt = vehicle_extract
-            .company_to_vehicle_to_type
-            .get(&company)
-            .and_then(|v2t| v2t.get(&vehicle_number))
-            .map(|t| t.clone());
-        if !has_any_vehicle_type && vehicle_type_opt.is_some() {
-            has_any_vehicle_type = true;
-        }
-
-        let fixed_coupling_opt = vehicle_extract
-            .company_to_vehicle_to_fixed_coupling
-            .get(&company)
-            .and_then(|v2fc| v2fc.get(&vehicle_number));
-        if let Some(fixed_coupling) = fixed_coupling_opt {
-            let known_fixed_couplings = company_to_known_fixed_couplings
-                .entry(company.clone())
-                .or_insert_with(|| HashSet::new());
-            if known_fixed_couplings.contains(fixed_coupling) {
-                // we've already output this one
-                continue;
-            }
-
-            // remember this coupling
-            known_fixed_couplings.insert(fixed_coupling.clone());
-
-            rides.push(RideRow::new(company, vehicle_type_opt, fixed_coupling.clone(), ride_count, last_line));
-        } else {
-            // not a fixed coupling; output 1:1
-            rides.push(RideRow::new(company, vehicle_type_opt, vec![vehicle_number], ride_count, last_line));
-        }
+        let vehicle_type_opt: Option<String> = row.get(2);
+        let ride_count: i64 = row.get(3);
+        let last_line: Option<String> = row.get(4);
+        // output 1:1
+        rides.push(RideRow::new(company, vehicle_type_opt, vehicle_number, ride_count, last_line));
     }
 
     rides.sort_unstable_by(|left, right| {
         left.company.cmp(&right.company)
-            .then_with(|| {
-                let mut left_sorted_vehicle_numbers = left.vehicle_numbers.clone();
-                let mut right_sorted_vehicle_numbers = right.vehicle_numbers.clone();
-                left_sorted_vehicle_numbers.sort_unstable();
-                right_sorted_vehicle_numbers.sort_unstable();
-                left_sorted_vehicle_numbers.cmp(&right_sorted_vehicle_numbers)
-            })
+            .then_with(|| left.vehicle_number.cmp(&right.vehicle_number))
             .then_with(|| left.ride_count.cmp(&right.ride_count))
             .then_with(|| left.last_line.cmp(&right.last_line))
     });
 
     let template = BimRidesTemplate {
-        has_any_vehicle_type,
         rides,
     };
     match render_response(&template, &query_pairs, 200, vec![]).await {
@@ -307,6 +266,7 @@ pub(crate) async fn handle_bim_types(request: &Request<Body>) -> Result<Response
         SELECT DISTINCT r.rider_username, r.company, rv.vehicle_number
         FROM bim.rides r
         INNER JOIN bim.ride_vehicles rv ON rv.ride_id = r.id
+        WHERE rv.coupling_mode = 'R'
     ", &[]).await;
     let rows = match query_res {
         Ok(r) => r,

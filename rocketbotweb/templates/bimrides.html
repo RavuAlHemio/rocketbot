@@ -10,20 +10,16 @@
 <table class="bim-rides">
   <tr>
     <th class="company">Company</th>
-    {% if has_any_vehicle_type %}
-      <th class="vehicle-type">Vehicle type</th>
-    {% endif %}
-    <th class="vehicle-numbers">Vehicle numbers</th>
+    <th class="vehicle-type">Vehicle type</th>
+    <th class="vehicle-number">Vehicle number</th>
     <th class="ride-count">Ride count</th>
     <th class="line">Example line</th>
   </tr>
   {% for ride in rides %}
   <tr>
     <td class="company">{{ ride.company|escape }}</td>
-    {% if has_any_vehicle_type %}
-      <td class="vehicle-type">{% if let Some(vehicle_type) = ride.vehicle_type_opt %}{{ vehicle_type|escape }}{% endif %}</td>
-    {% endif %}
-    <td class="vehicle-numbers">{% for vn in ride.vehicle_numbers %}{% if !loop.first %}+{% endif %}<a href="bim-detail?company={{ ride.company|urlencode|escape }}&amp;vehicle={{ vn }}">{{ vn }}</a>{% endfor %}</td>
+    <td class="vehicle-type">{% if let Some(vehicle_type) = ride.vehicle_type_opt %}{{ vehicle_type|escape }}{% endif %}</td>
+    <td class="vehicle-number"><a href="bim-detail?company={{ ride.company|urlencode|escape }}&amp;vehicle={{ ride.vehicle_number|urlencode|escape }}">{{ ride.vehicle_number|escape }}</a></td>
     <td class="ride-count">{{ ride.ride_count }}</td>
     <td class="line">{% if let Some(last_line) = ride.last_line %}<a href="bim-line-detail?company={{ ride.company|urlencode|escape }}&amp;line={{ last_line|urlencode|escape }}">{{ last_line|escape }}</a>{% endif %}</td>
   </tr>
