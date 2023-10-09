@@ -812,7 +812,7 @@ impl BimPlugin {
                             INNER JOIN bim.ride_vehicles rv
                                 ON rv.ride_id = r.id
                         WHERE
-                            rv.fixed_coupling_position = 0
+                            rv.coupling_mode = 'R'
                             {}
                             {{LOOKBACK_TIMESTAMP}}
                         GROUP BY
@@ -978,8 +978,7 @@ impl BimPlugin {
                     SELECT DISTINCT r.rider_username, r.company, rv.vehicle_number
                     FROM bim.rides r
                     INNER JOIN bim.ride_vehicles rv ON rv.ride_id = r.id
-                    WHERE rv.spec_position = 0
-                    AND rv.fixed_coupling_position = 0
+                    WHERE rv.coupling_mode = 'R'
                     {LOOKBACK_TIMESTAMP}
                 ) i
                 GROUP BY i.rider_username
@@ -1144,7 +1143,7 @@ impl BimPlugin {
                         SELECT r.rider_username, r.company, rv.vehicle_number, COUNT(*)
                         FROM bim.rides r
                         INNER JOIN bim.ride_vehicles rv ON rv.ride_id = r.id
-                        WHERE rv.fixed_coupling_position = 0
+                        WHERE rv.coupling_mode = 'R'
                         {LOOKBACK_TIMESTAMP}
                         GROUP BY r.rider_username, r.company, rv.vehicle_number
                     ),
@@ -1633,7 +1632,7 @@ impl BimPlugin {
                 INNER JOIN bim.ride_vehicles rv ON rv.ride_id = r.id
                 WHERE
                     LOWER(r.rider_username) = LOWER($1)
-                    AND rv.coupling_mode <> 'F'
+                    AND rv.coupling_mode = 'R'
                     {LOOKBACK_TIMESTAMP}
                 GROUP BY
                     r.company,
@@ -1990,6 +1989,7 @@ impl BimPlugin {
                 ON rv.ride_id = r.id
             WHERE
                 r.company = $1
+                AND rv.coupling_mode = 'R'
                 {AND_RIDER_USERNAME}
         ";
         let (mut response, rows_res) = if let Some(ru) = rider_username_opt {
@@ -2465,7 +2465,7 @@ impl BimPlugin {
                 WITH vehicle_and_distinct_rider_count(company, vehicle_number, rider_count) AS (
                     SELECT rav.company, rav.vehicle_number, COUNT(DISTINCT rav.rider_username)
                     FROM bim.rides_and_vehicles rav
-                    WHERE rav.fixed_coupling_position = 0
+                    WHERE rav.coupling_mode = 'R'
                     {LOOKBACK_TIMESTAMP}
                     GROUP BY rav.company, rav.vehicle_number
                 )

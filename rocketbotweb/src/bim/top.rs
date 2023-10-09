@@ -126,7 +126,7 @@ pub(crate) async fn handle_top_bims(request: &Request<Body>) -> Result<Response<
             WITH ride_counts(company, vehicle_number, ride_count) AS (
                 SELECT rav.company, rav.vehicle_number, COUNT(*)
                 FROM bim.rides_and_vehicles rav
-                WHERE rav.fixed_coupling_position = 0
+                WHERE rav.coupling_mode = 'R'
                 GROUP BY rav.company, rav.vehicle_number
             ),
             top_ride_counts(ride_count) AS (
@@ -216,7 +216,7 @@ pub(crate) async fn handle_wide_bims(request: &Request<Body>) -> Result<Response
                 WITH vehicle_and_distinct_rider_count(company, vehicle_number, rider_count) AS (
                     SELECT rav.company, rav.vehicle_number, COUNT(DISTINCT rav.rider_username)
                     FROM bim.rides_and_vehicles rav
-                    WHERE rav.fixed_coupling_position = 0
+                    WHERE rav.coupling_mode = 'R'
                     GROUP BY rav.company, rav.vehicle_number
                 )
                 SELECT CAST(COALESCE(MAX(rider_count), 0) AS bigint) FROM vehicle_and_distinct_rider_count
@@ -239,7 +239,7 @@ pub(crate) async fn handle_wide_bims(request: &Request<Body>) -> Result<Response
             WITH vehicle_and_distinct_rider_count(company, vehicle_number, rider_count) AS (
                 SELECT rav.company, rav.vehicle_number, COUNT(DISTINCT rav.rider_username)
                 FROM bim.rides_and_vehicles rav
-                WHERE rav.fixed_coupling_position = 0
+                WHERE rav.coupling_mode = 'R'
                 GROUP BY rav.company, rav.vehicle_number
             )
             SELECT DISTINCT rav.company, rav.vehicle_number, rav.rider_username rc
@@ -325,7 +325,7 @@ pub(crate) async fn handle_explorer_bims(request: &Request<Body>) -> Result<Resp
                 WITH vehicle_and_distinct_line_count(company, vehicle_number, line_count) AS (
                     SELECT rav.company, rav.vehicle_number, COUNT(DISTINCT rav.line)
                     FROM bim.rides_and_vehicles rav
-                    WHERE rav.fixed_coupling_position = 0
+                    WHERE rav.coupling_mode = 'R'
                     AND rav.line IS NOT NULL
                     GROUP BY rav.company, rav.vehicle_number
                 )
@@ -349,7 +349,7 @@ pub(crate) async fn handle_explorer_bims(request: &Request<Body>) -> Result<Resp
             WITH vehicle_and_distinct_line_count(company, vehicle_number, line_count) AS (
                 SELECT rav.company, rav.vehicle_number, COUNT(DISTINCT rav.line)
                 FROM bim.rides_and_vehicles rav
-                WHERE rav.fixed_coupling_position = 0
+                WHERE rav.coupling_mode = 'R'
                 AND rav.line IS NOT NULL
                 GROUP BY rav.company, rav.vehicle_number
             )
