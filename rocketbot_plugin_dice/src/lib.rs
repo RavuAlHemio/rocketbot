@@ -651,6 +651,33 @@ impl DicePlugin {
         ).await;
     }
 
+    async fn handle_pickglue(&self, channel_message: &ChannelMessage, command: &CommandInstance) {
+        let interface = match self.interface.upgrade() {
+            None => return,
+            Some(i) => i,
+        };
+
+        let lines: Vec<&str> = command.rest.split('\n')
+            .map(|ln| ln.trim_matches('\r'))
+            .collect();
+
+        let mut response = String::new();
+        {
+            let mut rng_guard = self.rng.lock().await;
+            for line in lines {
+                let choices: Vec<&str> = line.split('|').collect();
+                let choice = choices.choose(&mut *rng_guard).expect("empty split()?!");
+                response.push_str(choice);
+            }
+        }
+
+        send_channel_message!(
+            interface,
+            &channel_message.channel.name,
+            &response,
+        ).await;
+    }
+
     fn try_get_config(config: serde_json::Value) -> Result<DiceConfig, &'static str> {
         serde_json::from_value(config)
             .or_msg("failed to load config")
@@ -742,6 +769,15 @@ impl RocketBotPlugin for DicePlugin {
                 .add_flag("p").add_flag("purple")
                 .build()
         ).await;
+        my_interface.register_channel_command(
+            &CommandDefinitionBuilder::new(
+                "pickglue",
+                "dice",
+                "{cpfx}pickglue TEXT",
+                "Chooses an option from each line and glues the result together.",
+            )
+                .build()
+        ).await;
 
         DicePlugin {
             interface,
@@ -790,6 +826,8 @@ impl RocketBotPlugin for DicePlugin {
             self.handle_some_year(channel_message, command).await;
         } else if command.name == "randwordle" {
             self.handle_randwordle(channel_message, command).await;
+        } else if command.name == "pickglue" {
+            self.handle_pickglue(channel_message, command).await;
         }
     }
 
@@ -822,6 +860,8 @@ impl RocketBotPlugin for DicePlugin {
             )
         } else if command_name == "randwordle" {
             Some(include_str!("../help/randwordle.md").to_owned())
+        } else if command_name == "pickglue" {
+            Some(include_str!("../help/pickglue.md").to_owned())
         } else {
             None
         }
