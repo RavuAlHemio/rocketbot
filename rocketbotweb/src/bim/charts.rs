@@ -790,10 +790,10 @@ pub(crate) async fn handle_bim_last_rider_pie(request: &Request<Body>) -> Result
     let mut company_to_type_to_rider_to_last_count_ridden: BTreeMap<String, BTreeMap<String, BTreeMap<String, i64>>> = BTreeMap::new();
 
     let conditions_maps = [
-        ("", &mut company_to_type_to_rider_to_last_count),
-        ("AND rav.coupling_mode = 'R'", &mut company_to_type_to_rider_to_last_count_ridden),
+        ("", "", &mut company_to_type_to_rider_to_last_count),
+        ("AND rav.coupling_mode = 'R'", "AND rav2.coupling_mode = 'R'", &mut company_to_type_to_rider_to_last_count_ridden),
     ];
-    for (condition, map) in conditions_maps {
+    for (condition_rav, condition_rav2, map) in conditions_maps {
         let query_string = format!(
             "
                 WITH last_riders(company, vehicle_number, vehicle_type, rider_username) AS (
@@ -811,6 +811,7 @@ pub(crate) async fn handle_bim_last_rider_pie(request: &Request<Body>) -> Result
                             WHERE
                                 rav2.company = rav.company
                                 AND rav2.vehicle_number = rav.vehicle_number
+                                {}
                                 AND rav2.\"timestamp\" > rav.\"timestamp\"
                         )
                         {}
@@ -828,7 +829,8 @@ pub(crate) async fn handle_bim_last_rider_pie(request: &Request<Body>) -> Result
                     lr.vehicle_type,
                     lr.rider_username
             ",
-            condition,
+            condition_rav2,
+            condition_rav,
         );
         let rider_rows = match db_conn.query(&query_string, &[]).await {
             Ok(r) => r,
