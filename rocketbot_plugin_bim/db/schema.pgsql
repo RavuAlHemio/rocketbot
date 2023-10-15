@@ -248,24 +248,32 @@ STABLE STRICT
 AS $$
 DECLARE
     rv record;
-    company_and_vehicle_to_last_rider jsonb;
-    company_and_vehicle character varying;
+    company_to_vehicle_to_last_rider jsonb;
+    vehicle_to_last_rider jsonb;
 BEGIN
-    company_and_vehicle_to_last_rider := jsonb_build_object();
+    company_to_vehicle_to_last_rider := JSONB_BUILD_OBJECT();
     FOR rv IN SELECT rav.id, rav.company, rav.vehicle_number, rav."timestamp", rav.rider_username FROM bim.rides_and_vehicles rav WHERE rav.coupling_mode = 'R' ORDER BY rav."timestamp", rav.id
     LOOP
         id := rv.id;
         company := rv.company;
         vehicle_number := rv.vehicle_number;
         timestamp := rv."timestamp";
-        company_and_vehicle := rv.company || '/' || rv.vehicle_number;
-        old_rider := company_and_vehicle_to_last_rider ->> company_and_vehicle;
+
+        vehicle_to_last_rider := company_to_vehicle_to_last_rider -> company;
+        IF vehicle_to_last_rider IS NULL
+        THEN
+            vehicle_to_last_rider := JSONB_BUILD_OBJECT();
+        END IF;
+        old_rider := vehicle_to_last_rider ->> vehicle_number;
         new_rider := rv.rider_username;
+
         IF old_rider = new_rider
         THEN
             CONTINUE;
         END IF;
-        company_and_vehicle_to_last_rider := company_and_vehicle_to_last_rider || jsonb_build_object(company_and_vehicle, new_rider);
+
+        vehicle_to_last_rider := vehicle_to_last_rider || JSONB_BUILD_OBJECT(vehicle_number, new_rider);
+        company_to_vehicle_to_last_rider := company_to_vehicle_to_last_rider || JSONB_BUILD_OBJECT(company, vehicle_to_last_rider);
         RETURN NEXT;
     END LOOP;
 END;
