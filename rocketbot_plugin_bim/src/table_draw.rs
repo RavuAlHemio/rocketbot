@@ -132,6 +132,11 @@ pub struct RideTableVehicle {
     /// The rider's username and timestamp of the last time a vehicle coupled with this one was
     /// ridden by a different rider.
     pub other_coupled_last: Option<UserRide>,
+
+    /// Whether to highlight coupled rides if they are the latest.
+    ///
+    /// If false, a coupled ride is not highlighted even if it is the latest.
+    pub highlight_coupled_rides: bool,
 }
 impl UserRide {
     /// Returns the timestamp of this ride. Provided for structural equivalence with [`Ride`].
@@ -140,8 +145,13 @@ impl UserRide {
 }
 
 macro_rules! define_is_most_recent {
-    ($name:ident, $cmp_base:ident $(, $cmp_target:ident)+) => {
+    ($name:ident, ($cmp_base:ident, $cmp_base_add_criterion:ident) $(, ($cmp_target:ident, $cmp_target_add_criterion:ident))+) => {
         pub fn $name(&self) -> bool {
+            if !self.$cmp_base_add_criterion() {
+                // the user says the comparison base is not to be considered as the most recent
+                // therefore, it is not the most recent
+                return false;
+            }
             let cmp_base = match &self.$cmp_base {
                 Some(cb) => cb,
                 None => {
@@ -151,9 +161,11 @@ macro_rules! define_is_most_recent {
             };
 
             $(
-                if let Some(cmp_target) = &self.$cmp_target {
-                    if cmp_base.timestamp() < cmp_target.timestamp() {
-                        return false;
+                if self.$cmp_target_add_criterion() {
+                    if let Some(cmp_target) = &self.$cmp_target {
+                        if cmp_base.timestamp() < cmp_target.timestamp() {
+                            return false;
+                        }
                     }
                 }
             )+
@@ -164,10 +176,13 @@ macro_rules! define_is_most_recent {
 }
 
 impl RideTableVehicle {
-    define_is_most_recent!(is_my_same_most_recent, my_same_last, my_coupled_last, other_same_last, other_coupled_last);
-    define_is_most_recent!(is_my_coupled_most_recent, my_coupled_last, my_same_last, other_same_last, other_coupled_last);
-    define_is_most_recent!(is_other_same_most_recent, other_same_last, my_same_last, my_coupled_last, other_coupled_last);
-    define_is_most_recent!(is_other_coupled_most_recent, other_coupled_last, my_same_last, my_coupled_last, other_same_last);
+    #[inline] fn always_true(&self) -> bool { true }
+    #[inline] fn highlight_coupled_rides(&self) -> bool { self.highlight_coupled_rides }
+
+    define_is_most_recent!(is_my_same_most_recent, (my_same_last, always_true), (my_coupled_last, highlight_coupled_rides), (other_same_last, always_true), (other_coupled_last, highlight_coupled_rides));
+    define_is_most_recent!(is_my_coupled_most_recent, (my_coupled_last, highlight_coupled_rides), (my_same_last, always_true), (other_same_last, always_true), (other_coupled_last, highlight_coupled_rides));
+    define_is_most_recent!(is_other_same_most_recent, (other_same_last, always_true), (my_same_last, always_true), (my_coupled_last, highlight_coupled_rides), (other_coupled_last, highlight_coupled_rides));
+    define_is_most_recent!(is_other_coupled_most_recent, (other_coupled_last, highlight_coupled_rides), (my_same_last, always_true), (my_coupled_last, highlight_coupled_rides), (other_same_last, always_true));
 }
 
 

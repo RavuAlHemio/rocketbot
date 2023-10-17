@@ -289,6 +289,7 @@ struct Config {
     achievements_active: bool,
     operator_databases: HashSet<String>,
     default_operator_region: String,
+    highlight_coupled_rides: bool,
 }
 
 
@@ -674,6 +675,7 @@ impl BimPlugin {
             &command.rest,
             config_guard.allow_fixed_coupling_combos,
             sandbox,
+            config_guard.highlight_coupled_rides,
         ).await;
         let ride_table = match increment_res {
             Ok(lri) => lri,
@@ -3444,6 +3446,13 @@ impl BimPlugin {
                 .to_owned()
         };
 
+        let highlight_coupled_rides = if config["highlight_coupled_rides"].is_null() {
+            false
+        } else {
+            config["highlight_coupled_rides"]
+                .as_bool().ok_or("highlight_coupled_rides not a bool")?
+        };
+
         Ok(Config {
             company_to_definition,
             default_company,
@@ -3455,6 +3464,7 @@ impl BimPlugin {
             achievements_active,
             operator_databases,
             default_operator_region,
+            highlight_coupled_rides,
         })
     }
 
@@ -4053,6 +4063,7 @@ pub async fn add_ride(
     timestamp: DateTime<Local>,
     line: Option<&str>,
     sandbox: bool,
+    highlight_coupled_rides: bool,
 ) -> Result<(i64, Vec<RideTableVehicle>), tokio_postgres::Error> {
     let prev_my_same_count_stmt = ride_conn.prepare(
         "
@@ -4261,6 +4272,7 @@ pub async fn add_ride(
                         line: prev_other_coupled_line,
                     },
                 }),
+                highlight_coupled_rides,
             });
         }
     }
@@ -4463,6 +4475,7 @@ pub async fn increment_rides_by_spec(
     rides_spec: &str,
     allow_fixed_coupling_combos: bool,
     sandbox: bool,
+    highlight_coupled_rides: bool,
 ) -> Result<RideTableData, IncrementBySpecError> {
     let spec_no_spaces = rides_spec.replace(" ", "");
 
@@ -4515,6 +4528,7 @@ pub async fn increment_rides_by_spec(
             timestamp,
             line_str_opt,
             sandbox,
+            highlight_coupled_rides,
         )
             .await.map_err(|e|
                 IncrementBySpecError::DatabaseQuery(rider_username.to_owned(), all_vehicles.clone(), line_str_opt.map(|l| l.to_owned()), e)
