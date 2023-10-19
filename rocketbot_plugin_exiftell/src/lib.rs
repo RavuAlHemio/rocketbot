@@ -112,14 +112,22 @@ fn decode_exif_gps_position(value: &exif::Value) -> Option<Rational64> {
             => to_rationals_opt(&vals, |f| Rational64::approximate_float(*f as f64))?,
         exif::Value::Long(vals)
             => to_rationals(&vals, |l| Rational64::new((*l).into(), 1)),
-        exif::Value::Rational(vals)
-            => to_rationals(&vals, |r| Rational64::new(r.num.into(), r.denom.into())),
+        exif::Value::Rational(vals) => {
+            if vals.iter().any(|r| r.denom == 0) {
+                return None;
+            }
+            to_rationals(&vals, |r| Rational64::new(r.num.into(), r.denom.into()))
+        },
         exif::Value::SByte(vals)
             => to_rationals(&vals, |b| Rational64::new((*b).into(), 1)),
         exif::Value::SLong(vals)
             => to_rationals(&vals, |l| Rational64::new((*l).into(), 1)),
-        exif::Value::SRational(vals)
-            => to_rationals(&vals, |r| Rational64::new(r.num.into(), r.denom.into())),
+        exif::Value::SRational(vals) => {
+            if vals.iter().any(|r| r.denom == 0) {
+                return None;
+            }
+            to_rationals(&vals, |r| Rational64::new(r.num.into(), r.denom.into()))
+        },
         exif::Value::SShort(vals)
             => to_rationals(&vals, |s| Rational64::new((*s).into(), 1)),
         exif::Value::Short(vals)
@@ -403,5 +411,23 @@ mod tests {
         // the photo encodes 36.9780234, 48.6996499
         assert!((Rational64::new(369780234, 10_000_000) - final_lat).abs() < epsilon);
         assert!((Rational64::new(486996499, 10_000_000) - final_lon).abs() < epsilon);
+    }
+
+    #[test]
+    fn test_robust_zero_denominator() {
+        let jpeg_bytes = include_bytes!("../testing/exifgpszerodenom.jpeg");
+        let mut jpeg_cursor = std::io::Cursor::new(jpeg_bytes);
+
+        let exif_reader = exif::Reader::new();
+        let exif = exif_reader.read_from_container(&mut jpeg_cursor).unwrap();
+
+        let gps_lat = exif.get_field(exif::Tag::GPSLatitude, exif::In::PRIMARY).unwrap();
+        let gps_lat_ref = exif.get_field(exif::Tag::GPSLatitudeRef, exif::In::PRIMARY).unwrap();
+        let gps_lon = exif.get_field(exif::Tag::GPSLongitude, exif::In::PRIMARY).unwrap();
+        let gps_lon_ref = exif.get_field(exif::Tag::GPSLongitudeRef, exif::In::PRIMARY).unwrap();
+
+        if let Some(lv) = get_location_from_values(gps_lat, gps_lat_ref, gps_lon, gps_lon_ref) {
+            panic!("obtained concrete location value {:?} from invalid (divide-by-zero) rational values", lv);
+        }
     }
 }
