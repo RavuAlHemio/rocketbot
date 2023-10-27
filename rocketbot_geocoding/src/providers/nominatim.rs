@@ -225,15 +225,20 @@ impl GeocodingProvider for NominatimGeocodingProvider {
         if places.len() == 0 {
             return Err(GeocodingError::NoResult);
         }
-        let place_obj = &places[0];
-        if let Some(addr) = place_obj.address.as_ref().and_then(|a| a.name_and_country_name()) {
-            Ok(GeoLocation::new(
-                GeoCoordinates::new(place_obj.lat, place_obj.lon),
-                addr,
-            ))
-        } else {
-            Err(GeocodingError::MissingAddressInfo)
+        for place_obj in &places {
+            if place_obj.place_type == "aerodrome" {
+                return Ok(GeoLocation::new(
+                    GeoCoordinates::new(place_obj.lat, place_obj.lon),
+                    place_obj.display_name.clone(),
+                ));
+            } else if let Some(addr) = place_obj.address.as_ref().and_then(|a| a.name_and_country_name()) {
+                return Ok(GeoLocation::new(
+                    GeoCoordinates::new(place_obj.lat, place_obj.lon),
+                    addr,
+                ));
+            }
         }
+        Err(GeocodingError::MissingAddressInfo)
     }
 
     async fn geocode_advanced(&self, place: &str) -> Result<serde_json::Value, GeocodingError> {
