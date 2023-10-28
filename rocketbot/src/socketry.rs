@@ -1497,21 +1497,21 @@ async fn channel_left(state: &mut ConnectionState, channel_id: &str) {
 fn message_is_current(state: &mut ConnectionState, message: &Message) -> bool {
     let mut message_timestamp = message.timestamp;
     if let Some(ei) = &message.edit_info {
-        if message_timestamp < ei.timestamp {
-            message_timestamp = ei.timestamp;
-        }
-    } else if message_timestamp <= state.last_seen_message_timestamp {
-        // message is not edited but it's old => assume it has been updated; don't deliver it
+        // take the newer of both timestamps
+        message_timestamp = message_timestamp.max(ei.timestamp);
+    }
+
+    if message_timestamp <= state.last_seen_message_timestamp {
+        // message is old => assume it has been updated; don't deliver it
         debug!(
             "message timestamp {} <= last-seen timestamp {} -> not delivering message {:?}",
             message_timestamp, state.last_seen_message_timestamp, message.id,
         );
-        return false;
+        false
+    } else {
+        state.last_seen_message_timestamp = message_timestamp;
+        true
     }
-
-    state.last_seen_message_timestamp = message_timestamp;
-
-    true
 }
 
 #[derive(Debug)]
@@ -1552,7 +1552,7 @@ async fn handle_channel_message(shared_state: Arc<SharedConnectionState>, sender
     {
         let plugins = shared_state.plugins
             .read().await;
-        debug!("distributing channel message among plugins");
+        debug!("distributing channel message {:?} among plugins", channel_message.message.id);
         for plugin in plugins.iter() {
             if channel_message.message.edit_info.is_some() {
                 plugin.plugin.channel_message_edited(&channel_message).await;
@@ -1575,7 +1575,7 @@ async fn handle_private_message(shared_state: Arc<SharedConnectionState>, sender
     {
         let plugins = shared_state.plugins
             .read().await;
-        debug!("distributing private message among plugins");
+        debug!("distributing private message {:?} among plugins", private_message.message.id);
         for plugin in plugins.iter() {
             if private_message.message.edit_info.is_some() {
                 plugin.plugin.private_message_edited(&private_message).await;
