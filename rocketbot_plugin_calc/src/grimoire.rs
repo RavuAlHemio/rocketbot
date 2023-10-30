@@ -28,6 +28,8 @@ pub(crate) fn get_canonical_constants() -> HashMap<String, AstNode> {
     prepared.insert("theAnswerToLifeTheUniverseAndEverything", AstNode::from(BigInt::from(42)));
     prepared.insert("numberOfHornsOnAUnicorn", AstNode::from(BigInt::from(1)));
     prepared.insert("earthR", AstNode::from(*WGS84_MEAN_RADIUS));
+    prepared.insert("earthER", AstNode::from(WGS84_EQUATOR_RADIUS_M));
+    prepared.insert("earthIF", AstNode::from(WGS84_INVERSE_FLATTENING));
 
     prepared.drain()
         .map(|(k, v)| (k.to_owned(), v))
@@ -56,8 +58,10 @@ pub(crate) fn get_canonical_functions() -> HashMap<String, BuiltInFunction> {
     // the default for angles is radians because mathematicians hate their fellow humans
     // (the feeling is mutual)
     // let's be the change we want to see in the world
-    prepared.insert("havsinrad", f64_x5_f64("havsinrad", haversine));
-    prepared.insert("havsin", f64_x5_f64("havsin", haversine_deg));
+    prepared.insert("havsinrad", f64_multi_f64("havsinrad", haversine_array));
+    prepared.insert("havsin", f64_multi_f64("havsin", haversine_deg_array));
+    prepared.insert("elldisrad", f64_multi_f64("elldisrad", ellipsoid_distance_array));
+    prepared.insert("elldis", f64_multi_f64("elldis", ellipsoid_distance_deg_array));
 
     prepared.insert("ceil", f64_f64asint("ceil", |f| f.ceil()));
     prepared.insert("floor", f64_f64asint("floor", |f| f.floor()));
@@ -171,16 +175,16 @@ fn f64_f64_f64<F>(name: &'static str, inner: F) -> BuiltInFunction
     })
 }
 
-fn f64_x5_f64<F>(name: &'static str, inner: F) -> BuiltInFunction
-    where F: Fn(f64, f64, f64, f64, f64) -> f64 + 'static
+fn f64_multi_f64<F, const ARG_COUNT: usize>(name: &'static str, inner: F) -> BuiltInFunction
+    where F: Fn([f64; ARG_COUNT]) -> f64 + 'static
 {
     Box::new(move |_state, operands| {
-        if operands.len() != 5 {
-            return Err(SimplificationError::IncorrectArgCount(name.to_owned(), 2, operands.len()));
+        if operands.len() != ARG_COUNT {
+            return Err(SimplificationError::IncorrectArgCount(name.to_owned(), ARG_COUNT, operands.len()));
         }
         
-        let mut f64_operands = [0.0; 5];
-        for i in 0..5 { 
+        let mut f64_operands = [0.0; ARG_COUNT];
+        for i in 0..ARG_COUNT { 
             let f64_op = match &operands[i].node {
                 AstNode::Number(n) => {
                     match &n.value {
@@ -194,7 +198,7 @@ fn f64_x5_f64<F>(name: &'static str, inner: F) -> BuiltInFunction
         }
 
         Ok(AstNode::Number(Number::new(
-            NumberValue::Float(inner(f64_operands[0], f64_operands[1], f64_operands[2], f64_operands[3], f64_operands[4])),
+            NumberValue::Float(inner(f64_operands)),
             NumberUnits::new(),
         )))
     })
@@ -210,6 +214,9 @@ fn haversine(radius: f64, lat1: f64, lon1: f64, lat2: f64, lon2: f64) -> f64 {
     let right = lat1.cos() * lat2.cos() * ((lon2-lon1)/2.0).sin().powi(2);
     2.0 * radius * (left + right).sqrt().asin()
 }
+fn haversine_array(operands: [f64; 5]) -> f64 {
+    haversine(operands[0], operands[1], operands[2], operands[3], operands[4])
+}
 
 fn haversine_deg(radius: f64, lat1: f64, lon1: f64, lat2: f64, lon2: f64) -> f64 {
     haversine(
@@ -220,6 +227,9 @@ fn haversine_deg(radius: f64, lat1: f64, lon1: f64, lat2: f64, lon2: f64) -> f64
         deg2rad(lon2),
     )
 }
+fn haversine_deg_array(operands: [f64; 5]) -> f64 {
+    haversine_deg(operands[0], operands[1], operands[2], operands[3], operands[4])
+}
 
 fn ellipsoid_pole_radius(equator_radius: f64, inv_flattening: f64) -> f64 {
     equator_radius - (inv_flattening.recip() * equator_radius)
@@ -229,6 +239,82 @@ fn ellipsoid_mean_radius(equator_radius: f64, inv_flattening: f64) -> f64 {
     let prad = ellipsoid_pole_radius(equator_radius, inv_flattening);
     (2.0*equator_radius + prad) / 3.0
 }
+
+#[allow(non_snake_case)]
+fn ellipsoid_distance(equator_radius: f64, inv_flattening: f64, lat1: f64, lon1: f64, lat2: f64, lon2: f64) -> f64 {
+    // Vincenty's formulae
+    let a = equator_radius;
+    let f = 1.0/inv_flattening;
+    let b = (1.0 - f) * a;
+
+    let U1 = ((1.0 - f) * lat1.tan()).atan();
+    let U2 = ((1.0 - f) * lat2.tan()).atan();
+    let L = lon2 - lon1;
+
+    let mut lambda = L;
+    let mut cos2_alpha;
+    let mut sin_sigma;
+    let mut cos_sigma;
+    let mut sigma;
+    let mut cos_2sigmam;
+    loop {
+        let prev_lambda = lambda;
+        sin_sigma = (
+            (U2.cos() * lambda.sin()).powi(2)
+            + (U1.cos() * U2.sin() - U1.sin() * U2.cos() * lambda.cos()).powi(2)
+        ).sqrt();
+        cos_sigma = U1.sin() * U2.sin() + U1.cos() * U2.cos() * lambda.cos();
+        sigma = sin_sigma.atan2(cos_sigma);
+        let sin_alpha = (U1.cos() * U2.cos() * lambda.sin()) / sigma.sin();
+        cos2_alpha = 1.0 - sin_alpha.powi(2);
+        cos_2sigmam = sigma.cos() - (2.0 * U1.sin() * U2.sin()) / cos2_alpha;
+        let C = f / 16.0 * cos2_alpha * (4.0 + f * (4.0 - 3.0 * cos2_alpha));
+        lambda = L + (1.0 - C) * f * sin_alpha * (
+            sigma + C * sin_sigma * (
+                cos_2sigmam + C * cos_sigma * (
+                    -1.0 + 2.0 * cos_2sigmam.powi(2)
+                )
+            )
+        );
+        if (lambda - prev_lambda).abs() < 1e-6 {
+            break;
+        }
+    }
+
+    let u2 = cos2_alpha * (a.powi(2) - b.powi(2)) / b.powi(2);
+    let A = 1.0 + u2 / 16384.0 * (4096.0 + u2 * (-768.0 + u2 * (320.0 - 175.0 * u2)));
+    let B = u2 / 1024.0 * (256.0 + u2 * (128.0 + u2 * (74.0 - 47.0 * u2)));
+    let delta_sigma = B * sin_sigma * (
+        cos_2sigmam + 1.0/4.0 * B * (
+            cos_sigma * (
+                -1.0 + 2.0 * cos_2sigmam.powi(2)
+            )
+            - B/6.0 * cos_2sigmam * (-3.0 + 4.0 * sin_sigma.powi(2)) * (-3.0 + 4.0 * cos_2sigmam.powi(2))
+        )
+    );
+    let s = b * A * (sigma - delta_sigma);
+
+    s
+}
+fn ellipsoid_distance_array(operands: [f64; 6]) -> f64 {
+    ellipsoid_distance(operands[0], operands[1], operands[2], operands[3], operands[4], operands[5])
+}
+
+
+fn ellipsoid_distance_deg(equator_radius: f64, inv_flattening: f64, lat1: f64, lon1: f64, lat2: f64, lon2: f64) -> f64 {
+    ellipsoid_distance(
+        equator_radius,
+        inv_flattening,
+        deg2rad(lat1),
+        deg2rad(lon1),
+        deg2rad(lat2),
+        deg2rad(lon2),
+    )
+}
+fn ellipsoid_distance_deg_array(operands: [f64; 6]) -> f64 {
+    ellipsoid_distance_deg(operands[0], operands[1], operands[2], operands[3], operands[4], operands[5])
+}
+
 
 /// Takes two operands and attempts to convert the first operand to the unit of the second. The
 /// numeric value of the second operand is ignored; only the unit is taken into account.
