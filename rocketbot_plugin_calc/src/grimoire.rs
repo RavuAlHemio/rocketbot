@@ -1,7 +1,9 @@
 use std::collections::HashMap;
+use std::f64::consts::PI;
 
 use num_bigint::{BigInt, ToBigInt};
 use num_traits::ToPrimitive;
+use once_cell::sync::Lazy;
 
 use crate::ast::{
     AstNode, AstNodeAtLocation, BuiltInFunction, BuiltInFuncResult, SimplificationError,
@@ -12,6 +14,9 @@ use crate::units::{coerce_to_base_units, coerce_to_unit, NumberUnits};
 
 
 pub const GOLDEN_RATIO: f64 = 1.6180339887498948482045868344;
+pub const WGS84_EQUATOR_RADIUS_M: f64 = 6_378_137.0;
+pub const WGS84_INVERSE_FLATTENING: f64 = 298.257_223_563;
+pub static WGS84_MEAN_RADIUS: Lazy<f64> = Lazy::new(|| ellipsoid_mean_radius(WGS84_EQUATOR_RADIUS_M, WGS84_INVERSE_FLATTENING));
 
 
 pub(crate) fn get_canonical_constants() -> HashMap<String, AstNode> {
@@ -22,6 +27,7 @@ pub(crate) fn get_canonical_constants() -> HashMap<String, AstNode> {
     prepared.insert("goldenRatio", AstNode::from(GOLDEN_RATIO));
     prepared.insert("theAnswerToLifeTheUniverseAndEverything", AstNode::from(BigInt::from(42)));
     prepared.insert("numberOfHornsOnAUnicorn", AstNode::from(BigInt::from(1)));
+    prepared.insert("earthR", AstNode::from(*WGS84_MEAN_RADIUS));
 
     prepared.drain()
         .map(|(k, v)| (k.to_owned(), v))
@@ -47,6 +53,11 @@ pub(crate) fn get_canonical_functions() -> HashMap<String, BuiltInFunction> {
     prepared.insert("ln", f64_f64("ln", |f| f.ln()));
     prepared.insert("log10", f64_f64("log10", |f| f.log10()));
     prepared.insert("log", f64_f64_f64("log", |f, g| f.log(g)));
+    // the default for angles is radians because mathematicians hate their fellow humans
+    // (the feeling is mutual)
+    // let's be the change we want to see in the world
+    prepared.insert("havsinrad", f64_x5_f64("havsinrad", haversine));
+    prepared.insert("havsin", f64_x5_f64("havsin", haversine_deg));
 
     prepared.insert("ceil", f64_f64asint("ceil", |f| f.ceil()));
     prepared.insert("floor", f64_f64asint("floor", |f| f.floor()));
@@ -158,6 +169,65 @@ fn f64_f64_f64<F>(name: &'static str, inner: F) -> BuiltInFunction
             left_units,
         )))
     })
+}
+
+fn f64_x5_f64<F>(name: &'static str, inner: F) -> BuiltInFunction
+    where F: Fn(f64, f64, f64, f64, f64) -> f64 + 'static
+{
+    Box::new(move |_state, operands| {
+        if operands.len() != 5 {
+            return Err(SimplificationError::IncorrectArgCount(name.to_owned(), 2, operands.len()));
+        }
+        
+        let mut f64_operands = [0.0; 5];
+        for i in 0..5 { 
+            let f64_op = match &operands[i].node {
+                AstNode::Number(n) => {
+                    match &n.value {
+                        NumberValue::Int(i) => i.to_f64().expect("conversion failed"),
+                        NumberValue::Float(f) => *f,
+                    }
+                },
+                other => return Err(SimplificationError::UnexpectedOperandType(format!("{:?}", other))),
+            };
+            f64_operands[i] = f64_op;
+        }
+
+        Ok(AstNode::Number(Number::new(
+            NumberValue::Float(inner(f64_operands[0], f64_operands[1], f64_operands[2], f64_operands[3], f64_operands[4])),
+            NumberUnits::new(),
+        )))
+    })
+}
+
+#[inline]
+fn deg2rad(deg: f64) -> f64 {
+    deg * PI / 180.0
+}
+
+fn haversine(radius: f64, lat1: f64, lon1: f64, lat2: f64, lon2: f64) -> f64 {
+    let left = ((lat2-lat1)/2.0).sin().powi(2);
+    let right = lat1.cos() * lat2.cos() * ((lon2-lon1)/2.0).sin().powi(2);
+    2.0 * radius * (left + right).sqrt().asin()
+}
+
+fn haversine_deg(radius: f64, lat1: f64, lon1: f64, lat2: f64, lon2: f64) -> f64 {
+    haversine(
+        radius,
+        deg2rad(lat1),
+        deg2rad(lon1),
+        deg2rad(lat2),
+        deg2rad(lon2),
+    )
+}
+
+fn ellipsoid_pole_radius(equator_radius: f64, inv_flattening: f64) -> f64 {
+    equator_radius - (inv_flattening.recip() * equator_radius)
+}
+
+fn ellipsoid_mean_radius(equator_radius: f64, inv_flattening: f64) -> f64 {
+    let prad = ellipsoid_pole_radius(equator_radius, inv_flattening);
+    (2.0*equator_radius + prad) / 3.0
 }
 
 /// Takes two operands and attempts to convert the first operand to the unit of the second. The
