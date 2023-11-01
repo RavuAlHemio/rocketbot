@@ -262,6 +262,7 @@ fn process_sheet<F: Read + Seek>(
     zip_archive: &mut ZipArchive<F>,
     strings: &[String],
     style_to_fill: &HashMap<usize, RgbaColor>,
+    sheet_name: &str,
     sheet_path: &str,
     grouped_vehicles: bool,
     vehicles: &mut Vec<serde_json::Value>,
@@ -481,6 +482,9 @@ fn process_sheet<F: Read + Seek>(
                 if let Some(type_additional_key) = &config.original_type_additional_field {
                     my_other_fields.insert(type_additional_key.clone(), type_code.clone());
                 }
+                if let Some(worksheet_name_key) = &config.worksheet_name_additional_field {
+                    my_other_fields.insert(worksheet_name_key.clone(), sheet_name.to_owned());
+                }
                 for (k, v) in &conversion.common_props {
                     my_other_fields
                         .entry(k.clone())
@@ -602,7 +606,7 @@ fn process_sheets<F: Read + Seek>(config: &Config, zip_archive: &mut ZipArchive<
         let zip_path = rel_target_to_zip_path.get(rel)
             .expect("failed to open worksheet path");
         let has_grouped_vehicles = config.grouped_train_sheet_names.iter().any(|gtsn| gtsn.is_match(sheet_name));
-        process_sheet(config, zip_archive, &strings, &style_to_fill, zip_path, has_grouped_vehicles, vehicles);
+        process_sheet(config, zip_archive, &strings, &style_to_fill, sheet_name, zip_path, has_grouped_vehicles, vehicles);
     }
 }
 

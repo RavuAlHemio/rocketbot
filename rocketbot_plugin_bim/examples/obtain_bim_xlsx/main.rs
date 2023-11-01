@@ -149,6 +149,7 @@ struct Config {
     pub ignore_column_names: Vec<Regex>,
     pub full_code_additional_field: Option<String>,
     pub original_type_additional_field: Option<String>,
+    pub worksheet_name_additional_field: Option<String>,
 
     pub background_colors: HashSet<RgbaColor>,
     pub header_colors: HashSet<RgbaColor>,
