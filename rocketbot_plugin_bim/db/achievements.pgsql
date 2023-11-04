@@ -453,6 +453,7 @@ AS $$
         FOR r_company, r_vehicle_number, r_rider, r_timestamp IN
             SELECT DISTINCT company, vehicle_number, rider_username, "timestamp"
             FROM bim.rides_and_vehicles
+            WHERE coupling_mode = 'R'
             ORDER BY "timestamp"
         LOOP
             IF NOT last_rider_to_count ? r_rider THEN
