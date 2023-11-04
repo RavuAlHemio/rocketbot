@@ -2680,12 +2680,14 @@ impl BimPlugin {
                 FROM (
                     SELECT DISTINCT rav1.rider_username, rav1.company, rav1.vehicle_number
                     FROM bim.rides_and_vehicles rav1
-                    WHERE NOT EXISTS (
+                    WHERE rav1.coupling_mode = 'R'
+                    AND NOT EXISTS (
                         -- same vehicle, later timestamp
                         SELECT 1
                         FROM bim.rides_and_vehicles rav2
                         WHERE rav2.company = rav1.company
                         AND rav2.vehicle_number = rav1.vehicle_number
+                        AND rav2.coupling_mode = rav1.coupling_mode
                         AND rav2.\"timestamp\" > rav1.\"timestamp\"
                     )
                 ) innerquery
