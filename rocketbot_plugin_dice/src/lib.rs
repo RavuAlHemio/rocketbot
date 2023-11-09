@@ -40,6 +40,7 @@ struct DiceConfig {
     #[serde(default)] pub channels: HashSet<String>,
     #[serde(default)] pub obstinate_answers: Vec<String>,
     #[serde(default)] pub yes_no_answers: Vec<String>,
+    #[serde(default)] pub regex_yes_no_answers: Vec<RegexYesNoAnswers>,
     #[serde(default)] pub decision_splitters: Vec<String>,
     #[serde(default)] pub special_decision_answers: Vec<String>,
     #[serde(default)] pub cooldown_answers: Vec<String>,
@@ -60,6 +61,20 @@ impl DiceConfig {
     fn default_cooldown_upper_boundary() -> Option<u64> { Some(32) }
     fn default_default_wikipedia_language() -> String { "en".to_owned() }
 }
+
+
+#[derive(Clone, Debug, Deserialize, Serialize)]
+struct RegexYesNoAnswers {
+    #[serde(with = "rocketbot_interface::serde::serde_regex")] pub regex: Regex,
+    pub answers: Vec<String>,
+}
+impl PartialEq for RegexYesNoAnswers {
+    fn eq(&self, other: &Self) -> bool {
+        self.regex.as_str() == other.regex.as_str()
+            && self.answers == other.answers
+    }
+}
+impl Eq for RegexYesNoAnswers {}
 
 
 #[derive(Clone, Copy, Debug, Eq, Hash, PartialEq)]
@@ -327,7 +342,7 @@ impl DicePlugin {
         }
     }
 
-    async fn handle_yes_no(&self, channel_message: &ChannelMessage, _command: &CommandInstance) {
+    async fn handle_yes_no(&self, channel_message: &ChannelMessage, command: &CommandInstance) {
         let interface = match self.interface.upgrade() {
             None => return,
             Some(i) => i,
@@ -343,6 +358,22 @@ impl DicePlugin {
         }
 
         let mut rng_guard = self.rng.lock().await;
+        for regex_answers in &config_guard.regex_yes_no_answers {
+            if !regex_answers.regex.is_match(&command.rest) {
+                continue;
+            }
+
+            let yes_no_answer = regex_answers.answers.choose(&mut *rng_guard);
+            if let Some(yna) = yes_no_answer {
+                send_channel_message!(
+                    interface,
+                    channel_name,
+                    &format!("@{} {}", sender_username, yna),
+                ).await;
+                return;
+            }
+        }
+
         let yes_no_answer = config_guard.yes_no_answers.choose(&mut *rng_guard);
         if let Some(yna) = yes_no_answer {
             send_channel_message!(
