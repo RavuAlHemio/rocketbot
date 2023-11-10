@@ -227,9 +227,14 @@ async fn main() {
                     Some(f) => f,
                     None => continue,
                 };
+                // formation might be split by "," or ", "
                 let formation: IndexSet<VehicleNumber> = formation_str
                     .split(",")
-                    .map(|s| s.to_owned().into())
+                    .map(|s| if let Some(spaceless) = s.strip_prefix(" ") {
+                        spaceless.to_owned().into()
+                    } else {
+                        s.to_owned().into()
+                    })
                     .collect();
 
                 let is_withdrawn = loco.attribute_value("Status")
