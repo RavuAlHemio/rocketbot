@@ -113,7 +113,37 @@ impl CalcPlugin {
             Ok(ntn) => {
                 let result_string = match &ntn.node {
                     AstNode::Number(i) => {
-                        i.to_string()
+                        if ast_root.instructions.contains("hex") || ast_root.instructions.contains("oct") || ast_root.instructions.contains("bin") || ast_root.instructions.contains("trunc") {
+                            // output in a different base (if convertible to an integer)
+                            let i_integer = i.value.to_int_trunc();
+                            if ast_root.instructions.contains("hex") {
+                                format!("{:#X}", i_integer)
+                            } else if ast_root.instructions.contains("oct") {
+                                format!("{:#o}", i_integer)
+                            } else if ast_root.instructions.contains("bin") {
+                                format!("{:#b}", i_integer)
+                            } else {
+                                assert!(ast_root.instructions.contains("trunc"));
+                                format!("{}", i_integer)
+                            }
+                        } else if ast_root.instructions.contains("dms") {
+                            // output as degrees-minutes-seconds
+                            let f64_val = i.value.to_f64();
+                            let deg = f64_val.trunc();
+                            let min_s = (f64_val - deg) * 60.0;
+                            let min = min_s.trunc();
+                            let s = (min_s - min) * 60.0;
+                            format!("{}°{}'{}\"{}", deg, min, s, i.units_to_string())
+                        } else if ast_root.instructions.contains("dm") {
+                            // output as degrees-minutes
+                            let f64_val = i.value.to_f64();
+                            let deg = f64_val.trunc();
+                            let min = (f64_val - deg) * 60.0;
+                            format!("{}°{}'{}", deg, min, i.units_to_string())
+                        } else {
+                            // regular output
+                            i.to_string()
+                        }
                     },
                     other => {
                         error!("simplification produced invalid value: {:?}", other);

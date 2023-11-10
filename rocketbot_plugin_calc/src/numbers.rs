@@ -1,9 +1,9 @@
 use std::cmp::Ordering;
-use std::fmt;
+use std::fmt::{self, Write};
 use std::ops::{Add, AddAssign, Div, DivAssign, Mul, MulAssign, Neg, Rem, RemAssign, Sub, SubAssign};
 
 use num_bigint::{BigInt, ToBigInt};
-use num_traits::ToPrimitive;
+use num_traits::{FromPrimitive, ToPrimitive};
 
 use crate::units::{coerce_to_common_unit, NumberUnits, UnitDatabase};
 
@@ -135,6 +135,23 @@ impl NumberValue {
             |s, o| Some(NumberValue::Float(s % o)),
         )
     }
+
+    pub fn to_f64(&self) -> f64 {
+        match self {
+            Self::Int(i) => i.to_f64().unwrap(),
+            Self::Float(f) => *f,
+        }
+    }
+
+    pub fn to_int_trunc(&self) -> Self {
+        match self {
+            Self::Int(i) => Self::Int(i.clone()),
+            Self::Float(f) => match BigInt::from_f64(f.trunc()) {
+                Some(n) => Self::Int(n),
+                None => Self::Float(*f), // conversion failed
+            },
+        }
+    }
 }
 impl PartialOrd for NumberValue {
     fn partial_cmp(&self, other: &Self) -> Option<Ordering> {
@@ -225,8 +242,40 @@ impl WholeDiv for NumberValue {
 impl fmt::Display for NumberValue {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
-            Self::Int(v) => v.fmt(f),
-            Self::Float(v) => v.fmt(f),
+            Self::Int(v) => fmt::Display::fmt(v, f),
+            Self::Float(v) => fmt::Display::fmt(v, f),
+        }
+    }
+}
+impl fmt::LowerHex for NumberValue {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match self {
+            Self::Int(v) => fmt::LowerHex::fmt(v, f),
+            Self::Float(v) => fmt::Display::fmt(v, f), // alas
+        }
+    }
+}
+impl fmt::UpperHex for NumberValue {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match self {
+            Self::Int(v) => fmt::UpperHex::fmt(v, f),
+            Self::Float(v) => fmt::Display::fmt(v, f), // alas
+        }
+    }
+}
+impl fmt::Binary for NumberValue {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match self {
+            Self::Int(v) => fmt::Binary::fmt(v, f),
+            Self::Float(v) => fmt::Display::fmt(v, f), // alas
+        }
+    }
+}
+impl fmt::Octal for NumberValue {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match self {
+            Self::Int(v) => fmt::Octal::fmt(v, f),
+            Self::Float(v) => fmt::Display::fmt(v, f), // alas
         }
     }
 }
@@ -397,11 +446,9 @@ impl Number {
             self.units.clone(),
         )
     }
-}
-impl fmt::Display for Number {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+
+    fn fmt_units(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         let one = BigInt::from(1);
-        write!(f, "{}", self.value)?;
         for (unit, power) in &self.units {
             if power == &one {
                 write!(f, "#{}", unit)?;
@@ -410,6 +457,49 @@ impl fmt::Display for Number {
             }
         }
         Ok(())
+    }
+
+    pub fn units_to_string(&self) -> String {
+        let mut ret = String::new();
+        let one = BigInt::from(1);
+        for (unit, power) in &self.units {
+            if power == &one {
+                write!(ret, "#{}", unit).unwrap();
+            } else {
+                write!(ret, "#{}{}", unit, power).unwrap();
+            }
+        }
+        ret
+    }
+}
+impl fmt::Display for Number {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        fmt::Display::fmt(&self.value, f)?;
+        self.fmt_units(f)
+    }
+}
+impl fmt::LowerHex for Number {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        fmt::LowerHex::fmt(&self.value, f)?;
+        self.fmt_units(f)
+    }
+}
+impl fmt::UpperHex for Number {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        fmt::UpperHex::fmt(&self.value, f)?;
+        self.fmt_units(f)
+    }
+}
+impl fmt::Binary for Number {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        fmt::Binary::fmt(&self.value, f)?;
+        self.fmt_units(f)
+    }
+}
+impl fmt::Octal for Number {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        fmt::Octal::fmt(&self.value, f)?;
+        self.fmt_units(f)
     }
 }
 impl From<NumberValue> for Number {

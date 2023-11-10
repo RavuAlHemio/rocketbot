@@ -55,6 +55,8 @@ pub(crate) fn get_canonical_functions() -> HashMap<String, BuiltInFunction> {
     prepared.insert("ln", f64_f64("ln", |f| f.ln()));
     prepared.insert("log10", f64_f64("log10", |f| f.log10()));
     prepared.insert("log", f64_f64_f64("log", |f, g| f.log(g)));
+    prepared.insert("dms", f64_multi_f64("dms", from_dms_array));
+    prepared.insert("dm", f64_multi_f64("dm", from_dm_array));
     // the default for angles is radians because mathematicians hate their fellow humans
     // (the feeling is mutual)
     // let's be the change we want to see in the world
@@ -202,6 +204,21 @@ fn f64_multi_f64<F, const ARG_COUNT: usize>(name: &'static str, inner: F) -> Bui
             NumberUnits::new(),
         )))
     })
+}
+
+fn from_dms_array(dms: [f64; 3]) -> f64 {
+    let d = dms[0];
+    let min = dms[1];
+    let s = dms[2];
+
+    d + (min / 60.0) + (s / (60.0 * 60.0))
+}
+
+fn from_dm_array(dms: [f64; 2]) -> f64 {
+    let d = dms[0];
+    let min = dms[1];
+
+    d + (min / 60.0)
 }
 
 #[inline]
