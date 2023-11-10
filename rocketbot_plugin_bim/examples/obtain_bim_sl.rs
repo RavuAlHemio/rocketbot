@@ -35,6 +35,7 @@ struct ExportClass {
     pub type_code: String,
     pub vehicle_class: VehicleClass,
     #[serde(default)] pub other_data: BTreeMap<String, String>,
+    #[serde(default)] pub include_deleted: bool,
 }
 
 #[derive(Clone, Debug, Eq, PartialEq)]
@@ -234,6 +235,12 @@ async fn main() {
                 let is_withdrawn = loco.attribute_value("Status")
                     .map(|v| v == "W" || v == "X") // withdrawn or scrapped
                     .unwrap_or(false);
+                let is_deleted = loco.attribute_value("Deleted")
+                    .map(|v| v == "true")
+                    .unwrap_or(false);
+                if is_deleted && !class_def.include_deleted {
+                    continue;
+                }
 
                 // additional attributes
                 let mut my_other_data = BTreeMap::new();
