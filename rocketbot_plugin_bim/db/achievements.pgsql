@@ -127,7 +127,7 @@ AS $$
             last_vehicle := -2;
             FOR vehicle_num IN
                 SELECT DISTINCT vehicle_number
-                FROM bim.rides_and_numeric_vehicles
+                FROM bim.rides_and_ridden_numeric_vehicles
                 WHERE company = comp
                 AND rider_username = rider
                 AND (
@@ -183,7 +183,7 @@ AS $$
             last_timestamps := CAST(ARRAY[] AS timestamp with time zone[]);
             FOR vehicle_num, ts IN
                 SELECT vehicle_number, MIN("timestamp")
-                FROM bim.rides_and_numeric_vehicles
+                FROM bim.rides_and_ridden_numeric_vehicles
                 WHERE company = comp
                 AND rider_username = rider
                 GROUP BY vehicle_number
@@ -240,7 +240,7 @@ CREATE OR REPLACE VIEW bim.ride_by_rider_vehicle_timestamp AS
     SELECT
         rider_username, company, vehicle_number, "timestamp",
         RANK() OVER (PARTITION BY rider_username, company, vehicle_number ORDER BY "timestamp") nth
-    FROM bim.rides_and_vehicles
+    FROM bim.rides_and_ridden_vehicles
 ;
 CREATE OR REPLACE VIEW bim.ride_by_rider_line_timestamp AS
     SELECT
@@ -252,14 +252,14 @@ CREATE OR REPLACE VIEW bim.ride_by_rider_vehicle_line_timestamp AS
     SELECT
         rider_username, company, vehicle_number, line, "timestamp",
         RANK() OVER (PARTITION BY rider_username, company, vehicle_number, line ORDER BY "timestamp") nth
-    FROM bim.rides_and_vehicles
+    FROM bim.rides_and_ridden_vehicles
     WHERE line IS NOT NULL
 ;
 CREATE OR REPLACE VIEW bim.first_ride_by_rider_vehicle_line AS
     SELECT
         rider_username, company, vehicle_number, line, MIN("timestamp") min_timestamp,
         RANK() OVER (PARTITION BY rider_username, company, vehicle_number ORDER BY MIN("timestamp")) nth
-    FROM bim.rides_and_vehicles
+    FROM bim.rides_and_ridden_vehicles
     WHERE line IS NOT NULL
     GROUP BY rider_username, company, vehicle_number, line
 ;
@@ -267,13 +267,13 @@ CREATE OR REPLACE VIEW bim.ride_by_rider_day AS
     SELECT
         rider_username, bim.to_transport_date("timestamp"), "timestamp", company, vehicle_number,
         RANK() OVER (PARTITION BY rider_username, bim.to_transport_date("timestamp") ORDER BY "timestamp", company, vehicle_number) nth
-    FROM bim.rides_and_vehicles
+    FROM bim.rides_and_ridden_vehicles
 ;
 CREATE OR REPLACE VIEW bim.ride_by_rider_week AS
     SELECT
         rider_username, bim.to_transport_date("timestamp"), "timestamp", company, vehicle_number,
         RANK() OVER (PARTITION BY rider_username, bim.to_transport_date("timestamp") ORDER BY "timestamp", company, vehicle_number) nth
-    FROM bim.rides_and_vehicles
+    FROM bim.rides_and_ridden_vehicles
 ;
 
 CREATE OR REPLACE VIEW bim.first_vehicle_rides AS
@@ -281,10 +281,10 @@ CREATE OR REPLACE VIEW bim.first_vehicle_rides AS
         rav_a.rider_username, rav_a.company, rav_a.vehicle_number, rav_a."timestamp",
         RANK() OVER (PARTITION BY rider_username ORDER BY rav_a."timestamp", rav_a.company, rav_a.vehicle_number) nth_first
     FROM
-        bim.rides_and_vehicles rav_a
+        bim.rides_and_ridden_vehicles rav_a
     WHERE
         NOT EXISTS (
-            SELECT 1 FROM bim.rides_and_vehicles rav_b
+            SELECT 1 FROM bim.rides_and_ridden_vehicles rav_b
             WHERE
                 rav_b.company = rav_a.company
                 AND rav_b.vehicle_number = rav_a.vehicle_number
@@ -313,7 +313,7 @@ AS $$
         min_timestamp := NULL;
         FOR comp, veh_num IN
             SELECT DISTINCT rav1.company, rav1.vehicle_number
-            FROM bim.rides_and_vehicles rav1
+            FROM bim.rides_and_ridden_vehicles rav1
             WHERE rav1.rider_username = rider
             ORDER BY rav1.company, rav1.vehicle_number
         LOOP
@@ -321,7 +321,7 @@ AS $$
             previous_timestamp := NULL;
             FOR ts IN
                 SELECT rav2."timestamp"
-                FROM bim.rides_and_vehicles rav2
+                FROM bim.rides_and_ridden_vehicles rav2
                 WHERE rav2.company = comp
                 AND rav2.rider_username = rider
                 AND rav2.vehicle_number = veh_num
@@ -359,7 +359,7 @@ AS $$
         first_repdigit_ride(rider_username, company, vehicle_number, min_timestamp) AS (
             SELECT
                 rider_username, company, vehicle_number, MIN("timestamp")
-            FROM bim.rides_and_vehicles
+            FROM bim.rides_and_ridden_vehicles
             WHERE
                 bim.same_chars(vehicle_number, min_digits)
             GROUP BY
@@ -381,7 +381,7 @@ CREATE OR REPLACE VIEW bim.rider_first_palindrome_vehicle_ride AS
     WITH first_palindrome_ride(rider_username, company, vehicle_number, min_timestamp) AS (
         SELECT
             rider_username, company, vehicle_number, MIN("timestamp")
-        FROM bim.rides_and_vehicles
+        FROM bim.rides_and_ridden_vehicles
         WHERE
             LENGTH(vehicle_number) > 2
             AND vehicle_number = reverse(vehicle_number)
@@ -410,7 +410,7 @@ AS $$
     WITH ride_vehicles_interval_ago(rider_username, company, line, vehicle_number, timestamp_exact, timestamp_minute, timestamp_minute_day_ago) AS (
         SELECT
             rider_username, company, line, vehicle_number, "timestamp", DATE_TRUNC('minute', "timestamp"), DATE_TRUNC('minute', "timestamp" - interval_ago)
-        FROM bim.rides_and_vehicles
+        FROM bim.rides_and_ridden_vehicles
     )
     SELECT
         later.rider_username, later.company, later.line, later.vehicle_number, later.timestamp_exact
@@ -452,8 +452,7 @@ AS $$
 
         FOR r_company, r_vehicle_number, r_rider, r_timestamp IN
             SELECT DISTINCT company, vehicle_number, rider_username, "timestamp"
-            FROM bim.rides_and_vehicles
-            WHERE coupling_mode = 'R'
+            FROM bim.rides_and_ridden_vehicles
             ORDER BY "timestamp"
         LOOP
             IF NOT last_rider_to_count ? r_rider THEN
@@ -546,7 +545,7 @@ AS $$
     -- DESCR: Ride a vehicle (of any company) with number 666.
     -- ORDER: 1,1 special vehicle numbers
     SELECT 1, MIN("timestamp")
-    FROM bim.rides_and_vehicles rav1
+    FROM bim.rides_and_ridden_vehicles rav1
     WHERE rav1.rider_username = rider
     AND rav1.vehicle_number = '666'
 
@@ -556,7 +555,7 @@ AS $$
     -- DESCR: Ride a vehicle (of any company) with number 69.
     -- ORDER: 1,3 special vehicle numbers
     SELECT 2, MIN("timestamp")
-    FROM bim.rides_and_vehicles rav2
+    FROM bim.rides_and_ridden_vehicles rav2
     WHERE rav2.rider_username = rider
     AND rav2.vehicle_number = '69'
 
@@ -566,7 +565,7 @@ AS $$
     -- DESCR: Ride a vehicle (of any company) where the vehicle number and the line are the same.
     -- ORDER: 2,1 vehicle numbers in relation to line numbers
     SELECT 3, MIN("timestamp")
-    FROM bim.rides_and_vehicles rav3
+    FROM bim.rides_and_ridden_vehicles rav3
     WHERE rav3.rider_username = rider
     AND rav3.line = rav3.vehicle_number
 
@@ -607,7 +606,7 @@ AS $$
     -- DESCR: Ride a vehicle (of any company) where the vehicle number is the reverse of the line (but not the same as the line).
     -- ORDER: 2,2 vehicle numbers in relation to line numbers
     SELECT 8, MIN("timestamp")
-    FROM bim.rides_and_vehicles rav8
+    FROM bim.rides_and_ridden_vehicles rav8
     WHERE rav8.rider_username = rider
     AND REVERSE(rav8.line) = rav8.vehicle_number
     AND rav8.line <> rav8.vehicle_number
@@ -618,7 +617,7 @@ AS $$
     -- DESCR: Ride a vehicle (of any company) whose number has the pattern "7x7".
     -- ORDER: 1,9 special vehicle numbers
     SELECT 9, MIN("timestamp")
-    FROM bim.rides_and_vehicles rav9
+    FROM bim.rides_and_ridden_vehicles rav9
     WHERE rav9.rider_username = rider
     AND LENGTH(rav9.vehicle_number) = 3
     AND SUBSTRING(rav9.vehicle_number FROM 1 FOR 1) = '7'
@@ -630,8 +629,8 @@ AS $$
     -- DESCR: Ride two vehicles with the same vehicle number but different companies.
     -- ORDER: 3,1 vehicle numbers in relation to companies
     SELECT 10, MIN(rav10b."timestamp")
-    FROM bim.rides_and_vehicles rav10a
-    INNER JOIN bim.rides_and_vehicles rav10b
+    FROM bim.rides_and_ridden_vehicles rav10a
+    INNER JOIN bim.rides_and_ridden_vehicles rav10b
         ON rav10b.vehicle_number = rav10a.vehicle_number
         AND rav10b.rider_username = rav10a.rider_username
         AND rav10b.company <> rav10a.company
@@ -644,8 +643,8 @@ AS $$
     -- DESCR: Ride the same vehicle on the same day of two consecutive months.
     -- ORDER: 4,1 same vehicle
     SELECT 11, MIN(rav11b."timestamp")
-    FROM bim.rides_and_vehicles rav11a
-    INNER JOIN bim.rides_and_vehicles rav11b
+    FROM bim.rides_and_ridden_vehicles rav11a
+    INNER JOIN bim.rides_and_ridden_vehicles rav11b
         ON rav11b.rider_username = rav11a.rider_username
         AND rav11b.vehicle_number = rav11a.vehicle_number
         AND rav11b.company = rav11a.company
@@ -661,8 +660,8 @@ AS $$
     -- DESCR: Ride the same vehicle on the same day of two consecutive years.
     -- ORDER: 4,2 same vehicle
     SELECT 12, MIN(rav12b."timestamp")
-    FROM bim.rides_and_vehicles rav12a
-    INNER JOIN bim.rides_and_vehicles rav12b
+    FROM bim.rides_and_ridden_vehicles rav12a
+    INNER JOIN bim.rides_and_ridden_vehicles rav12b
         ON rav12b.rider_username = rav12a.rider_username
         AND rav12b.vehicle_number = rav12a.vehicle_number
         AND rav12b.company = rav12a.company
@@ -679,8 +678,8 @@ AS $$
     -- DESCR: Ride the same vehicle on the same weekday of two consecutive weeks.
     -- ORDER: 4,3 same vehicle
     SELECT 13, MIN(rav13b."timestamp")
-    FROM bim.rides_and_vehicles rav13a
-    INNER JOIN bim.rides_and_vehicles rav13b
+    FROM bim.rides_and_ridden_vehicles rav13a
+    INNER JOIN bim.rides_and_ridden_vehicles rav13b
         ON rav13b.rider_username = rav13a.rider_username
         AND rav13b.vehicle_number = rav13a.vehicle_number
         AND rav13b.company = rav13a.company
@@ -749,7 +748,7 @@ AS $$
     -- DESCR: Ride a vehicle (of any company) whose number contains "666" (but isn't 666).
     -- ORDER: 1,2 special vehicle numbers
     SELECT 22, MIN(rav22."timestamp")
-    FROM bim.rides_and_vehicles rav22
+    FROM bim.rides_and_ridden_vehicles rav22
     WHERE rav22.rider_username = rider
     AND rav22.vehicle_number <> '666'
     AND POSITION('666' IN rav22.vehicle_number) > 0
@@ -760,7 +759,7 @@ AS $$
     -- DESCR: Ride a vehicle (of any company) whose number contains "69" (but isn't 69).
     -- ORDER: 1,4 special vehicle numbers
     SELECT 23, MIN(rav23."timestamp")
-    FROM bim.rides_and_vehicles rav23
+    FROM bim.rides_and_ridden_vehicles rav23
     WHERE rav23.rider_username = rider
     AND rav23.vehicle_number <> '69'
     AND POSITION('69' IN rav23.vehicle_number) > 0
@@ -771,7 +770,7 @@ AS $$
     -- DESCR: Ride a vehicle (of any company) whose vehicle number is divisible by (but not equal to) its line number.
     -- ORDER: 2,3 vehicle numbers in relation to line numbers
     SELECT 24, MIN(rav24."timestamp")
-    FROM bim.rides_and_numeric_vehicles rav24
+    FROM bim.rides_and_ridden_numeric_vehicles rav24
     WHERE rav24.rider_username = rider
     AND rav24.vehicle_number > bim.char_to_bigint_or_null(rav24.line)
     AND MOD(rav24.vehicle_number, bim.char_to_bigint_or_null(rav24.line)) = 0
@@ -782,7 +781,7 @@ AS $$
     -- DESCR: Ride a vehicle (of any company) on a line whose number is divisible by (but not equal to) the vehicle's number.
     -- ORDER: 2,4 vehicle numbers in relation to line numbers
     SELECT 25, MIN(rav25."timestamp")
-    FROM bim.rides_and_numeric_vehicles rav25
+    FROM bim.rides_and_ridden_numeric_vehicles rav25
     WHERE rav25.rider_username = rider
     AND bim.char_to_bigint_or_null(rav25.line) > rav25.vehicle_number
     AND MOD(bim.char_to_bigint_or_null(rav25.line), rav25.vehicle_number) = 0
@@ -793,7 +792,7 @@ AS $$
     -- DESCR: Ride a vehicle (of any company) whose vehicle number is a four-digit prime.
     -- ORDER: 1,10 special vehicle numbers
     SELECT 26, MIN(rav26."timestamp")
-    FROM bim.rides_and_numeric_vehicles rav26
+    FROM bim.rides_and_ridden_numeric_vehicles rav26
     WHERE rav26.rider_username = rider
     AND rav26.vehicle_number BETWEEN 1000 AND 9999
     AND bim.is_prime(rav26.vehicle_number)
@@ -804,7 +803,7 @@ AS $$
     -- DESCR: Ride a vehicle (of any company) whose vehicle number is a three-digit prime.
     -- ORDER: 1,11 special vehicle numbers
     SELECT 27, MIN(rav27."timestamp")
-    FROM bim.rides_and_numeric_vehicles rav27
+    FROM bim.rides_and_ridden_numeric_vehicles rav27
     WHERE rav27.rider_username = rider
     AND rav27.vehicle_number BETWEEN 100 AND 999
     AND bim.is_prime(rav27.vehicle_number)
@@ -815,7 +814,7 @@ AS $$
     -- DESCR: Ride a vehicle (of any company) whose vehicle number is a two-digit prime.
     -- ORDER: 1,12 special vehicle numbers
     SELECT 28, MIN(rav28."timestamp")
-    FROM bim.rides_and_numeric_vehicles rav28
+    FROM bim.rides_and_ridden_numeric_vehicles rav28
     WHERE rav28.rider_username = rider
     AND rav28.vehicle_number BETWEEN 10 AND 99
     AND bim.is_prime(rav28.vehicle_number)
@@ -826,7 +825,7 @@ AS $$
     -- DESCR: Ride a vehicle (of any company) whose vehicle number is a single-digit prime.
     -- ORDER: 1,13 special vehicle numbers
     SELECT 29, MIN(rav29."timestamp")
-    FROM bim.rides_and_numeric_vehicles rav29
+    FROM bim.rides_and_ridden_numeric_vehicles rav29
     WHERE rav29.rider_username = rider
     AND rav29.vehicle_number BETWEEN 1 AND 9
     AND bim.is_prime(rav29.vehicle_number)
@@ -837,7 +836,7 @@ AS $$
     -- DESCR: Ride a vehicle (of any company) whose at least three-digit number's decimal digits are in ascending order.
     -- ORDER: 1,14 special vehicle numbers
     SELECT 30, MIN(rav30."timestamp")
-    FROM bim.rides_and_numeric_vehicles rav30
+    FROM bim.rides_and_ridden_numeric_vehicles rav30
     WHERE rav30.rider_username = rider
     AND rav30.vehicle_number > 99
     AND bim.is_in_sequence(rav30.vehicle_number, FALSE)
@@ -848,7 +847,7 @@ AS $$
     -- DESCR: Ride a vehicle (of any company) whose at least three-digit number's decimal digits are in descending order.
     -- ORDER: 1,15 special vehicle numbers
     SELECT 31, MIN(rav31."timestamp")
-    FROM bim.rides_and_numeric_vehicles rav31
+    FROM bim.rides_and_ridden_numeric_vehicles rav31
     WHERE rav31.rider_username = rider
     AND rav31.vehicle_number > 99
     AND bim.is_in_sequence(rav31.vehicle_number, TRUE)
@@ -1472,7 +1471,7 @@ AS $$
     -- DESCR: Ride a vehicle (of any company) with the number 313.
     -- ORDER: 1,16 special vehicle numbers
     SELECT 99, MIN(rav99."timestamp")
-    FROM bim.rides_and_numeric_vehicles rav99
+    FROM bim.rides_and_ridden_numeric_vehicles rav99
     WHERE rav99.rider_username = rider
     AND rav99.vehicle_number = 313
 
@@ -1522,12 +1521,12 @@ AS $$
     -- DESCR: Ride the same vehicle on the same line on a Tuesday and a Thursday of the same week.
     -- ORDER: 2,15 vehicle numbers in relation to line numbers
     SELECT 104, MIN(rav104."timestamp")
-    FROM bim.rides_and_vehicles rav104
+    FROM bim.rides_and_ridden_vehicles rav104
     WHERE rav104.rider_username = rider
     AND EXTRACT(DOW FROM rav104."timestamp") = 4
     AND EXISTS (
         SELECT 1
-        FROM bim.rides_and_vehicles rav104b
+        FROM bim.rides_and_ridden_vehicles rav104b
         WHERE rav104b.rider_username = rav104.rider_username
         AND rav104b.company = rav104.company
         AND rav104b.vehicle_number = rav104.vehicle_number
@@ -1573,7 +1572,7 @@ AS $$
     -- DESCR: Ride a vehicle (of any company) with the number 90210.
     -- ORDER: 1,17 special vehicle numbers
     SELECT 109, MIN(rav109."timestamp")
-    FROM bim.rides_and_numeric_vehicles rav109
+    FROM bim.rides_and_ridden_numeric_vehicles rav109
     WHERE rav109.rider_username = rider
     AND rav109.vehicle_number = 90210
 $$;
