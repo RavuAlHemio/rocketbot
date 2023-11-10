@@ -1,4 +1,4 @@
-use std::collections::VecDeque;
+use std::collections::{BTreeSet, VecDeque};
 
 use log::trace;
 use num_bigint::BigInt;
@@ -8,7 +8,7 @@ use pest::error::Error;
 use pest::iterators::{Pair, Pairs};
 use pest_derive::Parser;
 
-use crate::ast::{AstNode, AstNodeAtLocation, BinaryOperation, UnaryOperation};
+use crate::ast::{AstNode, AstNodeAtLocation, AstRoot, BinaryOperation, UnaryOperation};
 use crate::numbers::{Number, NumberValue};
 use crate::units::NumberUnits;
 
@@ -18,7 +18,7 @@ use crate::units::NumberUnits;
 struct CalcParser;
 
 
-pub(crate) fn parse_full_expression(text: &str) -> Result<AstNodeAtLocation, Error<Rule>> {
+pub(crate) fn parse_full_expression(text: &str) -> Result<AstRoot, Error<Rule>> {
     let pairs: Vec<Pair<'_, Rule>> = match CalcParser::parse(Rule::full_expression, text) {
         Ok(p) => p,
         Err(e) => return Err(e),
@@ -27,8 +27,22 @@ pub(crate) fn parse_full_expression(text: &str) -> Result<AstNodeAtLocation, Err
     assert_eq!(pairs.len(), 1);
 
     let mut inner = pairs[0].clone().into_inner();
-    let expression = inner.next().expect("no expression");
-    Ok(parse_expression(&expression))
+    let mut instructions = BTreeSet::new();
+    while let Some(child) = inner.next() {
+        if child.as_rule() == Rule::instruction {
+            let instruction = child.as_str().strip_prefix('@').unwrap();
+            instructions.insert(instruction.to_owned());
+        } else {
+            // expression
+            let root_node = parse_expression(&child);
+            return Ok(AstRoot {
+                root_node,
+                instructions,
+            });
+        }
+    }
+
+    panic!("missing expression");
 }
 
 fn parse_parens_expression(pair: &Pair<'_, Rule>) -> AstNodeAtLocation {

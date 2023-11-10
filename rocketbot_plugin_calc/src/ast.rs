@@ -1,4 +1,4 @@
-use std::collections::HashMap;
+use std::collections::{BTreeSet, HashMap};
 use std::fmt;
 use std::time::{Duration, Instant};
 
@@ -52,6 +52,12 @@ impl From<BigInt> for AstNode {
 pub(crate) struct AstNodeAtLocation {
     pub node: AstNode,
     pub start_end: Option<(usize, usize)>,
+}
+
+#[derive(Clone, Debug, PartialEq)]
+pub(crate) struct AstRoot {
+    pub root_node: AstNodeAtLocation,
+    pub instructions: BTreeSet<String>,
 }
 
 #[derive(Clone, Debug, PartialEq)]
@@ -443,7 +449,7 @@ mod tests {
     use crate::grimoire::{get_canonical_constants, get_canonical_functions};
     use crate::parsing::parse_full_expression;
 
-    fn run_test(expected: &str, parse_me: &str) {
+    fn run_test_instructions(expected: &str, parse_me: &str, instructions: &[&str]) {
         let parsed = parse_full_expression(parse_me).unwrap();
         let mut state = SimplificationState {
             constants: get_canonical_constants(),
@@ -452,12 +458,20 @@ mod tests {
             start_time: Instant::now(),
             timeout: Duration::from_secs(10),
         };
-        let result = parsed.simplify(&mut state).unwrap();
+        let result = parsed.root_node.simplify(&mut state).unwrap();
         let obtained = match result.node {
             AstNode::Number(i) => i.to_string(),
             other => panic!("unexpected AST node {:?}", other),
         };
         assert_eq!(expected, obtained);
+        assert_eq!(parsed.instructions.len(), instructions.len());
+        for (exp_instruction, obt_instruction) in instructions.iter().zip(parsed.instructions.iter()) {
+            assert_eq!(exp_instruction, obt_instruction);
+        }
+    }
+
+    fn run_test(expected: &str, parse_me: &str) {
+        run_test_instructions(expected, parse_me, &[]);
     }
 
     #[test]
@@ -551,5 +565,13 @@ mod tests {
         run_test("1", "10#m / 10#m");
         run_test("0.1#m-1", "1 / 10#m");
         run_test("0.1#m", "1#m / 10");
+    }
+
+    #[test]
+    fn test_instructions() {
+        // the output code for these tests ignores the instructions, but ensure they are read
+        run_test_instructions("12", "@dms 12", &["dms"]);
+        run_test_instructions("12", "@dms@dm 12", &["dm", "dms"]);
+        run_test_instructions("12", "@dms @dm 12", &["dm", "dms"]);
     }
 }

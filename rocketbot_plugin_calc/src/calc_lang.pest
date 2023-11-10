@@ -15,7 +15,7 @@ integer16 = @{ "0x" ~ ('0'..'9' | 'A'..'F' | 'a'..'f' | "_")+ }
 integer8 = @{ "0o" ~ ('0'..'7' | "_")+ }
 integer2 = @{ "0b" ~ ("0" | "1" | "_")+ }
 
-full_expression = { SOI ~ expression ~ EOI }
+full_expression = { SOI ~ instruction* ~ expression ~ EOI }
 
 bor_op = { "|" }
 bxor_op = { "^" }
@@ -56,3 +56,5 @@ unit_pow = @{ "-"? ~ ('0'..'9')+ }
 
 
 arglist = { expression ~ ("," ~ expression)* }
+
+instruction = @{ "@" ~ ('A'..'Z'|'a'..'z'|'0'..'9')+ }

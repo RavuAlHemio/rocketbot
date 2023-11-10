@@ -70,7 +70,7 @@ impl CalcPlugin {
         let channel_name = &channel_message.channel.name;
         let sender_username = &channel_message.message.sender.username;
 
-        let top_node = match parse_full_expression(&command.rest) {
+        let ast_root = match parse_full_expression(&command.rest) {
             Ok(node) => node,
             Err(e) => {
                 send_channel_message!(
@@ -107,7 +107,7 @@ impl CalcPlugin {
                 start_time: Instant::now(),
                 timeout: Duration::from_secs_f64(config_guard.timeout_seconds),
             };
-            top_node.simplify(&mut state)
+            ast_root.root_node.simplify(&mut state)
         };
         match simplified_res {
             Ok(ntn) => {
