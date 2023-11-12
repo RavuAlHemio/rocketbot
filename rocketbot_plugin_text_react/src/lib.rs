@@ -13,16 +13,16 @@ use serde_json;
 
 #[derive(Clone, Debug)]
 struct Reaction {
-    link_pattern: Regex,
+    text_pattern: Regex,
     reaction_names: Vec<String>,
 }
 impl Reaction {
     pub fn new(
-        link_pattern: Regex,
+        text_pattern: Regex,
         reaction_names: Vec<String>,
     ) -> Self {
         Self {
-            link_pattern,
+            text_pattern,
             reaction_names,
         }
     }
@@ -49,11 +49,11 @@ impl TextReactPlugin {
             let reaction_config = reaction_config_value.as_object()
                 .ok_or("element of reactions is not an object")?;
 
-            let link_pattern_str = reaction_config
-                .get("link_pattern").ok_or("link_pattern is missing")?
-                .as_str().ok_or("link_pattern is not a string")?;
-            let link_pattern = Regex::new(link_pattern_str)
-                .or_msg("failed to parse link_pattern")?;
+            let text_pattern_str = reaction_config
+                .get("text_pattern").ok_or("text_pattern is missing")?
+                .as_str().ok_or("text_pattern is not a string")?;
+            let text_pattern = Regex::new(text_pattern_str)
+                .or_msg("failed to parse text_pattern")?;
 
             let reaction_names_values = reaction_config
                 .get("reaction_names").ok_or("reaction_names is missing")?
@@ -66,7 +66,7 @@ impl TextReactPlugin {
             }
 
             reactions.push(Reaction::new(
-                link_pattern,
+                text_pattern,
                 reaction_names,
             ));
         }
@@ -119,7 +119,7 @@ impl RocketBotPlugin for TextReactPlugin {
 
         // look for a match
         for reaction in &config_guard.reactions {
-            if reaction.link_pattern.is_match(&raw_message) {
+            if reaction.text_pattern.is_match(&raw_message) {
                 // react
                 for reaction_name in &reaction.reaction_names {
                     interface.add_reaction(
