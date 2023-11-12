@@ -67,8 +67,6 @@ pub(crate) async fn load_plugins(iface: Weak<dyn RocketBotInterface>) -> Vec<Plu
                 Box::new(rocketbot_plugin_hackernews::HackernewsPlugin::new(iface_weak, inner_config).await)
             } else if plugin_config.name == "help" {
                 Box::new(rocketbot_plugin_help::HelpPlugin::new(iface_weak, inner_config).await)
-            } else if plugin_config.name == "link_react" {
-                Box::new(rocketbot_plugin_link_react::LinkReactPlugin::new(iface_weak, inner_config).await)
             } else if plugin_config.name == "logger" {
                 Box::new(rocketbot_plugin_logger::LoggerPlugin::new(iface_weak, inner_config).await)
             } else if plugin_config.name == "netdev" {
@@ -107,6 +105,8 @@ pub(crate) async fn load_plugins(iface: Weak<dyn RocketBotInterface>) -> Vec<Plu
                 Box::new(rocketbot_plugin_text::TextPlugin::new(iface_weak, inner_config).await)
             } else if plugin_config.name == "text_commands" {
                 Box::new(rocketbot_plugin_text_commands::TextCommandsPlugin::new(iface_weak, inner_config).await)
+            } else if plugin_config.name == "text_react" {
+                Box::new(rocketbot_plugin_text_react::TextReactPlugin::new(iface_weak, inner_config).await)
             } else if plugin_config.name == "thanks" {
                 Box::new(rocketbot_plugin_thanks::ThanksPlugin::new(iface_weak, inner_config).await)
             } else if plugin_config.name == "time" {

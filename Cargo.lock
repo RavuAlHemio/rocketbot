@@ -2128,7 +2128,6 @@ dependencies = [
  "rocketbot_plugin_group_pressure",
  "rocketbot_plugin_hackernews",
  "rocketbot_plugin_help",
- "rocketbot_plugin_link_react",
  "rocketbot_plugin_logger",
  "rocketbot_plugin_netdev",
  "rocketbot_plugin_new_year",
@@ -2148,6 +2147,7 @@ dependencies = [
  "rocketbot_plugin_syllable",
  "rocketbot_plugin_text",
  "rocketbot_plugin_text_commands",
+ "rocketbot_plugin_text_react",
  "rocketbot_plugin_thanks",
  "rocketbot_plugin_time",
  "rocketbot_plugin_topic_timer",
@@ -2528,18 +2528,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "rocketbot_plugin_link_react"
-version = "0.1.0"
-dependencies = [
- "async-trait",
- "chrono",
- "log",
- "regex",
- "rocketbot_interface",
- "serde_json",
-]
-
-[[package]]
 name = "rocketbot_plugin_logger"
 version = "0.1.0"
 dependencies = [
@@ -2775,6 +2763,18 @@ dependencies = [
  "async-trait",
  "log",
  "rand",
+ "rocketbot_interface",
+ "serde_json",
+]
+
+[[package]]
+name = "rocketbot_plugin_text_react"
+version = "0.1.0"
+dependencies = [
+ "async-trait",
+ "chrono",
+ "log",
+ "regex",
  "rocketbot_interface",
  "serde_json",
 ]

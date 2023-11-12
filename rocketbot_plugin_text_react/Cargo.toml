@@ -1,5 +1,5 @@
 [package]
-name = "rocketbot_plugin_link_react"
+name = "rocketbot_plugin_text_react"
 version = "0.1.0"
 edition = "2021"
 

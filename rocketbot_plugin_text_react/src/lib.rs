@@ -6,7 +6,6 @@ use log::error;
 use regex::Regex;
 use rocketbot_interface::ResultExtensions;
 use rocketbot_interface::interfaces::{RocketBotInterface, RocketBotPlugin};
-use rocketbot_interface::message::collect_urls;
 use rocketbot_interface::model::ChannelMessage;
 use rocketbot_interface::sync::RwLock;
 use serde_json;
@@ -36,11 +35,11 @@ struct Config {
 }
 
 
-pub struct LinkReactPlugin {
+pub struct TextReactPlugin {
     interface: Weak<dyn RocketBotInterface>,
     config: RwLock<Config>,
 }
-impl LinkReactPlugin {
+impl TextReactPlugin {
     fn try_get_config(config: serde_json::Value) -> Result<Config, &'static str> {
         let reaction_configs = config["reactions"].as_array()
             .ok_or("reactions is not an array")?;
@@ -78,7 +77,7 @@ impl LinkReactPlugin {
     }
 }
 #[async_trait]
-impl RocketBotPlugin for LinkReactPlugin {
+impl RocketBotPlugin for TextReactPlugin {
     async fn new(interface: Weak<dyn RocketBotInterface>, config: serde_json::Value) -> Self {
         let config_object = Self::try_get_config(config)
             .expect("failed to load config");
@@ -94,7 +93,7 @@ impl RocketBotPlugin for LinkReactPlugin {
     }
 
     async fn plugin_name(&self) -> String {
-        "link_react".to_owned()
+        "text_react".to_owned()
     }
 
     async fn channel_message(&self, channel_message: &ChannelMessage) {
@@ -111,27 +110,22 @@ impl RocketBotPlugin for LinkReactPlugin {
             }
         }
 
-        let parsed_message = match &channel_message.message.parsed {
-            Some(pm) => pm,
+        let raw_message = match &channel_message.message.raw {
+            Some(rm) => rm,
             None => return, // just some attachments
         };
-
-        // collect URLs from channel message
-        let urls = collect_urls(parsed_message.iter());
 
         let config_guard = self.config.read().await;
 
         // look for a match
-        for url in &urls {
-            for reaction in &config_guard.reactions {
-                if reaction.link_pattern.is_match(url) {
-                    // react
-                    for reaction_name in &reaction.reaction_names {
-                        interface.add_reaction(
-                            &channel_message.message.id,
-                            &reaction_name,
-                        ).await;
-                    }
+        for reaction in &config_guard.reactions {
+            if reaction.link_pattern.is_match(&raw_message) {
+                // react
+                for reaction_name in &reaction.reaction_names {
+                    interface.add_reaction(
+                        &channel_message.message.id,
+                        &reaction_name,
+                    ).await;
                 }
             }
         }
