@@ -615,7 +615,7 @@ AS $$
 
     -- NAME: Boeing
     -- DESCR: Ride a vehicle (of any company) whose number has the pattern "7x7".
-    -- ORDER: 1,9 special vehicle numbers
+    -- ORDER: 1,8 special vehicle numbers
     SELECT 9, MIN("timestamp")
     FROM bim.rides_and_ridden_vehicles rav9
     WHERE rav9.rider_username = rider
@@ -1575,6 +1575,28 @@ AS $$
     FROM bim.rides_and_ridden_numeric_vehicles rav109
     WHERE rav109.rider_username = rider
     AND rav109.vehicle_number = 90210
+
+    UNION ALL
+
+    -- NAME: Blaze It
+    -- DESCR: Ride a vehicle (of any company) with the number 420.
+    -- ORDER: 1,5 special vehicle numbers
+    SELECT 110, MIN(rav110."timestamp")
+    FROM bim.rides_and_ridden_numeric_vehicles rav110
+    WHERE rav110.rider_username = rider
+    AND rav110.vehicle_number = 420
+
+    UNION ALL
+
+    -- NAME: Mazda
+    -- DESCR: Ride a vehicle (of any company) whose number has the pattern "x2x".
+    -- ORDER: 1,9 special vehicle numbers
+    SELECT 111, MIN("timestamp")
+    FROM bim.rides_and_ridden_vehicles rav111
+    WHERE rav111.rider_username = rider
+    AND LENGTH(rav111.vehicle_number) = 3
+    AND SUBSTRING(rav111.vehicle_number FROM 1 FOR 1) = SUBSTRING(rav111.vehicle_number FROM 3 FOR 1)
+    AND SUBSTRING(rav111.vehicle_number FROM 2 FOR 1) = '2'
 $$;
 
 CREATE MATERIALIZED VIEW bim.rider_achievements AS
