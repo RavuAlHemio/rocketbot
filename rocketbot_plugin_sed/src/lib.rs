@@ -96,11 +96,11 @@ impl SedPlugin {
                 }
             }
         };
-        assert!(last_messages.iter().all(|m| m.message.raw.is_some()));
+        assert!(last_messages.iter().all(|m| Self::get_message_body(m).is_some()));
 
         let mut found_any = false;
         for last_message in last_messages {
-            let last_raw_message = last_message.message.raw.unwrap();
+            let last_raw_message = Self::get_message_body(&last_message).unwrap();
             let mut replaced = last_raw_message.clone();
 
             let mut all_transformations_successful = true;
@@ -112,7 +112,7 @@ impl SedPlugin {
                 replaced = this_replaced;
             }
 
-            if replaced != last_raw_message && (!require_all_transformations_successful || all_transformations_successful) {
+            if &replaced != last_raw_message && (!require_all_transformations_successful || all_transformations_successful) {
                 // success!
                 if config.max_result_length > 0 && replaced.len() > config.max_result_length {
                     replaced = config.result_too_long_message.clone();
@@ -207,6 +207,20 @@ impl SedPlugin {
             require_all_transformations_successful,
         })
     }
+
+    fn get_message_body(channel_message: &ChannelMessage) -> Option<&String> {
+        if let Some(raw_msg) = channel_message.message.raw.as_ref() {
+            Some(raw_msg)
+        } else if let Some(first_att) = channel_message.message.attachments.get(0) {
+            if let Some(descr) = first_att.description.as_ref() {
+                Some(descr)
+            } else {
+                None
+            }
+        } else {
+            None
+        }
+    }
 }
 #[async_trait]
 impl RocketBotPlugin for SedPlugin {
@@ -277,10 +291,8 @@ impl RocketBotPlugin for SedPlugin {
     }
 
     async fn channel_message_delivered(&self, channel_message: &ChannelMessage) {
-        let raw_msg = match &channel_message.message.raw {
-            Some(msg) => msg,
-            None => return,
-        };
+        // consider either the raw message or the description of the first attachment
+        let Some(raw_msg) = Self::get_message_body(channel_message) else { return };
 
         // a message sent by the bot
         // is it one sent by this plugin (as a response to a replacement command)?
@@ -316,8 +328,8 @@ impl RocketBotPlugin for SedPlugin {
             return;
         }
 
-        if channel_message.message.raw.is_some() {
-            self.remember_message(&config_guard, &channel_message).await;
+        if Self::get_message_body(channel_message).is_some() {
+            self.remember_message(&config_guard, channel_message).await;
         }
     }
 
