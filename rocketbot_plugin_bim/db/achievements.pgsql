@@ -1597,6 +1597,26 @@ AS $$
     AND LENGTH(rav111.vehicle_number) = 3
     AND SUBSTRING(rav111.vehicle_number FROM 1 FOR 1) = SUBSTRING(rav111.vehicle_number FROM 3 FOR 1)
     AND SUBSTRING(rav111.vehicle_number FROM 2 FOR 1) = '2'
+
+    UNION ALL
+
+    -- NAME: Answered
+    -- DESCR: Ride a vehicle (of any company) with the number 42.
+    -- ORDER: 1,6 special vehicle numbers
+    SELECT 112, MIN(rav112."timestamp")
+    FROM bim.rides_and_ridden_numeric_vehicles rav112
+    WHERE rav112.rider_username = rider
+    AND rav112.vehicle_number = 42
+
+    UNION ALL
+
+    -- NAME: Illuminated
+    -- DESCR: Ride a vehicle (of any company) with the number 23.
+    -- ORDER: 1,7 special vehicle numbers
+    SELECT 113, MIN(rav113."timestamp")
+    FROM bim.rides_and_ridden_numeric_vehicles rav113
+    WHERE rav113.rider_username = rider
+    AND rav113.vehicle_number = 23
 $$;
 
 CREATE MATERIALIZED VIEW bim.rider_achievements AS
