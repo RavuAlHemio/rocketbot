@@ -267,10 +267,51 @@ fn process_sheet<F: Read + Seek>(
     grouped_vehicles: bool,
     vehicles: &mut Vec<serde_json::Value>,
 ) {
-    eprintln!("sheet {}", sheet_path);
+    eprintln!("sheet {} ({:?})", sheet_path, sheet_name);
     let sheet_package = parse_xml_from_zip(zip_archive, &format!("xl/{}", sheet_path));
     let doc_elem = get_doc_elem(&sheet_package)
         .expect("worksheet doc is missing document element");
+
+    let mut merged_to_first_cell: HashMap<(usize, usize), (usize, usize)> = HashMap::new();
+    let cell_merge_elements: Vec<Element> = doc_elem
+        .children()
+        .iter()
+        .filter_map(|c| c.element())
+        .filter(|e| name_matches(e.name(), SSML_NSURL, "mergeCells"))
+        .into_iter()
+        .flat_map(|c| c.children())
+        .filter_map(|c| c.element())
+        .filter(|e| name_matches(e.name(), SSML_NSURL, "mergeCell"))
+        .collect();
+    for cell_merge_element in cell_merge_elements {
+        let ref_str = match cell_merge_element.attribute_value("ref") {
+            Some(rs) => rs,
+            None => {
+                eprintln!("mergeCell without ref attribute: {:?}", cell_merge_element);
+                continue;
+            },
+        };
+        let (range_start_str, range_end_str) = match ref_str.split_once(':') {
+            Some(rsre) => rsre,
+            None => {
+                eprintln!("mergeCell with unsplittable ref {:?}", ref_str);
+                continue;
+            },
+        };
+        let range_start = parse_coordinates(range_start_str);
+        let range_end = parse_coordinates(range_end_str);
+        let first_cell = (range_start.0, range_start.1);
+        for x in range_start.0..=range_end.0 {
+            for y in range_start.1..=range_end.1 {
+                let this_cell = (x, y);
+                if this_cell == first_cell {
+                    continue;
+                }
+
+                merged_to_first_cell.insert(this_cell, first_cell);
+            }
+        }
+    }
 
     let mut cells: BTreeMap<(usize, usize), CellContents> = BTreeMap::new();
     let rows: Vec<Element> = doc_elem
@@ -303,6 +344,13 @@ fn process_sheet<F: Read + Seek>(
                 .attribute_value("t").unwrap_or("");
 
             let coord = parse_coordinates(coord_str);
+            if let Some(first_cell_coord) = merged_to_first_cell.get(&coord) {
+                // take value from first merged cell instead
+                if let Some(val) = cells.get(first_cell_coord) {
+                    cells.insert(coord, val.clone());
+                    continue;
+                }
+            }
 
             let value_element_opt = column
                 .children()
