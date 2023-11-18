@@ -580,10 +580,13 @@ fn process_sheet<F: Read + Seek>(
         }
 
         // if there is no other fixed coupling, couple the row's vehicles together
-        let coupling: IndexSet<NatSortedString> = this_row_vehicles
+        let mut coupling: IndexSet<NatSortedString> = this_row_vehicles
             .iter()
             .map(|v| v.number.clone())
             .collect();
+        if coupling.len() == 1 {
+            coupling.pop();
+        }
         for this_row_vehicle in &mut this_row_vehicles {
             if this_row_vehicle.fixed_coupling.len() == 0 {
                 this_row_vehicle.fixed_coupling = coupling.clone();
