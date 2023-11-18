@@ -2,6 +2,9 @@ use std::collections::{BTreeMap, HashMap};
 use std::fmt::Write;
 use std::io::{Cursor, Read, Seek};
 
+use indexmap::IndexSet;
+use rocketbot_bim_common::VehicleInfo;
+use rocketbot_string::NatSortedString;
 use sxd_document::{QName, Package};
 use sxd_document::dom::Element;
 use zip::ZipArchive;
@@ -233,24 +236,26 @@ fn stringify_coordinates(x: usize, y: usize) -> String {
 }
 
 fn process_current_group_vehicles(
-    vehicles: &mut Vec<serde_json::Value>,
-    this_group_vehicles: &mut Vec<serde_json::Value>,
+    vehicles: &mut Vec<VehicleInfo>,
+    this_group_vehicles: &mut Vec<VehicleInfo>,
 ) {
     // collect vehicle numbers in this group
-    let mut fixed_coupling_numbers: Vec<String> = this_group_vehicles
+    let mut fixed_coupling_numbers: Vec<NatSortedString> = this_group_vehicles
         .iter()
-        .map(|val| val["number"].as_str().unwrap().to_owned())
+        .map(|veh| veh.number.clone())
         .collect();
 
     // reverse them
     fixed_coupling_numbers.reverse();
 
+    let mut fixed_coupling = IndexSet::new();
+    for fixed_coupling_number in fixed_coupling_numbers {
+        fixed_coupling.insert(fixed_coupling_number);
+    }
+
     // store them as the fixed coupling
     for this_group_vehicle in this_group_vehicles.iter_mut() {
-        let fixed_coupling_array = this_group_vehicle["fixed_coupling"].as_array_mut().unwrap();
-        for number in &fixed_coupling_numbers {
-            fixed_coupling_array.push(serde_json::Value::String(number.clone()));
-        }
+        this_group_vehicle.fixed_coupling = fixed_coupling.clone();
     }
 
     // append the group vehicles to our full list
@@ -265,7 +270,7 @@ fn process_sheet<F: Read + Seek>(
     sheet_name: &str,
     sheet_path: &str,
     grouped_vehicles: bool,
-    vehicles: &mut Vec<serde_json::Value>,
+    vehicles: &mut Vec<VehicleInfo>,
 ) {
     eprintln!("sheet {} ({:?})", sheet_path, sheet_name);
     let sheet_package = parse_xml_from_zip(zip_archive, &format!("xl/{}", sheet_path));
@@ -427,7 +432,7 @@ fn process_sheet<F: Read + Seek>(
         let mut header_row = false;
         let mut out_of_order = false;
         let mut type_code_opt = None;
-        let mut vehicle_code_opt = None;
+        let mut vehicle_codes = Vec::with_capacity(1);
         let mut other_fields = BTreeMap::new();
 
         for (&x, cell) in x_cells {
@@ -471,11 +476,11 @@ fn process_sheet<F: Read + Seek>(
                     continue 'row_loop;
                 }
             } else if !grouped_vehicles && config.code_column.matches_cell(x, column_name) {
-                vehicle_code_opt = Some(cell.text.clone());
+                vehicle_codes.push(cell.text.clone());
             } else if !grouped_vehicles && config.type_column.matches_cell(x, column_name) {
                 type_code_opt = Some(cell.text.clone());
             } else if grouped_vehicles && config.grouped_code_column.matches_cell(x, column_name) {
-                vehicle_code_opt = Some(cell.text.clone());
+                vehicle_codes.push(cell.text.clone());
             } else if grouped_vehicles && config.grouped_type_column.matches_cell(x, column_name) {
                 type_code_opt = Some(cell.text.clone());
             } else if config.ignore_column_names.iter().any(|icn| icn.is_match(column_name)) {
@@ -487,16 +492,15 @@ fn process_sheet<F: Read + Seek>(
             }
         }
 
-        let vehicle_code = match vehicle_code_opt {
-            Some(val) => val,
-            None => continue,
-        };
+        if vehicle_codes.len() == 0 {
+            continue;
+        }
         let type_code = match type_code_opt {
             Some(val) => val,
             None => continue,
         };
 
-        if vehicle_code.len() == 0 && type_code.len() == 0 {
+        if vehicle_codes[0].len() == 0 && type_code.len() == 0 {
             if grouped_vehicles && this_group_vehicles.len() > 0 {
                 // take care of the current group
                 process_current_group_vehicles(
@@ -507,68 +511,90 @@ fn process_sheet<F: Read + Seek>(
             continue;
         }
 
-        for conversion in &config.code_conversions {
-            if !conversion.code_extractor_regex.is_match(&vehicle_code) {
-                continue;
-            }
+        let mut this_row_vehicles = Vec::with_capacity(vehicle_codes.len());
+        for vehicle_code in &vehicle_codes {
+            let mut code_matched = false;
+            for conversion in &config.code_conversions {
+                if !conversion.code_extractor_regex.is_match(&vehicle_code) {
+                    continue;
+                }
+                code_matched = true;
 
-            if conversion.code_replacements.len() > 0 {
-                let mut generated_names = Vec::with_capacity(conversion.code_replacements.len());
-                for replacement in &conversion.code_replacements {
-                    generated_names.push(conversion.code_extractor_regex.replace_all(&vehicle_code, replacement));
-                }
-                let fixed_coupling = if conversion.code_replacements.len() > 1 {
-                    generated_names.clone()
-                } else {
-                    Vec::new()
-                };
-
-                let mut my_other_fields = other_fields.clone();
-                if let Some(full_code_key) = &config.full_code_additional_field {
-                    my_other_fields.insert(full_code_key.clone(), vehicle_code.clone());
-                }
-                if let Some(type_additional_key) = &config.original_type_additional_field {
-                    my_other_fields.insert(type_additional_key.clone(), type_code.clone());
-                }
-                if let Some(worksheet_name_key) = &config.worksheet_name_additional_field {
-                    my_other_fields.insert(worksheet_name_key.clone(), sheet_name.to_owned());
-                }
-                for (k, v) in &conversion.common_props {
-                    my_other_fields
-                        .entry(k.clone())
-                        .or_insert_with(|| v.clone());
-                }
-
-                let my_type_code = if let Some(overridden_type) = &conversion.overridden_type {
-                    overridden_type
-                } else {
-                    &type_code
-                };
-
-                for generated_name in &generated_names {
-                    let vehicle = serde_json::json!({
-                        "number": generated_name,
-                        "vehicle_class": conversion.vehicle_class,
-                        "type_code": my_type_code,
-                        "in_service_since": "?",
-                        "out_of_service_since": if out_of_order { Some("?") } else { None },
-                        "manufacturer": serde_json::Value::Null,
-                        "other_data": my_other_fields,
-                        "fixed_coupling": fixed_coupling,
-                    });
-                    if grouped_vehicles {
-                        this_group_vehicles.push(vehicle);
-                    } else {
-                        vehicles.push(vehicle);
+                if conversion.code_replacements.len() > 0 {
+                    let mut generated_names = Vec::with_capacity(conversion.code_replacements.len());
+                    for replacement in &conversion.code_replacements {
+                        generated_names.push(conversion.code_extractor_regex.replace_all(&vehicle_code, replacement).into_owned());
                     }
+                    let fixed_coupling = if conversion.code_replacements.len() > 1 {
+                        generated_names.iter()
+                            .map(|gn| gn.clone().into())
+                            .collect()
+                    } else {
+                        IndexSet::new()
+                    };
+
+                    let mut my_other_fields = other_fields.clone();
+                    if let Some(full_code_key) = &config.full_code_additional_field {
+                        my_other_fields.insert(full_code_key.clone(), vehicle_code.clone());
+                    }
+                    if let Some(type_additional_key) = &config.original_type_additional_field {
+                        my_other_fields.insert(type_additional_key.clone(), type_code.clone());
+                    }
+                    if let Some(worksheet_name_key) = &config.worksheet_name_additional_field {
+                        my_other_fields.insert(worksheet_name_key.clone(), sheet_name.to_owned());
+                    }
+                    for (k, v) in &conversion.common_props {
+                        my_other_fields
+                            .entry(k.clone())
+                            .or_insert_with(|| v.clone());
+                    }
+
+                    let my_type_code = if let Some(overridden_type) = &conversion.overridden_type {
+                        overridden_type
+                    } else {
+                        &type_code
+                    };
+
+                    for generated_name in &generated_names {
+                        let vehicle = VehicleInfo {
+                            number: generated_name.clone().into(),
+                            vehicle_class: conversion.vehicle_class,
+                            type_code: my_type_code.clone(),
+                            in_service_since: Some("?".to_owned()),
+                            out_of_service_since: if out_of_order { Some("?".to_owned()) } else { None },
+                            manufacturer: None,
+                            other_data: my_other_fields.clone(),
+                            fixed_coupling: fixed_coupling.clone(),
+                        };
+                        this_row_vehicles.push(vehicle);
+                    }
+                    have_vehicles = true;
                 }
-                have_vehicles = true;
+
+                // if we have no code replacements, this is a throwaway type but still valid; keep going
             }
 
-            // if we have no code replacements, this is a throwaway type but still valid; keep going
-            continue 'row_loop;
+            if !code_matched {
+                panic!("unmatched vehicle code {:?}", vehicle_code);
+            }
         }
-        panic!("unmatched vehicle code {:?}", vehicle_code);
+
+        // if there is no other fixed coupling, couple the row's vehicles together
+        let coupling: IndexSet<NatSortedString> = this_row_vehicles
+            .iter()
+            .map(|v| v.number.clone())
+            .collect();
+        for this_row_vehicle in &mut this_row_vehicles {
+            if this_row_vehicle.fixed_coupling.len() == 0 {
+                this_row_vehicle.fixed_coupling = coupling.clone();
+            }
+        }
+
+        if grouped_vehicles {
+            this_group_vehicles.append(&mut this_row_vehicles);
+        } else {
+            vehicles.append(&mut this_row_vehicles);
+        }
     }
 
     // take care of the current group if anything remains
@@ -581,7 +607,7 @@ fn process_sheet<F: Read + Seek>(
     }
 }
 
-fn process_sheets<F: Read + Seek>(config: &Config, zip_archive: &mut ZipArchive<F>, vehicles: &mut Vec<serde_json::Value>) {
+fn process_sheets<F: Read + Seek>(config: &Config, zip_archive: &mut ZipArchive<F>, vehicles: &mut Vec<VehicleInfo>) {
     // obtain strings and fills
     let strings = obtain_strings(zip_archive);
     let style_to_fill = obtain_style_to_fill(zip_archive);
@@ -665,5 +691,8 @@ pub(crate) fn extract_xlsx_vehicles(config: &Config, xlsx_bytes: &[u8]) -> Vec<s
         .expect("failed to open ZIP archive");
     let mut vehicles = Vec::new();
     process_sheets(config, &mut zip_archive, &mut vehicles);
-    vehicles
+    let vehicles_json = vehicles.iter()
+        .map(|veh| serde_json::to_value(veh).unwrap())
+        .collect();
+    vehicles_json
 }

@@ -11,6 +11,7 @@ use std::str::FromStr;
 
 use ciborium;
 use regex::Regex;
+use rocketbot_bim_common::VehicleClass;
 use serde::{Deserialize, Deserializer, Serialize, Serializer};
 use serde::de::Error;
 use serde_json;
@@ -124,7 +125,7 @@ struct CodeConversion {
     #[serde(with = "rocketbot_interface::serde::serde_regex")]
     pub code_extractor_regex: Regex,
     pub code_replacements: Vec<String>,
-    pub vehicle_class: String,
+    pub vehicle_class: VehicleClass,
     pub overridden_type: Option<String>,
     #[serde(default)] pub common_props: BTreeMap<String, String>,
 }
