@@ -571,7 +571,9 @@ fn process_sheet<F: Read + Seek>(
                     have_vehicles = true;
                 }
 
-                // if we have no code replacements, this is a throwaway type but still valid; keep going
+                // if we have no code replacements, this is a valid type, even if it is throwaway
+                // no need to check another matcher
+                break;
             }
 
             if !code_matched {
