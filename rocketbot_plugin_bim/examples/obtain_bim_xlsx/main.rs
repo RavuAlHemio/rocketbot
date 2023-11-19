@@ -56,7 +56,7 @@ impl Serialize for ColumnSpec {
 
 #[derive(Clone, Debug, Deserialize, Hash, Eq, Ord, PartialEq, PartialOrd, Serialize)]
 struct PriorityColumnSpec {
-    #[serde(flatten)] pub column_spec: ColumnSpec,
+    pub column_spec: ColumnSpec,
     pub priority: i64,
 }
 
