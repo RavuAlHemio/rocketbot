@@ -432,7 +432,7 @@ fn process_sheet<F: Read + Seek>(
         let mut header_row = false;
         let mut out_of_order = false;
         let mut type_code_opt = None;
-        let mut vehicle_codes = Vec::with_capacity(1);
+        let mut priority_to_vehicle_codes: BTreeMap<i64, Vec<String>> = BTreeMap::new();
         let mut other_fields = BTreeMap::new();
 
         for (&x, cell) in x_cells {
@@ -475,23 +475,52 @@ fn process_sheet<F: Read + Seek>(
                     // skip this row as the vehicle probably appears elsewhere
                     continue 'row_loop;
                 }
-            } else if !grouped_vehicles && config.code_column.matches_cell(x, column_name) {
-                vehicle_codes.push(cell.text.clone());
             } else if !grouped_vehicles && config.type_column.matches_cell(x, column_name) {
                 type_code_opt = Some(cell.text.clone());
             } else if grouped_vehicles && config.grouped_code_column.matches_cell(x, column_name) {
-                vehicle_codes.push(cell.text.clone());
+                priority_to_vehicle_codes
+                    .entry(0)
+                    .or_insert_with(|| Vec::with_capacity(1))
+                    .push(cell.text.clone());
             } else if grouped_vehicles && config.grouped_type_column.matches_cell(x, column_name) {
                 type_code_opt = Some(cell.text.clone());
             } else if config.ignore_column_names.iter().any(|icn| icn.is_match(column_name)) {
                 // skip this column
                 continue;
             } else {
-                // additional data
-                other_fields.insert(column_name.to_owned(), cell.text.clone());
+                // vehicle code?
+                let mut is_vehicle_code = false;
+                if !grouped_vehicles {
+                    for code_column in &config.code_columns {
+                        if code_column.column_spec.matches_cell(x, column_name) {
+                            priority_to_vehicle_codes
+                                .entry(code_column.priority)
+                                .or_insert_with(|| Vec::with_capacity(1))
+                                .push(cell.text.clone());
+                            is_vehicle_code = true;
+                        }
+                    }
+                }
+
+                if !is_vehicle_code {
+                    // additional data
+                    other_fields.insert(column_name.to_owned(), cell.text.clone());
+                }
             }
         }
 
+        // remove vehicle codes that are empty
+        for vehicle_codes in priority_to_vehicle_codes.values_mut() {
+            vehicle_codes.retain(|vc| vc.trim().len() > 0);
+        }
+
+        // remove priority values that have no vehicle codes
+        priority_to_vehicle_codes.retain(|_prio, vcs| vcs.len() > 0);
+
+        // pick out the vehicle codes with the highest-priority value
+        let vehicle_codes = priority_to_vehicle_codes.pop_last()
+            .map(|(_prio, vcs)| vcs)
+            .unwrap_or_else(|| Vec::with_capacity(0));
         if vehicle_codes.len() == 0 {
             continue;
         }

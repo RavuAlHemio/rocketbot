@@ -54,6 +54,12 @@ impl Serialize for ColumnSpec {
     }
 }
 
+#[derive(Clone, Debug, Deserialize, Hash, Eq, Ord, PartialEq, PartialOrd, Serialize)]
+struct PriorityColumnSpec {
+    #[serde(flatten)] pub column_spec: ColumnSpec,
+    pub priority: i64,
+}
+
 
 #[derive(Clone, Copy, Debug, Eq, Hash, Ord, PartialEq, PartialOrd)]
 pub struct RgbaColor {
@@ -143,7 +149,7 @@ struct Config {
 
     pub state_color_column: ColumnSpec,
     pub type_column: ColumnSpec,
-    pub code_column: ColumnSpec,
+    pub code_columns: Vec<PriorityColumnSpec>,
     pub grouped_type_column: ColumnSpec,
     pub grouped_code_column: ColumnSpec,
     #[serde(with = "rocketbot_interface::serde::serde_vec_regex")]
