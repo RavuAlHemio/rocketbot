@@ -25,6 +25,16 @@ pub enum VehicleClass {
     TramTrain,
     RegionalTrain,
     LongDistanceTrain,
+    HorseDrawnCarriage,
+    Funicular,
+    AerialTramway,
+    JBarLift,
+    TBarLift,
+    SeatLift,
+    GondolaLift,
+    SeatAndGondolaLift,
+    Ship,
+    Hovercraft,
 }
 impl fmt::Display for VehicleClass {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
@@ -39,6 +49,16 @@ impl fmt::Display for VehicleClass {
             Self::TramTrain => write!(f, "tram-train"),
             Self::RegionalTrain => write!(f, "train (regional)"),
             Self::LongDistanceTrain => write!(f, "train (long-distance)"),
+            Self::HorseDrawnCarriage => write!(f, "horse-drawn carriage"),
+            Self::Funicular => write!(f, "funicular"),
+            Self::AerialTramway => write!(f, "aerial tramway"),
+            Self::JBarLift => write!(f, "J-bar lift"),
+            Self::TBarLift => write!(f, "T-bar lift"),
+            Self::SeatLift => write!(f, "seat lift"),
+            Self::GondolaLift => write!(f, "gondola lift"),
+            Self::SeatAndGondolaLift => write!(f, "seat and gondola lift"),
+            Self::Ship => write!(f, "ship"),
+            Self::Hovercraft => write!(f, "hovercraft"),
         }
     }
 }
