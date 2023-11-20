@@ -468,7 +468,7 @@ pub(crate) async fn handle_bim_coverage(request: &Request<Body>) -> Result<Respo
                     fixed_coupling_to_vehicles.insert(fixed_coupling, coupling_vehicles);
                 }
 
-                fixed_coupling_to_vehicles.values()
+                let mut sequences: Vec<Vec<_>> = fixed_coupling_to_vehicles.values()
                     .map(|vehicles|
                         vehicles.into_iter()
                             .map(|vehicle| CoverageVehiclePart::from_vehicle_info(
@@ -479,7 +479,16 @@ pub(crate) async fn handle_bim_coverage(request: &Request<Body>) -> Result<Respo
                             ))
                             .collect()
                     )
-                    .collect()
+                    .collect();
+
+                if hide_inactive {
+                    sequences.retain(|vehicles|
+                        vehicles.iter()
+                            .any(|veh| veh.is_active || veh.ride_count > 0)
+                    );
+                }
+
+                sequences
             } else {
                 Vec::with_capacity(0)
             };
