@@ -522,14 +522,6 @@ fn process_sheet<F: Read + Seek>(
             .map(|(_prio, vcs)| vcs)
             .unwrap_or_else(|| Vec::with_capacity(0));
         if vehicle_codes.len() == 0 {
-            continue;
-        }
-        let type_code = match type_code_opt {
-            Some(val) => val,
-            None => continue,
-        };
-
-        if vehicle_codes[0].len() == 0 && type_code.len() == 0 {
             if grouped_vehicles && this_group_vehicles.len() > 0 {
                 // take care of the current group
                 process_current_group_vehicles(
@@ -539,6 +531,10 @@ fn process_sheet<F: Read + Seek>(
             }
             continue;
         }
+        let type_code = match type_code_opt {
+            Some(val) => val,
+            None => continue,
+        };
 
         let mut this_row_vehicles = Vec::with_capacity(vehicle_codes.len());
         for vehicle_code in &vehicle_codes {
@@ -623,6 +619,8 @@ fn process_sheet<F: Read + Seek>(
                 this_row_vehicle.fixed_coupling = coupling.clone();
             }
         }
+
+        eprintln!("vehicles in this row: {:#?}", this_row_vehicles);
 
         if grouped_vehicles {
             this_group_vehicles.append(&mut this_row_vehicles);
