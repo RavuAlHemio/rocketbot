@@ -359,6 +359,13 @@ impl RocketBotPlugin for SedPlugin {
                 "Transposes letters `abc` to letters `def` in the most recent matching message. Type `{cpfx}help tr` for details.".to_owned(),
             ),
         );
+        ret.insert(
+            "x".to_owned(),
+            (
+                "x/abc/def/".to_owned(),
+                "Exchanges `abc` and `def` in the most recent matching message. Type `{cpfx}help x` for details.".to_owned(),
+            ),
+        );
         ret
     }
 
@@ -367,6 +374,8 @@ impl RocketBotPlugin for SedPlugin {
             Some(include_str!("../help/s.md").to_owned())
         } else if command_name == "tr" {
             Some(include_str!("../help/tr.md").to_owned())
+        } else if command_name == "x" {
+            Some(include_str!("../help/x.md").to_owned())
         } else if command_name == "sedall" {
             Some(include_str!("../help/sedall.md").to_owned())
         } else if command_name == "sedany" {
