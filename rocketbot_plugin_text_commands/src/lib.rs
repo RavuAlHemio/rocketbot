@@ -3,7 +3,7 @@ use std::fmt::Write;
 use std::sync::{Arc, Weak};
 
 use async_trait::async_trait;
-use log::error;
+use log::{debug, error};
 use rand::{Rng, SeedableRng};
 use rand::rngs::StdRng;
 use rocketbot_interface::{JsonValueExtensions, send_channel_message};
@@ -63,6 +63,8 @@ impl TextCommandsPlugin {
             random_flags.insert("random".to_owned());
             random_flags.insert("b".to_owned());
             random_flags.insert("also-bots".to_owned());
+            random_flags.insert("B".to_owned());
+            random_flags.insert("only-bots".to_owned());
             (
                 format!("{{cpfx}}{} [{{lopfx}}random|NICKNAME]", name),
                 "Responds to the given text command, inserting a nickname at a predefined location.",
@@ -140,6 +142,14 @@ impl TextCommandsPlugin {
             nicknamable_commands_responses,
             mad_libs_commands,
         })
+    }
+
+    async fn obtain_bot_ids(interface: &dyn RocketBotInterface) -> HashSet<String> {
+        interface.obtain_users_with_server_role("bot").await
+            .unwrap_or_else(|| HashSet::new())
+            .into_iter()
+            .map(|bot| bot.id)
+            .collect()
     }
 }
 #[async_trait]
@@ -224,12 +234,18 @@ impl RocketBotPlugin for TextCommandsPlugin {
             ).await
                 .unwrap_or(HashSet::new());
 
-            if !command.flags.contains("b") && !command.flags.contains("also-bots") {
+            if command.flags.contains("B") || command.flags.contains("only-bots") {
+                // find bots and only allow them
+                let bot_ids = Self::obtain_bot_ids(&*interface).await;
+                debug!("bot IDs: {:?}", bot_ids);
+                channel_members.retain(|member| bot_ids.contains(&member.id));
+            } else if !command.flags.contains("b") && !command.flags.contains("also-bots") {
                 // find bots and remove them
-                let bots = interface.obtain_users_with_server_role("bot").await
-                    .unwrap_or_else(|| HashSet::new());
-                channel_members.retain(|member| !bots.contains(member));
+                let bot_ids = Self::obtain_bot_ids(&*interface).await;
+                debug!("bot IDs: {:?}", bot_ids);
+                channel_members.retain(|member| !bot_ids.contains(&member.id));
             }
+            debug!("channel members being considered: {:?}", channel_members);
 
             let target = if channel_members.len() == 0 {
                 // fallback to sender
