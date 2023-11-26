@@ -492,6 +492,102 @@ impl RocketBotInterface for ServerConnection {
         Some(users)
     }
 
+    async fn obtain_server_roles(&self) -> Option<HashSet<String>> {
+        let no_query_options: [(&str, Option<&str>); 0] = [];
+        let roles_res = get_api_json(
+            &self.shared_state,
+            "api/v1/roles.list",
+            no_query_options,
+        ).await;
+        let roles = match roles_res {
+            Ok(r) => r,
+            Err(e) => {
+                error!("HTTP error while fetching roles: {}", e);
+                return None;
+            },
+        };
+
+        if !roles["success"].as_bool().unwrap_or(false) {
+            error!("response error obtaining server roles: {}", roles);
+            return None;
+        }
+
+        let mut ret = HashSet::new();
+        let role_iter = match roles["roles"].members() {
+            Some(ri) => ri,
+            None => {
+                error!("server roles \"roles\" member is not a list: {}", roles);
+                return None;
+            },
+        };
+        for role in role_iter {
+            let name = match role["name"].as_str() {
+                Some(n) => n.to_owned(),
+                None => {
+                    warn!("server role entry does not contain \"name\" string; skipping: {}", role);
+                    continue;
+                },
+            };
+            ret.insert(name);
+        }
+        Some(ret)
+    }
+
+    async fn obtain_users_with_server_role(&self, role: &str) -> Option<HashSet<User>> {
+        let users_res = get_api_json(
+            &self.shared_state,
+            "api/v1/roles.getUsersInRole",
+            [("role", Some(role))],
+        ).await;
+        let users = match users_res {
+            Ok(u) => u,
+            Err(e) => {
+                error!("HTTP error obtaining users in role: {}", e);
+                return None;
+            },
+        };
+
+        if !users["success"].as_bool().unwrap_or(false) {
+            error!("response error obtaining users in role: {}", users);
+            return None;
+        }
+
+        let mut ret = HashSet::new();
+        let user_iter = match users["users"].members() {
+            Some(ui) => ui,
+            None => {
+                error!("server roles users \"users\" member is not a list: {}", users);
+                return None;
+            },
+        };
+        for user_json in user_iter {
+            let user_id = match user_json["_id"].as_str() {
+                Some(s) => s,
+                None => {
+                    warn!("server role user does not have ID, skipping: {:?}", user_json);
+                    continue;
+                }
+            };
+            let username = match user_json["username"].as_str() {
+                Some(s) => s,
+                None => {
+                    warn!("server role user {:?} does not have username, skipping: {:?}", user_id, user_json);
+                    continue;
+                }
+            };
+            let nickname = user_json["name"].as_str();
+
+            let user = User::new(
+                user_id.to_owned(),
+                username.to_owned(),
+                nickname.map(|n| n.to_owned()),
+            );
+            ret.insert(user);
+        }
+
+        Some(ret)
+    }
+
     async fn register_channel_command(&self, command: &CommandDefinition) -> bool {
         let mut commands_guard = self.shared_state.channel_commands
             .write().await;

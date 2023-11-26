@@ -61,6 +61,13 @@ pub trait RocketBotInterface : Send + Sync {
     /// is not known.
     async fn obtain_users_in_channel(&self, channel_name: &str) -> Option<HashSet<User>>;
 
+    /// Obtains the list of roles on the server.
+    async fn obtain_server_roles(&self) -> Option<HashSet<String>>;
+
+    /// Obtains the list of users on the server with the given role. Returns `None` if the role is
+    /// not known.
+    async fn obtain_users_with_server_role(&self, role: &str) -> Option<HashSet<User>>;
+
     /// Registers a command that is delivered when it is detected in a channel message. Returns
     /// `true` if the command was registered successfully and `false` if a command of that name
     /// already exists.
