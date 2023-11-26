@@ -61,6 +61,8 @@ impl TextCommandsPlugin {
         let (usage, description) = if nicknamable {
             random_flags.insert("r".to_owned());
             random_flags.insert("random".to_owned());
+            random_flags.insert("b".to_owned());
+            random_flags.insert("also-bots".to_owned());
             (
                 format!("{{cpfx}}{} [{{lopfx}}random|NICKNAME]", name),
                 "Responds to the given text command, inserting a nickname at a predefined location.",
@@ -217,10 +219,17 @@ impl RocketBotPlugin for TextCommandsPlugin {
                 nicknamable_responses[index].clone()
             };
 
-            let channel_members = interface.obtain_users_in_channel(
+            let mut channel_members = interface.obtain_users_in_channel(
                 &channel_message.channel.name,
             ).await
                 .unwrap_or(HashSet::new());
+
+            if !command.flags.contains("b") && !command.flags.contains("also-bots") {
+                // find bots and remove them
+                let bots = interface.obtain_users_with_server_role("bot").await
+                    .unwrap_or_else(|| HashSet::new());
+                channel_members.retain(|member| !bots.contains(member));
+            }
 
             let target = if channel_members.len() == 0 {
                 // fallback to sender
