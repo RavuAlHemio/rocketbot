@@ -3,6 +3,7 @@ mod range_set;
 pub mod table_draw;
 
 
+use std::borrow::Cow;
 use std::collections::{BTreeMap, BTreeSet, HashMap, HashSet};
 use std::collections::hash_map;
 use std::fmt::{self, Write};
@@ -290,6 +291,7 @@ struct Config {
     operator_databases: HashSet<String>,
     default_operator_region: String,
     highlight_coupled_rides: bool,
+    emoji_reactions: HashMap<EmojiReaction, String>,
 }
 
 
@@ -297,6 +299,27 @@ struct Config {
 struct UpdateAchievementsData {
     pub channel: String,
     pub explicit: bool,
+}
+
+
+#[derive(Clone, Copy, Debug, Eq, Hash, Ord, PartialEq, PartialOrd)]
+enum EmojiReaction {
+    DoNotRespond,
+    SamePerson,
+    SamePersonRecently,
+    VehicleChangedHands,
+    FirstRideInVehicle,
+}
+impl EmojiReaction {
+    pub fn from_str(s: &str) -> Option<EmojiReaction> {
+        match s {
+            "same-person" => Some(EmojiReaction::SamePerson),
+            "same-person-recently" => Some(EmojiReaction::SamePersonRecently),
+            "vehicle-changed-hands" => Some(EmojiReaction::VehicleChangedHands),
+            "first-ride-in-vehicle" => Some(EmojiReaction::FirstRideInVehicle),
+            _ => None,
+        }
+    }
 }
 
 
@@ -730,11 +753,37 @@ impl BimPlugin {
             "image/png".to_owned(),
             None,
         );
-        interface.send_channel_message_with_attachment(
+        let message_id_opt = interface.send_channel_message_with_attachment(
             &channel_message.channel.name,
             OutgoingMessageWithAttachmentBuilder::new(attachment)
                 .build()
         ).await;
+        if let Some(message_id) = message_id_opt {
+            let mut emoji_reaction = EmojiReaction::DoNotRespond;
+            for vehicle in &ride_table.vehicles {
+                if !vehicle.highlight_coupled_rides && !vehicle.actually_ridden {
+                    continue;
+                }
+                if vehicle.is_first_highlighted_ride_overall() {
+                    emoji_reaction = emoji_reaction.max(EmojiReaction::FirstRideInVehicle);
+                } else if vehicle.has_changed_hands_highlighted() {
+                    emoji_reaction = emoji_reaction.max(EmojiReaction::VehicleChangedHands);
+                } else {
+                    let mut same_reaction = EmojiReaction::SamePerson;
+                    if let Some(relative_time) = ride_table.relative_time {
+                        if let Some(my_highlighted_last) = vehicle.my_highlighted_last() {
+                            if &relative_time > my_highlighted_last.timestamp() && relative_time - my_highlighted_last.timestamp() < Duration::hours(24) {
+                                same_reaction = EmojiReaction::SamePersonRecently;
+                            }
+                        }
+                    }
+                    emoji_reaction = emoji_reaction.max(same_reaction);
+                }
+            }
+            if let Some(emoji_short_name) = config_guard.emoji_reactions.get(&emoji_reaction) {
+                interface.add_reaction(&message_id, emoji_short_name).await;
+            }
+        }
 
         // signal to update achievements
         if config_guard.achievements_active {
@@ -3366,7 +3415,7 @@ impl BimPlugin {
         }
     }
 
-    fn try_get_config(config: serde_json::Value) -> Result<Config, &'static str> {
+    fn try_get_config(config: serde_json::Value) -> Result<Config, Cow<'static, str>> {
         let company_to_definition: HashMap<String, CompanyDefinition> = serde_json::from_value(config["company_to_definition"].clone())
             .or_msg("failed to decode company definitions")?;
         let default_company = config["default_company"]
@@ -3457,6 +3506,26 @@ impl BimPlugin {
                 .as_bool().ok_or("highlight_coupled_rides not a bool")?
         };
 
+        let mut emoji_reactions = HashMap::new();
+        if let Some(emoji_reactions_obj) = config["emoji_reactions"].as_object() {
+            for (key, value) in emoji_reactions_obj {
+                let emoji_reaction = match EmojiReaction::from_str(key) {
+                    Some(er) => er,
+                    None => return Err(Cow::Owned(format!("invalid emoji_reactions key {:?}", key))),
+                };
+                if value.is_null() {
+                    continue;
+                }
+                let value_str = match value.as_str() {
+                    Some(s) => s,
+                    None => return Err(Cow::Owned(format!("emoji_reactions value for key {:?} is not a string", key))),
+                };
+                emoji_reactions.insert(emoji_reaction, value_str.to_owned());
+            }
+        } else if !config["emoji_reactions"].is_null() {
+            return Err(Cow::Borrowed("emoji_reactions not an object"));
+        };
+
         Ok(Config {
             company_to_definition,
             default_company,
@@ -3469,6 +3538,7 @@ impl BimPlugin {
             operator_databases,
             default_operator_region,
             highlight_coupled_rides,
+            emoji_reactions,
         })
     }
 
@@ -4277,6 +4347,7 @@ pub async fn add_ride(
                     },
                 }),
                 highlight_coupled_rides,
+                actually_ridden: vehicle.coupling_mode == CouplingMode::Ridden,
             });
         }
     }

@@ -91,6 +91,11 @@ pub struct UserRide {
     /// All the other ride data.
     pub ride: Ride,
 }
+impl UserRide {
+    /// Returns the timestamp of this ride. Provided for structural equivalence with [`Ride`].
+    #[inline]
+    pub fn timestamp(&self) -> &DateTime<Local> { &self.ride.timestamp }
+}
 
 #[derive(Clone, Debug, Default, Deserialize, Eq, Hash, Ord, PartialEq, PartialOrd, Serialize)]
 pub struct RideTableVehicle {
@@ -137,11 +142,12 @@ pub struct RideTableVehicle {
     ///
     /// If false, a coupled ride is not highlighted even if it is the latest.
     pub highlight_coupled_rides: bool,
-}
-impl UserRide {
-    /// Returns the timestamp of this ride. Provided for structural equivalence with [`Ride`].
-    #[inline]
-    pub fn timestamp(&self) -> &DateTime<Local> { &self.ride.timestamp }
+
+    /// Whether this vehicle was actually ridden.
+    ///
+    /// An actually-ridden vehicle was either marked thus in the specification (using the
+    /// exclamation mark) or was the only vehicle in the specification.
+    pub actually_ridden: bool,
 }
 
 macro_rules! define_is_most_recent {
@@ -183,6 +189,50 @@ impl RideTableVehicle {
     define_is_most_recent!(is_my_coupled_most_recent, (my_coupled_last, highlight_coupled_rides), (my_same_last, always_true), (other_same_last, always_true), (other_coupled_last, highlight_coupled_rides));
     define_is_most_recent!(is_other_same_most_recent, (other_same_last, always_true), (my_same_last, always_true), (my_coupled_last, highlight_coupled_rides), (other_coupled_last, highlight_coupled_rides));
     define_is_most_recent!(is_other_coupled_most_recent, (other_coupled_last, highlight_coupled_rides), (my_same_last, always_true), (my_coupled_last, highlight_coupled_rides), (other_same_last, always_true));
+
+    /// Whether this vehicle has, in terms of highlighting, never been ridden before.
+    ///
+    /// Same-vehicle rides are always considered; if `highlight_coupled_rides` is true,
+    /// coupled-vehicle rides are considered as well.
+    #[inline]
+    pub fn is_first_highlighted_ride_overall(&self) -> bool {
+        self.my_same_count == 0
+            && self.other_same_count == 0
+            && (
+                !self.highlight_coupled_rides
+                || (
+                    self.my_coupled_count == 0
+                    && self.other_coupled_count == 0
+                )
+            )
+    }
+
+    /// Whether this vehicle has changed hands in terms of highlighting.
+    ///
+    /// Same-vehicle rides are always considered; if `highlight_coupled_rides` is true,
+    /// coupled-vehicle rides are considered as well.
+    #[inline]
+    pub fn has_changed_hands_highlighted(&self) -> bool {
+        // is_other_coupled_most_recent() takes highlight_coupled_rides into account
+        self.is_other_same_most_recent() || self.is_other_coupled_most_recent()
+    }
+
+    /// The latest highlighted ride of this vehicle by the rider registering the ride, if any.
+    ///
+    /// If `highlight_coupled_rides` is true, picks the later ride of `my_same_last` and
+    /// `my_coupled_last`. If `highlight_coupled_rides` is false, returns `my_same_last`.
+    pub fn my_highlighted_last(&self) -> Option<&Ride> {
+        if self.highlight_coupled_rides {
+            match (self.my_same_last.as_ref(), self.my_coupled_last.as_ref()) {
+                (Some(s), Some(c)) => Some(if c.timestamp() > s.timestamp() { c } else { s }),
+                (Some(s), None) => Some(s),
+                (None, Some(c)) => Some(c),
+                (None, None) => None,
+            }
+        } else {
+            self.my_same_last.as_ref()
+        }
+    }
 }
 
 
