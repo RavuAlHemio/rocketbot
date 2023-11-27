@@ -398,7 +398,7 @@ impl RocketBotInterface for ServerConnection {
         }
     }
 
-    async fn send_channel_message_with_attachment(&self, channel_name: &str, message: OutgoingMessageWithAttachment) {
+    async fn send_channel_message_with_attachment(&self, channel_name: &str, message: OutgoingMessageWithAttachment) -> Option<String> {
         let channel_opt = {
             let cdb_guard = self.shared_state.subscribed_channels
                 .read().await;
@@ -408,13 +408,13 @@ impl RocketBotInterface for ServerConnection {
             c
         } else {
             warn!("trying to send message with attachment to unknown channel {:?}", channel_name);
-            return;
+            return None;
         };
 
-        do_send_channel_message_with_attachment(&self.shared_state, &channel, message).await;
+        do_send_channel_message_with_attachment(&self.shared_state, &channel, message).await
     }
 
-    async fn send_private_message_with_attachment(&self, conversation_id: &str, message: OutgoingMessageWithAttachment) {
+    async fn send_private_message_with_attachment(&self, conversation_id: &str, message: OutgoingMessageWithAttachment) -> Option<String> {
         let convo_opt = {
             let cdb_guard = self.shared_state.subscribed_channels
                 .read().await;
@@ -424,10 +424,10 @@ impl RocketBotInterface for ServerConnection {
             c
         } else {
             warn!("trying to send message with attachment to unknown private conversation {:?}", conversation_id);
-            return;
+            return None;
         };
 
-        do_send_private_message_with_attachment(&self.shared_state, &convo, message).await;
+        do_send_private_message_with_attachment(&self.shared_state, &convo, message).await
     }
 
     async fn send_private_message_to_user_with_attachment(&self, username: &str, message: OutgoingMessageWithAttachment) {
@@ -1299,7 +1299,7 @@ async fn do_send_any_message(shared_state: &SharedConnectionState, target_id: &s
         .expect("failed to enqueue channel message");
 }
 
-async fn do_send_any_message_with_attachment(shared_state: &SharedConnectionState, target_id: &str, message: OutgoingMessageWithAttachment) {
+async fn do_send_any_message_with_attachment(shared_state: &SharedConnectionState, target_id: &str, message: OutgoingMessageWithAttachment) -> Option<String> {
     // make a boundary text
     let boundary_text = generate_boundary_text(&shared_state.rng).await;
 
@@ -1349,7 +1349,7 @@ async fn do_send_any_message_with_attachment(shared_state: &SharedConnectionStat
             Some(uid) => uid.clone(),
             None => {
                 error!("cannot send message with attachment; user ID is missing!");
-                return;
+                return None;
             },
         }
     };
@@ -1360,7 +1360,7 @@ async fn do_send_any_message_with_attachment(shared_state: &SharedConnectionStat
             Some(tok) => tok.clone(),
             None => {
                 error!("cannot send message with attachment; auth token is missing!");
-                return;
+                return None;
             },
         }
     };
@@ -1398,7 +1398,7 @@ async fn do_send_any_message_with_attachment(shared_state: &SharedConnectionStat
         Ok(r) => r,
         Err(e) => {
             error!("cannot send message with attachment; failed to send request: {}", e);
-            return;
+            return None;
         },
     };
 
@@ -1408,14 +1408,35 @@ async fn do_send_any_message_with_attachment(shared_state: &SharedConnectionStat
         Ok(rb) => rb.to_vec(),
         Err(e) => {
             error!("cannot send message with attachment; failed to obtain response bytes: {}", e);
-            return;
+            return None;
         },
     };
 
     if response_header.status != StatusCode::OK {
         error!("cannot send message with attachment; response code is not OK but {} (body is {:?})", response_header.status, response_bytes);
-        return;
+        return None;
     }
+
+    let response_json: serde_json::Value = match serde_json::from_slice(&response_bytes) {
+        Ok(rj) => rj,
+        Err(e) => {
+            error!("failed to parse send-message-with-attachment response: {} (response is {:?})", e, response_bytes);
+            return None;
+        },
+    };
+    if !response_json["success"].as_bool().unwrap_or(false) {
+        error!("send-message-with-attachment not successful: {:?}", response_json);
+        return None;
+    }
+
+    let message_id = match response_json["message"]["_id"].as_str() {
+        Some(mid) => mid.to_owned(),
+        None => {
+            warn!("send-message-with-attachment response does not contain message ID string $.message._id: {:?}", response_json);
+            return None;
+        },
+    };
+    Some(message_id)
 }
 
 async fn do_send_channel_message(shared_state: &SharedConnectionState, channel: &Channel, message: OutgoingMessage) {
@@ -1450,7 +1471,7 @@ async fn do_send_private_message(shared_state: &SharedConnectionState, convo: &P
     do_send_any_message(shared_state, &convo.id, message).await
 }
 
-async fn do_send_channel_message_with_attachment(shared_state: &SharedConnectionState, channel: &Channel, message: OutgoingMessageWithAttachment) {
+async fn do_send_channel_message_with_attachment(shared_state: &SharedConnectionState, channel: &Channel, message: OutgoingMessageWithAttachment) -> Option<String> {
     {
         // let the plugins review and possibly block the message
         let plugins = shared_state.plugins
@@ -1458,7 +1479,7 @@ async fn do_send_channel_message_with_attachment(shared_state: &SharedConnection
         debug!("asking plugins to review a message");
         for plugin in plugins.iter() {
             if !plugin.plugin.outgoing_channel_message_with_attachment(&channel, &message).await {
-                return;
+                return None;
             }
         }
     }
@@ -1466,7 +1487,7 @@ async fn do_send_channel_message_with_attachment(shared_state: &SharedConnection
     do_send_any_message_with_attachment(shared_state, &channel.id, message).await
 }
 
-async fn do_send_private_message_with_attachment(shared_state: &SharedConnectionState, convo: &PrivateConversation, message: OutgoingMessageWithAttachment) {
+async fn do_send_private_message_with_attachment(shared_state: &SharedConnectionState, convo: &PrivateConversation, message: OutgoingMessageWithAttachment) -> Option<String> {
     {
         // let the plugins review and possibly block the message
         let plugins = shared_state.plugins
@@ -1474,7 +1495,7 @@ async fn do_send_private_message_with_attachment(shared_state: &SharedConnection
         debug!("asking plugins to review a message");
         for plugin in plugins.iter() {
             if !plugin.plugin.outgoing_private_message_with_attachment(&convo, &message).await {
-                return;
+                return None;
             }
         }
     }

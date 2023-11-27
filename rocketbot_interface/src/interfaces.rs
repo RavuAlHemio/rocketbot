@@ -45,10 +45,10 @@ pub trait RocketBotInterface : Send + Sync {
     async fn send_private_message_to_user_advanced(&self, username: &str, message: OutgoingMessage);
 
     /// Sends a textual message with an attachment to a channel.
-    async fn send_channel_message_with_attachment(&self, channel_name: &str, message: OutgoingMessageWithAttachment);
+    async fn send_channel_message_with_attachment(&self, channel_name: &str, message: OutgoingMessageWithAttachment) -> Option<String>;
 
     /// Sends a textual message with an attachment to a private conversation.
-    async fn send_private_message_with_attachment(&self, conversation_id: &str, message: OutgoingMessageWithAttachment);
+    async fn send_private_message_with_attachment(&self, conversation_id: &str, message: OutgoingMessageWithAttachment) -> Option<String>;
 
     /// Sends a textual message with an attachment to a person.
     async fn send_private_message_to_user_with_attachment(&self, username: &str, message: OutgoingMessageWithAttachment);
