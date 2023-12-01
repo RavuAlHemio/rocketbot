@@ -44,7 +44,7 @@ interface GlobalStatsData {
     companyToTotalRides: { [company: string]: number };
 }
 
-export module RocketBotWeb.Bim.Charting {
+export module Charting {
     function doSetUpByDayOfWeek() {
         const canvas = <HTMLCanvasElement|null>document.getElementById("chart-canvas");
         if (canvas === null) {

@@ -1,0 +1,33 @@
+{% extends "base.html" %}
+
+{% block title %}Public Transport Vehicle Status{% endblock %}
+
+{% block content %}
+<main>
+
+<h1>Public Transport Vehicle Status</h1>
+
+<form action="" method="get">
+  <p>
+    <label>
+      Company:
+      <select name="company" required="required">
+        {% for company in companies %}
+        <option value="{{ company }}"{% if let Some(dc) = default_company %}{% if dc == company %} selected="selected"{% endif %}{% endif %}>{{ company }}</option>
+        {% endfor %}
+      </select>
+    </label>
+    <label>
+      Rider:
+      <select name="rider" required="required">
+        {% for rider in riders %}
+        <option value="{{ rider }}">{{ rider }}</option>
+        {% endfor %}
+      </select>
+    </label>
+    <input type="submit" value="query" />
+  </p>
+</form>
+
+</main>
+{% endblock %}

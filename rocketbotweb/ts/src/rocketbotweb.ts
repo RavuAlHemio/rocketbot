@@ -1,7 +1,13 @@
-import { RocketBotWeb } from "./bim/chart";
+import { Charting } from "./bim/chart";
+import { VehicleStatus } from "./bim/vehicle-status";
 
 // "globals are evil"
 declare global {
     interface Window { RocketBotWeb: any; }
 }
-window.RocketBotWeb = RocketBotWeb;
+window.RocketBotWeb = {
+    Bim: {
+        Charting: Charting,
+        VehicleStatus: VehicleStatus,
+    },
+};

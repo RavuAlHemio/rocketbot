@@ -38,7 +38,7 @@ use crate::bim::charts::{
 };
 use crate::bim::coverage::{handle_bim_coverage, handle_bim_coverage_field};
 use crate::bim::details::{handle_bim_detail, handle_bim_line_detail, handle_bim_ride_by_id};
-use crate::bim::query::handle_bim_query;
+use crate::bim::query::{handle_bim_query, handle_bim_vehicle_status};
 use crate::bim::tables::{handle_bim_rides, handle_bim_types, handle_bim_vehicles};
 use crate::bim::top::{
     handle_explorer_bims, handle_top_bim_days, handle_top_bim_lines, handle_top_bims,
@@ -325,6 +325,7 @@ async fn handle_request(request: Request<Body>) -> Result<Response<Body>, Infall
         "/bim-histogram-fixed-coupling" => handle_bim_histogram_fixed_coupling(&request).await,
         "/bim-global-stats" => handle_bim_global_stats(&request).await,
         "/top-bim-days" => handle_top_bim_days(&request).await,
+        "/bim-vehicle-status" => handle_bim_vehicle_status(&request).await,
         _ => {
             if let Some(caps) = STATIC_FILE_REGEX.captures(request.uri().path()) {
                 debug!(

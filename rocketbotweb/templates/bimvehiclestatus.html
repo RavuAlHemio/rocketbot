@@ -1,0 +1,28 @@
+{% extends "base.html" %}
+
+{% block title %}Public Transport Vehicle Status{% endblock %}
+
+{% block scripts %}
+<style type="text/css">
+  div.vehicle { margin: 0.2em 0; padding: 0.1em; }
+  div.vehicle.unridden { background-color: #ccc; }
+  div.vehicle.ridden-by-someone-else { background-color: #ffc; }
+  div.ridden-by-you { background-color: #cfc; }
+  div.ridden-by-you-recently { background-color: #9f9; }
+  div.ride.other span.rider { margin-left: 0.5em; }
+</style>
+<script type="text/javascript" src="static/rocketbotweb.js"></script>
+<script type="text/javascript">RocketBotWeb.Bim.VehicleStatus.setUp();</script>
+{% endblock %}
+
+{% block content %}
+<main>
+
+<h1>Public Transport Vehicle Status</h1>
+
+<div id="content">
+  Bro, do you even JavaScript?
+</div>
+
+</main>
+{% endblock %}
