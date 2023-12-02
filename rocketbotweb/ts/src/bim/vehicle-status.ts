@@ -10,7 +10,7 @@ export module VehicleStatus {
 
     interface VehicleEntry {
         state: "unridden"|"ridden-by-someone-else"|"ridden-by-you"|"ridden-by-you-recently";
-        my_last_ride_time_opt: string|null;
+        my_last_ride_opt: RiderAndTime|null;
         other_last_ride_opt: RiderAndTime|null;
         fixed_coupling: string[];
     }
@@ -84,26 +84,16 @@ export module VehicleStatus {
         return `${year}-${month}-${day} ${hour}:${minute}:${second}`;
     }
 
-    function appendMyRide(vehicleDiv: HTMLDivElement, myTime: Date) {
-        const myDiv = createDivChild(vehicleDiv);
-        myDiv.classList.add("ride");
-        myDiv.classList.add("my");
+    function appendRide(vehicleDiv: HTMLDivElement, rider: string, time: Date, my: boolean) {
+        const rideDiv = createDivChild(vehicleDiv);
+        rideDiv.classList.add("ride");
+        rideDiv.classList.add(my ? "my" : "other");
 
-        const timeSpan = createSpanChild(myDiv);
+        const timeSpan = createSpanChild(rideDiv);
         timeSpan.classList.add("timestamp");
-        timeSpan.textContent = niceTimeFormat(myTime);
-    }
+        timeSpan.textContent = niceTimeFormat(time);
 
-    function appendOtherRide(vehicleDiv: HTMLDivElement, rider: string, otherTime: Date) {
-        const otherDiv = createDivChild(vehicleDiv);
-        otherDiv.classList.add("ride");
-        otherDiv.classList.add("other");
-
-        const timeSpan = createSpanChild(otherDiv);
-        timeSpan.classList.add("timestamp");
-        timeSpan.textContent = niceTimeFormat(otherTime);
-
-        const riderSpan = createSpanChild(otherDiv);
+        const riderSpan = createSpanChild(rideDiv);
         riderSpan.classList.add("rider");
         riderSpan.textContent = rider;
     }
@@ -126,23 +116,23 @@ export module VehicleStatus {
         numberSpan.classList.add("number");
         numberSpan.textContent = vehicleNumber;
 
-        if (vehicle.my_last_ride_time_opt !== null) {
-            const myTime = parseRustChronoUtcTimestamp(vehicle.my_last_ride_time_opt);
+        if (vehicle.my_last_ride_opt !== null) {
+            const myTime = parseRustChronoUtcTimestamp(vehicle.my_last_ride_opt.time);
             if (vehicle.other_last_ride_opt !== null) {
                 const otherTime = parseRustChronoUtcTimestamp(vehicle.other_last_ride_opt.time);
                 if (myTime >= otherTime) {
-                    appendMyRide(vehicleDiv, myTime);
-                    appendOtherRide(vehicleDiv, vehicle.other_last_ride_opt.rider, otherTime);
+                    appendRide(vehicleDiv, vehicle.my_last_ride_opt.rider, myTime, true);
+                    appendRide(vehicleDiv, vehicle.other_last_ride_opt.rider, otherTime, false);
                 } else {
-                    appendOtherRide(vehicleDiv, vehicle.other_last_ride_opt.rider, otherTime);
-                    appendMyRide(vehicleDiv, myTime);
+                    appendRide(vehicleDiv, vehicle.other_last_ride_opt.rider, otherTime, false);
+                    appendRide(vehicleDiv, vehicle.my_last_ride_opt.rider, myTime, true);
                 }
             } else {
-                appendMyRide(vehicleDiv, myTime);
+                appendRide(vehicleDiv, vehicle.my_last_ride_opt.rider, myTime, true);
             }
         } else if (vehicle.other_last_ride_opt !== null) {
             const otherTime = parseRustChronoUtcTimestamp(vehicle.other_last_ride_opt.time);
-            appendOtherRide(vehicleDiv, vehicle.other_last_ride_opt.rider, otherTime);
+            appendRide(vehicleDiv, vehicle.other_last_ride_opt.rider, otherTime, false);
         }
 
         if (!recurseToFixed) {

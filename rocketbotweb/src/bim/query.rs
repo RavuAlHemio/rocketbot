@@ -99,7 +99,7 @@ struct VehicleStatusTemplate;
 #[derive(Clone, Debug, Eq, Hash, Ord, PartialEq, PartialOrd, Serialize)]
 struct VehicleStatusEntry {
     pub state: LastRideState,
-    pub my_last_ride_time_opt: Option<DateTime<Utc>>,
+    pub my_last_ride_opt: Option<RiderAndUtcTime>,
     pub other_last_ride_opt: Option<RiderAndUtcTime>,
     pub fixed_coupling: Vec<VehicleNumber>,
 }
@@ -483,28 +483,28 @@ pub(crate) async fn handle_bim_vehicle_status(request: &Request<Body>) -> Result
 
                 let mut vehicles = BTreeMap::new();
                 for (vehicle_number, last_rides) in vehicle_to_last_rides {
-                    let my_last_ride_time_opt = last_rides.iter()
+                    let my_last_ride_opt = last_rides.iter()
                         .filter(|r| &r.rider == rider)
                         .nth(0)
-                        .map(|rat| rat.time);
+                        .map(|rat| rat.clone());
                     let other_last_ride_opt = last_rides.iter()
                         .filter(|r| &r.rider != rider)
                         .nth(0)
                         .map(|rat| rat.clone());
 
-                    let state = match (my_last_ride_time_opt, &other_last_ride_opt) {
+                    let state = match (&my_last_ride_opt, &other_last_ride_opt) {
                         (None, None) => LastRideState::Unridden,
-                        (Some(my_last_ride_time), None) => {
-                            if my_last_ride_time <= timestamp && my_last_ride_time - timestamp < Duration::hours(24) {
+                        (Some(my_last_ride), None) => {
+                            if my_last_ride.time <= timestamp && my_last_ride.time - timestamp < Duration::hours(24) {
                                 LastRideState::RiddenByYouRecently
                             } else {
                                 LastRideState::RiddenByYou
                             }
                         },
                         (None, Some(_other_last_ride)) => LastRideState::RiddenBySomeoneElse,
-                        (Some(my_last_ride_time), Some(other_last_ride)) => {
-                            if my_last_ride_time >= other_last_ride.time {
-                                if my_last_ride_time <= timestamp && my_last_ride_time - timestamp < Duration::hours(24) {
+                        (Some(my_last_ride), Some(other_last_ride)) => {
+                            if my_last_ride.time >= other_last_ride.time {
+                                if my_last_ride.time <= timestamp && my_last_ride.time - timestamp < Duration::hours(24) {
                                     LastRideState::RiddenByYouRecently
                                 } else {
                                     LastRideState::RiddenByYou
@@ -522,7 +522,7 @@ pub(crate) async fn handle_bim_vehicle_status(request: &Request<Body>) -> Result
                         vehicle_number,
                         VehicleStatusEntry {
                             state,
-                            my_last_ride_time_opt,
+                            my_last_ride_opt,
                             other_last_ride_opt,
                             fixed_coupling,
                         },
@@ -540,7 +540,7 @@ pub(crate) async fn handle_bim_vehicle_status(request: &Request<Body>) -> Result
                         vehicle_number.clone(),
                         VehicleStatusEntry {
                             state: LastRideState::Unridden,
-                            my_last_ride_time_opt: None,
+                            my_last_ride_opt: None,
                             other_last_ride_opt: None,
                             fixed_coupling,
                         },
