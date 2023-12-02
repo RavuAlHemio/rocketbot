@@ -51,10 +51,14 @@ export module VehicleStatus {
         }
 
         let msString = match[7];
-        while (msString.length < 3) {
-            msString += "0";
+        if (msString === undefined) {
+            msString = "0";
+        } else {
+            while (msString.length < 3) {
+                msString += "0";
+            }
+            msString = msString.substring(0, 3);
         }
-        msString = msString.substring(0, 3);
 
         return new Date(Date.UTC(
             +match[1],
