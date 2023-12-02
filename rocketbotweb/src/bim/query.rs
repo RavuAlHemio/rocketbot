@@ -572,11 +572,11 @@ pub(crate) async fn handle_bim_vehicle_status(request: &Request<Body>) -> Result
                 Some(p) => p,
                 None => return return_500(),
             };
-            let default_company = match &plugin_config["default_company"] {
+            let default_company = match &plugin_config["config"]["default_company"] {
                 serde_json::Value::Null => None,
                 serde_json::Value::String(s) => Some(s.clone()),
                 _ => {
-                    error!("default company has unexpected value {:?}", plugin_config["default_company"]);
+                    error!("default company has unexpected value {:?}", plugin_config["config"]["default_company"]);
                     return return_500();
                 },
             };
