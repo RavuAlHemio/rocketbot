@@ -114,9 +114,12 @@ struct RiderAndUtcTime {
 #[serde(rename_all = "kebab-case")]
 enum LastRideState {
     Unridden,
-    RiddenBySomeoneElse,
-    RiddenByYou,
-    RiddenByYouRecently,
+    OtherOnly,
+    OtherLast,
+    YouOnly,
+    YouLast,
+    YouOnlyRecently,
+    YouLastRecently,
 }
 
 
@@ -496,21 +499,21 @@ pub(crate) async fn handle_bim_vehicle_status(request: &Request<Body>) -> Result
                         (None, None) => LastRideState::Unridden,
                         (Some(my_last_ride), None) => {
                             if my_last_ride.time <= timestamp && my_last_ride.time - timestamp < Duration::hours(24) {
-                                LastRideState::RiddenByYouRecently
+                                LastRideState::YouOnlyRecently
                             } else {
-                                LastRideState::RiddenByYou
+                                LastRideState::YouOnly
                             }
                         },
-                        (None, Some(_other_last_ride)) => LastRideState::RiddenBySomeoneElse,
+                        (None, Some(_other_last_ride)) => LastRideState::OtherOnly,
                         (Some(my_last_ride), Some(other_last_ride)) => {
                             if my_last_ride.time >= other_last_ride.time {
                                 if my_last_ride.time <= timestamp && my_last_ride.time - timestamp < Duration::hours(24) {
-                                    LastRideState::RiddenByYouRecently
+                                    LastRideState::YouLastRecently
                                 } else {
-                                    LastRideState::RiddenByYou
+                                    LastRideState::YouLast
                                 }
                             } else {
-                                LastRideState::RiddenBySomeoneElse
+                                LastRideState::OtherLast
                             }
                         },
                     };

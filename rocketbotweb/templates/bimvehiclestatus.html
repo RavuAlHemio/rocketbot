@@ -6,10 +6,12 @@
 <style type="text/css">
   div.vehicle { margin: 0.2em 0; padding: 0.1em; }
   div.vehicle.unridden { background-color: #ccc; }
-  div.vehicle.ridden-by-someone-else { background-color: #ffc; }
-  div.ridden-by-you { background-color: #cfc; }
-  div.ridden-by-you-recently { background-color: #9f9; }
-  div.ride.other span.rider { margin-left: 0.5em; }
+  div.vehicle.other-only { background-color: #ff9; }
+  div.vehicle.other-last { background-color: #ffc; }
+  div.vehicle.you-last-recently, div.vehicle.you-only-recently { background-color: #6f6; }
+  div.vehicle.you-only { background-color: #9f9; }
+  div.vehicle.you-last { background-color: #cfc; }
+  div.ride span.rider { margin-left: 0.5em; }
 </style>
 <script type="text/javascript" src="static/rocketbotweb.js"></script>
 <script type="text/javascript">RocketBotWeb.Bim.VehicleStatus.setUp();</script>

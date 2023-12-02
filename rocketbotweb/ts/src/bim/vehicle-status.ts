@@ -9,7 +9,7 @@ export module VehicleStatus {
     }
 
     interface VehicleEntry {
-        state: "unridden"|"ridden-by-someone-else"|"ridden-by-you"|"ridden-by-you-recently";
+        state: "unridden"|"other-only"|"other-last"|"you-only"|"you-last"|"you-only-recently"|"you-last-recently";
         my_last_ride_opt: RiderAndTime|null;
         other_last_ride_opt: RiderAndTime|null;
         fixed_coupling: string[];
