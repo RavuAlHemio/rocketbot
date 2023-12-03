@@ -2,6 +2,7 @@ mod model;
 
 
 use std::collections::{BTreeSet, BTreeMap};
+use std::time::Duration as StdDuration;
 
 use async_trait::async_trait;
 use bytes::Buf;
@@ -157,7 +158,7 @@ pub(crate) struct OpenWeatherMapProvider {
     max_calls_per_minute: Option<usize>,
     weather_station_look_back_minutes: i64,
     last_queries: Mutex<BTreeSet<DateTime<Utc>>>,
-    timeout: Option<Duration>,
+    timeout: Option<StdDuration>,
     http_client: Mutex<reqwest::Client>,
 }
 impl OpenWeatherMapProvider {
@@ -289,7 +290,7 @@ impl WeatherProvider for OpenWeatherMapProvider {
         let timeout = if config["timeout_s"].is_null() {
             None
         } else {
-            Some(Duration::from_secs_f64(
+            Some(StdDuration::from_secs_f64(
                 config["timeout_s"]
                     .as_f64().expect("timeout_s is not an f64")
             ))  
