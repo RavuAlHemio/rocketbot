@@ -157,6 +157,7 @@ pub(crate) struct OpenWeatherMapProvider {
     max_calls_per_minute: Option<usize>,
     weather_station_look_back_minutes: i64,
     last_queries: Mutex<BTreeSet<DateTime<Utc>>>,
+    timeout: Option<Duration>,
     http_client: Mutex<reqwest::Client>,
 }
 impl OpenWeatherMapProvider {
@@ -188,8 +189,12 @@ impl OpenWeatherMapProvider {
 
         let client_guard = self.http_client
             .lock().await;
-        let response = client_guard
-            .get(uri)
+        let mut request_builder = client_guard
+            .get(uri);
+        if let Some(timeout) = self.timeout {
+            request_builder = request_builder.timeout(timeout);
+        }   
+        let response = request_builder
             .send().await.map_err(|e| WeatherError::new(format!("failed to perform request to {}: {}", uri, e)))?;
         self.register_for_cooldown().await;
         if response.status() != reqwest::StatusCode::OK {
@@ -281,12 +286,21 @@ impl WeatherProvider for OpenWeatherMapProvider {
             "OpenWeatherMapProvider::http_client",
             reqwest::Client::new(),
         );
+        let timeout = if config["timeout_s"].is_null() {
+            None
+        } else {
+            Some(Duration::from_secs_f64(
+                config["timeout_s"]
+                    .as_f64().expect("timeout_s is not an f64")
+            ))  
+        };
 
         OpenWeatherMapProvider {
             api_key,
             max_calls_per_minute,
             weather_station_look_back_minutes,
             last_queries,
+            timeout,
             http_client,
         }
     }
