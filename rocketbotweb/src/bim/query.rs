@@ -108,6 +108,7 @@ struct VehicleStatusEntry {
 struct RiderAndUtcTime {
     pub rider: String,
     pub time: DateTime<Utc>,
+    pub line: Option<String>,
 }
 
 #[derive(Clone, Copy, Debug, Eq, Hash, Ord, PartialEq, PartialOrd, Serialize)]
@@ -424,7 +425,8 @@ pub(crate) async fn handle_bim_vehicle_status(request: &Request<Body>) -> Result
     
                 let rows_res = db_conn.query(
                     "
-                        SELECT rav.vehicle_number, rav.\"timestamp\", rav.rider_username
+                        SELECT
+                            rav.vehicle_number, rav.\"timestamp\", rav.rider_username, rav.line
                         FROM bim.rides_and_vehicles rav
                         WHERE rav.company = $1
                         AND rav.coupling_mode = 'R'
@@ -441,7 +443,8 @@ pub(crate) async fn handle_bim_vehicle_status(request: &Request<Body>) -> Result
 
                         UNION ALL
 
-                        SELECT rav3.vehicle_number, rav3.\"timestamp\", rav3.rider_username
+                        SELECT
+                            rav3.vehicle_number, rav3.\"timestamp\", rav3.rider_username, rav3.line
                         FROM bim.rides_and_vehicles rav3
                         WHERE rav3.company = $1
                         AND rav3.coupling_mode = 'R'
@@ -472,11 +475,13 @@ pub(crate) async fn handle_bim_vehicle_status(request: &Request<Body>) -> Result
                     let vehicle_number_raw: String = row.get(0);
                     let time: DateTime<Utc> = row.get(1);
                     let rider_username: String = row.get(2);
+                    let line: Option<String> = row.get(3);
     
                     let vehicle_number = VehicleNumber::from_string(vehicle_number_raw);
                     let last = RiderAndUtcTime {
                         rider: rider_username,
                         time,
+                        line,
                     };
                     vehicle_to_last_rides
                         .entry(vehicle_number)
@@ -575,8 +580,8 @@ pub(crate) async fn handle_bim_vehicle_status(request: &Request<Body>) -> Result
             let default_company = match &plugin_config["config"]["default_company"] {
                 serde_json::Value::Null => None,
                 serde_json::Value::String(s) => Some(s.clone()),
-                _ => {
-                    error!("default company has unexpected value {:?}", plugin_config["config"]["default_company"]);
+                other => {
+                    error!("default company has unexpected value {:?}", other);
                     return return_500();
                 },
             };
