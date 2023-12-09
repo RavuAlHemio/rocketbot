@@ -57,7 +57,7 @@
       <td class="timestamp">{{ ride.timestamp.format("%d.%m.%Y %H:%M:%S") }}</td>
       <td class="rider">{{ ride.rider_username }}</td>
       <td class="company">{{ ride.company }}</td>
-      <td class="line{% if ride.line.is_none() %} null{% endif %}">{% if let Some(line) = ride.line %}{{ line }}{% endif %}</td>
+      <td class="line{% if ride.line.is_none() %} null{% endif %}">{% if let Some(line) = ride.line %}<a href="bim-line-detail?company={{ ride.company|encode_query_parameter }}&amp;line={{ line|encode_query_parameter }}">{{ line }}</a>{% endif %}</td>
       <td class="vehicles">
         <table class="vehicles">
           {% for vehicle in ride.vehicles %}
@@ -65,7 +65,7 @@
             {% if ride.at_least_one_vehicle_has_type() %}
               <td class="type{% if vehicle.vehicle_type.is_none() %} null{% endif %}">{% if let Some(vehicle_type) = vehicle.vehicle_type %}{{ vehicle_type }}{% endif %}</td>
             {% endif %}
-            <td class="number">{{ vehicle.vehicle_number }}</td>
+            <td class="number"><a href="bim-detail?company={{ ride.company|encode_query_parameter }}&amp;vehicle={{ vehicle.vehicle_number|encode_query_parameter }}">{{ vehicle.vehicle_number }}</a></td>
             {% if ride.at_least_one_vehicle_ridden() %}
               <td class="actually-ridden {% if let Some(cm) = vehicle.coupling_mode %}coupling-mode-{{ cm }}{% else %}no-coupling-mode{% endif %}">{% if vehicle.coupling_mode == Some('R') %}&#8226;{% endif %}</td>
             {% endif %}

@@ -16,6 +16,7 @@ use crate::bim::{
     append_to_query, connect_to_db, obtain_bim_plugin_config, obtain_company_to_bim_database,
     obtain_company_to_definition,
 };
+use crate::templating::filters;
 
 
 #[derive(Clone, Debug, Default, Eq, Hash, Ord, PartialEq, PartialOrd, Serialize)]

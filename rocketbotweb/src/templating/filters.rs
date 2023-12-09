@@ -1,4 +1,4 @@
-use std::fmt;
+use std::fmt::{self, Write};
 
 use askama;
 use unicode_normalization::char::{decompose_compatible, is_combining_mark};
@@ -146,6 +146,31 @@ pub(crate) fn slugify(string: &str) -> askama::Result<String> {
             });
         } else {
             ret.push('-');
+        }
+    }
+    Ok(ret)
+}
+
+pub(crate) fn encode_query_parameter(string: &str) -> askama::Result<String> {
+    let mut ret = String::with_capacity(string.len());
+    for b in string.bytes() {
+        if b == b' ' {
+            ret.push('+');
+        } else {
+            let can_verbatim =
+                b == b'*'
+                || b == b'-'
+                || b == b'.'
+                || (b >= b'0' && b <= b'9')
+                || (b >= b'A' && b <= b'Z')
+                || b == b'_'
+                || (b >= b'a' && b <= b'z')
+            ;
+            if can_verbatim {
+                ret.push(char::from_u32(b.into()).unwrap());
+            } else {
+                write!(ret, "%{:02X}", b).unwrap();
+            }
         }
     }
     Ok(ret)
