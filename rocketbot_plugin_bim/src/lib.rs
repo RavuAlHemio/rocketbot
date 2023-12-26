@@ -292,6 +292,7 @@ struct Config {
     default_operator_region: String,
     highlight_coupled_rides: bool,
     emoji_reactions: HashMap<EmojiReaction, String>,
+    vehicle_emoji_reactions: Vec<VehicleEmojiReaction>,
 }
 
 
@@ -320,6 +321,14 @@ impl EmojiReaction {
             _ => None,
         }
     }
+}
+
+
+#[derive(Clone, Debug)]
+struct VehicleEmojiReaction {
+    pub company_matcher: Regex,
+    pub vehicle_number_matcher: Regex,
+    pub emoji: String,
 }
 
 
@@ -778,6 +787,16 @@ impl BimPlugin {
                         }
                     }
                     emoji_reaction = emoji_reaction.max(same_reaction);
+                }
+
+                for vehicle_emoji_reaction in &config_guard.vehicle_emoji_reactions {
+                    if !vehicle_emoji_reaction.company_matcher.is_match(company) {
+                        continue;
+                    }
+                    if !vehicle_emoji_reaction.vehicle_number_matcher.is_match(&vehicle.vehicle_number) {
+                        continue;
+                    }
+                    interface.add_reaction(&message_id, &vehicle_emoji_reaction.emoji).await;
                 }
             }
             if let Some(emoji_short_name) = config_guard.emoji_reactions.get(&emoji_reaction) {
@@ -3526,6 +3545,52 @@ impl BimPlugin {
             return Err(Cow::Borrowed("emoji_reactions not an object"));
         };
 
+        let mut vehicle_emoji_reactions = Vec::new();
+        if let Some(vehicle_emoji_reactions_array) = config["vehicle_emoji_reactions"].as_array() {
+            for (i, vehicle_emoji_reaction_value) in vehicle_emoji_reactions_array.iter().enumerate() {
+                if let Some(vehicle_emoji_reaction_object) = vehicle_emoji_reaction_value.as_object() {
+                    let Some(company_matcher_value) = vehicle_emoji_reaction_object.get("company_matcher") else {
+                        return Err(Cow::Owned(format!("vehicle_emoji_reactions child at index {} does not have company_matcher", i)));
+                    };
+                    let Some(company_matcher_str) = company_matcher_value.as_str() else {
+                        return Err(Cow::Owned(format!("vehicle_emoji_reactions child at index {} company_matcher not a string", i)));
+                    };
+                    let company_matcher = match Regex::new(company_matcher_str) {
+                        Ok(re) => re,
+                        Err(e) => return Err(Cow::Owned(format!("vehicle_emoji_reactions child at index {} company_matcher failed to compile: {}", i, e))),
+                    };
+
+                    let Some(vehicle_number_matcher_value) = vehicle_emoji_reaction_object.get("vehicle_number_matcher") else {
+                        return Err(Cow::Owned(format!("vehicle_emoji_reactions child at index {} does not have vehicle_number_matcher", i)));
+                    };
+                    let Some(vehicle_number_matcher_str) = vehicle_number_matcher_value.as_str() else {
+                        return Err(Cow::Owned(format!("vehicle_emoji_reactions child at index {} vehicle_number_matcher not a string", i)));
+                    };
+                    let vehicle_number_matcher = match Regex::new(vehicle_number_matcher_str) {
+                        Ok(re) => re,
+                        Err(e) => return Err(Cow::Owned(format!("vehicle_emoji_reactions child at index {} vehicle_number_matcher failed to compile: {}", i, e))),
+                    };
+
+                    let Some(emoji_value) = vehicle_emoji_reaction_object.get("vehicle_number_matcher") else {
+                        return Err(Cow::Owned(format!("vehicle_emoji_reactions child at index {} does not have emoji", i)));
+                    };
+                    let Some(emoji_str) = emoji_value.as_str() else {
+                        return Err(Cow::Owned(format!("vehicle_emoji_reactions child at index {} emoji not a string", i)));
+                    };
+
+                    vehicle_emoji_reactions.push(VehicleEmojiReaction {
+                        company_matcher,
+                        vehicle_number_matcher,
+                        emoji: emoji_str.to_owned(),
+                    });
+                } else {
+                    return Err(Cow::Owned(format!("vehicle_emoji_reactions child at index {} not an array", i)));
+                }
+            }
+        } else if !config["vehicle_emoji_reactions"].is_null() {
+            return Err(Cow::Borrowed("vehicle_emoji_reactions not an array"));
+        };
+
         Ok(Config {
             company_to_definition,
             default_company,
@@ -3539,6 +3604,7 @@ impl BimPlugin {
             default_operator_region,
             highlight_coupled_rides,
             emoji_reactions,
+            vehicle_emoji_reactions,
         })
     }
 
