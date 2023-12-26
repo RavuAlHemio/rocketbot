@@ -329,6 +329,7 @@ struct VehicleEmojiReaction {
     pub company_matcher: Regex,
     pub vehicle_number_matcher: Regex,
     pub emoji: String,
+    pub only_ridden_vehicles: bool,
 }
 
 
@@ -795,6 +796,9 @@ impl BimPlugin {
                         continue;
                     }
                     if !vehicle_emoji_reaction.vehicle_number_matcher.is_match(&vehicle.vehicle_number) {
+                        continue;
+                    }
+                    if vehicle_emoji_reaction.only_ridden_vehicles && !vehicle.actually_ridden {
                         continue;
                     }
                     vehicle_reaction_emoji.push(vehicle_emoji_reaction.emoji.clone());
@@ -3582,10 +3586,20 @@ impl BimPlugin {
                         return Err(Cow::Owned(format!("vehicle_emoji_reactions child at index {} emoji not a string", i)));
                     };
 
+                    let only_ridden_vehicles = if let Some(only_ridden_vehicles_value) = vehicle_emoji_reaction_object.get("only_ridden_vehicles") {
+                        let Some(orv) = only_ridden_vehicles_value.as_bool() else {
+                            return Err(Cow::Owned(format!("vehicle_emoji_reactions child at index {} only_ridden_vehicles not a bool", i)));
+                        };
+                        orv
+                    } else {
+                        false
+                    };
+
                     vehicle_emoji_reactions.push(VehicleEmojiReaction {
                         company_matcher,
                         vehicle_number_matcher,
                         emoji: emoji_str.to_owned(),
+                        only_ridden_vehicles,
                     });
                 } else {
                     return Err(Cow::Owned(format!("vehicle_emoji_reactions child at index {} not an array", i)));
