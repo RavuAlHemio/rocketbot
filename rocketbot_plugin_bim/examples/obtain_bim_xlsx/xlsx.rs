@@ -16,8 +16,10 @@ const BASE_DOC_PATH: &str = "xl/workbook.xml";
 const BASE_DOC_REL_PATH: &str = "xl/_rels/workbook.xml.rels";
 const STYLES_PATH: &str = "xl/styles.xml";
 const STRINGS_PATH: &str = "xl/sharedStrings.xml";
+const THEME1_PATH: &str = "xl/theme/theme1.xml";
 
 const SSML_NSURL: &str = "http://schemas.openxmlformats.org/spreadsheetml/2006/main";
+const DRAWINGML_NSURL: &str = "http://schemas.openxmlformats.org/drawingml/2006/main";
 const RELS_NSURL: &str = "http://schemas.openxmlformats.org/officeDocument/2006/relationships";
 const RELS_PACK_NSURL: &str = "http://schemas.openxmlformats.org/package/2006/relationships";
 
@@ -102,7 +104,74 @@ fn obtain_strings<F: Read + Seek>(zip_archive: &mut ZipArchive<F>) -> Vec<String
     strings
 }
 
-fn obtain_style_to_fill<F: Read + Seek>(zip_archive: &mut ZipArchive<F>) -> HashMap<usize, RgbaColor> {
+fn obtain_theme_to_fill<F: Read + Seek>(zip_archive: &mut ZipArchive<F>) -> HashMap<usize, RgbaColor> {
+    let xml = parse_xml_from_zip(zip_archive, THEME1_PATH);
+    let doc_elem = get_doc_elem(&xml)
+        .expect("theme1 document does not have a document element");
+    if !name_matches(doc_elem.name(), DRAWINGML_NSURL, "theme") {
+        panic!("theme1 doc {:?} has wrong top-level element: {:?}", THEME1_PATH, doc_elem.name());
+    }
+
+    let color_scheme_children = doc_elem
+        .children()
+        .iter()
+        .filter_map(|c| c.element())
+        .filter(|e| name_matches(e.name(), DRAWINGML_NSURL, "themeElements"))
+        .flat_map(|e| e.children())
+        .filter_map(|c| c.element())
+        .filter(|e| name_matches(e.name(), DRAWINGML_NSURL, "clrScheme"))
+        .nth(0)
+        .expect("theme1 does not contain a clrScheme")
+        .children();
+    let color_scheme_child_elems = color_scheme_children
+        .iter()
+        .filter_map(|c| c.element());
+    let mut ret = HashMap::with_capacity(12);
+    for color_scheme_child_elem in color_scheme_child_elems {
+        if color_scheme_child_elem.name().namespace_uri() != Some(DRAWINGML_NSURL) {
+            continue;
+        }
+        let color_index = match color_scheme_child_elem.name().local_part() {
+            // ECMA-376 Part 1 § 20.1.6.2
+            "dk1" => 0,
+            "lt1" => 1,
+            "dk2" => 2,
+            "lt2" => 3,
+            "accent1" => 4,
+            "accent2" => 5,
+            "accent3" => 6,
+            "accent4" => 7,
+            "accent5" => 8,
+            "accent6" => 9,
+            "hlink" => 10,
+            "folHlink" => 11,
+            _ => continue,
+        };
+        let color_child = color_scheme_child_elem
+            .children()
+            .iter()
+            .filter_map(|c| c.element())
+            .filter(|e| e.name().namespace_uri() == Some(DRAWINGML_NSURL))
+            .filter(|e| e.name().local_part() == "sysClr" || e.name().local_part() == "srgbClr")
+            .nth(0)
+            .expect("theme1 clrScheme child has neither sysClr nor srgbClr grandchild");
+        if color_child.name().local_part() == "sysClr" {
+            let hex_clr = color_child.attribute_value("lastClr")
+                .expect("theme1 sysClr element does not have lastClr attribute");
+            let color: RgbaColor = hex_clr.parse().unwrap();
+            ret.insert(color_index, color);
+        } else {
+            assert_eq!(color_child.name().local_part(), "srgbClr");
+            let hex_clr = color_child.attribute_value("val")
+                .expect("theme1 srgbClr element does not have val attribute");
+            let color: RgbaColor = hex_clr.parse().unwrap();
+            ret.insert(color_index, color);
+        }
+    }
+    ret
+}
+
+fn obtain_style_to_fill<F: Read + Seek>(zip_archive: &mut ZipArchive<F>, theme_to_fill: &HashMap<usize, RgbaColor>) -> HashMap<usize, RgbaColor> {
     let xml = parse_xml_from_zip(zip_archive, STYLES_PATH);
     let doc_elem = get_doc_elem(&xml)
         .expect("styles document does not have a document element");
@@ -143,11 +212,20 @@ fn obtain_style_to_fill<F: Read + Seek>(zip_archive: &mut ZipArchive<F>) -> Hash
                 .filter(|e| name_matches(e.name(), SSML_NSURL, "fgColor"))
                 .nth(0)
                 .expect("solid patternFill does not have a fgColor");
-            let fb_rgb = fg_color
-                .attribute_value("rgb")
-                .expect("fgColor does not have rgb attribute");
-            fb_rgb.parse()
-                .expect("failed to parse fgColor as RGBA")
+            if let Some(theme_index_str) = fg_color.attribute_value("theme") {
+                // theme color
+                let theme_index = theme_index_str.parse()
+                    .expect("failed to parse fgColor theme index");
+                theme_to_fill.get(&theme_index)
+                    .expect("theme color not found for fgColor index")
+                    .clone()
+            } else {
+                let fb_rgb = fg_color
+                    .attribute_value("rgb")
+                    .expect("fgColor does not have rgb attribute");
+                fb_rgb.parse()
+                    .expect("failed to parse fgColor as RGBA")
+            }
         } else {
             panic!("unknown patternType {:?}", pattern_type);
         };
@@ -642,7 +720,8 @@ fn process_sheet<F: Read + Seek>(
 fn process_sheets<F: Read + Seek>(config: &Config, zip_archive: &mut ZipArchive<F>, vehicles: &mut Vec<VehicleInfo>) {
     // obtain strings and fills
     let strings = obtain_strings(zip_archive);
-    let style_to_fill = obtain_style_to_fill(zip_archive);
+    let theme_to_fill = obtain_theme_to_fill(zip_archive);
+    let style_to_fill = obtain_style_to_fill(zip_archive, &theme_to_fill);
 
     // obtain base doc
     let base_package = parse_xml_from_zip(zip_archive, BASE_DOC_PATH);

@@ -99,18 +99,28 @@ impl FromStr for RgbaColor {
     type Err = &'static str;
 
     fn from_str(s: &str) -> Result<Self, Self::Err> {
-        if s.len() != 8 {
+        if s.len() != 8 && s.len() != 6 {
             return Err("wrong length");
         }
         if !s.chars().all(|c| (c >= '0' && c <= '9') || (c >= 'A' && c <= 'F') || (c >= 'a' && c <= 'f')) {
             return Err("wrong character");
         }
-        let argb = u32::from_str_radix(s, 16).unwrap();
-        let a = ((argb >> 24) & 0xFF) as u8;
-        let r = ((argb >> 16) & 0xFF) as u8;
-        let g = ((argb >>  8) & 0xFF) as u8;
-        let b = ((argb >>  0) & 0xFF) as u8;
-        Ok(Self::rgba(r, g, b, a))
+        if s.len() == 8 {
+            // ARGB
+            let argb = u32::from_str_radix(s, 16).unwrap();
+            let a = ((argb >> 24) & 0xFF) as u8;
+            let r = ((argb >> 16) & 0xFF) as u8;
+            let g = ((argb >>  8) & 0xFF) as u8;
+            let b = ((argb >>  0) & 0xFF) as u8;
+            Ok(Self::rgba(r, g, b, a))
+        } else {
+            assert_eq!(s.len(), 6);
+            let rgb = u32::from_str_radix(s, 16).unwrap();
+            let r = ((rgb >> 16) & 0xFF) as u8;
+            let g = ((rgb >>  8) & 0xFF) as u8;
+            let b = ((rgb >>  0) & 0xFF) as u8;
+            Ok(Self::rgb(r, g, b))
+        }
     }
 }
 impl<'de> Deserialize<'de> for RgbaColor {
