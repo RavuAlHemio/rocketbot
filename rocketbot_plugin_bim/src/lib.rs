@@ -3571,7 +3571,7 @@ impl BimPlugin {
                         Err(e) => return Err(Cow::Owned(format!("vehicle_emoji_reactions child at index {} vehicle_number_matcher failed to compile: {}", i, e))),
                     };
 
-                    let Some(emoji_value) = vehicle_emoji_reaction_object.get("vehicle_number_matcher") else {
+                    let Some(emoji_value) = vehicle_emoji_reaction_object.get("emoji") else {
                         return Err(Cow::Owned(format!("vehicle_emoji_reactions child at index {} does not have emoji", i)));
                     };
                     let Some(emoji_str) = emoji_value.as_str() else {
