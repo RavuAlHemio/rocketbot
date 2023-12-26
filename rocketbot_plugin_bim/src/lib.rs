@@ -769,6 +769,7 @@ impl BimPlugin {
         ).await;
         if let Some(message_id) = message_id_opt {
             let mut emoji_reaction = EmojiReaction::DoNotRespond;
+            let mut vehicle_reaction_emoji = Vec::new();
             for vehicle in &ride_table.vehicles {
                 if !vehicle.highlight_coupled_rides && !vehicle.actually_ridden {
                     continue;
@@ -796,11 +797,14 @@ impl BimPlugin {
                     if !vehicle_emoji_reaction.vehicle_number_matcher.is_match(&vehicle.vehicle_number) {
                         continue;
                     }
-                    interface.add_reaction(&message_id, &vehicle_emoji_reaction.emoji).await;
+                    vehicle_reaction_emoji.push(vehicle_emoji_reaction.emoji.clone());
                 }
             }
             if let Some(emoji_short_name) = config_guard.emoji_reactions.get(&emoji_reaction) {
                 interface.add_reaction(&message_id, emoji_short_name).await;
+            }
+            for vre in vehicle_reaction_emoji {
+                interface.add_reaction(&message_id, &vre).await;
             }
         }
 
