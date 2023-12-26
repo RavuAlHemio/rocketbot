@@ -821,6 +821,7 @@ impl RocketBotInterface for ServerConnection {
     }
 
     async fn add_reaction(&self, message_id: &str, emoji_short_name: &str) {
+        debug!("reacting to message {:?} with emoji {:?}", message_id, emoji_short_name);
         let message_body = serde_json::json!({
             "msg": "method",
             "method": "setReaction",
@@ -836,6 +837,7 @@ impl RocketBotInterface for ServerConnection {
     }
 
     async fn remove_reaction(&self, message_id: &str, emoji_short_name: &str) {
+        debug!("removing reaction from message {:?} with emoji {:?}", message_id, emoji_short_name);
         let message_body = serde_json::json!({
             "msg": "method",
             "method": "setReaction",
