@@ -200,49 +200,75 @@ async fn get_company_to_vehicles_ridden(
 async fn get_company_to_vehicles_is_last_rider(
     db_conn: &tokio_postgres::Client,
     to_date_opt: Option<DateTime<Local>>,
-    rider_username_opt: Option<&str>,
+    rider_username: &str,
     ridden_only: bool,
+    query_everyone: bool,
 ) -> Option<(HashMap<String, HashMap<VehicleNumber, i64>>, i64)> {
     let mut inner_conditions: Vec<String> = Vec::with_capacity(1);
     let mut conditions: Vec<String> = Vec::with_capacity(3);
     let mut params: Vec<&(dyn ToSql + Sync)> = Vec::with_capacity(3);
 
-    if let Some(rider_username) = rider_username_opt.as_ref() {
-        conditions.push(format!("AND rav.rider_username = ${}", params.len() + 1));
-        params.push(rider_username);
-    }
-
     if let Some(to_date) = to_date_opt.as_ref() {
         inner_conditions.push(format!("AND rav2.\"timestamp\" <= ${}", params.len() + 1));
-        params.push(to_date);
         conditions.push(format!("AND rav.\"timestamp\" <= ${}", params.len() + 1));
         params.push(to_date);
     }
 
     if ridden_only {
-        conditions.push("AND coupling_mode = 'R'".to_owned());
+        inner_conditions.push("AND rav2.coupling_mode = 'R'".to_owned());
+        conditions.push("AND rav.coupling_mode = 'R'".to_owned());
     }
 
-    let inner_conditions_string = conditions.join(" ");
+    let inner_conditions_string = inner_conditions.join(" ");
     let conditions_string = conditions.join(" ");
 
-    let query = format!(
-        "
-            SELECT rav.company, rav.vehicle_number
-            FROM bim.rides_and_vehicles rav
-            WHERE NOT EXISTS (
-                SELECT 1
-                FROM bim.rides_and_vehicles rav2
-                WHERE rav2.company = rav.company
-                AND rav2.vehicle_number = rav.vehicle_number
-                AND rav2.\"timestamp\" > rav.\"timestamp\"
+    let query = if query_everyone {
+        let query = format!(
+            "
+                SELECT
+                    rav.company,
+                    rav.vehicle_number,
+                    CAST(CASE WHEN EXISTS (
+                        SELECT 1
+                        FROM bim.rides_and_vehicles rav2
+                        WHERE rav2.company = rav.company
+                        AND rav2.vehicle_number = rav.vehicle_number
+                        AND rav2.rider_username = ${}
+                        {}
+                    ) THEN 1 ELSE 3 END AS bigint) count_value
+                FROM bim.rides_and_vehicles rav
+                WHERE 1=1
                 {}
-            )
-            {}
-        ",
-        inner_conditions_string,
-        conditions_string,
-    );
+            ",
+            params.len() + 1,
+            inner_conditions_string,
+            conditions_string,
+        );
+        params.push(&rider_username);
+        query
+    } else {
+        let query = format!(
+            "
+                SELECT rav.company, rav.vehicle_number, CAST(1 AS bigint) count_value
+                FROM bim.rides_and_vehicles rav
+                WHERE NOT EXISTS (
+                    SELECT 1
+                    FROM bim.rides_and_vehicles rav2
+                    WHERE rav2.company = rav.company
+                    AND rav2.vehicle_number = rav.vehicle_number
+                    AND rav2.\"timestamp\" > rav.\"timestamp\"
+                    {}
+                )
+                AND rav.rider_username = ${}
+                {}
+            ",
+            inner_conditions_string,
+            params.len() + 1,
+            conditions_string,
+        );
+        params.push(&rider_username);
+        query
+    };
 
     // get ridden vehicles for rider
     let vehicles_res = db_conn.query(&query, &params).await;
@@ -257,14 +283,14 @@ async fn get_company_to_vehicles_is_last_rider(
     for vehicle_row in vehicle_rows {
         let company: String = vehicle_row.get(0);
         let vehicle_number = VehicleNumber::from_string(vehicle_row.get(1));
+        let count_value: i64 = vehicle_row.get(2);
         company_to_vehicles_ridden
             .entry(company)
             .or_insert_with(|| HashMap::new())
-            .insert(vehicle_number, 1);
+            .insert(vehicle_number, count_value);
     }
 
-    // use 2 as the max value to lead to lighter colors in the web interface
-    Some((company_to_vehicles_ridden, 2))
+    Some((company_to_vehicles_ridden, 4))
 }
 
 
@@ -329,8 +355,9 @@ pub(crate) async fn handle_bim_coverage(request: &Request<Body>) -> Result<Respo
             get_company_to_vehicles_is_last_rider(
                 &db_conn,
                 to_date_opt,
-                rider_username_opt,
+                rider_username_opt.unwrap(),
                 ridden_only,
+                false,
             ).await
         } else {
             get_company_to_vehicles_ridden(
@@ -351,8 +378,9 @@ pub(crate) async fn handle_bim_coverage(request: &Request<Body>) -> Result<Respo
                 get_company_to_vehicles_is_last_rider(
                     &db_conn,
                     to_date_opt,
-                    None,
+                    rider_username_opt.unwrap(),
                     ridden_only,
+                    true,
                 ).await
             } else {
                 get_company_to_vehicles_ridden(
