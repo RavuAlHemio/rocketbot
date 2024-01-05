@@ -237,7 +237,11 @@ async fn main() {
                     })
                     .collect();
 
-                let is_withdrawn = loco.attribute_value("Status")
+                let status_value_opt = loco.attribute_value("Status");
+                let is_active = status_value_opt
+                    .map(|v| v == "A") // active
+                    .unwrap_or(false);
+                let is_withdrawn = status_value_opt
                     .map(|v| v == "W" || v == "X") // withdrawn or scrapped
                     .unwrap_or(false);
                 let is_deleted = loco.attribute_value("Deleted")
@@ -286,6 +290,8 @@ async fn main() {
                     }
                     if let Some(i) = introduced {
                         vib.in_service_since(i);
+                    } else if is_active || is_withdrawn {
+                        vib.in_service_since("?");
                     }
                     if is_withdrawn {
                         vib.out_of_service_since(withdrawn.unwrap_or("?"));
