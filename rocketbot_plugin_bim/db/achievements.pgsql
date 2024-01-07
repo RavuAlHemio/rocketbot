@@ -498,6 +498,33 @@ AS $$
     END;
 $$;
 
+CREATE OR REPLACE FUNCTION bim.euclid_gcd
+( a bigint
+, b bigint
+) RETURNS bigint
+LANGUAGE plpgsql
+IMMUTABLE LEAKPROOF STRICT
+PARALLEL SAFE
+AS $$
+    DECLARE
+        t bigint;
+    BEGIN
+        IF a IS NULL THEN RETURN NULL; END IF;
+        IF b IS NULL THEN RETURN NULL; END IF;
+        IF a < 0 THEN a := -a; END IF;
+        IF b < 0 THEN b := -b; END IF;
+
+        WHILE b <> 0
+        LOOP
+            t := b;
+            b := MOD(a, b);
+            a := t;
+        END LOOP;
+
+        RETURN a;
+    END;
+$$;
+
 CREATE TABLE IF NOT EXISTS bim.not_thursday_timestamp
 ( rider_username character varying(256)
 , "timestamp" timestamp with time zone
@@ -770,10 +797,10 @@ AS $$
     -- DESCR: Ride a vehicle (of any company) whose vehicle number is divisible by (but not equal to) its line number.
     -- ORDER: 2,3 vehicle numbers in relation to line numbers
     SELECT 24, MIN(rav24."timestamp")
-    FROM bim.rides_and_ridden_numeric_vehicles rav24
+    FROM bim.numeric_line_rides_and_ridden_numeric_vehicles rav24
     WHERE rav24.rider_username = rider
-    AND rav24.vehicle_number > bim.char_to_bigint_or_null(rav24.line)
-    AND MOD(rav24.vehicle_number, bim.char_to_bigint_or_null(rav24.line)) = 0
+    AND rav24.vehicle_number > rav24.line
+    AND MOD(rav24.vehicle_number, rav24.line) = 0
 
     UNION ALL
 
@@ -781,10 +808,10 @@ AS $$
     -- DESCR: Ride a vehicle (of any company) on a line whose number is divisible by (but not equal to) the vehicle's number.
     -- ORDER: 2,4 vehicle numbers in relation to line numbers
     SELECT 25, MIN(rav25."timestamp")
-    FROM bim.rides_and_ridden_numeric_vehicles rav25
+    FROM bim.numeric_line_rides_and_ridden_numeric_vehicles rav25
     WHERE rav25.rider_username = rider
-    AND bim.char_to_bigint_or_null(rav25.line) > rav25.vehicle_number
-    AND MOD(bim.char_to_bigint_or_null(rav25.line), rav25.vehicle_number) = 0
+    AND rav25.line > rav25.vehicle_number
+    AND MOD(rav25.line, rav25.vehicle_number) = 0
 
     UNION ALL
 
@@ -1617,6 +1644,94 @@ AS $$
     FROM bim.rides_and_ridden_numeric_vehicles rav113
     WHERE rav113.rider_username = rider
     AND rav113.vehicle_number = 23
+
+    UNION ALL
+
+    -- NAME: Twentylindrome
+    -- DESCR: Ride twenty unique vehicles (of any company) whose numbers are a palindrome while not being all the same digit.
+    -- ORDER: 9,7 palindromes
+    SELECT 114, min_timestamp
+    FROM bim.rider_first_palindrome_vehicle_ride rfpvr114
+    WHERE rfpvr114.rider_username = rider
+    AND rfpvr114.nth = 20
+
+    UNION ALL
+
+    -- NAME: Four by Two
+    -- DESCR: Ride four unique vehicles (of any company) whose numbers consist of one digit repeated at least two times.
+    -- ORDER: 10,7 repdigits
+    SELECT 115, bim.repdigit_unique_vehicle_ride(rider, 2, 4)
+
+    UNION ALL
+
+    -- NAME: Five by Two
+    -- DESCR: Ride five unique vehicles (of any company) whose numbers consist of one digit repeated at least two times.
+    -- ORDER: 10,8 repdigits
+    SELECT 116, bim.repdigit_unique_vehicle_ride(rider, 2, 5)
+
+    UNION ALL
+
+    -- NAME: Indy Twenty
+    -- DESCR: Register twenty rides (with any company) where the vehicle number is divisible by the line number (and the line number is not 1).
+    -- ORDER: 2,16 vehicle numbers in relation to line numbers
+    SELECT 117, inner117."timestamp"
+    FROM (
+        SELECT rav117."timestamp", rank() OVER (ORDER BY rav117."timestamp" ASC) ride_rank
+        FROM bim.numeric_line_rides_and_ridden_numeric_vehicles rav117
+        WHERE rav117.rider_username = rider
+        AND rav117.vehicle_number > rav117.line
+        AND MOD(rav117.vehicle_number, rav117.line) = 0
+        AND rav117.line <> 1
+    ) inner117
+    WHERE inner117.ride_rank = 20
+
+    UNION ALL
+
+    -- NAME: Indy Fifty
+    -- DESCR: Register fifty rides (with any company) where the vehicle number is divisible by the line number (and the line number is not 1).
+    -- ORDER: 2,17 vehicle numbers in relation to line numbers
+    SELECT 118, inner118."timestamp"
+    FROM (
+        SELECT rav118."timestamp", rank() OVER (ORDER BY rav118."timestamp" ASC) ride_rank
+        FROM bim.numeric_line_rides_and_ridden_numeric_vehicles rav118
+        WHERE rav118.rider_username = rider
+        AND rav118.vehicle_number > rav118.line
+        AND MOD(rav118.vehicle_number, rav118.line) = 0
+        AND rav118.line <> 1
+    ) inner118
+    WHERE inner118.ride_rank = 50
+
+    UNION ALL
+
+    -- NAME: Nice Indy
+    -- DESCR: Register sixty-nine rides (with any company) where the vehicle number is divisible by the line number (and the line number is not 1).
+    -- ORDER: 2,18 vehicle numbers in relation to line numbers
+    SELECT 119, inner119."timestamp"
+    FROM (
+        SELECT rav119."timestamp", rank() OVER (ORDER BY rav119."timestamp" ASC) ride_rank
+        FROM bim.numeric_line_rides_and_ridden_numeric_vehicles rav119
+        WHERE rav119.rider_username = rider
+        AND rav119.vehicle_number > rav119.line
+        AND MOD(rav119.vehicle_number, rav119.line) = 0
+        AND rav119.line <> 1
+    ) inner119
+    WHERE inner119.ride_rank = 69
+
+    UNION ALL
+
+    -- NAME: Indy 100
+    -- DESCR: Register one hundred rides (with any company) where the vehicle number is divisible by the line number (and the line number is not 1).
+    -- ORDER: 2,19 vehicle numbers in relation to line numbers
+    SELECT 120, inner120."timestamp"
+    FROM (
+        SELECT rav120."timestamp", rank() OVER (ORDER BY rav120."timestamp" ASC) ride_rank
+        FROM bim.numeric_line_rides_and_ridden_numeric_vehicles rav120
+        WHERE rav120.rider_username = rider
+        AND rav120.vehicle_number > rav120.line
+        AND MOD(rav120.vehicle_number, rav120.line) = 0
+        AND rav120.line <> 1
+    ) inner120
+    WHERE inner120.ride_rank = 100
 $$;
 
 CREATE MATERIALIZED VIEW bim.rider_achievements AS
