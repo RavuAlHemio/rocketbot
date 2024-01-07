@@ -31,7 +31,7 @@ use toml;
 use crate::aliases::{handle_nicks_aliases, handle_plaintext_aliases_for_nick};
 use crate::bim::achievements::handle_bim_achievements;
 use crate::bim::charts::{
-    handle_bim_global_stats, handle_bim_histogram_by_day_of_week,
+    handle_bim_first_rider_pie, handle_bim_global_stats, handle_bim_histogram_by_day_of_week,
     handle_bim_histogram_by_line_ride_count_group, handle_bim_histogram_by_vehicle_ride_count_group,
     handle_bim_histogram_fixed_coupling, handle_bim_latest_rider_count_over_time,
     handle_bim_latest_rider_count_over_time_image, handle_bim_last_rider_pie,
@@ -326,6 +326,7 @@ async fn handle_request(request: Request<Body>) -> Result<Response<Body>, Infall
         "/bim-global-stats" => handle_bim_global_stats(&request).await,
         "/top-bim-days" => handle_top_bim_days(&request).await,
         "/bim-vehicle-status" => handle_bim_vehicle_status(&request).await,
+        "/bim-first-rider-pie" => handle_bim_first_rider_pie(&request).await,
         _ => {
             if let Some(caps) = STATIC_FILE_REGEX.captures(request.uri().path()) {
                 debug!(

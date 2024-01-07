@@ -165,6 +165,23 @@ impl GlobalStatsTemplate {
     }
 }
 
+#[derive(Clone, Debug, Default, Eq, Hash, Ord, PartialEq, PartialOrd, Serialize, Template)]
+#[template(path = "bimfirstriderpie.html")]
+struct FirstRiderPieTemplate {
+    pub company_to_rider_to_first_rides: BTreeMap<String, BTreeMap<String, i64>>,
+    pub rider_to_total_first_rides: BTreeMap<String, i64>,
+}
+impl FirstRiderPieTemplate {
+    pub fn json_data(&self) -> String {
+        let value = serde_json::json!({
+            "companyToRiderToFirstRides": self.company_to_rider_to_first_rides,
+            "riderToTotalFirstRides": self.rider_to_total_first_rides,
+        });
+        serde_json::to_string(&value)
+            .expect("failed to JSON-encode graph data")
+    }
+}
+
 
 pub(crate) async fn handle_bim_latest_rider_count_over_time_image(request: &Request<Body>) -> Result<Response<Body>, Infallible> {
     let query_pairs = get_query_pairs(request);
@@ -1034,6 +1051,73 @@ pub(crate) async fn handle_bim_global_stats(request: &Request<Body>) -> Result<R
     let template = GlobalStatsTemplate {
         total_rides,
         company_to_total_rides,
+    };
+    match render_response(&template, &query_pairs, 200, vec![]).await {
+        Some(r) => Ok(r),
+        None => return_500(),
+    }
+}
+
+pub(crate) async fn handle_bim_first_rider_pie(request: &Request<Body>) -> Result<Response<Body>, Infallible> {
+    let query_pairs = get_query_pairs(request);
+    if request.method() != Method::GET {
+        return return_405(&query_pairs).await;
+    }
+
+    let db_conn = match connect_to_db().await {
+        Some(c) => c,
+        None => return return_500(),
+    };
+
+    let company_rows_res = db_conn.query(
+        "
+            SELECT
+                rrv.company,
+                rrv.rider_username,
+                COUNT(*) count
+            FROM
+                bim.rides_and_ridden_vehicles rrv
+            WHERE
+                NOT EXISTS (
+                    SELECT 1
+                    FROM bim.rides_and_ridden_vehicles rrv2
+                    WHERE rrv2.company = rrv.company
+                    AND rrv2.vehicle_number = rrv.vehicle_number
+                    AND rrv2.\"timestamp\" < rrv.\"timestamp\"
+                )
+            GROUP BY
+                rrv.company,
+                rrv.rider_username
+        ",
+        &[],
+    ).await;
+    let company_rows = match company_rows_res {
+        Ok(r) => r,
+        Err(e) => {
+            error!("failed to query rides: {}", e);
+            return return_500();
+        },
+    };
+    let mut company_to_rider_to_first_rides: BTreeMap<String, BTreeMap<String, i64>> = BTreeMap::new();
+    let mut rider_to_total_first_rides: BTreeMap<String, i64> = BTreeMap::new();
+    for row in &company_rows {
+        let company: String = row.get(0);
+        let rider_username: String = row.get(1);
+        let ride_count: i64 = row.get(2);
+
+        company_to_rider_to_first_rides
+            .entry(company)
+            .or_insert_with(|| BTreeMap::new())
+            .insert(rider_username.clone(), ride_count);
+        let rider_total_first_rides = rider_to_total_first_rides
+            .entry(rider_username)
+            .or_insert(0);
+        *rider_total_first_rides += ride_count;
+    }
+
+    let template = FirstRiderPieTemplate {
+        company_to_rider_to_first_rides,
+        rider_to_total_first_rides,
     };
     match render_response(&template, &query_pairs, 200, vec![]).await {
         Some(r) => Ok(r),

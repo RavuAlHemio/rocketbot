@@ -1,0 +1,16 @@
+{% extends "base.html" %}
+
+{% block title %}Public Transport First Rider Pie Chart{% endblock %}
+
+{% block scripts %}
+<script src="static/rocketbotweb.js?{{ "{{VERSION}}" }}"></script>
+<script>RocketBotWeb.Bim.Charting.setUpFirstRiderPie();</script>
+{% endblock %}
+
+{% block content %}
+<p id="pie-controls"></p>
+<p>
+    <canvas id="chart-canvas"></canvas>
+</p>
+<script type="application/json" id="chart-data">{{ self.json_data()|safe }}</script>
+{% endblock %}

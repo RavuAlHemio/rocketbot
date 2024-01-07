@@ -20,6 +20,16 @@ interface LatestRiderSankeyData {
     count: number;
 }
 
+type RiderToCount = {
+    [rider: string]: number
+};
+
+type CompanyToRiderToCount = {
+    [company: string]: {
+        [rider: string]: number
+    }
+};
+
 type CompanyToTypeToRiderToCount = {
     [company: string]: {
         [vehicleType: string]: {
@@ -27,6 +37,11 @@ type CompanyToTypeToRiderToCount = {
         }
     }
 };
+
+interface FirstRiderPieData {
+    companyToRiderToFirstRides: CompanyToRiderToCount;
+    riderToTotalFirstRides: RiderToCount;
+}
 
 interface LastRiderPieData {
     companyToTypeToLastRiderToCount: CompanyToTypeToRiderToCount;
@@ -183,6 +198,96 @@ export module Charting {
                 ],
             },
         });
+    }
+
+    function doSetUpFirstRiderPie() {
+        const ALL_VALUE: string = "\u0018";
+
+        // set up controls
+        const controls = <HTMLParagraphElement|null>document.getElementById("pie-controls");
+        if (controls === null) {
+            return;
+        }
+
+        const companyLabel = document.createElement("label");
+        companyLabel.appendChild(document.createTextNode("Company: "));
+        const companySelect = document.createElement("select");
+        companyLabel.appendChild(companySelect);
+        controls.appendChild(companyLabel);
+
+        // load data
+        const dataString = document.getElementById("chart-data")?.textContent;
+        if (dataString === null || dataString === undefined) {
+            return;
+        }
+        const data: FirstRiderPieData = JSON.parse(dataString);
+
+        const allCompanies: string[] = Object.keys(data.companyToRiderToFirstRides);
+        allCompanies.sort();
+
+        // pre-populate options
+        const allCompaniesOption = document.createElement("option");
+        allCompaniesOption.value = ALL_VALUE;
+        allCompaniesOption.textContent = "(all)";
+        companySelect.appendChild(allCompaniesOption);
+        for (let company of allCompanies) {
+            const companyOption = document.createElement("option");
+            companyOption.value = company;
+            companyOption.textContent = company;
+            companySelect.appendChild(companyOption);
+        }
+        companySelect.selectedIndex = 0;
+
+        // set up empty chart
+        const canvas = <HTMLCanvasElement|null>document.getElementById("chart-canvas");
+        if (canvas === null) {
+            return;
+        }
+        const chart = new Chart(canvas, {
+            type: "pie",
+            data: {
+                datasets: [],
+            },
+        });
+
+        // define update function
+        function updateChart(
+            chart: Chart<"pie">, data: FirstRiderPieData,
+            companySelect: HTMLSelectElement,
+            allCompanies: string[],
+        ) {
+            const riderToCount = (companySelect.value === ALL_VALUE)
+                ? data.riderToTotalFirstRides
+                : data.companyToRiderToFirstRides[companySelect.value];
+
+            // give this data to the chart
+            const dataRiders: string[] = Object.keys(riderToCount);
+            dataRiders.sort();
+            const dataValues: number[] = dataRiders.map(r => riderToCount[r]);
+            chart.data = {
+                datasets: [
+                    {
+                        data: dataValues,
+                    },
+                ],
+                labels: dataRiders,
+            };
+            chart.update();
+        }
+
+        // link up events
+        companySelect.addEventListener("change", () => updateChart(
+            chart, data,
+            companySelect,
+            allCompanies,
+        ));
+
+        // perform initial chart update
+        updateChart(
+            chart, data,
+            companySelect,
+            allCompanies,
+        );
     }
 
     function doSetUpLastRiderPie() {
@@ -574,6 +679,10 @@ export module Charting {
 
     export function setUpLatestRiderCount() {
         document.addEventListener("DOMContentLoaded", doSetUpLatestRiderCount);
+    }
+
+    export function setUpFirstRiderPie() {
+        document.addEventListener("DOMContentLoaded", doSetUpFirstRiderPie);
     }
 
     export function setUpLastRiderPie() {
