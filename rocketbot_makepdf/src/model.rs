@@ -18,8 +18,8 @@ pub struct PdfDescription {
 
 #[derive(Clone, Debug, Deserialize, PartialEq, Serialize)]
 pub struct PdfPageDescription {
-    pub width_mm: f64,
-    pub height_mm: f64,
+    pub width_mm: f32,
+    pub height_mm: f32,
     pub elements: Vec<PdfElementDescription>,
 }
 
@@ -34,7 +34,7 @@ pub enum PdfElementDescription {
 #[derive(Clone, Debug, Deserialize, PartialEq, Serialize)]
 pub struct PdfPathDescription {
     pub stroke: Option<PdfColorDescription>,
-    pub stroke_width: Option<f64>,
+    pub stroke_width: Option<f32>,
     pub fill: Option<PdfColorDescription>,
     pub close: bool,
     pub commands_mm: Vec<PdfPathCommandDescription>,
@@ -43,21 +43,21 @@ pub struct PdfPathDescription {
 #[derive(Clone, Copy, Debug, Deserialize, PartialEq, Serialize)]
 #[serde(rename_all = "lowercase")]
 pub enum PdfColorDescription {
-    Rgb { red: f64, green: f64, blue: f64 },
-    Cmyk { cyan: f64, magenta: f64, yellow: f64, black: f64 },
-    Grayscale { white: f64 },
+    Rgb { red: f32, green: f32, blue: f32 },
+    Cmyk { cyan: f32, magenta: f32, yellow: f32, black: f32 },
+    Grayscale { white: f32 },
 }
 
 #[derive(Clone, Copy, Debug, Deserialize, PartialEq, Serialize)]
 pub enum PdfPathCommandDescription {
     #[serde(rename = "m")]
-    MoveTo { x: f64, y: f64 },
+    MoveTo { x: f32, y: f32 },
 
     #[serde(rename = "l")]
-    LineTo { x: f64, y: f64 },
+    LineTo { x: f32, y: f32 },
 
     #[serde(rename = "c")]
-    CubicBezierTo { c1x: f64, c1y: f64, c2x: f64, c2y: f64, x: f64, y: f64 },
+    CubicBezierTo { c1x: f32, c1y: f32, c2x: f32, c2y: f32, x: f32, y: f32 },
 }
 
 #[derive(Clone, Copy, Debug, Deserialize, PartialEq, Serialize)]
@@ -75,10 +75,10 @@ impl Default for TextAlignmentDescription {
 
 #[derive(Clone, Debug, Deserialize, PartialEq, Serialize)]
 pub struct PdfTextDescription {
-    pub x: f64,
-    pub y: f64,
+    pub x: f32,
+    pub y: f32,
     pub font: String,
-    pub size_pt: f64,
+    pub size_pt: f32,
     pub text: String,
     #[serde(default)]
     pub alignment: TextAlignmentDescription,
@@ -86,10 +86,10 @@ pub struct PdfTextDescription {
 
 #[derive(Clone, Debug, Deserialize, PartialEq, Serialize)]
 pub struct PdfImageDescription {
-    pub x: f64,
-    pub y: f64,
-    pub scale_x: f64,
-    pub scale_y: f64,
+    pub x: f32,
+    pub y: f32,
+    pub scale_x: f32,
+    pub scale_y: f32,
     pub mime_type: String,
     pub data: PdfBinaryDataDescription,
 }

@@ -35,10 +35,10 @@ pub(crate) struct VaxInfo {
 
 #[derive(Clone, Debug, Deserialize, PartialEq, Serialize)]
 pub(crate) struct PdfSettings {
-    pub qr_top_left_x: f64,
-    pub qr_top_left_y: f64,
-    pub qr_pixel_width: f64,
-    pub qr_pixel_height: f64,
+    pub qr_top_left_x: f32,
+    pub qr_top_left_y: f32,
+    pub qr_pixel_width: f32,
+    pub qr_pixel_height: f32,
     pub base_description: PdfDescription,
 }
 
@@ -193,9 +193,9 @@ pub(crate) fn make_vax_pdf(vax_info: &VaxInfo, pdf_settings: &PdfSettings) -> Ve
     // paint the QR code
     for y in 0..qr_bitmap.height() {
         // PDF's origin is the bottom left; compensate
-        let pdf_y = pdf_settings.qr_top_left_y - (y as f64) * pdf_settings.qr_pixel_height;
+        let pdf_y = pdf_settings.qr_top_left_y - (y as f32) * pdf_settings.qr_pixel_height;
         for x in 0..qr_bitmap.width() {
-            let pdf_x = pdf_settings.qr_top_left_x + (x as f64) * pdf_settings.qr_pixel_width;
+            let pdf_x = pdf_settings.qr_top_left_x + (x as f32) * pdf_settings.qr_pixel_width;
 
             if qr_bitmap.bits()[y * qr_bitmap.width() + x] {
                 let path = PdfPathDescription {

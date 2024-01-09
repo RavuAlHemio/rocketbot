@@ -1,7 +1,7 @@
 use std::sync::{Arc, Weak};
 
 use async_trait::async_trait;
-use chrono::{DateTime, TimeZone, Timelike, Utc};
+use chrono::{DateTime, TimeZone, Timelike, Utc, NaiveDateTime};
 use log::{debug, warn};
 use regex::Regex;
 use rocketbot_interface::JsonValueExtensions;
@@ -65,8 +65,9 @@ impl RocketBotPlugin for TopicTimerPlugin {
         for counter_json in config["counters"].members().expect("counters is not a list") {
             let base_timestamp_str = counter_json["base_timestamp_utc"].as_str()
                 .expect("base_timestamp_utc not representable as a string");
-            let base_timestamp = Utc.datetime_from_str(base_timestamp_str, "%Y-%m-%d %H:%M:%S")
-                .expect("base_timestamp_utc not in \"YYYY-MM-DD hh:mm:ss\" format");
+            let base_timestamp = NaiveDateTime::parse_from_str(base_timestamp_str, "%Y-%m-%d %H:%M:%S")
+                .expect("base_timestamp_utc not in \"YYYY-MM-DD hh:mm:ss\" format")
+                .and_utc();
 
             let channel_name = counter_json["channel_name"].as_str()
                 .expect("channel_name not representable as a string");

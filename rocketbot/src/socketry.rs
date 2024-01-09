@@ -1014,6 +1014,7 @@ pub(crate) async fn connect() -> Arc<ServerConnection> {
     );
     let https_connector = HttpsConnectorBuilder::new()
         .with_native_roots()
+        .expect("failed to create HttpsConnectorBuilder with native roots")
         .https_or_http()
         .enable_http1()
         .enable_http2()

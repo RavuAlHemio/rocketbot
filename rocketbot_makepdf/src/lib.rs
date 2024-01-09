@@ -74,13 +74,13 @@ pub fn verify_description(description: &PdfDescription) -> Result<(), PdfDefinit
 fn color_from_def(color: &PdfColorDescription) -> Color {
     match color {
         PdfColorDescription::Rgb { red, green, blue } => Color::Rgb(Rgb { r: *red, g: *green, b: *blue, icc_profile: None }),
-        PdfColorDescription::Cmyk { cyan, magenta, yellow, black, } => Color::Cmyk(Cmyk { c: *cyan, m: *magenta, y: *yellow, k: *black, icc_profile: None }),
+        PdfColorDescription::Cmyk { cyan, magenta, yellow, black } => Color::Cmyk(Cmyk { c: *cyan, m: *magenta, y: *yellow, k: *black, icc_profile: None }),
         PdfColorDescription::Grayscale { white } => Color::Greyscale(Greyscale { percent: *white, icc_profile: None }),
     }
 }
 
 #[inline]
-fn object_from_mm(mm: f64) -> Object {
+fn object_from_mm(mm: f32) -> Object {
     let pt: Pt = Mm(mm).into();
     pt.into()
 }
@@ -206,7 +206,7 @@ pub fn render_description(description: &PdfDescription) -> Result<PdfDocumentRef
                                 .iter()
                                 .map(|gp| gp.x_advance)
                                 .sum();
-                            let total_advance_em = (total_advance_units as f64) / (units_per_em as f64);
+                            let total_advance_em = (total_advance_units as f32) / (units_per_em as f32);
                             let total_advance_pt = Pt(txt.size_pt * total_advance_em);
                             let total_advance_mm = Mm::from(total_advance_pt);
 

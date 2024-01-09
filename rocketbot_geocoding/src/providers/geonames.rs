@@ -294,7 +294,7 @@ impl GeocodingProvider for GeonamesGeocodingProvider {
 }
 
 mod serde_datetime {
-    use chrono::{DateTime, TimeZone, Utc};
+    use chrono::{DateTime, NaiveDateTime, Utc};
     use serde::{Deserialize, Deserializer, Serialize, Serializer};
     use serde::de::Error;
 
@@ -306,7 +306,8 @@ mod serde_datetime {
 
     pub(crate) fn deserialize<'de, D: Deserializer<'de>>(deserializer: D) -> Result<DateTime<Utc>, D::Error> {
         let date_time_string = String::deserialize(deserializer)?;
-        Utc.datetime_from_str(&date_time_string, super::DATE_TIME_FORMAT)
+        NaiveDateTime::parse_from_str(&date_time_string, super::DATE_TIME_FORMAT)
+            .map(|ndt| ndt.and_utc())
             .map_err(|_| D::Error::custom("parsing failed"))
     }
 }
