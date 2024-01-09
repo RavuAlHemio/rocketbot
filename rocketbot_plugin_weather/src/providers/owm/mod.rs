@@ -194,7 +194,7 @@ impl OpenWeatherMapProvider {
             .get(uri);
         if let Some(timeout) = self.timeout {
             request_builder = request_builder.timeout(timeout);
-        }   
+        }
         let response = request_builder
             .send().await.map_err(|e| WeatherError::new(format!("failed to perform request to {}: {}", uri, e)))?;
         self.register_for_cooldown().await;
@@ -293,7 +293,7 @@ impl WeatherProvider for OpenWeatherMapProvider {
             Some(StdDuration::from_secs_f64(
                 config["timeout_s"]
                     .as_f64().expect("timeout_s is not an f64")
-            ))  
+            ))
         };
 
         OpenWeatherMapProvider {

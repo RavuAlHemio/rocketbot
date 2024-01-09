@@ -423,7 +423,7 @@ pub(crate) async fn handle_bim_vehicle_status(request: &Request<Body>) -> Result
                     Some(Some(bd)) => bd,
                     _ => &empty_database,
                 };
-    
+
                 let rows_res = db_conn.query(
                     "
                         SELECT
@@ -470,14 +470,14 @@ pub(crate) async fn handle_bim_vehicle_status(request: &Request<Body>) -> Result
                         return return_500();
                     },
                 };
-    
+
                 let mut vehicle_to_last_rides: BTreeMap<VehicleNumber, Vec<RiderAndUtcTime>> = BTreeMap::new();
                 for row in rows {
                     let vehicle_number_raw: String = row.get(0);
                     let time: DateTime<Utc> = row.get(1);
                     let rider_username: String = row.get(2);
                     let line: Option<String> = row.get(3);
-    
+
                     let vehicle_number = VehicleNumber::from_string(vehicle_number_raw);
                     let last = RiderAndUtcTime {
                         rider: rider_username,
@@ -526,7 +526,7 @@ pub(crate) async fn handle_bim_vehicle_status(request: &Request<Body>) -> Result
                     let fixed_coupling: Vec<VehicleNumber> = bim_database.get(&vehicle_number)
                         .map(|fc| fc.fixed_coupling.iter().map(|v| v.clone()).collect())
                         .unwrap_or_else(|| Vec::with_capacity(0));
-    
+
                     vehicles.insert(
                         vehicle_number,
                         VehicleStatusEntry {
@@ -537,7 +537,7 @@ pub(crate) async fn handle_bim_vehicle_status(request: &Request<Body>) -> Result
                         },
                     );
                 }
-    
+
                 for (vehicle_number, vehicle_entry) in bim_database.iter() {
                     if vehicles.contains_key(vehicle_number) {
                         continue;

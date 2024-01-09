@@ -184,9 +184,9 @@ fn f64_multi_f64<F, const ARG_COUNT: usize>(name: &'static str, inner: F) -> Bui
         if operands.len() != ARG_COUNT {
             return Err(SimplificationError::IncorrectArgCount(name.to_owned(), ARG_COUNT, operands.len()));
         }
-        
+
         let mut f64_operands = [0.0; ARG_COUNT];
-        for i in 0..ARG_COUNT { 
+        for i in 0..ARG_COUNT {
             let f64_op = match &operands[i].node {
                 AstNode::Number(n) => {
                     match &n.value {

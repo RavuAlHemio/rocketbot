@@ -59,6 +59,6 @@ pub(crate) fn version() -> String {
         }
     }
     write!(ret, " Build {}", buf.build_number).unwrap();
-    
+
     ret
 }
