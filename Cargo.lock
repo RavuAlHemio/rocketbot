@@ -1196,6 +1196,15 @@ dependencies = [
 ]
 
 [[package]]
+name = "julian"
+version = "0.5.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "66f9e2d6a37d6895e94c520a4a3b83bfc110393ae3d086226baf28827c3722c4"
+dependencies = [
+ "thiserror",
+]
+
+[[package]]
 name = "kamadak-exif"
 version = "0.5.5"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -2294,6 +2303,7 @@ version = "0.1.0"
 dependencies = [
  "async-trait",
  "chrono",
+ "julian",
  "log",
  "once_cell",
  "regex",
