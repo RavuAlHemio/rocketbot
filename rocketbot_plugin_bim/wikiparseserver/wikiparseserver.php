@@ -240,8 +240,14 @@ function runService(string $strListenIP, int $intPort) {
         throw SocketException::makeFromLastGlobal("create socket");
     }
 
-    // allow reusing port
-    \socket_set_option($objSock, SOL_SOCKET, SO_REUSEPORT, 1);
+    // TIME_WAIT was a mistake
+    if (defined("SO_REUSEPORT")) {
+        // allow reusing port
+        \socket_set_option($objSock, SOL_SOCKET, SO_REUSEPORT, 1);
+    } else if (defined("SO_REUSEADDR")) {
+        // allow reusing socket address (address + port)
+        \socket_set_option($objSock, SOL_SOCKET, SO_REUSEADDR, 1);
+    }
 
     // bind
     if (!\socket_bind($objSock, $strListenIP, $intPort)) {
