@@ -244,11 +244,96 @@ pub(crate) fn process_table<F>(vehicles: &mut BTreeMap<VehicleNumber, VehicleInf
 }
 
 
+/// Walks up the XML tree starting from descendant_element, recursively collects the <section>s in
+/// which this element is contained, and returns their headings (text within the first child of the
+/// section if it is a <h#> element).
+fn get_title_stack<'a>(descendant_element: Element<'a>) -> Vec<&'a str> {
+    let mut current_element = descendant_element;
+    let mut ret = Vec::new();
+    loop {
+        let parent_element_opt = current_element
+            .parent()
+            .and_then(|p| p.element());
+        current_element = match parent_element_opt {
+            Some(e) => e,
+            None => {
+                // it is done
+                break;
+            },
+        };
+        let current_name = current_element.name();
+        if current_name.namespace_uri().is_some() {
+            continue;
+        }
+        if current_name.local_part() != "section" {
+            continue;
+        }
+
+        // this is a section element; find a heading child
+        let first_child_opt = current_element
+            .children()
+            .iter()
+            .filter_map(|c| c.element())
+            .nth(0);
+        let first_child = match first_child_opt {
+            Some(fc) => fc,
+            None => continue,
+        };
+        let child_name = first_child.name();
+        if child_name.namespace_uri().is_some() {
+            continue;
+        }
+        let child_local = child_name.local_part();
+        if child_local.len() != 2 {
+            continue;
+        }
+        if !child_local.starts_with('h') {
+            continue;
+        }
+        if !child_local.chars().skip(1).all(|c| c.is_ascii_digit()) {
+            continue;
+        }
+
+        // okay, we got a heading; remember its text
+        let first_child_text_opt = first_child.children()
+            .iter()
+            .filter_map(|c| c.text())
+            .nth(0);
+        let first_child_text = match first_child_text_opt {
+            Some(fct) => fct.text(),
+            None => "",
+        };
+        ret.push(first_child_text);
+    }
+    ret.reverse();
+    ret
+}
+
+fn section_stack_matches(section_stack: &[&str], section_stack_regexes: &[Regex]) -> bool {
+    if section_stack.len() != section_stack_regexes.len() {
+        return false;
+    }
+    for (section, regex) in section_stack.iter().zip(section_stack_regexes.iter()) {
+        if !regex.is_match(section) {
+            return false;
+        }
+    }
+    true
+}
+
 pub(crate) async fn process_page<F, G>(page_url_pattern: &str, page_config: &PageConfig, parser: &mut WikiParser, mut process_table: F, row_data_to_vehicles: G) -> BTreeMap<VehicleNumber, VehicleInfo>
     where
         F : FnMut(&mut BTreeMap<VehicleNumber, VehicleInfo>, Element, &PageConfig, G),
         G : FnMut(&PageConfig, Vec<(String, String)>) -> BTreeMap<VehicleNumber, VehicleInfo> + Copy,
 {
+    let section_stack_regexes: Vec<Vec<Regex>> = page_config.section_stack_regexes
+        .iter()
+        .map(|ssr| ssr
+            .iter()
+            .map(|s| Regex::new(s).expect("failed to compile section stack regex"))
+            .collect()
+        )
+        .collect();
     let page_json = obtain_content(page_url_pattern, &page_config.title).await;
 
     // deserialize
@@ -291,6 +376,17 @@ pub(crate) async fn process_page<F, G>(page_url_pattern: &str, page_config: &Pag
     if let sxd_xpath::Value::Nodeset(table_nodes) = tables {
         for table_node in table_nodes {
             let table_elem = table_node.element().expect("table node is not an element");
+
+            if section_stack_regexes.len() > 0 {
+                // we only want tables in specific sections
+                let section_stack = get_title_stack(table_elem);
+                eprintln!("  table in section {:?}", section_stack);
+                if section_stack_regexes.iter().all(|ssr| !section_stack_matches(&section_stack, ssr)) {
+                    // we are not interested in this table
+                    continue;
+                }
+            }
+
             process_table(&mut vehicles, table_elem, &page_config, row_data_to_vehicles);
         }
     }

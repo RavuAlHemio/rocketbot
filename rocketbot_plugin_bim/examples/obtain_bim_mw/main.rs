@@ -53,6 +53,7 @@ pub(crate) struct PageConfig {
     #[serde(default)] pub common_type_code: Option<String>,
     #[serde(default)] pub specific_type_code_property: Option<String>,
     #[serde(default)] pub type_code_matcher: Option<MatcherTransformerConfig>,
+    #[serde(default)] pub section_stack_regexes: Vec<Vec<String>>,
 }
 
 #[derive(Clone, Debug, Deserialize, Serialize)]
