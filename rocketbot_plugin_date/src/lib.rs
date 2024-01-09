@@ -166,6 +166,16 @@ impl RocketBotPlugin for DatePlugin {
         }
     }
 
+    async fn get_command_help(&self, command_name: &str) -> Option<String> {
+        if command_name == "days" {
+            Some(include_str!("../help/days.md").to_owned())
+        } else if command_name == "weekday" {
+            Some(include_str!("../help/weekday.md").to_owned())
+        } else {
+            None
+        }
+    }
+
     async fn configuration_updated(&self, _new_config: serde_json::Value) -> bool {
         // no config to update
         true
