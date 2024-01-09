@@ -9,6 +9,7 @@ use Wikimedia\Parsoid\Mocks\MockDataAccess;
 use Wikimedia\Parsoid\Mocks\MockPageConfig;
 use Wikimedia\Parsoid\Mocks\MockPageContent;
 use Wikimedia\Parsoid\Mocks\MockSiteConfig;
+use Wikimedia\Parsoid\Utils\Utils;
 
 
 class SocketException extends \Exception {
@@ -43,6 +44,43 @@ class ParseServerDataAccess extends MockDataAccess {
 
         return parent::parseWikitext($pageConfig, $metadata, $wikitext);
     }
+
+    /**
+     * @param string|LinkTarget $title
+     * @return string
+     */
+    protected function wpsNormTitle( $title ): string {
+        if ( is_int( $title ) ) {
+            $title = "{$title}";
+        }
+        if ( !is_string( $title ) ) {
+            $title = Title::newFromLinkTarget(
+                $title, $this->siteConfig
+            );
+            return $title->getPrefixedDBKey();
+        }
+        return strtr( $title, ' ', '_' );
+    }
+
+    /** @inheritDoc */
+    public function getPageInfo( $pageConfigOrTitle, array $titles ): array {
+        $ret = [];
+        foreach ( $titles as $title ) {
+            // we copied this out only to change this line:
+            $normTitle = $this->wpsNormTitle( $title );
+            $pageData = self::$PAGE_DATA[$normTitle] ?? null;
+            $ret[$title] = [
+                'pageId' => $pageData['pageid'] ?? null,
+                'revId' => $pageData['revid'] ?? null,
+                'missing' => $pageData === null,
+                'known' => $pageData !== null || ( $pageData['known'] ?? false ),
+                'redirect' => $pageData['redirect'] ?? false,
+                'linkclasses' => $pageData['linkclasses'] ?? [],
+            ];
+        }
+
+        return $ret;
+    }
 }
 
 class ParseServerSiteConfig extends MockSiteConfig {
@@ -69,12 +107,15 @@ class ParseServerSiteConfig extends MockSiteConfig {
 }
 
 
-function makeParsoid(): Parsoid {
+function makeSiteConfig(): ParseServerSiteConfig {
     $arrConfigOpts = [];
+    return new ParseServerSiteConfig($arrConfigOpts);
+}
 
-    $objSiteConfig = new ParseServerSiteConfig($arrConfigOpts);
-    $objDataAccess = new ParseServerDataAccess($arrConfigOpts);
 
+function makeParsoid(ParseServerSiteConfig $objSiteConfig): Parsoid {
+    $arrConfigOpts = [];
+    $objDataAccess = new ParseServerDataAccess($objSiteConfig, $arrConfigOpts);
     return new Parsoid($objSiteConfig, $objDataAccess);
 }
 
@@ -129,7 +170,7 @@ function int32ToBytes(int $intData): string {
 }
 
 
-function handleClient(Socket $objConn, Parsoid $objParsoid): bool {
+function handleClient(Socket $objConn, ParseServerSiteConfig $objSiteConfig, Parsoid $objParsoid): bool {
     // read magic
     $strExpectedMagic = "WiKiCrUnCh";
     $strEndMagic = "EnOuGhWiKi";
@@ -163,10 +204,10 @@ function handleClient(Socket $objConn, Parsoid $objParsoid): bool {
         'title' => $strTitle,
     ];
     $objPageContent = new MockPageContent(['main' => ['content' => $strWikitext]]);
-    $objPageConfig = new MockPageConfig($arrPageOpts, $objPageContent);
+    $objPageConfig = new MockPageConfig($objSiteConfig, $arrPageOpts, $objPageContent);
     $arrParsoidOpts = [
         'body_only' => false,
-        'wrapSections' => false,
+        'wrapSections' => true,
     ];
 
     $strHtml = '';
@@ -190,13 +231,17 @@ function handleClient(Socket $objConn, Parsoid $objParsoid): bool {
 
 function runService(string $strListenIP, int $intPort) {
     // make a parsoid
-    $objParsoid = makeParsoid();
+    $objSiteConfig = makeSiteConfig();
+    $objParsoid = makeParsoid($objSiteConfig);
 
     // open a socket
     $objSock = \socket_create(AF_INET, SOCK_STREAM, SOL_TCP);
     if ($objSock === false) {
         throw SocketException::makeFromLastGlobal("create socket");
     }
+
+    // allow reusing port
+    \socket_set_option($objSock, SOL_SOCKET, SO_REUSEPORT, 1);
 
     // bind
     if (!\socket_bind($objSock, $strListenIP, $intPort)) {
@@ -212,7 +257,7 @@ function runService(string $strListenIP, int $intPort) {
         try {
             // handle the same client until we're done
             for (;;) {
-                $blnRes = handleClient($objConn, $objParsoid);
+                $blnRes = handleClient($objConn, $objSiteConfig, $objParsoid);
                 if (!$blnRes) {
                     break;
                 }
