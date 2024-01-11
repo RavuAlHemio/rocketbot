@@ -1,4 +1,4 @@
-use std::collections::BTreeMap;
+use std::collections::{BTreeMap, HashMap};
 use std::io::Read;
 use std::fs::File;
 
@@ -321,7 +321,7 @@ fn section_stack_matches(section_stack: &[&str], section_stack_regexes: &[Regex]
     true
 }
 
-pub(crate) async fn process_page<F, G>(page_url_pattern: &str, page_config: &PageConfig, parser: &mut WikiParser, mut process_table: F, row_data_to_vehicles: G) -> BTreeMap<VehicleNumber, VehicleInfo>
+pub(crate) async fn process_page<F, G>(page_url_pattern: &str, page_config: &PageConfig, parser: &mut WikiParser, page_cache: &mut HashMap<String, String>, mut process_table: F, row_data_to_vehicles: G) -> BTreeMap<VehicleNumber, VehicleInfo>
     where
         F : FnMut(&mut BTreeMap<VehicleNumber, VehicleInfo>, Element, &PageConfig, G),
         G : FnMut(&PageConfig, Vec<(String, String)>) -> BTreeMap<VehicleNumber, VehicleInfo> + Copy,
@@ -334,7 +334,13 @@ pub(crate) async fn process_page<F, G>(page_url_pattern: &str, page_config: &Pag
             .collect()
         )
         .collect();
-    let page_json = obtain_content(page_url_pattern, &page_config.title).await;
+    let page_json = if let Some(page_content) = page_cache.get(&page_config.title) {
+        page_content.clone()
+    } else {
+        let fresh_page_content = obtain_content(page_url_pattern, &page_config.title).await;
+        page_cache.insert(page_config.title.clone(), fresh_page_content.clone());
+        fresh_page_content
+    };
 
     // deserialize
     let page: serde_json::Value = serde_json::from_str(&page_json)

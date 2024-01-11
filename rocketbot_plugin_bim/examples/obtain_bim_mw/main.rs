@@ -4,7 +4,7 @@
 mod extract_info;
 
 
-use std::collections::BTreeMap;
+use std::collections::{BTreeMap, HashMap};
 use std::env::args_os;
 use std::fs::File;
 use std::path::PathBuf;
@@ -106,12 +106,14 @@ async fn main() {
             parser
         };
 
+        let mut page_cache = HashMap::new();
         for page_source in &config.page_sources {
             for page in &page_source.pages {
                 let mut vehicles = process_page(
                     &page_source.page_url_pattern,
                     &page,
                     &mut parser,
+                    &mut page_cache,
                     process_table,
                     row_data_to_trams,
                 ).await;
