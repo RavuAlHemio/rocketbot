@@ -18,7 +18,7 @@ use chrono::{
     Weekday,
 };
 use log::{debug, error, info};
-use once_cell::sync::OnceCell;
+use once_cell::sync::{Lazy, OnceCell};
 use rand::{Rng, thread_rng};
 use regex::Regex;
 use rocketbot_bim_common::{CouplingMode, VehicleInfo, VehicleNumber};
@@ -43,6 +43,7 @@ use crate::table_draw::{draw_ride_table, Ride, RideTableData, RideTableVehicle, 
 
 const INVISIBLE_JOINER: &str = "\u{2060}"; // WORD JOINER
 const TIMESTAMP_INPUT_FORMAT: &str = "%Y-%m-%d %H:%M:%S%.f";
+static DIGITS_RE: Lazy<Regex> = Lazy::new(|| Regex::new("[0-9]+").expect("failed to compile digits regex"));
 
 
 #[derive(Clone, Copy, Debug, Eq, Hash, Ord, PartialEq, PartialOrd)]
@@ -310,6 +311,7 @@ enum EmojiReaction {
     SamePersonRecently,
     VehicleChangedHands,
     FirstRideInVehicle,
+    Divisible,
 }
 impl EmojiReaction {
     pub fn from_str(s: &str) -> Option<EmojiReaction> {
@@ -318,6 +320,7 @@ impl EmojiReaction {
             "same-person-recently" => Some(EmojiReaction::SamePersonRecently),
             "vehicle-changed-hands" => Some(EmojiReaction::VehicleChangedHands),
             "first-ride-in-vehicle" => Some(EmojiReaction::FirstRideInVehicle),
+            "divisible" => Some(EmojiReaction::Divisible),
             _ => None,
         }
     }
@@ -802,6 +805,15 @@ impl BimPlugin {
                         continue;
                     }
                     vehicle_reaction_emoji.push(vehicle_emoji_reaction.emoji.clone());
+                }
+
+                if let Some(divisible_emoji) = config_guard.emoji_reactions.get(&EmojiReaction::Divisible) {
+                    if do_vehicle_number_digits_divide_line_digits(
+                        &vehicle.vehicle_number,
+                        ride_table.line.as_ref(),
+                    ) {
+                        vehicle_reaction_emoji.push(divisible_emoji.clone());
+                    }
                 }
             }
             if let Some(emoji_short_name) = config_guard.emoji_reactions.get(&emoji_reaction) {
@@ -4720,4 +4732,35 @@ fn get_night_owl_date<D: Datelike + Timelike>(date_time: &D) -> NaiveDate {
     } else {
         naive_date
     }
+}
+
+
+/// Returns whether the sole digit block in the given vehicle number is divisible by the sole digit
+/// block in the given line number.
+///
+/// Returns `false` if there are zero or multiple digit blocks in the vehicle number or line number,
+/// or if no line is given.
+fn do_vehicle_number_digits_divide_line_digits(
+    vehicle_number: &String,
+    line_opt: Option<&String>,
+) -> bool {
+    let Some(line) = line_opt else { return false };
+    let vehicle_digit_blocks: Vec<regex::Match> = DIGITS_RE.find_iter(vehicle_number)
+        .collect();
+    if vehicle_digit_blocks.len() != 1 {
+        return false;
+    }
+    let line_digit_blocks: Vec<regex::Match> = DIGITS_RE.find_iter(line)
+        .collect();
+    if line_digit_blocks.len() != 1 {
+        return false;
+    }
+
+    let Ok(vehicle_number) = vehicle_digit_blocks[0].as_str().parse::<u64>() else { return false };
+    let Ok(line_number) = line_digit_blocks[0].as_str().parse::<u64>() else { return false };
+    if line_number == 0 {
+        return false;
+    }
+
+    vehicle_number % line_number == 0
 }
