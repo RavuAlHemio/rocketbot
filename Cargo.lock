@@ -2230,6 +2230,7 @@ dependencies = [
  "ciborium",
  "clap",
  "form_urlencoded",
+ "futures-util",
  "indexmap",
  "log",
  "once_cell",
