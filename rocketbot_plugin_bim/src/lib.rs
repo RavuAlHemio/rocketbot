@@ -42,7 +42,28 @@ use crate::table_draw::{draw_ride_table, Ride, RideTableData, RideTableVehicle, 
 
 
 const INVISIBLE_JOINER: &str = "\u{2060}"; // WORD JOINER
-const TIMESTAMP_INPUT_FORMAT: &str = "%Y-%m-%d %H:%M:%S%.f";
+const TIMESTAMP_INPUT_FORMAT: &str = "YYYY-MM-DD hh:mm[:ss[.fff]]";
+static TIMESTAMP_RE: Lazy<Regex> = Lazy::new(|| Regex::new(concat!(
+    "^",
+    "(?P<year>[0-9]{4})",
+    "-",
+    "(?P<month>0[1-9]|1[0-2])",
+    "-",
+    "(?P<day>0[1-9]|[12][0-9]|3[01])",
+    "[ T]",
+    "(?P<hour>[01][0-9]|2[0-3])",
+    ":",
+    "(?P<minute>[0-5][0-9])",
+    "(?:",
+        ":",
+        "(?P<second>[0-5][0-9])",
+        "(?:",
+            "[.]",
+            "(?P<secfrac>[0-9]+)",
+        ")?",
+    ")?",
+    "$",
+)).expect("failed to compile timestamp regex"));
 static DIGITS_RE: Lazy<Regex> = Lazy::new(|| Regex::new("[0-9]+").expect("failed to compile digits regex"));
 
 
@@ -3644,9 +3665,9 @@ impl BimPlugin {
             None => return None,
         };
 
-        let ndt = match NaiveDateTime::parse_from_str(timestamp_str, TIMESTAMP_INPUT_FORMAT) {
-            Ok(ndt) => ndt,
-            Err(_) => {
+        let ndt = match try_parse_timestamp(timestamp_str) {
+            Some(ndt) => ndt,
+            None => {
                 send_channel_message!(
                     interface,
                     channel_name,
@@ -4732,6 +4753,50 @@ fn get_night_owl_date<D: Datelike + Timelike>(date_time: &D) -> NaiveDate {
     } else {
         naive_date
     }
+}
+
+
+/// Attempts to parse the given timestamp string.
+fn try_parse_timestamp(timestamp_str: &str) -> Option<NaiveDateTime> {
+    let caps = TIMESTAMP_RE.captures(timestamp_str)?;
+    let year: i32 = caps
+        .name("year").expect("'year' group missing")
+        .as_str().parse().ok()?;
+    let month: u32 = caps
+        .name("month").expect("'month' group missing")
+        .as_str().parse().ok()?;
+    let day: u32 = caps
+        .name("day").expect("'day' group missing")
+        .as_str().parse().ok()?;
+    let hour: u32 = caps
+        .name("hour").expect("'hour' group missing")
+        .as_str().parse().ok()?;
+    let minute: u32 = caps
+        .name("minute").expect("'minute' group missing")
+        .as_str().parse().ok()?;
+    let second: u32 = match caps.name("second") {
+        Some(sec) => sec.as_str().parse().ok()?,
+        None => 0,
+    };
+    let secfrac_str = match caps.name("secfrac") {
+        Some(f) => f.as_str(),
+        None => "",
+    };
+
+    // normalize second fractions to nanoseconds (9 digits)
+    let nano_string = if secfrac_str.len() > 9 {
+        secfrac_str[0..9].to_owned()
+    } else {
+        let mut s = secfrac_str.to_owned();
+        while s.len() < 9 {
+            s.push('0');
+        }
+        s
+    };
+    let nano: u32 = nano_string.parse().ok()?;
+
+    NaiveDate::from_ymd_opt(year, month, day)?
+        .and_hms_nano_opt(hour, minute, second, nano)
 }
 
 
