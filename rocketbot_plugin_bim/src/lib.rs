@@ -845,13 +845,51 @@ impl BimPlugin {
             }
         }
 
-        // signal to update achievements
-        if config_guard.achievements_active {
-            let data = UpdateAchievementsData {
-                channel: channel_message.channel.name.clone(),
-                explicit: false,
-            };
-            let _ = self.achievement_update_sender.send(data);
+        // check if there is a fixed coupling
+        if !sandbox {
+            if let Some(bim_database) = bim_database_opt.as_ref() {
+                let mut any_fixed_coupling = false;
+                let mut all_vehicle_numbers = HashSet::new();
+
+                for vehicle in &ride_table.vehicles {
+                    let nss_number = VehicleNumber::from_string(vehicle.vehicle_number.clone());
+                    all_vehicle_numbers.insert(nss_number.clone());
+                    if let Some(db_vehicle) = bim_database.get(&nss_number) {
+                        if db_vehicle.fixed_coupling.len() > 0 {
+                            any_fixed_coupling = true;
+                            for fixed_number in &db_vehicle.fixed_coupling {
+                                all_vehicle_numbers.insert(fixed_number.clone());
+                            }
+                        }
+                    }
+                }
+
+                if any_fixed_coupling {
+                    // okay; do all those vehicles belong to this rider?
+                    let avbtr_opt = all_vehicles_have_given_last_rider(
+                        &mut ride_conn,
+                        company,
+                        &all_vehicle_numbers,
+                        rider_username,
+                    ).await;
+                    if avbtr_opt == Some(true) {
+                        send_channel_message!(
+                            interface,
+                            &channel_message.channel.name,
+                            &format!("Fun fact: all vehicles in the fixed coupling belong to {}!", rider_username),
+                        ).await;
+                    }
+                }
+            }
+
+            // signal to update achievements
+            if config_guard.achievements_active {
+                let data = UpdateAchievementsData {
+                    channel: channel_message.channel.name.clone(),
+                    explicit: false,
+                };
+                let _ = self.achievement_update_sender.send(data);
+            }
         }
     }
 
@@ -4828,4 +4866,64 @@ fn do_vehicle_number_digits_divide_line_digits(
     }
 
     vehicle_number % line_number == 0
+}
+
+/// Returns whether all vehicles in the given set have the given last rider.
+async fn all_vehicles_have_given_last_rider(
+    conn: &tokio_postgres::Client,
+    company: &str,
+    all_vehicle_numbers: &HashSet<VehicleNumber>,
+    last_rider: &str,
+) -> Option<bool> {
+    // prepare statement
+    let last_rider_stmt_res = conn.prepare(
+        "
+            SELECT rarv.rider_username
+            FROM bim.rides_and_ridden_vehicles rarv
+            WHERE rarv.company = $1
+            AND rarv.vehicle_number = $2
+            AND NOT EXISTS (
+                SELECT 1
+                FROM bim.rides_and_ridden_vehicles rarv2
+                WHERE rarv2.company = rarv.company
+                AND rarv2.vehicle_number = rarv.vehicle_number
+                AND rarv2.\"timestamp\" > rarv.\"timestamp\"
+            )
+        "
+    ).await;
+    let last_rider_stmt = match last_rider_stmt_res {
+        Ok(lrs) => lrs,
+        Err(e) => {
+            error!("error preparing last-rider statement: {}", e);
+            return None;
+        },
+    };
+
+    // run through all vehicles
+    for vehicle_number in all_vehicle_numbers {
+        let row_opt_res = conn.query_opt(
+            &last_rider_stmt,
+            &[&company, &**vehicle_number],
+        ).await;
+        let row = match row_opt_res {
+            Ok(Some(r)) => r,
+            Ok(None) => {
+                // this vehicle has no last rider
+                // => the rider is not the last rider of all the vehicles
+                return Some(false);
+            },
+            Err(e) => {
+                error!("error obtaining last rider of company {:?} vehicle {:?}: {}", company, vehicle_number, e);
+                return None;
+            },
+        };
+        let vehicle_last_rider: String = row.get(0);
+        if &vehicle_last_rider != last_rider {
+            // different last rider than the one we are checking for
+            return Some(false);
+        }
+    }
+
+    // yup, they are the last rider on all these vehicles
+    Some(true)
 }
