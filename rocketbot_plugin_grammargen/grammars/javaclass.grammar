@@ -1,0 +1,44 @@
+// storrowed from https://gist.github.com/hay/1351230 / https://projects.haykranen.nl/java/
+
+javaclass : word_cluster word_cluster word_cluster* ;
+
+word_cluster : any_word* word ;
+
+any_word
+    : <93> word
+    | <46> not_last_word
+    ;
+
+word
+    : "Factory" | "Bean" | "Wrapper" | "Visitor" | "Model" | "Singleton"
+    | "Method" | "Configuration" | "Exception" | "Error" | "Property" | "Value"
+    | "Identifier" | "Attribute" | "Authentication" | "Policy" | "Container"
+    | "Order" | "Info" | "Parameter" | "Request" | "Adapter" | "Bridge"
+    | "Decorator" | "Facade" | "Proxy" | "Worker"
+    | "Interpreter" | "Iterator" | "Observer"
+    | "State" | "Strategy" | "Template" | "Comparator" | "Clone" | "Task"
+    | "Resolver" | "Candidate" | "Expression" | "Predicate"
+    | "Thread" | "Pool" | "Descriptor" | "Interceptor" | "Definition"
+    | "Getter" | "Setter" | "Listener" | "Proccesor" | "Printer"
+    | "Prototype" | "Composer" | "Event" | "Helper" | "Utils"
+    | "Invocation" | "Exporter" | "Importer" | "Serializer" | "Callback"
+    | "Tag" | "Context" | "Mapping" | "Advisor" | "Filter" | "Field" | "Test"
+    | "Tests" | "Connection" | "Annotation" | "Service" | "Repository"
+    | "Stub" | "Mock" | "Instance" | "Dispatcher" | "Client" | "Server"
+    | "Message" | "Map" | "List" | "Collection" | "Queue" | "Manager"
+    | "Database" | "Reponse" | "Broadcaster"
+    | "Watcher" | "Schema" | "Mapper" | "Publisher" | "Consumer" | "Producer"
+    ;
+
+not_last_word
+    : "Composite" | "Invalid" | "Supported" | "Focus" | "Traversal" | "Abstract"
+    | "Transformer" | "Common" | "Concrete" | "Autowire" | "Simple" | "Aware"
+    | "Aspect" | "Principal" | "Driven" | "Interruptible" | "Batch"
+    | "Prepared" | "Statement" | "Remote" | "Stateless" | "Session"
+    | "Transaction" | "Transactional" | "Based" | "Meta" | "Data" | "Jms"
+    | "Readable" | "Literal" | "Reflective" | "Scope" | "Multipart" | "Xml"
+    | "Generic" | "Interface" | "Advisable" | "Observable" | "Identifiable"
+    | "Iterable" | "Distributed" | "Notification" | "Failure" | "Type"
+    | "Http" | "Jdbc"
+    ;
+
