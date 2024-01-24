@@ -87,11 +87,36 @@ struct BloodSugarEntry {
 
     #[serde(with = "serde_rational")]
     pub sugar_mmol_per_l: Rational64,
-
-    #[serde(with = "serde_rational")]
-    pub sugar_mg_per_dl: Rational64,
+}
+impl BloodSugarEntry {
+    pub fn sugar_mg_per_dl(&self) -> Rational64 {
+        self.sugar_mmol_per_l * 18
+    }
 }
 impl BeepeeMeasurement for BloodSugarEntry {
+    fn id(&self) -> i64 { self.id }
+    fn timestamp(&self) -> DateTime<Local> { self.timestamp }
+}
+
+
+#[derive(Clone, Debug, Deserialize, PartialEq, Serialize)]
+struct LongTermBloodSugarEntry {
+    pub id: i64,
+
+    #[serde(rename = "zoned_timestamp", with = "serde_date_string")]
+    pub timestamp: DateTime<Local>,
+
+    #[serde(with = "serde_rational")]
+    pub hba1c_mmol_per_mol: Rational64,
+}
+impl LongTermBloodSugarEntry {
+    pub fn hba1c_dcct_percent(&self) -> Rational64 {
+        let additive_factor = Rational64::new(214, 100);
+        let multiplicative_factor = Rational64::new(10_929, 1_000);
+        (self.hba1c_mmol_per_mol / multiplicative_factor) + additive_factor
+    }
+}
+impl BeepeeMeasurement for LongTermBloodSugarEntry {
     fn id(&self) -> i64 { self.id }
     fn timestamp(&self) -> DateTime<Local> { self.timestamp }
 }
@@ -110,6 +135,7 @@ pub(crate) struct BeepeeReader {
     mass_uri: Option<String>,
     temp_uri: Option<String>,
     sugar_uri: Option<String>,
+    long_term_sugar_uri: Option<String>,
     cutoff_days: Option<i64>,
 }
 impl BeepeeReader {
@@ -234,11 +260,31 @@ impl BeepeeReader {
             MeasurementResult::NoMeasurement => return MeasurementResult::NoMeasurement,
         };
 
-        let mg_per_dl = (*newest.sugar_mg_per_dl.numer() as f64) / (*newest.sugar_mg_per_dl.denom() as f64);
+        let mg_per_dl = (*newest.sugar_mg_per_dl().numer() as f64) / (*newest.sugar_mg_per_dl().denom() as f64);
         let mmol_per_l = (*newest.sugar_mmol_per_l.numer() as f64) / (*newest.sugar_mmol_per_l.denom() as f64);
         MeasurementResult::Measurement(format!(
             "{:.01} mg/dl ({:.01} mmol/l) at {}",
             mg_per_dl, mmol_per_l, newest.timestamp.format("%Y-%m-%d %H:%M:%S"),
+        ))
+    }
+
+    async fn get_long_term_blood_sugar(&self) -> MeasurementResult<String> {
+        let long_term_sugar_uri = match &self.long_term_sugar_uri {
+            Some(u) => u.as_str(),
+            None => return MeasurementResult::NoUri,
+        };
+        let newest: LongTermBloodSugarEntry = match self.get_json("long-term blood sugar", long_term_sugar_uri).await {
+            MeasurementResult::Measurement(m) => m,
+            MeasurementResult::NoUri => return MeasurementResult::NoUri,
+            MeasurementResult::FetchFailed => return MeasurementResult::FetchFailed,
+            MeasurementResult::NoMeasurement => return MeasurementResult::NoMeasurement,
+        };
+
+        let mmol_per_mol = (*newest.hba1c_mmol_per_mol.numer() as f64) / (*newest.hba1c_mmol_per_mol.denom() as f64);
+        let dcct_percent = (*newest.hba1c_dcct_percent().numer() as f64) / (*newest.hba1c_dcct_percent().denom() as f64);
+        MeasurementResult::Measurement(format!(
+            "{} mmol/mol ({:.01}%) at {}",
+            mmol_per_mol, dcct_percent, newest.timestamp.format("%Y-%m-%d %H:%M:%S"),
         ))
     }
 
@@ -260,6 +306,7 @@ impl VitalsReader for BeepeeReader {
         let mass_uri = Self::config_str(config, "mass_uri");
         let temp_uri = Self::config_str(config, "temp_uri");
         let sugar_uri = Self::config_str(config, "sugar_uri");
+        let long_term_sugar_uri = Self::config_str(config, "long_term_sugar_uri");
 
         let cutoff_days = if config["cutoff_days"].is_null() {
             None
@@ -272,6 +319,7 @@ impl VitalsReader for BeepeeReader {
             mass_uri,
             temp_uri,
             sugar_uri,
+            long_term_sugar_uri,
             cutoff_days,
         }
     }
@@ -303,6 +351,12 @@ impl VitalsReader for BeepeeReader {
             MeasurementResult::Measurement(m) => pieces.push(m),
             MeasurementResult::FetchFailed => failures.push("blood sugar"),
             MeasurementResult::NoMeasurement => empties.push("blood sugar"),
+        }
+        match self.get_long_term_blood_sugar().await {
+            MeasurementResult::NoUri => {},
+            MeasurementResult::Measurement(m) => pieces.push(m),
+            MeasurementResult::FetchFailed => failures.push("long-term blood sugar"),
+            MeasurementResult::NoMeasurement => empties.push("long-term blood sugar"),
         }
 
         if failures.len() > 0 {
