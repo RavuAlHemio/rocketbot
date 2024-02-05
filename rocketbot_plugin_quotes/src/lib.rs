@@ -546,7 +546,7 @@ RETURNING quote_id
             Some(qr) => qr,
             None => return,
         };
-        let show_rating = command.flags.contains("r");
+        let show_rating = !command.flags.contains("R");
         let case_sensitive = command.flags.contains("c");
 
         let relevant_quotes_res = self.get_filtered_quotes(
@@ -588,7 +588,7 @@ RETURNING quote_id
             Some(qr) => qr,
             None => return,
         };
-        let show_rating = command.flags.contains("r");
+        let show_rating = !command.flags.contains("R");
         let case_sensitive = command.flags.contains("c");
 
         {
@@ -813,7 +813,7 @@ impl RocketBotPlugin for QuotesPlugin {
         let mut quote_flags = HashSet::new();
         quote_flags.insert("any".to_owned());
         quote_flags.insert("bad".to_owned());
-        quote_flags.insert("r".to_owned());
+        quote_flags.insert("R".to_owned());
 
         let mut quote_case_flags = quote_flags.clone();
         quote_case_flags.insert("c".to_owned());
@@ -821,7 +821,7 @@ impl RocketBotPlugin for QuotesPlugin {
         let quote_command = CommandDefinitionBuilder::new(
             format!("{}quote", config_object.command_prefix),
             "quotes",
-            format!("{{cpfx}}{}quote [{{lopfx}}any|{{lopfx}}bad] [{{sopfx}}r] [{{sopfx}}c] [SUBSTRING]", config_object.command_prefix),
+            format!("{{cpfx}}{}quote [{{lopfx}}any|{{lopfx}}bad] [{{sopfx}}R] [{{sopfx}}c] [SUBSTRING]", config_object.command_prefix),
             "Outputs a random quote containing the given substring.",
         )
             .flags(Some(quote_case_flags.clone()))
@@ -831,7 +831,7 @@ impl RocketBotPlugin for QuotesPlugin {
         let quoteuser_command = CommandDefinitionBuilder::new(
             format!("{}quoteuser", config_object.command_prefix),
             "quotes",
-            format!("{{cpfx}}{}quoteuser [{{lopfx}}any|{{lopfx}}bad] [{{sopfx}}r] [{{sopfx}}c] USERNAME [SUBSTRING]", config_object.command_prefix),
+            format!("{{cpfx}}{}quoteuser [{{lopfx}}any|{{lopfx}}bad] [{{sopfx}}R] [{{sopfx}}c] USERNAME [SUBSTRING]", config_object.command_prefix),
             "Outputs a random quote from the given user containing the given substring.",
         )
             .flags(Some(quote_case_flags.clone()))
@@ -842,7 +842,7 @@ impl RocketBotPlugin for QuotesPlugin {
         let nextquote_command = CommandDefinitionBuilder::new(
             format!("{}nextquote", config_object.command_prefix),
             "quotes",
-            format!("{{cpfx}}{}nextquote [{{lopfx}}any|{{lopfx}}bad] [{{sopfx}}r]", config_object.command_prefix),
+            format!("{{cpfx}}{}nextquote [{{lopfx}}any|{{lopfx}}bad] [{{sopfx}}R]", config_object.command_prefix),
             "Displays the next quote from a pre-shuffled list of quotes.",
         )
             .flags(Some(quote_flags.clone()))
