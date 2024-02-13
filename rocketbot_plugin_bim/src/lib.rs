@@ -3490,7 +3490,7 @@ impl BimPlugin {
         let response_body = if riders_and_balances.len() > 0 {
             let mut ret = "Last-rider balances:".to_owned();
             for (rider, pm) in &riders_and_balances {
-                write_expect!(ret, "\n{}: +{} -{} = {:+}", rider, pm.plus, pm.minus, pm.plus - pm.minus);
+                write_expect!(ret, "\n{}: {:+} (+{} -{})", rider, pm.plus - pm.minus, pm.plus, pm.minus);
             }
             if first_ride_count > 0 {
                 write_expect!(ret, "\n({} first rides)", first_ride_count);
