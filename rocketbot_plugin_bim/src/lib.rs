@@ -356,6 +356,12 @@ struct VehicleEmojiReaction {
     pub only_ridden_vehicles: bool,
 }
 
+#[derive(Clone, Copy, Debug, Default, Eq, Hash, Ord, PartialEq, PartialOrd)]
+struct PlusMinus {
+    pub plus: i64,
+    pub minus: i64,
+}
+
 
 pub struct BimPlugin {
     interface: Weak<dyn RocketBotInterface>,
@@ -3449,7 +3455,7 @@ impl BimPlugin {
             },
         };
 
-        let mut rider_to_balance: BTreeMap<String, i64> = BTreeMap::new();
+        let mut rider_to_plus_minus: BTreeMap<String, PlusMinus> = BTreeMap::new();
         let mut first_ride_count: u64 = 0;
         for ride in rides {
             let prev_rider: Option<String> = ride.get(0);
@@ -3460,31 +3466,31 @@ impl BimPlugin {
                     continue;
                 }
 
-                let prev_balance = rider_to_balance
+                let prev_balance = rider_to_plus_minus
                     .entry(pr)
-                    .or_insert(0);
-                *prev_balance -= 1;
+                    .or_insert_with(|| PlusMinus::default());
+                prev_balance.minus += 1;
             } else {
                 first_ride_count += 1;
             }
 
-            let now_balance = rider_to_balance
+            let now_balance = rider_to_plus_minus
                 .entry(now_rider)
-                .or_insert(0);
-            *now_balance += 1;
+                .or_insert_with(|| PlusMinus::default());
+            now_balance.plus += 1;
         }
 
-        let mut riders_and_balances: Vec<(String, i64)> = rider_to_balance.iter()
-            .map(|(r, bal)| (r.clone(), *bal))
+        let mut riders_and_balances: Vec<(String, PlusMinus)> = rider_to_plus_minus.iter()
+            .map(|(r, pm)| (r.clone(), *pm))
             .collect();
         if sort_by_number {
-            riders_and_balances.sort_unstable_by_key(|(r, bal)| (-bal, r.clone()));
+            riders_and_balances.sort_unstable_by_key(|(r, pm)| (pm.minus - pm.plus, r.clone()));
         }
 
         let response_body = if riders_and_balances.len() > 0 {
             let mut ret = "Last-rider balances:".to_owned();
-            for (rider, balance) in &riders_and_balances {
-                write_expect!(ret, "\n{}: {:+}", rider, balance);
+            for (rider, pm) in &riders_and_balances {
+                write_expect!(ret, "\n{}: +{} -{} = {:+}", rider, pm.plus, pm.minus, pm.plus - pm.minus);
             }
             if first_ride_count > 0 {
                 write_expect!(ret, "\n({} first rides)", first_ride_count);
