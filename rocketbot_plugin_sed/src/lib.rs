@@ -333,6 +333,36 @@ impl RocketBotPlugin for SedPlugin {
         }
     }
 
+    async fn channel_message_edited(&self, channel_message: &ChannelMessage) {
+        let interface = match self.interface.upgrade() {
+            None => return,
+            Some(i) => i,
+        };
+
+        if !Self::get_message_body(channel_message).is_some() {
+            // I don't care about messages with no body
+            return;
+        }
+        if interface.is_my_user_id(&channel_message.message.sender.id).await {
+            // I don't care about my own messages
+            return;
+        }
+
+        // find the message in the backlog
+        let mut messages_guard = self.channel_name_to_last_messages
+            .lock().await;
+        let last_messages = messages_guard
+            .entry(channel_message.channel.name.clone())
+            .or_insert_with(|| Vec::new());
+        for last_message in last_messages {
+            if last_message.message.id == channel_message.message.id {
+                // this is it; replace it
+                *last_message = channel_message.clone();
+                break;
+            }
+        }
+    }
+
     async fn channel_command(&self, channel_message: &ChannelMessage, command: &CommandInstance) {
         if command.name == "sedparse" {
             self.channel_command_sedparse(channel_message, command).await
