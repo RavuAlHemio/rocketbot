@@ -20,7 +20,7 @@ use chrono::{
 use log::{debug, error, info};
 use once_cell::sync::{Lazy, OnceCell};
 use rand::{Rng, thread_rng};
-use regex::Regex;
+use regex::{Captures, Regex};
 use rocketbot_bim_common::{CouplingMode, VehicleInfo, VehicleNumber};
 use rocketbot_bim_common::achievements::ACHIEVEMENT_DEFINITIONS;
 use rocketbot_interface::{JsonValueExtensions, phrase_join, ResultExtensions, send_channel_message};
@@ -65,6 +65,7 @@ static TIMESTAMP_RE: Lazy<Regex> = Lazy::new(|| Regex::new(concat!(
     "$",
 )).expect("failed to compile timestamp regex"));
 static DIGITS_RE: Lazy<Regex> = Lazy::new(|| Regex::new("[0-9]+").expect("failed to compile digits regex"));
+static SPACES_RE: Lazy<Regex> = Lazy::new(|| Regex::new("\\s+").expect("failed to compile spaces regex"));
 
 
 #[derive(Clone, Copy, Debug, Eq, Hash, Ord, PartialEq, PartialOrd)]
@@ -4660,7 +4661,8 @@ fn spec_to_vehicles(
 ) -> Result<Vec<NewVehicleEntry>, IncrementBySpecError> {
     let vehicle_num_strs: Vec<&str> = vehicles_str.split("+").collect();
     let mut vehicle_nums_and_modes = Vec::new();
-    for &vehicle_num in &vehicle_num_strs {
+    for &vehicle_num_with_spaces in &vehicle_num_strs {
+        let vehicle_num = fold_whitespace_xml(vehicle_num_with_spaces);
         let (no_exclamation_vehicle_num, coupling_mode) = if let Some(nevn) = vehicle_num.strip_suffix("!") {
             (nevn, CouplingMode::Ridden)
         } else {
@@ -4669,7 +4671,7 @@ fn spec_to_vehicles(
             } else {
                 CouplingMode::Explicit
             };
-            (vehicle_num, coupling_mode)
+            (vehicle_num.as_ref(), coupling_mode)
         };
         let vehicle_num_owned = VehicleNumber::from_string(no_exclamation_vehicle_num.to_owned());
         if !allow_fixed_coupling_combos {
@@ -4683,7 +4685,7 @@ fn spec_to_vehicles(
                 }
             }
         }
-        vehicle_nums_and_modes.push((no_exclamation_vehicle_num, coupling_mode));
+        vehicle_nums_and_modes.push((no_exclamation_vehicle_num.to_owned(), coupling_mode));
     }
 
     // also count vehicles ridden in a fixed coupling with the given vehicle
@@ -4760,8 +4762,6 @@ pub async fn increment_rides_by_spec(
     sandbox: bool,
     highlight_coupled_rides: bool,
 ) -> Result<RideTableData, IncrementBySpecError> {
-    let spec_no_spaces = rides_spec.replace(" ", "");
-
     let vehicle_and_line_regex = company_def.vehicle_and_line_regex();
     let mut vehicle_cap_names = Vec::new();
     let mut line_cap_names = Vec::new();
@@ -4775,9 +4775,9 @@ pub async fn increment_rides_by_spec(
         }
     }
 
-    let caps = match vehicle_and_line_regex.captures(&spec_no_spaces) {
+    let caps = match vehicle_and_line_regex.captures(rides_spec.trim()) {
         Some(c) => c,
-        None => return Err(IncrementBySpecError::SpecParseFailure(spec_no_spaces)),
+        None => return Err(IncrementBySpecError::SpecParseFailure(rides_spec.to_owned())),
     };
 
     let vehicles_str_opt = vehicle_cap_names
@@ -4787,11 +4787,12 @@ pub async fn increment_rides_by_spec(
         .nth(0);
     let vehicles_str = vehicles_str_opt.expect("failed to capture vehicles");
 
-    let line_str_opt = line_cap_names
+    let line_cow_str_opt = line_cap_names
         .iter()
         .filter_map(|cn| caps.name(cn))
-        .map(|cap| cap.as_str())
+        .map(|cap| fold_whitespace_xml(cap.as_str()))
         .nth(0);
+    let line_str_opt = line_cow_str_opt.as_deref();
 
     let all_vehicles = spec_to_vehicles(
         vehicles_str,
@@ -4979,4 +4980,19 @@ async fn all_vehicles_have_given_last_rider(
 
     // yup, they are the last rider on all these vehicles
     Some(true)
+}
+
+/// Fold whitespace as in XML: leading whitespace is completely trimmed and any other whitespace is
+/// reduced to one occurrence of ' ' (U+0020).
+fn fold_whitespace_xml(s: &str) -> Cow<str> {
+    SPACES_RE.replace_all(s, |caps: &Captures| {
+        let m = caps.get(0).expect("Captures has no match 0?!");
+        if m.start() == 0 || m.end() == s.len() {
+            // leading/trailing whitespace (or both!)
+            ""
+        } else {
+            // interior whitespace
+            " "
+        }
+    })
 }
