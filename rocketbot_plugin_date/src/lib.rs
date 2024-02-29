@@ -210,16 +210,21 @@ impl DatePlugin {
             Some(i) => i,
         };
 
-        let year: i32 = match command.rest.trim().parse() {
-            Ok(y) => y,
-            Err(_) => {
-                send_channel_message!(
-                    interface,
-                    &channel_message.channel.name,
-                    "Is that a year?",
-                ).await;
-                return;
-            },
+        let year_str = command.rest.trim();
+        let year: i32 = if year_str.len() == 0 {
+            Local::now().year()
+        } else {
+            match year_str.parse() {
+                Ok(y) => y,
+                Err(_) => {
+                    send_channel_message!(
+                        interface,
+                        &channel_message.channel.name,
+                        "Is that a year?",
+                    ).await;
+                    return;
+                },
+            }
         };
         if year < 1 {
             send_channel_message!(
