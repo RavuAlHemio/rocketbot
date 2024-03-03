@@ -47,14 +47,14 @@ impl AnyMessage {
                     interface,
                     &c.channel.name,
                     message_body,
-                ).await
+                ).await;
             },
             Self::Private(p) => {
                 send_private_message!(
                     interface,
                     &p.conversation.id,
                     message_body,
-                ).await
+                ).await;
             },
         }
     }

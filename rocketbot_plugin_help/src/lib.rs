@@ -21,11 +21,11 @@ fn replace_config_placeholders(original: &str, command_name: &str, command_confi
 
 
 async fn respond_channel_message<'a>(interface: Arc<dyn RocketBotInterface + 'a>, orig_message: &ChannelMessage, response: &str) {
-    send_channel_message!(interface, &orig_message.channel.name, &response).await
+    send_channel_message!(interface, &orig_message.channel.name, &response).await;
 }
 
 async fn respond_private_message<'a>(interface: Arc<dyn RocketBotInterface + 'a>, orig_message: &PrivateMessage, response: &str) {
-    send_private_message!(interface, &orig_message.conversation.id, &response).await
+    send_private_message!(interface, &orig_message.conversation.id, &response).await;
 }
 
 fn collect_command_usages(

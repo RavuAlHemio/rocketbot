@@ -18,13 +18,17 @@ use crate::model::{
 #[async_trait]
 pub trait RocketBotInterface : Send + Sync {
     /// Sends a textual message to a channel.
-    async fn send_channel_message(&self, channel_name: &str, message: &str) {
+    ///
+    /// Returns the ID of the submitted message, or `None` if sending was aborted.
+    async fn send_channel_message(&self, channel_name: &str, message: &str) -> Option<String> {
         let message_object = OutgoingMessage::new(message.to_owned(), None, None);
         self.send_channel_message_advanced(channel_name, message_object).await
     }
 
     /// Sends a textual message to a private conversation.
-    async fn send_private_message(&self, conversation_id: &str, message: &str) {
+    ///
+    /// Returns the ID of the submitted message, or `None` if sending was aborted.
+    async fn send_private_message(&self, conversation_id: &str, message: &str) -> Option<String> {
         let message_object = OutgoingMessage::new(message.to_owned(), None, None);
         self.send_private_message_advanced(conversation_id, message_object).await
     }
@@ -36,10 +40,14 @@ pub trait RocketBotInterface : Send + Sync {
     }
 
     /// Sends a textual message to a channel, allowing for advanced options.
-    async fn send_channel_message_advanced(&self, channel_name: &str, message: OutgoingMessage);
+    ///
+    /// Returns the ID of the submitted message, or `None` if sending was aborted.
+    async fn send_channel_message_advanced(&self, channel_name: &str, message: OutgoingMessage) -> Option<String>;
 
     /// Sends a textual message to a private conversation, allowing for advanced options.
-    async fn send_private_message_advanced(&self, conversation_id: &str, message: OutgoingMessage);
+    ///
+    /// Returns the ID of the submitted message, or `None` if sending was aborted.
+    async fn send_private_message_advanced(&self, conversation_id: &str, message: OutgoingMessage) -> Option<String>;
 
     /// Sends a textual message to a person, allowing for advanced options.
     async fn send_private_message_to_user_advanced(&self, username: &str, message: OutgoingMessage);

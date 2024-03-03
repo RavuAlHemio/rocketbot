@@ -330,7 +330,7 @@ impl Clone for ServerConnection {
 }
 #[async_trait]
 impl RocketBotInterface for ServerConnection {
-    async fn send_channel_message_advanced(&self, channel_name: &str, message: OutgoingMessage) {
+    async fn send_channel_message_advanced(&self, channel_name: &str, message: OutgoingMessage) -> Option<String> {
         let channel_opt = {
             let cdb_guard = self.shared_state.subscribed_channels
                 .read().await;
@@ -340,13 +340,13 @@ impl RocketBotInterface for ServerConnection {
             c
         } else {
             warn!("trying to send message to unknown channel {:?}", channel_name);
-            return;
+            return None;
         };
 
-        do_send_channel_message(&self.shared_state, &channel, message).await;
+        do_send_channel_message(&self.shared_state, &channel, message).await
     }
 
-    async fn send_private_message_advanced(&self, conversation_id: &str, message: OutgoingMessage) {
+    async fn send_private_message_advanced(&self, conversation_id: &str, message: OutgoingMessage) -> Option<String> {
         let convo_opt = {
             let cdb_guard = self.shared_state.subscribed_channels
                 .read().await;
@@ -356,10 +356,10 @@ impl RocketBotInterface for ServerConnection {
             c
         } else {
             warn!("trying to send message to unknown private conversation {:?}", conversation_id);
-            return;
+            return None;
         };
 
-        do_send_private_message(&self.shared_state, &convo, message).await;
+        do_send_private_message(&self.shared_state, &convo, message).await
     }
 
     async fn send_private_message_to_user_advanced(&self, username: &str, message: OutgoingMessage) {
@@ -1273,7 +1273,7 @@ async fn run_connection(mut state: &mut ConnectionState) -> Result<(), WebSocket
     Ok(())
 }
 
-async fn do_send_any_message(shared_state: &SharedConnectionState, target_id: &str, message: OutgoingMessage) {
+async fn do_send_any_message(shared_state: &SharedConnectionState, target_id: &str, message: OutgoingMessage) -> String {
     // make an ID for this message
     let message_id = generate_message_id(&shared_state.rng).await;
     let mut message_body = serde_json::json!({
@@ -1300,6 +1300,7 @@ async fn do_send_any_message(shared_state: &SharedConnectionState, target_id: &s
     }
     shared_state.outgoing_sender.send(message_body)
         .expect("failed to enqueue channel message");
+    message_id
 }
 
 async fn do_send_any_message_with_attachment(shared_state: &SharedConnectionState, target_id: &str, message: OutgoingMessageWithAttachment) -> Option<String> {
@@ -1442,7 +1443,7 @@ async fn do_send_any_message_with_attachment(shared_state: &SharedConnectionStat
     Some(message_id)
 }
 
-async fn do_send_channel_message(shared_state: &SharedConnectionState, channel: &Channel, message: OutgoingMessage) {
+async fn do_send_channel_message(shared_state: &SharedConnectionState, channel: &Channel, message: OutgoingMessage) -> Option<String> {
     {
         // let the plugins review and possibly block the message
         let plugins = shared_state.plugins
@@ -1450,15 +1451,15 @@ async fn do_send_channel_message(shared_state: &SharedConnectionState, channel: 
         debug!("asking plugins to review a message");
         for plugin in plugins.iter() {
             if !plugin.plugin.outgoing_channel_message(&channel, &message).await {
-                return;
+                return None;
             }
         }
     }
 
-    do_send_any_message(shared_state, &channel.id, message).await
+    Some(do_send_any_message(shared_state, &channel.id, message).await)
 }
 
-async fn do_send_private_message(shared_state: &SharedConnectionState, convo: &PrivateConversation, message: OutgoingMessage) {
+async fn do_send_private_message(shared_state: &SharedConnectionState, convo: &PrivateConversation, message: OutgoingMessage) -> Option<String> {
     {
         // let the plugins review and possibly block the message
         let plugins = shared_state.plugins
@@ -1466,12 +1467,12 @@ async fn do_send_private_message(shared_state: &SharedConnectionState, convo: &P
         debug!("asking plugins to review a message");
         for plugin in plugins.iter() {
             if !plugin.plugin.outgoing_private_message(&convo, &message).await {
-                return;
+                return None;
             }
         }
     }
 
-    do_send_any_message(shared_state, &convo.id, message).await
+    Some(do_send_any_message(shared_state, &convo.id, message).await)
 }
 
 async fn do_send_channel_message_with_attachment(shared_state: &SharedConnectionState, channel: &Channel, message: OutgoingMessageWithAttachment) -> Option<String> {
