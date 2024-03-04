@@ -310,6 +310,7 @@ struct Config {
     allow_fixed_coupling_combos: bool,
     admin_usernames: HashSet<String>,
     max_edit_s: i64,
+    max_backdate_min: i64,
     achievements_active: bool,
     operator_databases: HashSet<String>,
     default_operator_region: String,
@@ -667,6 +668,8 @@ impl BimPlugin {
             .or_else(|| command.options.get("r"));
         let alternate_timestamp_string = command.options.get("timestamp")
             .or_else(|| command.options.get("t"));
+        let backdate = command.options.get("backdate")
+            .or_else(|| command.options.get("b"));
         let utc_timestamp = command.flags.contains("utc") || command.flags.contains("u");
         let sandbox = command.flags.contains("sandbox") || command.flags.contains("s");
 
@@ -677,6 +680,34 @@ impl BimPlugin {
                 "-r/--rider and -t/--timestamp can only be used by `bim` administrators!",
             ).await;
             return;
+        }
+        if alternate_timestamp_string.is_some() && backdate.is_some() {
+            send_channel_message!(
+                interface,
+                &channel_message.channel.name,
+                "-b/--backdate and -t/--timestamp cannot be specified at the same time!",
+            ).await;
+            return;
+        }
+        let mut backdate_min = 0;
+        if let Some(backdate_value) = backdate {
+            backdate_min = backdate_value.as_i64().expect("--backdate value not an i64");
+            if backdate_min < 0 {
+                send_channel_message!(
+                    interface,
+                    &channel_message.channel.name,
+                    "Hey, no forward-dating using the backdate functionality!",
+                ).await;
+                return;
+            }
+            if backdate_min > config_guard.max_backdate_min && !is_admin {
+                send_channel_message!(
+                    interface,
+                    &channel_message.channel.name,
+                    &format!("Rides can only be backdated by up to {} minutes (unless you are a `bim` administrator)!", backdate_min),
+                ).await;
+                return;
+            }
         }
 
         let company = command.options.get("company")
@@ -707,7 +738,7 @@ impl BimPlugin {
                 None => return, // error message already output
             }
         } else {
-            channel_message.message.timestamp.with_timezone(&Local)
+            channel_message.message.timestamp.with_timezone(&Local) - Duration::minutes(backdate_min)
         };
 
         let rider_username = if let Some(ar) = alternate_rider {
@@ -3621,6 +3652,16 @@ impl BimPlugin {
                 .as_i64().ok_or("max_edit_s not an i64")?
         };
 
+        let max_backdate_min = if config["max_backdate_min"].is_null() {
+            0
+        } else {
+            config["max_backdate_min"]
+                .as_i64().ok_or("max_backdate_min not an i64")?
+        };
+        if max_backdate_min < 0 {
+            return Err(Cow::Borrowed("max_backdate_min must be at least 0"));
+        }
+
         let achievements_active = if config["achievements_active"].is_null() {
             false
         } else {
@@ -3742,6 +3783,7 @@ impl BimPlugin {
             allow_fixed_coupling_combos,
             admin_usernames,
             max_edit_s,
+            max_backdate_min,
             achievements_active,
             operator_databases,
             default_operator_region,
@@ -3832,6 +3874,8 @@ impl RocketBotPlugin for BimPlugin {
                 .add_option("r", CommandValueType::String)
                 .add_option("timestamp", CommandValueType::String)
                 .add_option("t", CommandValueType::String)
+                .add_option("backdate", CommandValueType::Integer)
+                .add_option("b", CommandValueType::Integer)
                 .add_flag("u")
                 .add_flag("utc")
                 .add_flag("s")
