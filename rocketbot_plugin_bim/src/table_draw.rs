@@ -459,23 +459,22 @@ pub fn draw_ride_table(
         vehicle_has_coupled.push(has_coupled);
     }
 
-    assert_eq!(vehicle_numbers.len(), table.vehicles.len());
-    assert_eq!(vehicle_types.len(), table.vehicles.len());
-    assert_eq!(my_same_counts.len(), table.vehicles.len());
-    assert_eq!(my_same_rides.len(), table.vehicles.len());
-    assert_eq!(my_coupled_counts.len(), table.vehicles.len());
-    assert_eq!(my_coupled_rides.len(), table.vehicles.len());
-    assert_eq!(other_same_counts.len(), table.vehicles.len());
-    assert_eq!(other_same_names.len(), table.vehicles.len());
-    assert_eq!(other_same_rides.len(), table.vehicles.len());
-    assert_eq!(other_coupled_counts.len(), table.vehicles.len());
-    assert_eq!(other_coupled_names.len(), table.vehicles.len());
-    assert_eq!(other_coupled_rides.len(), table.vehicles.len());
-    assert_eq!(same_sums.len(), table.vehicles.len());
-    assert_eq!(coupled_sums.len(), table.vehicles.len());
-    assert_eq!(my_sums.len(), table.vehicles.len());
-    assert_eq!(other_sums.len(), table.vehicles.len());
-    assert_eq!(total_sums.len(), table.vehicles.len());
+    assert_eq!(vehicle_types.len(), vehicle_numbers.len());
+    assert_eq!(my_same_counts.len(), vehicle_numbers.len());
+    assert_eq!(my_same_rides.len(), vehicle_numbers.len());
+    assert_eq!(my_coupled_counts.len(), vehicle_numbers.len());
+    assert_eq!(my_coupled_rides.len(), vehicle_numbers.len());
+    assert_eq!(other_same_counts.len(), vehicle_numbers.len());
+    assert_eq!(other_same_names.len(), vehicle_numbers.len());
+    assert_eq!(other_same_rides.len(), vehicle_numbers.len());
+    assert_eq!(other_coupled_counts.len(), vehicle_numbers.len());
+    assert_eq!(other_coupled_names.len(), vehicle_numbers.len());
+    assert_eq!(other_coupled_rides.len(), vehicle_numbers.len());
+    assert_eq!(same_sums.len(), vehicle_numbers.len());
+    assert_eq!(coupled_sums.len(), vehicle_numbers.len());
+    assert_eq!(my_sums.len(), vehicle_numbers.len());
+    assert_eq!(other_sums.len(), vehicle_numbers.len());
+    assert_eq!(total_sums.len(), vehicle_numbers.len());
 
     // calculate table widths
     let vehicle_number_width = calculate_width(
@@ -553,7 +552,7 @@ pub fn draw_ride_table(
     x_cursor += other_columns_width + COLUMN_SPACING;
     place_on_canvas(&mut canvas, &sum_heading_and_tag, x_cursor, y_cursor);
 
-    for i in 0..table.vehicles.len() {
+    for i in 0..vehicle_numbers.len() {
         draw_line(&mut canvas, &mut y_cursor, line_height, full_table_width);
 
         x_cursor = HORIZONTAL_MARGIN;
