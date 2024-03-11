@@ -138,3 +138,24 @@ impl VehicleInfo {
         }
     }
 }
+
+
+/// The last rider of a vehicle.
+#[derive(Clone, Debug, Default, Deserialize, Eq, Hash, Ord, PartialEq, PartialOrd, Serialize)]
+pub enum LastRider<'a> {
+    #[default]
+    Nobody,
+
+    Me,
+
+    SomebodyElse(&'a str),
+}
+impl<'a> LastRider<'a> {
+    #[inline]
+    pub const fn is_somebody_else(&self) -> bool {
+        match self {
+            Self::SomebodyElse(_) => true,
+            _ => false,
+        }
+    }
+}

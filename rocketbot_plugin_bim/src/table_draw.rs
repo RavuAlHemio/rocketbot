@@ -36,6 +36,7 @@ use std::iter::once;
 use chrono::{DateTime, Local, TimeZone};
 use serde::{Deserialize, Serialize};
 
+use rocketbot_bim_common::{CouplingMode, LastRider};
 use rocketbot_render_text::{
     DEFAULT_FONT_DATA, DEFAULT_ITALIC_FONT_DATA, DEFAULT_SIZE_PX, map_to_dimensions, TextRenderer,
 };
@@ -97,7 +98,7 @@ impl UserRide {
     pub fn timestamp(&self) -> &DateTime<Local> { &self.ride.timestamp }
 }
 
-#[derive(Clone, Debug, Default, Deserialize, Eq, Hash, Ord, PartialEq, PartialOrd, Serialize)]
+#[derive(Clone, Debug, Deserialize, Eq, Hash, Ord, PartialEq, PartialOrd, Serialize)]
 pub struct RideTableVehicle {
     /// The number of this vehicle.
     pub vehicle_number: String,
@@ -143,11 +144,8 @@ pub struct RideTableVehicle {
     /// If false, a coupled ride is not highlighted even if it is the latest.
     pub highlight_coupled_rides: bool,
 
-    /// Whether this vehicle was actually ridden.
-    ///
-    /// An actually-ridden vehicle was either marked thus in the specification (using the
-    /// exclamation mark) or was the only vehicle in the specification.
-    pub actually_ridden: bool,
+    /// The coupling mode of this vehicle.
+    pub coupling_mode: CouplingMode,
 }
 
 macro_rules! define_is_most_recent {
@@ -215,6 +213,19 @@ impl RideTableVehicle {
     pub fn has_changed_hands_highlighted(&self) -> bool {
         // is_other_coupled_most_recent() takes highlight_coupled_rides into account
         self.is_other_same_most_recent() || self.is_other_coupled_most_recent()
+    }
+
+    /// Returns the last highlighted rider of this vehicle.
+    pub fn last_highlighted_rider(&self) -> LastRider<'_> {
+        if self.is_my_same_most_recent() || self.is_my_coupled_most_recent() {
+            LastRider::Me
+        } else if self.is_other_same_most_recent() {
+            LastRider::SomebodyElse(self.other_same_last.as_ref().unwrap().rider_username.as_str())
+        } else if self.is_other_coupled_most_recent() {
+            LastRider::SomebodyElse(self.other_coupled_last.as_ref().unwrap().rider_username.as_str())
+        } else {
+            LastRider::Nobody
+        }
     }
 
     /// The latest highlighted ride of this vehicle by the rider registering the ride, if any.
@@ -348,6 +359,10 @@ pub fn draw_ride_table(
     let mut vehicle_has_coupled = Vec::with_capacity(table.vehicles.len());
 
     for vehicle in &table.vehicles {
+        if vehicle.coupling_mode == CouplingMode::FixedCoupling {
+            continue;
+        }
+
         vehicle_numbers.push(renderer.render_text(&vehicle.vehicle_number));
 
         if let Some(vt) = &vehicle.vehicle_type {

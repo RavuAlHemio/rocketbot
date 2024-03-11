@@ -21,7 +21,7 @@ use log::{debug, error, info};
 use once_cell::sync::{Lazy, OnceCell};
 use rand::{Rng, thread_rng};
 use regex::{Captures, Regex};
-use rocketbot_bim_common::{CouplingMode, VehicleInfo, VehicleNumber};
+use rocketbot_bim_common::{CouplingMode, LastRider, VehicleInfo, VehicleNumber};
 use rocketbot_bim_common::achievements::ACHIEVEMENT_DEFINITIONS;
 use rocketbot_interface::{JsonValueExtensions, phrase_join, ResultExtensions, send_channel_message};
 use rocketbot_interface::commands::{CommandDefinitionBuilder, CommandInstance, CommandValueType};
@@ -121,6 +121,12 @@ pub type RegionToLineToOperator = HashMap<String, HashMap<String, LineOperatorIn
 macro_rules! write_expect {
     ($dst:expr, $($arg:tt)*) => {
         write!($dst, $($arg)*).expect("write failed")
+    };
+}
+
+macro_rules! implies {
+    ($a:expr, $b:expr $(,)?) => {
+        (!($a)) || ($b)
     };
 }
 
@@ -834,7 +840,10 @@ impl BimPlugin {
             let mut emoji_reaction = EmojiReaction::DoNotRespond;
             let mut vehicle_reaction_emoji = Vec::new();
             for vehicle in &ride_table.vehicles {
-                if !vehicle.highlight_coupled_rides && !vehicle.actually_ridden {
+                if vehicle.coupling_mode == CouplingMode::FixedCoupling {
+                    continue;
+                }
+                if !vehicle.highlight_coupled_rides && vehicle.coupling_mode != CouplingMode::Ridden {
                     continue;
                 }
                 if vehicle.is_first_highlighted_ride_overall() {
@@ -860,7 +869,7 @@ impl BimPlugin {
                     if !vehicle_emoji_reaction.vehicle_number_matcher.is_match(&vehicle.vehicle_number) {
                         continue;
                     }
-                    if vehicle_emoji_reaction.only_ridden_vehicles && !vehicle.actually_ridden {
+                    if vehicle_emoji_reaction.only_ridden_vehicles && vehicle.coupling_mode != CouplingMode::Ridden {
                         continue;
                     }
                     vehicle_reaction_emoji.push(vehicle_emoji_reaction.emoji.clone());
@@ -884,42 +893,52 @@ impl BimPlugin {
         }
 
         // check if there is a fixed coupling
-        if !sandbox {
-            if let Some(bim_database) = bim_database_opt.as_ref() {
-                let mut any_fixed_coupling = false;
-                let mut all_vehicle_numbers = HashSet::new();
+        let any_fixed_coupling = ride_table.vehicles
+            .iter()
+            .any(|v| v.coupling_mode == CouplingMode::FixedCoupling);
+        if any_fixed_coupling {
+            // okay, what happened here?
 
-                for vehicle in &ride_table.vehicles {
-                    let nss_number = VehicleNumber::from_string(vehicle.vehicle_number.clone());
-                    all_vehicle_numbers.insert(nss_number.clone());
-                    if let Some(db_vehicle) = bim_database.get(&nss_number) {
-                        if db_vehicle.fixed_coupling.len() > 0 {
-                            any_fixed_coupling = true;
-                            for fixed_number in &db_vehicle.fixed_coupling {
-                                all_vehicle_numbers.insert(fixed_number.clone());
-                            }
-                        }
-                    }
-                }
+            // do all unridden vehicles belong to me already?
+            let unridden_vehicles_already_belong_to_me = ride_table.vehicles
+                .iter()
+                .all(|v| implies!(v.coupling_mode != CouplingMode::Ridden, !v.has_changed_hands_highlighted()));
+            // has the ridden vehicle changed hands?
+            let ridden_vehicles_do_not_belong_to_me = ride_table.vehicles
+                .iter()
+                .all(|v| implies!(v.coupling_mode == CouplingMode::Ridden, v.has_changed_hands_highlighted()));
+            if unridden_vehicles_already_belong_to_me && ridden_vehicles_do_not_belong_to_me {
+                send_channel_message!(
+                    interface,
+                    &channel_message.channel.name,
+                    &format!("All vehicles in the fixed coupling now belong to {}!", rider_username),
+                ).await;
+            }
 
-                if any_fixed_coupling {
-                    // okay; do all those vehicles belong to this rider?
-                    let avbtr_opt = all_vehicles_have_given_last_rider(
-                        &mut ride_conn,
-                        company,
-                        &all_vehicle_numbers,
-                        rider_username,
-                    ).await;
-                    if avbtr_opt == Some(true) {
+            // did all the vehicles belong to the same person who isn't us?
+            let last_riders: Vec<LastRider<'_>> = ride_table.vehicles
+                .iter()
+                .map(|v| v.last_highlighted_rider())
+                .collect();
+            if last_riders.len() > 1 {
+                let first_last_rider = &last_riders[0];
+                if let LastRider::SomebodyElse(who) = first_last_rider {
+                    let all_the_same = last_riders
+                        .iter()
+                        .skip(1)
+                        .all(|lr| lr == first_last_rider);
+                    if all_the_same {
                         send_channel_message!(
                             interface,
                             &channel_message.channel.name,
-                            &format!("Fun fact: all vehicles in the fixed coupling belong to {}!", rider_username),
+                            &format!("The monopoly of {} in the fixed coupling has been broken!", who),
                         ).await;
                     }
                 }
             }
+        }
 
+        if !sandbox {
             // signal to update achievements
             if config_guard.achievements_active {
                 let data = UpdateAchievementsData {
@@ -4569,40 +4588,38 @@ pub async fn add_ride(
             (prev_other_coupled_timestamp, prev_other_coupled_line, prev_other_coupled_rider)
         };
 
-        if vehicle.coupling_mode != CouplingMode::FixedCoupling {
-            vehicle_data.push(RideTableVehicle {
-                vehicle_number: vehicle.number.clone().into_string(),
-                vehicle_type: vehicle.type_code.clone(),
-                my_same_count: prev_my_same_count,
-                my_same_last: prev_my_same_timestamp.map(|timestamp| Ride {
+        vehicle_data.push(RideTableVehicle {
+            vehicle_number: vehicle.number.clone().into_string(),
+            vehicle_type: vehicle.type_code.clone(),
+            my_same_count: prev_my_same_count,
+            my_same_last: prev_my_same_timestamp.map(|timestamp| Ride {
+                timestamp,
+                line: prev_my_same_line,
+            }),
+            my_coupled_count: prev_my_coupled_count,
+            my_coupled_last: prev_my_coupled_timestamp.map(|timestamp| Ride {
+                timestamp,
+                line: prev_my_coupled_line,
+            }),
+            other_same_count: prev_other_same_count,
+            other_same_last: prev_other_same_timestamp.map(|timestamp| UserRide {
+                rider_username: prev_other_same_rider.unwrap(),
+                ride: Ride {
                     timestamp,
-                    line: prev_my_same_line,
-                }),
-                my_coupled_count: prev_my_coupled_count,
-                my_coupled_last: prev_my_coupled_timestamp.map(|timestamp| Ride {
+                    line: prev_other_same_line,
+                },
+            }),
+            other_coupled_count: prev_other_coupled_count,
+            other_coupled_last: prev_other_coupled_timestamp.map(|timestamp| UserRide {
+                rider_username: prev_other_coupled_rider.unwrap(),
+                ride: Ride {
                     timestamp,
-                    line: prev_my_coupled_line,
-                }),
-                other_same_count: prev_other_same_count,
-                other_same_last: prev_other_same_timestamp.map(|timestamp| UserRide {
-                    rider_username: prev_other_same_rider.unwrap(),
-                    ride: Ride {
-                        timestamp,
-                        line: prev_other_same_line,
-                    },
-                }),
-                other_coupled_count: prev_other_coupled_count,
-                other_coupled_last: prev_other_coupled_timestamp.map(|timestamp| UserRide {
-                    rider_username: prev_other_coupled_rider.unwrap(),
-                    ride: Ride {
-                        timestamp,
-                        line: prev_other_coupled_line,
-                    },
-                }),
-                highlight_coupled_rides,
-                actually_ridden: vehicle.coupling_mode == CouplingMode::Ridden,
-            });
-        }
+                    line: prev_other_coupled_line,
+                },
+            }),
+            highlight_coupled_rides,
+            coupling_mode: vehicle.coupling_mode,
+        });
     }
 
     let ride_id: i64 = if sandbox {
