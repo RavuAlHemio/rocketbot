@@ -157,12 +157,12 @@ pub struct RideTableVehicle {
 }
 
 macro_rules! define_is_most_recent {
-    ($name:ident, $expect_coupled:expr, $expect_other:expr) => {
+    ($name:ident, $expect_other:expr, $expect_coupled:expr) => {
         #[inline]
         pub fn $name(&self) -> bool {
             let highlighted_rides = self.highlighted_rides_most_recent_first();
             highlighted_rides.get(0)
-                .map(|r| r.is_coupled == $expect_coupled && r.is_other == $expect_other)
+                .map(|r| r.is_other == $expect_other && r.is_coupled == $expect_coupled)
                 .unwrap_or(false)
         }
     };
