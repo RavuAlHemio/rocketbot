@@ -902,17 +902,28 @@ impl BimPlugin {
             // do all unridden vehicles belong to me already?
             let unridden_vehicles_already_belong_to_me = ride_table.vehicles
                 .iter()
-                .all(|v| implies!(v.coupling_mode != CouplingMode::Ridden, !v.has_changed_hands_highlighted()));
-            // has the ridden vehicle changed hands?
+                .all(|v| implies!(v.coupling_mode != CouplingMode::Ridden, v.belongs_to_rider_highlighted()));
+            // does the ridden vehicle not yet belong to me?
+            let ridden_vehicles_already_belong_to_me = ride_table.vehicles
+                .iter()
+                .all(|v| implies!(v.coupling_mode == CouplingMode::Ridden, v.belongs_to_rider_highlighted()));
             let ridden_vehicles_do_not_belong_to_me = ride_table.vehicles
                 .iter()
-                .all(|v| implies!(v.coupling_mode == CouplingMode::Ridden, v.has_changed_hands_highlighted()));
-            if unridden_vehicles_already_belong_to_me && ridden_vehicles_do_not_belong_to_me {
-                send_channel_message!(
-                    interface,
-                    &channel_message.channel.name,
-                    &format!("All vehicles in the fixed coupling now belong to {}!", rider_username),
-                ).await;
+                .all(|v| implies!(v.coupling_mode == CouplingMode::Ridden, !v.belongs_to_rider_highlighted()));
+            if unridden_vehicles_already_belong_to_me {
+                if ridden_vehicles_do_not_belong_to_me {
+                    send_channel_message!(
+                        interface,
+                        &channel_message.channel.name,
+                        &format!("All vehicles in the fixed coupling now belong to {}!", rider_username),
+                    ).await;
+                } else if ridden_vehicles_already_belong_to_me {
+                    send_channel_message!(
+                        interface,
+                        &channel_message.channel.name,
+                        &format!("{} is holding on to their monopoly over this fixed coupling!", rider_username),
+                    ).await;
+                }
             }
 
             // did all the vehicles belong to the same person who isn't us?
