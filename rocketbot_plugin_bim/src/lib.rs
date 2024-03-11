@@ -4983,66 +4983,6 @@ fn do_vehicle_number_digits_divide_line_digits(
     vehicle_number % line_number == 0
 }
 
-/// Returns whether all vehicles in the given set have the given last rider.
-async fn all_vehicles_have_given_last_rider(
-    conn: &tokio_postgres::Client,
-    company: &str,
-    all_vehicle_numbers: &HashSet<VehicleNumber>,
-    last_rider: &str,
-) -> Option<bool> {
-    // prepare statement
-    let last_rider_stmt_res = conn.prepare(
-        "
-            SELECT rarv.rider_username
-            FROM bim.rides_and_ridden_vehicles rarv
-            WHERE rarv.company = $1
-            AND rarv.vehicle_number = $2
-            AND NOT EXISTS (
-                SELECT 1
-                FROM bim.rides_and_ridden_vehicles rarv2
-                WHERE rarv2.company = rarv.company
-                AND rarv2.vehicle_number = rarv.vehicle_number
-                AND rarv2.\"timestamp\" > rarv.\"timestamp\"
-            )
-        "
-    ).await;
-    let last_rider_stmt = match last_rider_stmt_res {
-        Ok(lrs) => lrs,
-        Err(e) => {
-            error!("error preparing last-rider statement: {}", e);
-            return None;
-        },
-    };
-
-    // run through all vehicles
-    for vehicle_number in all_vehicle_numbers {
-        let row_opt_res = conn.query_opt(
-            &last_rider_stmt,
-            &[&company, &**vehicle_number],
-        ).await;
-        let row = match row_opt_res {
-            Ok(Some(r)) => r,
-            Ok(None) => {
-                // this vehicle has no last rider
-                // => the rider is not the last rider of all the vehicles
-                return Some(false);
-            },
-            Err(e) => {
-                error!("error obtaining last rider of company {:?} vehicle {:?}: {}", company, vehicle_number, e);
-                return None;
-            },
-        };
-        let vehicle_last_rider: String = row.get(0);
-        if &vehicle_last_rider != last_rider {
-            // different last rider than the one we are checking for
-            return Some(false);
-        }
-    }
-
-    // yup, they are the last rider on all these vehicles
-    Some(true)
-}
-
 /// Fold whitespace as in XML: leading whitespace is completely trimmed and any other whitespace is
 /// reduced to one occurrence of ' ' (U+0020).
 fn fold_whitespace_xml(s: &str) -> Cow<str> {
