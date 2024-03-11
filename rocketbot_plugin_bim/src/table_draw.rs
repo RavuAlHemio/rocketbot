@@ -219,7 +219,7 @@ impl RideTableVehicle {
 
     /// Whether this vehicle has, in terms of highlighting, never been ridden before.
     ///
-    /// See the documentation `highlighted_rides_most_recent_first` for an explanation of
+    /// See the documentation for `highlighted_rides_most_recent_first` for an explanation of
     /// highlighting rules.
     #[inline]
     pub fn is_first_highlighted_ride_overall(&self) -> bool {
@@ -228,7 +228,7 @@ impl RideTableVehicle {
 
     /// Whether this vehicle has previously belonged to the same rider in terms of highlighting.
     ///
-    /// See the documentation `highlighted_rides_most_recent_first` for an explanation of
+    /// See the documentation for `highlighted_rides_most_recent_first` for an explanation of
     /// highlighting rules.
     #[inline]
     pub fn belongs_to_rider_highlighted(&self) -> bool {
@@ -239,7 +239,7 @@ impl RideTableVehicle {
 
     /// Whether this vehicle has changed hands in terms of highlighting.
     ///
-    /// See the documentation `highlighted_rides_most_recent_first` for an explanation of
+    /// See the documentation for `highlighted_rides_most_recent_first` for an explanation of
     /// highlighting rules.
     #[inline]
     pub fn has_changed_hands_highlighted(&self) -> bool {
