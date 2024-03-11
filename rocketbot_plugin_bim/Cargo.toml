@@ -18,6 +18,7 @@ rocketbot_render_text = { path = "../rocketbot_render_text", features = ["png"] 
 rocketbot_string = { path = "../rocketbot_string", features = ["serde"] }
 serde = { version = "1.0", features = ["derive"] }
 serde_json = { version = "1.0" }
+smallvec = { version = "1.13" }
 tokio = { version = "1.32", features = ["rt"] }
 tokio-postgres = { version = "0.7", features = ["with-chrono-0_4"] }
 

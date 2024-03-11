@@ -35,6 +35,7 @@ use std::iter::once;
 
 use chrono::{DateTime, Local, TimeZone};
 use serde::{Deserialize, Serialize};
+use smallvec::SmallVec;
 
 use rocketbot_bim_common::{CouplingMode, LastRider};
 use rocketbot_render_text::{
@@ -98,6 +99,13 @@ impl UserRide {
     pub fn timestamp(&self) -> &DateTime<Local> { &self.ride.timestamp }
 }
 
+#[derive(Clone, Debug, Default, Deserialize, Eq, Hash, Ord, PartialEq, PartialOrd, Serialize)]
+struct HighlightedRide {
+    pub timestamp: DateTime<Local>,
+    pub is_other: bool,
+    pub is_coupled: bool,
+}
+
 #[derive(Clone, Debug, Deserialize, Eq, Hash, Ord, PartialEq, PartialOrd, Serialize)]
 pub struct RideTableVehicle {
     /// The number of this vehicle.
@@ -149,80 +157,111 @@ pub struct RideTableVehicle {
 }
 
 macro_rules! define_is_most_recent {
-    ($name:ident, ($cmp_base:ident, $cmp_base_add_criterion:ident) $(, ($cmp_target:ident, $cmp_target_add_criterion:ident))+) => {
+    ($name:ident, $expect_coupled:expr, $expect_other:expr) => {
+        #[inline]
         pub fn $name(&self) -> bool {
-            if !self.$cmp_base_add_criterion() {
-                // the user says the comparison base is not to be considered as the most recent
-                // therefore, it is not the most recent
-                return false;
-            }
-            let cmp_base = match &self.$cmp_base {
-                Some(cb) => cb,
-                None => {
-                    // if the comparison base is None, it cannot be the most recent ride
-                    return false;
-                },
-            };
-
-            $(
-                if self.$cmp_target_add_criterion() {
-                    if let Some(cmp_target) = &self.$cmp_target {
-                        if cmp_base.timestamp() < cmp_target.timestamp() {
-                            return false;
-                        }
-                    }
-                }
-            )+
-
-            true
+            let highlighted_rides = self.highlighted_rides_most_recent_first();
+            highlighted_rides.get(0)
+                .map(|r| r.is_coupled == $expect_coupled && r.is_other == $expect_other)
+                .unwrap_or(false)
         }
     };
 }
 
 impl RideTableVehicle {
-    #[inline] fn always_true(&self) -> bool { true }
-    #[inline] fn highlight_coupled_rides(&self) -> bool { self.highlight_coupled_rides }
+    /// Returns all the rides worth highlighting.
+    ///
+    /// A ride is considered worth highlighting if it is a same-vehicle ride, or if it is a
+    /// coupled-vehicle ride and `highlight_coupled_rides` is true.
+    ///
+    /// The rides are returned sorted in descending order by timestamp, i.e. latest first.
+    fn highlighted_rides_most_recent_first(&self) -> SmallVec<[HighlightedRide; 4]> {
+        let mut ret = SmallVec::new();
+        if let Some(my_same_last) = self.my_same_last.as_ref() {
+            ret.push(HighlightedRide {
+                timestamp: my_same_last.timestamp,
+                is_coupled: false,
+                is_other: false,
+            });
+        }
+        if let Some(other_same_last) = self.other_same_last.as_ref() {
+            ret.push(HighlightedRide {
+                timestamp: other_same_last.ride.timestamp,
+                is_coupled: false,
+                is_other: true,
+            });
+        }
+        if self.highlight_coupled_rides {
+            if let Some(my_coupled_last) = self.my_coupled_last.as_ref() {
+                ret.push(HighlightedRide {
+                    timestamp: my_coupled_last.timestamp,
+                    is_coupled: true,
+                    is_other: false,
+                });
+            }
+            if let Some(other_coupled_last) = self.other_coupled_last.as_ref() {
+                ret.push(HighlightedRide {
+                    timestamp: other_coupled_last.ride.timestamp,
+                    is_coupled: true,
+                    is_other: true,
+                });
+            }
+        }
+        ret.sort_unstable();
+        ret.reverse();
+        ret
+    }
 
-    define_is_most_recent!(is_my_same_most_recent, (my_same_last, always_true), (my_coupled_last, highlight_coupled_rides), (other_same_last, always_true), (other_coupled_last, highlight_coupled_rides));
-    define_is_most_recent!(is_my_coupled_most_recent, (my_coupled_last, highlight_coupled_rides), (my_same_last, always_true), (other_same_last, always_true), (other_coupled_last, highlight_coupled_rides));
-    define_is_most_recent!(is_other_same_most_recent, (other_same_last, always_true), (my_same_last, always_true), (my_coupled_last, highlight_coupled_rides), (other_coupled_last, highlight_coupled_rides));
-    define_is_most_recent!(is_other_coupled_most_recent, (other_coupled_last, highlight_coupled_rides), (my_same_last, always_true), (my_coupled_last, highlight_coupled_rides), (other_same_last, always_true));
+    define_is_most_recent!(is_my_same_most_recent, false, false);
+    define_is_most_recent!(is_my_coupled_most_recent, false, true);
+    define_is_most_recent!(is_other_same_most_recent, true, false);
+    define_is_most_recent!(is_other_coupled_most_recent, true, true);
 
     /// Whether this vehicle has, in terms of highlighting, never been ridden before.
     ///
-    /// Same-vehicle rides are always considered; if `highlight_coupled_rides` is true,
-    /// coupled-vehicle rides are considered as well.
+    /// See the documentation `highlighted_rides_most_recent_first` for an explanation of
+    /// highlighting rules.
     #[inline]
     pub fn is_first_highlighted_ride_overall(&self) -> bool {
-        self.my_same_count == 0
-            && self.other_same_count == 0
-            && (
-                !self.highlight_coupled_rides
-                || (
-                    self.my_coupled_count == 0
-                    && self.other_coupled_count == 0
-                )
-            )
+        self.highlighted_rides_most_recent_first().len() == 0
+    }
+
+    /// Whether this vehicle has previously belonged to the same rider in terms of highlighting.
+    ///
+    /// See the documentation `highlighted_rides_most_recent_first` for an explanation of
+    /// highlighting rules.
+    #[inline]
+    pub fn belongs_to_rider_highlighted(&self) -> bool {
+        self.highlighted_rides_most_recent_first().get(0)
+            .map(|hr| !hr.is_other)
+            .unwrap_or(false)
     }
 
     /// Whether this vehicle has changed hands in terms of highlighting.
     ///
-    /// Same-vehicle rides are always considered; if `highlight_coupled_rides` is true,
-    /// coupled-vehicle rides are considered as well.
+    /// See the documentation `highlighted_rides_most_recent_first` for an explanation of
+    /// highlighting rules.
     #[inline]
     pub fn has_changed_hands_highlighted(&self) -> bool {
-        // is_other_coupled_most_recent() takes highlight_coupled_rides into account
-        self.is_other_same_most_recent() || self.is_other_coupled_most_recent()
+        self.highlighted_rides_most_recent_first().get(0)
+            .map(|hr| hr.is_other)
+            .unwrap_or(false)
     }
 
     /// Returns the last highlighted rider of this vehicle.
     pub fn last_highlighted_rider(&self) -> LastRider<'_> {
-        if self.is_my_same_most_recent() || self.is_my_coupled_most_recent() {
-            LastRider::Me
-        } else if self.is_other_same_most_recent() {
-            LastRider::SomebodyElse(self.other_same_last.as_ref().unwrap().rider_username.as_str())
-        } else if self.is_other_coupled_most_recent() {
-            LastRider::SomebodyElse(self.other_coupled_last.as_ref().unwrap().rider_username.as_str())
+        let last_rides_by_category = self.highlighted_rides_most_recent_first();
+
+        if let Some(last_highlighted_ride) = last_rides_by_category.get(0) {
+            if last_highlighted_ride.is_other {
+                if last_highlighted_ride.is_coupled {
+                    LastRider::SomebodyElse(self.other_coupled_last.as_ref().unwrap().rider_username.as_str())
+                } else {
+                    LastRider::SomebodyElse(self.other_same_last.as_ref().unwrap().rider_username.as_str())
+                }
+            } else {
+                LastRider::Me
+            }
         } else {
             LastRider::Nobody
         }
