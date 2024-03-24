@@ -3569,6 +3569,125 @@ impl BimPlugin {
         ).await;
     }
 
+    async fn channel_command_bimdivscore(&self, channel_message: &ChannelMessage, command: &CommandInstance) {
+        let interface = match self.interface.upgrade() {
+            None => return,
+            Some(i) => i,
+        };
+
+        let sort_by_number =
+            command.flags.contains("n")
+            || command.flags.contains("sort-by-number")
+        ;
+        let lookback_range = match Self::lookback_range_from_command(command) {
+            Some(lr) => lr,
+            None => {
+                send_channel_message!(
+                    interface,
+                    &channel_message.channel.name,
+                    "Hey, no mixing options that mean different time ranges!",
+                ).await;
+                return;
+            },
+        };
+        let lookback_start_opt = lookback_range.start_timestamp();
+
+        let config_guard = self.config.read().await;
+        let ride_conn = match connect_ride_db(&config_guard).await {
+            Ok(c) => c,
+            Err(_) => {
+                send_channel_message!(
+                    interface,
+                    &channel_message.channel.name,
+                    "Failed to open database connection. :disappointed:",
+                ).await;
+                return;
+            },
+        };
+
+        let mut criteria = Vec::new();
+        let mut query_params: Vec<&(dyn ToSql + Sync)> = Vec::with_capacity(1);
+        if let Some(lookback_start) = &lookback_start_opt {
+            criteria.push(format!("AND nnrn.\"timestamp\" >= ${}", query_params.len() + 1));
+            query_params.push(lookback_start);
+        }
+
+        let query = format!(
+            // SUBSTRING SIMILAR extraction is done by wrapping the subpattern
+            // in sequences of the escape character followed by the double quote
+            "
+                WITH
+                    ride_numbers(id, \"timestamp\", rider_username, vehicle_number, line_number) AS (
+                        SELECT
+                            rarv.id, rarv.\"timestamp\", rarv.rider_username,
+                            bim.char_to_bigint_or_null(SUBSTRING(rarv.vehicle_number SIMILAR '[^0-9]*#\"[0-9]+#\"[^0-9]*' ESCAPE '#')),
+                            bim.char_to_bigint_or_null(SUBSTRING(rarv.line SIMILAR '[^0-9]*#\"[0-9]+#\"[^0-9]*' ESCAPE '#'))
+                        FROM bim.rides_and_ridden_vehicles rarv
+                        WHERE
+                            rarv.line IS NOT NULL
+                            AND rarv.line SIMILAR TO '[^0-9]*[0-9]+[^0-9]*'
+                            AND rarv.vehicle_number SIMILAR TO '[^0-9]*[0-9]+[^0-9]*'
+                    ),
+                    not_null_ride_numbers(id, \"timestamp\", rider_username, vehicle_number, line_number) AS (
+                        SELECT id, \"timestamp\", rider_username, vehicle_number, line_number
+                        FROM ride_numbers
+                        WHERE vehicle_number IS NOT NULL
+                        AND line_number IS NOT NULL
+                    )
+                SELECT
+                    nnrn.rider_username,
+                    SUM(nnrn.line_number)
+                FROM not_null_ride_numbers nnrn
+                WHERE MOD(nnrn.vehicle_number, nnrn.line_number) = 0
+                {}
+                GROUP BY nnrn.rider_username
+            ",
+            criteria.join(" "),
+        );
+        let rides = match ride_conn.query(&query, &query_params).await {
+            Ok(r) => r,
+            Err(e) => {
+                error!("failed to execute ride query: {}", e);
+                send_channel_message!(
+                    interface,
+                    &channel_message.channel.name,
+                    "Failed to execute ride query. :disappointed:",
+                ).await;
+                return;
+            },
+        };
+
+        let mut riders_and_scores: Vec<(String, i64)> = Vec::new();
+        for ride in rides {
+            let rider: String = ride.get(0);
+            let score: i64 = ride.get(1);
+
+            riders_and_scores.push((rider, score));
+        }
+
+        if sort_by_number {
+            riders_and_scores.sort_unstable_by_key(|(r, score)| (*score, r.clone()));
+        } else {
+            riders_and_scores.sort_unstable_by_key(|(r, _score)| r.clone());
+        }
+
+        let response_body = if riders_and_scores.len() > 0 {
+            let mut ret = "Divisibility scores:".to_owned();
+            for (rider, score) in &riders_and_scores {
+                write_expect!(ret, "\n{}: {}", rider, score);
+            }
+            ret
+        } else {
+            "We remain indivisible...".to_owned()
+        };
+
+        send_channel_message!(
+            interface,
+            &channel_message.channel.name,
+            &response_body,
+        ).await;
+    }
+
     #[inline]
     fn weekday_abbr2(weekday: Weekday) -> &'static str {
         match weekday {
@@ -4126,6 +4245,18 @@ impl RocketBotPlugin for BimPlugin {
                 .add_lookback_flags()
                 .build()
         ).await;
+        my_interface.register_channel_command(
+            &CommandDefinitionBuilder::new(
+                "bimdivscore",
+                "bim",
+                "{cpfx}bimdivscore [-n]",
+                "A list of riders and their divisibility scores.",
+            )
+                .add_flag("n")
+                .add_flag("sort-by-number")
+                .add_lookback_flags()
+                .build()
+        ).await;
 
         // set up the achievement update loop
         let (achievement_update_sender, mut achievement_update_receiver) = mpsc::unbounded_channel();
@@ -4219,6 +4350,8 @@ impl RocketBotPlugin for BimPlugin {
             self.channel_command_bimfreshen(channel_message, command).await
         } else if command.name == "lastbimriderbalance" {
             self.channel_command_lastbimriderbalance(channel_message, command).await
+        } else if command.name == "bimdivscore" {
+            self.channel_command_bimdivscore(channel_message, command).await
         }
     }
 
@@ -4269,6 +4402,8 @@ impl RocketBotPlugin for BimPlugin {
             Some(include_str!("../help/bimfreshen.md").to_owned())
         } else if command_name == "lastbimriderbalance" {
             Some(include_str!("../help/lastbimriderbalance.md").to_owned())
+        } else if command_name == "bimdivscore" {
+            Some(include_str!("../help/bimdivscore.md").to_owned())
         } else {
             None
         }
