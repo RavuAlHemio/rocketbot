@@ -3666,7 +3666,7 @@ impl BimPlugin {
         }
 
         if sort_by_number {
-            riders_and_scores.sort_unstable_by_key(|(r, score)| (*score, r.clone()));
+            riders_and_scores.sort_unstable_by_key(|(r, score)| (-score, r.clone()));
         } else {
             riders_and_scores.sort_unstable_by_key(|(r, _score)| r.clone());
         }
