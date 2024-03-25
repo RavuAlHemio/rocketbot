@@ -234,8 +234,8 @@ pub(crate) async fn handle_bim_latest_rider_count_over_time_image(request: &Requ
             // different ride
             // clone to new entry (or create a completely new map)
             let new_rider_to_latest_vehicle_count = ride_id_and_rider_to_latest_vehicle_count.last()
-            .map(|(_ride_id, rtlvc)| rtlvc.clone())
-            .unwrap_or_else(|| HashMap::new());
+                .map(|(_ride_id, rtlvc)| rtlvc.clone())
+                .unwrap_or_else(|| HashMap::new());
             ride_id_and_rider_to_latest_vehicle_count.push((ride_id, new_rider_to_latest_vehicle_count));
         }
         let rider_to_latest_vehicle_count = &mut ride_id_and_rider_to_latest_vehicle_count
