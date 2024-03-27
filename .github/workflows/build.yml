@@ -35,6 +35,7 @@ jobs:
             target/debug/rocketbot
             target/debug/rocketbotweb
             target/debug/examples/obtain_bim_mw
+            target/debug/examples/obtain_bim_ratb
             target/debug/examples/obtain_bim_sa
             target/debug/examples/obtain_bim_sl
             target/debug/examples/obtain_bim_xlsx
@@ -82,6 +83,7 @@ jobs:
             target/release/rocketbot
             target/release/rocketbotweb
             target/release/examples/obtain_bim_mw
+            target/release/examples/obtain_bim_ratb
             target/release/examples/obtain_bim_sa
             target/release/examples/obtain_bim_sl
             target/release/examples/obtain_bim_xlsx
@@ -161,6 +163,7 @@ jobs:
             target/release/rocketbot
             target/release/rocketbotweb
             target/release/examples/obtain_bim_mw
+            target/release/examples/obtain_bim_ratb
             target/release/examples/obtain_bim_sa
             target/release/examples/obtain_bim_sl
             target/release/examples/obtain_bim_xlsx
