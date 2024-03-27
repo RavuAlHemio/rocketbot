@@ -8,8 +8,7 @@ use std::path::PathBuf;
 
 use once_cell::sync::Lazy;
 use reqwest;
-use rocketbot_bim_common::{VehicleClass, VehicleInfo};
-use rocketbot_string::NatSortedString;
+use rocketbot_bim_common::{VehicleClass, VehicleInfo, VehicleNumber};
 use scraper::{Html, Selector};
 use serde::{Deserialize, Serialize};
 use url::Url;
@@ -82,7 +81,8 @@ async fn obtain_page(url: Url) -> Html {
 
 async fn get_vehicles_of_type(
     type_config: &TypeConfig,
-    vehicles: &mut Vec<VehicleInfo>,
+    vehicle_number_to_extant: &mut BTreeMap<VehicleNumber, VehicleInfo>,
+    vehicle_number_to_disposed: &mut BTreeMap<VehicleNumber, VehicleInfo>,
 ) {
     // obtain base page
     let base_page_url = Url::parse(&type_config.first_page_url)
@@ -121,14 +121,11 @@ async fn get_vehicles_of_type(
         }
     }
 
-    // drop disposed vehicle numbers who also have an extant variant
-    disposed_vehicle_numbers.retain(|vn| !extant_vehicle_numbers.contains(vn));
-
     // assemble vehicle database
     for (numbers, is_disposed) in [(&extant_vehicle_numbers, false), (&disposed_vehicle_numbers, true)] {
         for number in numbers {
             let mut vehicle = VehicleInfo::new(
-                NatSortedString::from_string(number.clone()),
+                VehicleNumber::from_string(number.clone()),
                 VehicleClass::Tram,
                 type_config.type_code.clone(),
             );
@@ -139,7 +136,11 @@ async fn get_vehicles_of_type(
             vehicle.manufacturer = type_config.manufacturer.clone();
             vehicle.other_data = type_config.other_properties.clone();
 
-            vehicles.push(vehicle);
+            if is_disposed {
+                vehicle_number_to_disposed.insert(vehicle.number.clone(), vehicle);
+            } else {
+                vehicle_number_to_extant.insert(vehicle.number.clone(), vehicle);
+            }
         }
     }
 }
@@ -160,13 +161,23 @@ async fn main() {
     };
 
     // load all vehicle types
-    let mut vehicles = Vec::new();
+    let mut vehicle_number_to_extant = BTreeMap::new();
+    let mut vehicle_number_to_disposed = BTreeMap::new();
     for vehicle_type in config.types {
-        get_vehicles_of_type(&vehicle_type, &mut vehicles).await;
+        get_vehicles_of_type(
+            &vehicle_type,
+            &mut vehicle_number_to_extant,
+            &mut vehicle_number_to_disposed,
+        ).await;
     }
 
-    // sort
-    vehicles.sort_unstable_by_key(|v| v.number.clone());
+    // merge (disposed first so they get overwritten by extant)
+    let mut number_to_vehicle = BTreeMap::new();
+    number_to_vehicle.append(&mut vehicle_number_to_disposed);
+    number_to_vehicle.append(&mut vehicle_number_to_extant);
+
+    // derive list of references
+    let vehicles: Vec<&VehicleInfo> = number_to_vehicle.values().collect();
 
     // output
     {
