@@ -490,7 +490,7 @@ async fn main() {
                                 }
                             }
                             for text in texts {
-                                if !text.starts_with('(') && !text.starts_with('[') {
+                                if !text.starts_with('(') && !text.starts_with('[') && text.len() > 0 {
                                     current_vehicle.out_of_service_since(text);
                                 }
                             }
