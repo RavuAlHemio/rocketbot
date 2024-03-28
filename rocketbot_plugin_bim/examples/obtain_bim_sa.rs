@@ -456,8 +456,10 @@ async fn main() {
                                 .filter(|t| t.len() > 0)
                                 .last();
                             if let Some(number_string) = number_string_opt {
-                                let num = trim_text(&number_string).into();
-                                current_vehicle.number(num);
+                                let num: VehicleNumber = trim_text(&number_string).into();
+                                if &*num != "-" {
+                                    current_vehicle.number(num);
+                                }
                             }
                         // no CSS classes beyond this point :-(
                         } else if i == 4 {
