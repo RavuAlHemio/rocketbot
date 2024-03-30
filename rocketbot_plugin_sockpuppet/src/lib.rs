@@ -68,6 +68,29 @@ impl SockpuppetPlugin {
         send_channel_message_advanced!(interface, &channel_name, outgoing_message).await;
     }
 
+    async fn private_command_react(&self, private_message: &PrivateMessage, command: &CommandInstance) {
+        let interface = match self.interface.upgrade() {
+            None => return,
+            Some(i) => i,
+        };
+
+        let config_guard = self.config.read().await;
+
+        if !config_guard.allowed_usernames.contains(&private_message.message.sender.username) {
+            return;
+        }
+
+        let message_id = &command.args[0];
+        let emoji_name = command.rest.trim();
+        let undo = command.flags.contains("undo") || command.flags.contains("u");
+
+        if undo {
+            interface.remove_reaction(&message_id, emoji_name).await;
+        } else {
+            interface.add_reaction(&message_id, emoji_name).await;
+        }
+    }
+
     async fn private_command_reload(&self, private_message: &PrivateMessage, _command: &CommandInstance) {
         let interface = match self.interface.upgrade() {
             None => return,
@@ -127,6 +150,18 @@ impl RocketBotPlugin for SockpuppetPlugin {
 
         my_interface.register_private_message_command(
             &CommandDefinitionBuilder::new(
+                "react",
+                "sockpuppet",
+                "{cpfx}react MSGID EMOJI",
+                "Reacts to the given message with the given emoji.",
+            )
+                .add_flag("undo")
+                .add_flag("u")
+                .arg_count(1)
+                .build()
+        ).await;
+        my_interface.register_private_message_command(
+            &CommandDefinitionBuilder::new(
                 "reload",
                 "sockpuppet",
                 "{cpfx}reload",
@@ -148,6 +183,8 @@ impl RocketBotPlugin for SockpuppetPlugin {
     async fn private_command(&self, private_message: &PrivateMessage, command: &CommandInstance) {
         if command.name == "chansend" {
             self.private_command_chansend(private_message, command).await
+        } else if command.name == "react" {
+            self.private_command_react(private_message, command).await
         } else if command.name == "reload" {
             self.private_command_reload(private_message, command).await
         }
@@ -156,6 +193,8 @@ impl RocketBotPlugin for SockpuppetPlugin {
     async fn get_command_help(&self, command_name: &str) -> Option<String> {
         if command_name == "chansend" {
             Some(include_str!("../help/chansend.md").to_owned())
+        } else if command_name == "react" {
+            Some(include_str!("../help/react.md").to_owned())
         } else if command_name == "reload" {
             Some(include_str!("../help/reload.md").to_owned())
         } else {
