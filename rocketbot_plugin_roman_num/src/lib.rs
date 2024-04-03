@@ -180,7 +180,7 @@ impl RocketBotPlugin for RomanNumPlugin {
             let Some(val) = LETTER_TO_VALUE.get(&c) else { continue };
             sum += *val;
             if sum > 69 {
-                continue;
+                return;
             }
         }
         if sum == 69 {
