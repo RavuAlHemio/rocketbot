@@ -2597,6 +2597,7 @@ dependencies = [
  "once_cell",
  "regex",
  "rocketbot_interface",
+ "serde",
  "serde_json",
 ]
 

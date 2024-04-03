@@ -1,16 +1,40 @@
-use std::collections::HashMap;
+use std::collections::{BTreeSet, HashMap};
 use std::sync::Weak;
 
 use async_trait::async_trait;
+use log::error;
+use once_cell::sync::Lazy;
 use rocketbot_interface::send_channel_message;
 use rocketbot_interface::commands::{CommandDefinitionBuilder, CommandInstance};
 use rocketbot_interface::interfaces::{RocketBotInterface, RocketBotPlugin};
-use rocketbot_interface::model::{ChannelMessage};
+use rocketbot_interface::model::ChannelMessage;
+use rocketbot_interface::sync::RwLock;
+use serde::{Deserialize, Serialize};
 use serde_json;
+
+
+static LETTER_TO_VALUE: Lazy<HashMap<char, u16>> = Lazy::new(|| {
+    let mut ltv: HashMap<char, u16> = HashMap::new();
+    ltv.insert('I', 1);
+    ltv.insert('V', 5);
+    ltv.insert('X', 10);
+    ltv.insert('L', 50);
+    ltv.insert('C', 100);
+    ltv.insert('D', 500);
+    ltv.insert('M', 1000);
+    ltv
+});
+
+
+#[derive(Clone, Debug, Default, Deserialize, Hash, Eq, Ord, PartialEq, PartialOrd, Serialize)]
+struct Config {
+    pub lxix_chronogram_channels: BTreeSet<String>,
+}
 
 
 pub struct RomanNumPlugin {
     interface: Weak<dyn RocketBotInterface>,
+    config: RwLock<Config>,
 }
 impl RomanNumPlugin {
     async fn handle_roman(&self, channel_message: &ChannelMessage, command: &CommandInstance) {
@@ -60,14 +84,32 @@ impl RomanNumPlugin {
             &arabic_digits,
         ).await;
     }
+
+    fn read_config(config: serde_json::Value) -> Option<Config> {
+        match serde_json::from_value(config.clone()) {
+            Ok(c) => Some(c),
+            Err(e) => {
+                error!("error decoding configuration {:?}: {}", config, e);
+                None
+            },
+        }
+    }
 }
 #[async_trait]
 impl RocketBotPlugin for RomanNumPlugin {
-    async fn new(interface: Weak<dyn RocketBotInterface>, _config: serde_json::Value) -> Self {
+    async fn new(interface: Weak<dyn RocketBotInterface>, config_json: serde_json::Value) -> Self {
         let my_interface = match interface.upgrade() {
             None => panic!("interface is gone"),
             Some(i) => i,
         };
+
+        // attempt to deserialize configuration
+        let config = Self::read_config(config_json)
+            .expect("failed to decode config");
+        let config_lock = RwLock::new(
+            "RomanNumPlugin::config",
+            config,
+        );
 
         my_interface.register_channel_command(
             &CommandDefinitionBuilder::new(
@@ -89,7 +131,8 @@ impl RocketBotPlugin for RomanNumPlugin {
         ).await;
 
         Self {
-            interface
+            interface,
+            config: config_lock,
         }
     }
 
@@ -105,31 +148,58 @@ impl RocketBotPlugin for RomanNumPlugin {
         }
     }
 
-    async fn configuration_updated(&self, _new_config: serde_json::Value) -> bool {
-        // not much to update
+    async fn configuration_updated(&self, new_config: serde_json::Value) -> bool {
+        let Some(config) = Self::read_config(new_config) else {
+            // error already logged
+            return false;
+        };
+
+        {
+            let mut config_guard = self.config.write().await;
+            *config_guard = config;
+        }
+
+        // done
         true
+    }
+
+    async fn channel_message(&self, channel_message: &ChannelMessage) {
+        let Some(interface) = self.interface.upgrade() else { return };
+        let Some(raw_message) = channel_message.message.raw.as_ref() else { return };
+
+        {
+            let config_guard = self.config.read().await;
+            if !config_guard.lxix_chronogram_channels.contains(&channel_message.channel.name) {
+                return;
+            }
+        }
+
+        let uppercase_message = raw_message.to_uppercase();
+        let mut sum = 0;
+        for c in uppercase_message.chars() {
+            let Some(val) = LETTER_TO_VALUE.get(&c) else { continue };
+            sum += *val;
+            if sum > 69 {
+                continue;
+            }
+        }
+        if sum == 69 {
+            send_channel_message!(
+                interface,
+                &channel_message.channel.name,
+                "Summa omnium numerorum in nuntio LXIX -- formosum!",
+            ).await;
+        }
     }
 }
 
 
 fn roman2arabic(roman_numerals: &str) -> Option<String> {
-    let letter_to_value = {
-        let mut ltv: HashMap<char, u16> = HashMap::new();
-        ltv.insert('I', 1);
-        ltv.insert('V', 5);
-        ltv.insert('X', 10);
-        ltv.insert('L', 50);
-        ltv.insert('C', 100);
-        ltv.insert('D', 500);
-        ltv.insert('M', 1000);
-        ltv
-    };
-
     // convert numerals to numbers
     let numbers = {
         let mut nums = Vec::with_capacity(roman_numerals.len());
         for c in roman_numerals.chars() {
-            let num = match letter_to_value.get(&c) {
+            let num = match LETTER_TO_VALUE.get(&c) {
                 Some(&v) => v,
                 None => return None,
             };
