@@ -8,6 +8,10 @@ rules = [
     # special case: "Steve" is only one syllable, but "Steven" is two
     { find = "(?i)steven", adjust_count = 2 },
     { find = "(?i)steve" },
+    
+    # "phone" at the end of a word is one syllable
+    # (English loanword)
+    { find = "(?i)phone\\b" },
 
     # in "zuerst" etc., "ue" is not a diphthong
     { find = "(?i)zue", replace = "e" },
