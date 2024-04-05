@@ -263,8 +263,9 @@ $$;
 
 CREATE INDEX IF NOT EXISTS idx_ride_vehicles_ridden ON bim.ride_vehicles (ride_id, vehicle_number) WHERE coupling_mode = 'R';
 
-CREATE OR REPLACE FUNCTION bim.ridden_vehicles_taken_over
-() RETURNS TABLE
+CREATE OR REPLACE FUNCTION bim.ridden_vehicles_between_riders
+( same_rider_also boolean
+) RETURNS TABLE
 ( id bigint
 , company character varying(256)
 , vehicle_number character varying(256)
@@ -280,6 +281,11 @@ DECLARE
     company_to_vehicle_to_last_rider jsonb;
     vehicle_to_last_rider jsonb;
 BEGIN
+    IF same_rider_also IS NULL
+    THEN
+        RETURN;
+    END IF;
+
     company_to_vehicle_to_last_rider := JSONB_BUILD_OBJECT();
     FOR rv IN SELECT rav.id, rav.company, rav.vehicle_number, rav."timestamp", rav.rider_username FROM bim.rides_and_vehicles rav WHERE rav.coupling_mode = 'R' ORDER BY rav."timestamp", rav.id
     LOOP
@@ -296,7 +302,7 @@ BEGIN
         old_rider := vehicle_to_last_rider ->> vehicle_number;
         new_rider := rv.rider_username;
 
-        IF old_rider = new_rider
+        IF NOT same_rider_also AND old_rider = new_rider
         THEN
             CONTINUE;
         END IF;
@@ -311,4 +317,4 @@ $$;
 CREATE TABLE bim.schema_revision
 ( sch_rev bigint NOT NULL
 );
-INSERT INTO bim.schema_revision (sch_rev) VALUES (13);
+INSERT INTO bim.schema_revision (sch_rev) VALUES (14);

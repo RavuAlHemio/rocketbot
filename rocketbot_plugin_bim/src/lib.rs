@@ -3497,7 +3497,7 @@ impl BimPlugin {
         let query = format!(
             "
                 SELECT rvto.old_rider, rvto.new_rider
-                FROM bim.ridden_vehicles_taken_over() rvto
+                FROM bim.ridden_vehicles_between_riders(FALSE) rvto
                 {} {}
                 ORDER BY rvto.\"timestamp\"
             ",

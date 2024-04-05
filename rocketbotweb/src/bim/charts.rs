@@ -203,7 +203,7 @@ pub(crate) async fn handle_bim_latest_rider_count_over_time_image(request: &Requ
     let ride_res = db_conn.query(
         "
             SELECT rvto.id, rvto.old_rider, rvto.new_rider
-            FROM bim.ridden_vehicles_taken_over() rvto
+            FROM bim.ridden_vehicles_between_riders(FALSE) rvto
             ORDER BY rvto.\"timestamp\", rvto.id
         ",
         &[],
@@ -456,7 +456,7 @@ pub(crate) async fn handle_bim_latest_rider_count_over_time(request: &Request<Bo
     let rides_res = db_conn.query(
         "
             SELECT rvto.old_rider, rvto.new_rider, CAST(COUNT(*) AS bigint) pair_count
-            FROM bim.ridden_vehicles_taken_over() rvto
+            FROM bim.ridden_vehicles_between_riders(FALSE) rvto
             WHERE rvto.old_rider IS NOT NULL
             GROUP BY rvto.old_rider, rvto.new_rider
         ",
