@@ -201,6 +201,7 @@ fn parse_paragraph_fragment(paragraph: &serde_json::Value) -> Result<MessageFrag
             }
             Ok(MessageFragment::Heading(level, fragments))
         },
+        "LINE_BREAK" => Ok(MessageFragment::LineBreak),
         other => {
             Err(MessageParsingError::UnexpectedFragment(other.into(), "message fragment".into()))
         },
