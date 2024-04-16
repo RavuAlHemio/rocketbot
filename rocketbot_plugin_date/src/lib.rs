@@ -1,14 +1,19 @@
+use std::collections::BTreeSet;
+use std::fmt::Write;
 use std::sync::Weak;
 
 use async_trait::async_trait;
 use chrono::{Datelike, Local, NaiveDate, Weekday};
 use julian;
+use log::error;
 use once_cell::sync::Lazy;
 use regex::Regex;
 use rocketbot_interface::send_channel_message;
 use rocketbot_interface::commands::{CommandDefinitionBuilder, CommandInstance};
 use rocketbot_interface::interfaces::{RocketBotInterface, RocketBotPlugin};
 use rocketbot_interface::model::ChannelMessage;
+use rocketbot_interface::sync::RwLock;
+use serde::{Deserialize, Serialize};
 use serde_json;
 
 
@@ -24,6 +29,18 @@ static DATE_REGEX: Lazy<Regex> = Lazy::new(|| Regex::new(concat!(
     ")",
     "$",
 )).expect("failed to parse regex"));
+
+
+#[derive(Clone, Default, Debug, Deserialize, Eq, Hash, Ord, PartialEq, PartialOrd, Serialize)]
+struct Config {
+    #[serde(default)] pub additional_holidays: BTreeSet<Holiday>,
+}
+
+#[derive(Clone, Default, Debug, Deserialize, Eq, Hash, Ord, PartialEq, PartialOrd, Serialize)]
+struct Holiday {
+    pub easter_sunday_offset_days: i64,
+    pub name: String,
+}
 
 
 /// Calculates the Gregorian date of Easter Sunday for the given year.
@@ -110,6 +127,7 @@ fn julian_computus(year: i32) -> julian::Date {
 
 pub struct DatePlugin {
     interface: Weak<dyn RocketBotInterface>,
+    config: RwLock<Config>,
 }
 impl DatePlugin {
     fn parse_date(date_str: &str) -> Option<NaiveDate> {
@@ -204,6 +222,33 @@ impl DatePlugin {
         ).await;
     }
 
+    fn append_additional_holiday(easter_sunday_gregorian: &julian::Date, additional_holiday: &Holiday, message: &mut String) {
+        let mut holiday_gregorian = easter_sunday_gregorian.clone();
+        if additional_holiday.easter_sunday_offset_days >= 0 {
+            for _ in 0..additional_holiday.easter_sunday_offset_days {
+                holiday_gregorian = match holiday_gregorian.succ() {
+                    Some(hg) => hg,
+                    None => return, // oh well
+                };
+            }
+        } else {
+            for _ in 0..-additional_holiday.easter_sunday_offset_days {
+                holiday_gregorian = match holiday_gregorian.pred() {
+                    Some(hg) => hg,
+                    None => return, // oh well
+                };
+            }
+        }
+        write!(
+            message,
+            "\n{}: {:04}-{:02}-{:02}",
+            additional_holiday.name,
+            holiday_gregorian.year(),
+            holiday_gregorian.month().number(),
+            holiday_gregorian.day(),
+        ).unwrap();
+    }
+
     async fn handle_easter(&self, channel_message: &ChannelMessage, command: &CommandInstance) {
         let interface = match self.interface.upgrade() {
             None => return,
@@ -235,42 +280,58 @@ impl DatePlugin {
             return;
         }
 
-        if command.flags.contains("j") || command.flags.contains("julian") {
+        let (gregorian_date, mut output) = if command.flags.contains("j") || command.flags.contains("julian") {
             let julian_date = julian_computus(year);
             let gregorian_date = julian_date.convert_to(julian::Calendar::GREGORIAN);
-
-            send_channel_message!(
-                interface,
-                &channel_message.channel.name,
-                &format!(
-                    "Easter Sunday {} according to the Julian calendar:\nJulian date: {:04}-{:02}-{:02}\nequal to Gregorian date: {:04}-{:02}-{:02}",
-                    year,
-                    julian_date.year(), julian_date.month().number(), julian_date.day(),
-                    gregorian_date.year(), gregorian_date.month().number(), gregorian_date.day(),
-                ),
-            ).await;
+            let output = format!(
+                "Easter Sunday {} according to the Julian calendar:\nJulian date: {:04}-{:02}-{:02}\nequal to Gregorian date: {:04}-{:02}-{:02}",
+                year,
+                julian_date.year(), julian_date.month().number(), julian_date.day(),
+                gregorian_date.year(), gregorian_date.month().number(), gregorian_date.day(),
+            );
+            (gregorian_date, output)
         } else {
             let gregorian_date = gregorian_computus(year);
+            let output = format!(
+                "Easter Sunday {} according to the Gregorian calendar:\nGregorian date: {:04}-{:02}-{:02}",
+                year,
+                gregorian_date.year(), gregorian_date.month().number(), gregorian_date.day(),
+            );
+            (gregorian_date, output)
+        };
 
-            send_channel_message!(
-                interface,
-                &channel_message.channel.name,
-                &format!(
-                    "Easter Sunday {} according to the Gregorian calendar:\nGregorian date: {:04}-{:02}-{:02}",
-                    year,
-                    gregorian_date.year(), gregorian_date.month().number(), gregorian_date.day(),
-                ),
-            ).await;
+        if command.flags.contains("other-holidays") || command.flags.contains("h") {
+            // calculate additional holidays
+            let config_guard = self.config.read().await;
+            if config_guard.additional_holidays.len() > 0 {
+                write!(output, "\n\nGregorian dates of additional holidays:").unwrap();
+                for additional_holiday in &config_guard.additional_holidays {
+                    Self::append_additional_holiday(&gregorian_date, additional_holiday, &mut output);
+                }
+            }
         }
+
+        send_channel_message!(
+            interface,
+            &channel_message.channel.name,
+            &output,
+        ).await;
     }
 }
 #[async_trait]
 impl RocketBotPlugin for DatePlugin {
-    async fn new(interface: Weak<dyn RocketBotInterface>, _config: serde_json::Value) -> Self {
+    async fn new(interface: Weak<dyn RocketBotInterface>, config: serde_json::Value) -> Self {
         let my_interface = match interface.upgrade() {
             None => panic!("interface is gone"),
             Some(i) => i,
         };
+
+        let config_object: Config = serde_json::from_value(config)
+            .expect("failed to load config");
+        let config_lock = RwLock::new(
+            "DatePlugin::config",
+            config_object,
+        );
 
         my_interface.register_channel_command(
             &CommandDefinitionBuilder::new(
@@ -296,16 +357,19 @@ impl RocketBotPlugin for DatePlugin {
             &CommandDefinitionBuilder::new(
                 "easter",
                 "date",
-                "{cpfx}easter [-j|--julian] [YEAR]",
+                "{cpfx}easter [{sopfx}j|{lopfx}julian] [{sopfx}h|{lopfx}other-holidays] [YEAR]",
                 "Outputs the date of Easter (Easter Sunday) for the given year.",
             )
                 .add_flag("j")
                 .add_flag("julian")
+                .add_flag("h")
+                .add_flag("other-holidays")
                 .build()
         ).await;
 
         Self {
             interface,
+            config: config_lock,
         }
     }
 
@@ -335,8 +399,20 @@ impl RocketBotPlugin for DatePlugin {
         }
     }
 
-    async fn configuration_updated(&self, _new_config: serde_json::Value) -> bool {
-        // no config to update
+    async fn configuration_updated(&self, new_config: serde_json::Value) -> bool {
+        let new_config_object: Config = match serde_json::from_value(new_config) {
+            Ok(nco) => nco,
+            Err(e) => {
+                error!("failed to parse new config: {}", e);
+                return false;
+            },
+        };
+
+        {
+            let mut config_guard = self.config.write().await;
+            *config_guard = new_config_object;
+        }
+
         true
     }
 }
