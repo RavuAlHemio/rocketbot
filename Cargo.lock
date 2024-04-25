@@ -2048,6 +2048,7 @@ dependencies = [
  "rocketbot_plugin_degrees",
  "rocketbot_plugin_deobfuscate",
  "rocketbot_plugin_dice",
+ "rocketbot_plugin_elementary",
  "rocketbot_plugin_exiftell",
  "rocketbot_plugin_fact",
  "rocketbot_plugin_fortune",
@@ -2358,6 +2359,18 @@ dependencies = [
  "rocketbot_interface",
  "serde",
  "serde_json",
+]
+
+[[package]]
+name = "rocketbot_plugin_elementary"
+version = "0.1.0"
+dependencies = [
+ "async-trait",
+ "chrono",
+ "log",
+ "rocketbot_interface",
+ "serde_json",
+ "unicode-normalization",
 ]
 
 [[package]]

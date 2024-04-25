@@ -20,6 +20,7 @@ members = [
     "rocketbot_plugin_degrees",
     "rocketbot_plugin_deobfuscate",
     "rocketbot_plugin_dice",
+    "rocketbot_plugin_elementary",
     "rocketbot_plugin_exiftell",
     "rocketbot_plugin_fact",
     "rocketbot_plugin_fortune",

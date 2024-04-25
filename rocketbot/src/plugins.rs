@@ -53,6 +53,8 @@ pub(crate) async fn load_plugins(iface: Weak<dyn RocketBotInterface>) -> Vec<Plu
                 Box::new(rocketbot_plugin_deobfuscate::DeobfuscatePlugin::new(iface_weak, inner_config).await)
             } else if plugin_config.name == "dice" {
                 Box::new(rocketbot_plugin_dice::DicePlugin::new(iface_weak, inner_config).await)
+            } else if plugin_config.name == "elementary" {
+                Box::new(rocketbot_plugin_elementary::ElementaryPlugin::new(iface_weak, inner_config).await)
             } else if plugin_config.name == "exiftell" {
                 Box::new(rocketbot_plugin_exiftell::ExifTellPlugin::new(iface_weak, inner_config).await)
             } else if plugin_config.name == "fact" {

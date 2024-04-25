@@ -27,6 +27,7 @@ rocketbot_plugin_date = { path = "../rocketbot_plugin_date" }
 rocketbot_plugin_degrees = { path = "../rocketbot_plugin_degrees" }
 rocketbot_plugin_deobfuscate = { path = "../rocketbot_plugin_deobfuscate" }
 rocketbot_plugin_dice = { path = "../rocketbot_plugin_dice" }
+rocketbot_plugin_elementary = { path = "../rocketbot_plugin_elementary" }
 rocketbot_plugin_exiftell = { path = "../rocketbot_plugin_exiftell" }
 rocketbot_plugin_fact = { path = "../rocketbot_plugin_fact" }
 rocketbot_plugin_fortune = { path = "../rocketbot_plugin_fortune" }
