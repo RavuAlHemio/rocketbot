@@ -2368,7 +2368,9 @@ dependencies = [
  "async-trait",
  "chrono",
  "log",
+ "rand",
  "rocketbot_interface",
+ "serde",
  "serde_json",
  "unicode-normalization",
 ]

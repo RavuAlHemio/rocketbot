@@ -3,13 +3,17 @@ use std::sync::Weak;
 
 use async_trait::async_trait;
 use chrono::Local;
+use log::error;
+use rand::{Rng, SeedableRng};
+use rand::rngs::StdRng;
 use rocketbot_interface::send_channel_message;
 use rocketbot_interface::interfaces::{RocketBotInterface, RocketBotPlugin};
 use rocketbot_interface::model::ChannelMessage;
+use rocketbot_interface::sync::{Mutex, RwLock};
+use serde::{Deserialize, Serialize};
 use unicode_normalization::UnicodeNormalization;
 
 
-const MIN_LENGTH: usize = 5;
 const ELEMENTS: [&str; 118] = [
     "H",  "He", "Li", "Be", "B",  "C",  "N",  "O",
     "F",  "Ne", "Na", "Mg", "Al", "Si", "P",  "S",
@@ -27,6 +31,25 @@ const ELEMENTS: [&str; 118] = [
     "Db", "Sg", "Bh", "Hs", "Mt", "Ds", "Rg", "Cn",
     "Nh", "Fl", "Mc", "Lv", "Ts", "Og",
 ];
+
+
+/// The configuration of the elementary plugin.
+///
+/// The configuration allows a ramp up of response probabilities with some randomness. If the string
+/// of found elements has fewer elements than `random_min_elements`, the bot will never answer; if
+/// it has at least `random_max_elements`, the bot will always answer; and otherwise, the
+#[derive(Clone, Copy, Debug, Deserialize, Eq, Hash, Ord, PartialEq, PartialOrd, Serialize)]
+struct Config {
+    #[serde(default = "Config::default_random_min_elements")]
+    pub random_min_elements: usize,
+
+    #[serde(default = "Config::default_random_max_elements")]
+    pub random_max_elements: usize,
+}
+impl Config {
+    const fn default_random_min_elements() -> usize { 5 }
+    const fn default_random_max_elements() -> usize { 10 }
+}
 
 
 #[derive(Clone, Debug, Default, Eq, PartialEq)]
@@ -108,14 +131,31 @@ fn find_elements(lowercase_ascii_letters_str: &str, data: &PreprocessedData) -> 
 
 pub struct ElementaryPlugin {
     interface: Weak<dyn RocketBotInterface>,
+    config: RwLock<Config>,
+    rng: Mutex<StdRng>,
     preprocessed_data: PreprocessedData,
 }
 #[async_trait]
 impl RocketBotPlugin for ElementaryPlugin {
-    async fn new(interface: Weak<dyn RocketBotInterface>, _config: serde_json::Value) -> Self {
+    async fn new(interface: Weak<dyn RocketBotInterface>, config: serde_json::Value) -> Self {
+        let config_object: Config = serde_json::from_value(config)
+            .expect("failed to parse config");
+        let config_lock = RwLock::new(
+            "ElementaryPlugin::config",
+            config_object,
+        );
+
+        let std_rng = StdRng::from_entropy();
+        let rng = Mutex::new(
+            "ElementaryPlugin::rng",
+            std_rng,
+        );
+
         let preprocessed_data = preprocess_data();
         ElementaryPlugin {
             interface,
+            config: config_lock,
+            rng,
             preprocessed_data,
         }
     }
@@ -158,8 +198,61 @@ impl RocketBotPlugin for ElementaryPlugin {
             return;
         }
 
+        // get randomness values
+        let (lower_bound, upper_bound) = {
+            let config_guard = self.config.read().await;
+            (config_guard.random_min_elements, config_guard.random_max_elements)
+        };
+
         if let Some(found_element_indexes) = find_elements(&normalized_letters_body, &self.preprocessed_data) {
-            if found_element_indexes.len() >= MIN_LENGTH {
+            let output_response = if found_element_indexes.len() < lower_bound {
+                // too few
+                false
+            } else if found_element_indexes.len() >= upper_bound {
+                // enough to be an interesting message
+                true
+            } else {
+                // throw the die
+
+                // lower = 3, upper = 7
+                // 0 => false
+                // 1 => false
+                // 2 => false (also applies if we run it through the RNG formula)
+                // 3 =>
+                //      (upper_bound - lower_bound) + 1 = 5
+                //      (3 - lower_bound) + 1 = 1
+                //      1 / 5 = 0.2
+                //      rand() < 0.2
+                // 4 =>
+                //      (upper_bound - lower_bound) + 1 = 5
+                //      (4 - lower_bound) + 1 = 2
+                //      2 / 5 = 0.4
+                //      rand() < 0.4
+                // 5 =>
+                //      (upper_bound - lower_bound) + 1 = 5
+                //      (5 - lower_bound) + 1 = 3
+                //      3 / 5 = 0.6
+                //      rand() < 0.6
+                // 6 =>
+                //      (upper_bound - lower_bound) + 1 = 5
+                //      (6 - lower_bound) + 1 = 4
+                //      4 / 5 = 0.8
+                //      rand() < 0.8
+                // 7 => true (also applies if we run it through the RNG formula)
+
+                let step_count = (upper_bound - lower_bound) + 1;
+                let numerator = (found_element_indexes.len() - lower_bound) + 1;
+                let cutoff = (numerator as f64) / (step_count as f64);
+
+                let random_value: f64 = {
+                    let mut rng_lock = self.rng.lock().await;
+                    rng_lock.gen() // 0.0 <= x < 1.0
+                };
+
+                random_value < cutoff
+            };
+
+            if output_response {
                 let mut output_message = format!("Congratulations! Your message can be expressed as a sequence of chemical elements:");
                 for element_index in found_element_indexes {
                     output_message.push(' ');
@@ -174,8 +267,16 @@ impl RocketBotPlugin for ElementaryPlugin {
         }
     }
 
-    async fn configuration_updated(&self, _new_config: serde_json::Value) -> bool {
-        // not much to update
+    async fn configuration_updated(&self, new_config: serde_json::Value) -> bool {
+        let config_object: Config = match serde_json::from_value(new_config) {
+            Ok(c) => c,
+            Err(e) => {
+                error!("failed to parse new elementary config: {}", e);
+                return false;
+            },
+        };
+        let mut config_guard = self.config.write().await;
+        *config_guard = config_object;
         true
     }
 }
