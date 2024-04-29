@@ -1,4 +1,4 @@
-use std::collections::HashMap;
+use std::collections::{HashMap, HashSet};
 use std::sync::Weak;
 
 use async_trait::async_trait;
@@ -45,6 +45,9 @@ struct Config {
 
     #[serde(default = "Config::default_random_max_elements")]
     pub random_max_elements: usize,
+
+    #[serde(default)]
+    pub count_unique_elements: bool,
 }
 impl Config {
     const fn default_random_min_elements() -> usize { 5 }
@@ -199,16 +202,28 @@ impl RocketBotPlugin for ElementaryPlugin {
         }
 
         // get randomness values
-        let (lower_bound, upper_bound) = {
+        let (lower_bound, upper_bound, count_unique) = {
             let config_guard = self.config.read().await;
-            (config_guard.random_min_elements, config_guard.random_max_elements)
+            (
+                config_guard.random_min_elements,
+                config_guard.random_max_elements,
+                config_guard.count_unique_elements,
+            )
         };
 
         if let Some(found_element_indexes) = find_elements(&normalized_letters_body, &self.preprocessed_data) {
-            let output_response = if found_element_indexes.len() < lower_bound {
+            let element_count = if count_unique {
+                let unique_indexes: HashSet<&usize> = found_element_indexes.iter()
+                    .collect();
+                unique_indexes.len()
+            } else {
+                found_element_indexes.len()
+            };
+
+            let output_response = if element_count < lower_bound {
                 // too few
                 false
-            } else if found_element_indexes.len() >= upper_bound {
+            } else if element_count >= upper_bound {
                 // enough to be an interesting message
                 true
             } else {
@@ -241,7 +256,7 @@ impl RocketBotPlugin for ElementaryPlugin {
                 // 7 => true (also applies if we run it through the RNG formula)
 
                 let step_count = (upper_bound - lower_bound) + 1;
-                let numerator = (found_element_indexes.len() - lower_bound) + 1;
+                let numerator = (element_count - lower_bound) + 1;
                 let cutoff = (numerator as f64) / (step_count as f64);
 
                 let random_value: f64 = {
