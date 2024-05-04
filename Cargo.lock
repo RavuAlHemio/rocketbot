@@ -2367,11 +2367,16 @@ version = "0.1.0"
 dependencies = [
  "async-trait",
  "chrono",
+ "clap",
  "log",
  "rand",
+ "regex",
+ "reqwest",
  "rocketbot_interface",
  "serde",
  "serde_json",
+ "tokio",
+ "toml",
  "unicode-normalization",
 ]
 

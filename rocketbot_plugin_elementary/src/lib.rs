@@ -1,4 +1,4 @@
-use std::collections::{HashMap, HashSet};
+use std::collections::{BTreeMap, HashMap, HashSet};
 use std::sync::Weak;
 
 use async_trait::async_trait;
@@ -11,26 +11,22 @@ use rocketbot_interface::interfaces::{RocketBotInterface, RocketBotPlugin};
 use rocketbot_interface::model::ChannelMessage;
 use rocketbot_interface::sync::{Mutex, RwLock};
 use serde::{Deserialize, Serialize};
+use toml;
 use unicode_normalization::UnicodeNormalization;
 
 
-const ELEMENTS: [&str; 118] = [
-    "H",  "He", "Li", "Be", "B",  "C",  "N",  "O",
-    "F",  "Ne", "Na", "Mg", "Al", "Si", "P",  "S",
-    "Cl", "Ar", "K",  "Ca", "Sc", "Ti", "V",  "Cr",
-    "Mn", "Fe", "Co", "Ni", "Cu", "Zn", "Ga", "Ge",
-    "As", "Se", "Br", "Kr", "Rb", "Sr", "Y",  "Zr",
-    "Nb", "Mo", "Tc", "Ru", "Rh", "Pd", "Ag", "Cd",
-    "In", "Sn", "Sb", "Te", "I",  "Xe", "Cs", "Ba",
-    "La", "Ce", "Pr", "Nd", "Pm", "Sm", "Eu", "Gd",
-    "Tb", "Dy", "Ho", "Er", "Tm", "Yb", "Lu", "Hf",
-    "Ta", "W",  "Re", "Os", "Ir", "Pt", "Au", "Hg",
-    "Tl", "Pb", "Bi", "Po", "At", "Rn", "Fr", "Ra",
-    "Ac", "Th", "Pa", "U",  "Np", "Pu", "Am", "Cm",
-    "Bk", "Cf", "Es", "Fm", "Md", "No", "Lr", "Rf",
-    "Db", "Sg", "Bh", "Hs", "Mt", "Ds", "Rg", "Cn",
-    "Nh", "Fl", "Mc", "Lv", "Ts", "Og",
-];
+#[derive(Clone, Debug, Default, Deserialize, Eq, Hash, Ord, PartialEq, PartialOrd, Serialize)]
+pub struct ElementData {
+    pub elements: Vec<Element>,
+}
+
+
+#[derive(Clone, Debug, Default, Deserialize, Eq, Hash, Ord, PartialEq, PartialOrd, Serialize)]
+pub struct Element {
+    pub atomic_number: u32,
+    pub symbol: String,
+    pub language_to_name: BTreeMap<String, String>,
+}
 
 
 /// The configuration of the elementary plugin.
@@ -38,8 +34,11 @@ const ELEMENTS: [&str; 118] = [
 /// The configuration allows a ramp up of response probabilities with some randomness. If the string
 /// of found elements has fewer elements than `random_min_elements`, the bot will never answer; if
 /// it has at least `random_max_elements`, the bot will always answer; and otherwise, the
-#[derive(Clone, Copy, Debug, Deserialize, Eq, Hash, Ord, PartialEq, PartialOrd, Serialize)]
+#[derive(Clone, Debug, Deserialize, Eq, Hash, Ord, PartialEq, PartialOrd, Serialize)]
 struct Config {
+    #[serde(default = "Config::default_element_data_path")]
+    pub element_data_path: String,
+
     #[serde(default = "Config::default_random_min_elements")]
     pub random_min_elements: usize,
 
@@ -50,6 +49,7 @@ struct Config {
     pub count_unique_elements: bool,
 }
 impl Config {
+    fn default_element_data_path() -> String { "elements.toml".to_owned() }
     const fn default_random_min_elements() -> usize { 5 }
     const fn default_random_max_elements() -> usize { 10 }
 }
@@ -57,6 +57,7 @@ impl Config {
 
 #[derive(Clone, Debug, Default, Eq, PartialEq)]
 struct PreprocessedData {
+    pub elements: Vec<Element>,
     pub lowercase_elements_1: HashMap<char, usize>,
     pub lowercase_elements_2: HashMap<(char, char), usize>,
 }
@@ -69,11 +70,11 @@ struct State<'s> {
 }
 
 
-fn preprocess_data() -> PreprocessedData {
+fn preprocess_data(elements: Vec<Element>) -> PreprocessedData {
     let mut lowercase_elements_1 = HashMap::new();
     let mut lowercase_elements_2 = HashMap::new();
-    for (i, element) in ELEMENTS.iter().enumerate() {
-        let lowercase_chars: Vec<char> = element.to_lowercase().chars().collect();
+    for (i, element) in elements.iter().enumerate() {
+        let lowercase_chars: Vec<char> = element.symbol.to_lowercase().chars().collect();
         if lowercase_chars.len() == 1 {
             lowercase_elements_1.insert(lowercase_chars[0], i);
         } else {
@@ -82,6 +83,7 @@ fn preprocess_data() -> PreprocessedData {
         }
     }
     PreprocessedData {
+        elements,
         lowercase_elements_1,
         lowercase_elements_2,
     }
@@ -136,17 +138,25 @@ pub struct ElementaryPlugin {
     interface: Weak<dyn RocketBotInterface>,
     config: RwLock<Config>,
     rng: Mutex<StdRng>,
-    preprocessed_data: PreprocessedData,
+    preprocessed_data: RwLock<PreprocessedData>,
 }
 #[async_trait]
 impl RocketBotPlugin for ElementaryPlugin {
     async fn new(interface: Weak<dyn RocketBotInterface>, config: serde_json::Value) -> Self {
         let config_object: Config = serde_json::from_value(config)
             .expect("failed to parse config");
+        let element_data_path = config_object.element_data_path.clone();
         let config_lock = RwLock::new(
             "ElementaryPlugin::config",
             config_object,
         );
+
+        let element_data: ElementData = {
+            let element_data_string = std::fs::read_to_string(&element_data_path)
+                .expect("failed to read element data");
+            toml::from_str(&element_data_string)
+                .expect("failed to parse element data")
+        };
 
         let std_rng = StdRng::from_entropy();
         let rng = Mutex::new(
@@ -154,12 +164,16 @@ impl RocketBotPlugin for ElementaryPlugin {
             std_rng,
         );
 
-        let preprocessed_data = preprocess_data();
+        let preprocessed_data = preprocess_data(element_data.elements);
+        let preprocessed_data_lock = RwLock::new(
+            "ElementaryPlugin::preprocessed_data",
+            preprocessed_data,
+        );
         ElementaryPlugin {
             interface,
             config: config_lock,
             rng,
-            preprocessed_data,
+            preprocessed_data: preprocessed_data_lock,
         }
     }
 
@@ -210,8 +224,12 @@ impl RocketBotPlugin for ElementaryPlugin {
                 config_guard.count_unique_elements,
             )
         };
+        let preprocessed_data = {
+            let data_guard = self.preprocessed_data.read().await;
+            (*data_guard).clone()
+        };
 
-        if let Some(found_element_indexes) = find_elements(&normalized_letters_body, &self.preprocessed_data) {
+        if let Some(found_element_indexes) = find_elements(&normalized_letters_body, &preprocessed_data) {
             let element_count = if count_unique {
                 let unique_indexes: HashSet<&usize> = found_element_indexes.iter()
                     .collect();
@@ -271,7 +289,7 @@ impl RocketBotPlugin for ElementaryPlugin {
                 let mut output_message = format!("Congratulations! Your message can be expressed as a sequence of chemical elements:");
                 for element_index in found_element_indexes {
                     output_message.push(' ');
-                    output_message.push_str(ELEMENTS[element_index]);
+                    output_message.push_str(&preprocessed_data.elements[element_index].symbol);
                 }
                 send_channel_message!(
                     interface,
@@ -290,8 +308,33 @@ impl RocketBotPlugin for ElementaryPlugin {
                 return false;
             },
         };
-        let mut config_guard = self.config.write().await;
-        *config_guard = config_object;
+
+        let element_data: ElementData = {
+            let element_data_string = match std::fs::read_to_string(&config_object.element_data_path) {
+                Ok(eds) => eds,
+                Err(e) => {
+                    error!("failed to read new element data from file {:?}: {}", config_object.element_data_path, e);
+                    return false;
+                },
+            };
+            match toml::from_str(&element_data_string) {
+                Ok(ed) => ed,
+                Err(e) => {
+                    error!("failed to parse new element data from file {:?}: {}", config_object.element_data_path, e);
+                    return false;
+                },
+            }
+        };
+        let preprocessed_data = preprocess_data(element_data.elements);
+
+        {
+            let mut config_guard = self.config.write().await;
+            *config_guard = config_object;
+        }
+        {
+            let mut preprocessed_data_guard = self.preprocessed_data.write().await;
+            *preprocessed_data_guard = preprocessed_data;
+        }
         true
     }
 }
@@ -299,11 +342,44 @@ impl RocketBotPlugin for ElementaryPlugin {
 
 #[cfg(test)]
 mod tests {
-    use super::{find_elements, preprocess_data};
+    use std::collections::BTreeMap;
+    use super::{Element, find_elements, preprocess_data};
+
+    fn make_elements(elements: &[&str]) -> Vec<Element> {
+        let mut element_vec = Vec::with_capacity(elements.len());
+        for (i, elem) in elements.iter().enumerate() {
+            let atomic_number = (i + 1).try_into().unwrap();
+            let element = Element {
+                atomic_number,
+                symbol: (*elem).to_owned(),
+                language_to_name: BTreeMap::new(),
+            };
+            element_vec.push(element);
+        }
+        element_vec
+    }
 
     #[test]
     fn test_find_elements() {
-        let data = preprocess_data();
+        let test_elements = make_elements(&[
+            "H",  "He", "Li", "Be", "B",  "C",  "N",  "O",
+            "F",  "Ne", "Na", "Mg", "Al", "Si", "P",  "S",
+            "Cl", "Ar", "K",  "Ca", "Sc", "Ti", "V",  "Cr",
+            "Mn", "Fe", "Co", "Ni", "Cu", "Zn", "Ga", "Ge",
+            "As", "Se", "Br", "Kr", "Rb", "Sr", "Y",  "Zr",
+            "Nb", "Mo", "Tc", "Ru", "Rh", "Pd", "Ag", "Cd",
+            "In", "Sn", "Sb", "Te", "I",  "Xe", "Cs", "Ba",
+            "La", "Ce", "Pr", "Nd", "Pm", "Sm", "Eu", "Gd",
+            "Tb", "Dy", "Ho", "Er", "Tm", "Yb", "Lu", "Hf",
+            "Ta", "W",  "Re", "Os", "Ir", "Pt", "Au", "Hg",
+            "Tl", "Pb", "Bi", "Po", "At", "Rn", "Fr", "Ra",
+            "Ac", "Th", "Pa", "U",  "Np", "Pu", "Am", "Cm",
+            "Bk", "Cf", "Es", "Fm", "Md", "No", "Lr", "Rf",
+            "Db", "Sg", "Bh", "Hs", "Mt", "Ds", "Rg", "Cn",
+            "Nh", "Fl", "Mc", "Lv", "Ts", "Og",
+        ]);
+
+        let data = preprocess_data(test_elements);
         assert_eq!(find_elements("", &data).unwrap().len(), 0);
         assert_eq!(find_elements("h", &data).unwrap(), [0]);
         assert_eq!(find_elements("hehe", &data).unwrap(), [1, 1]);

@@ -11,4 +11,11 @@ rand = { version = "0.8" }
 rocketbot_interface = { path = "../rocketbot_interface" }
 serde = { version = "1.0", features = ["derive"] }
 serde_json = { version = "1.0" }
+toml = { version = "0.8" }
 unicode-normalization = { version = "0.1" }
+
+[dev-dependencies]
+clap = { version = "4.0", features = ["derive"] }
+regex = { version = "1.9" }
+reqwest = { version = "0.11", features = ["rustls-tls"] }
+tokio = { version = "1.32", features = ["macros", "rt-multi-thread"] }
