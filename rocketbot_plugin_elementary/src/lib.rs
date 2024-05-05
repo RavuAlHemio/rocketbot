@@ -4,9 +4,12 @@ use std::sync::Weak;
 use async_trait::async_trait;
 use chrono::Local;
 use log::error;
+use once_cell::sync::Lazy;
 use rand::{Rng, SeedableRng};
 use rand::rngs::StdRng;
+use regex::Regex;
 use rocketbot_interface::send_channel_message;
+use rocketbot_interface::commands::{CommandDefinitionBuilder, CommandInstance, CommandValueType};
 use rocketbot_interface::interfaces::{RocketBotInterface, RocketBotPlugin};
 use rocketbot_interface::model::ChannelMessage;
 use rocketbot_interface::sync::{Mutex, RwLock};
@@ -68,6 +71,11 @@ struct State<'s> {
     pub element_indexes: Vec<usize>,
     pub remaining_string: &'s str,
 }
+
+
+static WHITESPACE_RE: Lazy<Regex> = Lazy::new(|| Regex::new(
+    "\\s+"
+).expect("failed to compile whitespace regex"));
 
 
 fn preprocess_data(elements: Vec<Element>) -> PreprocessedData {
@@ -134,15 +142,78 @@ fn find_elements(lowercase_ascii_letters_str: &str, data: &PreprocessedData) -> 
 }
 
 
+fn get_element_index(lowercase_symbol: &str, data: &PreprocessedData) -> Option<usize> {
+    let char_count = lowercase_symbol.chars().count();
+    if char_count == 1 {
+        let c1 = lowercase_symbol.chars().nth(0).unwrap();
+        data.lowercase_elements_1.get(&c1)
+            .map(|i| *i)
+    } else if char_count == 2 {
+        let c1 = lowercase_symbol.chars().nth(0).unwrap();
+        let c2 = lowercase_symbol.chars().nth(1).unwrap();
+        data.lowercase_elements_2.get(&(c1, c2))
+            .map(|i| *i)
+    } else {
+        None
+    }
+}
+
+
 pub struct ElementaryPlugin {
     interface: Weak<dyn RocketBotInterface>,
     config: RwLock<Config>,
     rng: Mutex<StdRng>,
     preprocessed_data: RwLock<PreprocessedData>,
 }
+impl ElementaryPlugin {
+    async fn channel_command_elements(&self, channel_message: &ChannelMessage, command: &CommandInstance) {
+        let interface = match self.interface.upgrade() {
+            None => return,
+            Some(i) => i,
+        };
+
+        let lang_opt = command.options.get("lang")
+            .or_else(|| command.options.get("l"))
+            .and_then(|cv| cv.as_str());
+
+        let elements: Vec<String> = {
+            let data_guard = self.preprocessed_data.read().await;
+
+            WHITESPACE_RE.split(&command.rest.to_lowercase())
+                .map(|piece| get_element_index(piece, &*data_guard))
+                .map(|i_opt| {
+                    if let Some(i) = i_opt {
+                        if let Some(lang) = lang_opt {
+                            data_guard.elements[i].language_to_name
+                                .get(lang)
+                                .map(|name| name.to_owned())
+                                .unwrap_or_else(|| "?".to_owned())
+                        } else {
+                            format!("{}", data_guard.elements[i].atomic_number)
+                        }
+                    } else {
+                        "??".to_owned()
+                    }
+                })
+                .collect()
+        };
+
+        let response = elements.join(", ");
+        send_channel_message!(
+            interface,
+            &channel_message.channel.name,
+            &response,
+        ).await;
+    }
+}
 #[async_trait]
 impl RocketBotPlugin for ElementaryPlugin {
     async fn new(interface: Weak<dyn RocketBotInterface>, config: serde_json::Value) -> Self {
+        let my_interface = match interface.upgrade() {
+            None => panic!("interface is gone"),
+            Some(i) => i,
+        };
+
         let config_object: Config = serde_json::from_value(config)
             .expect("failed to parse config");
         let element_data_path = config_object.element_data_path.clone();
@@ -169,6 +240,19 @@ impl RocketBotPlugin for ElementaryPlugin {
             "ElementaryPlugin::preprocessed_data",
             preprocessed_data,
         );
+
+        my_interface.register_channel_command(
+            &CommandDefinitionBuilder::new(
+                "elements",
+                "elementary",
+                "{cpfx}elements [{lopfx}lang LANG] ELEMENTSYMBOLS",
+                "Translates element symbols into their names.",
+            )
+                .add_option("l", CommandValueType::String)
+                .add_option("lang", CommandValueType::String)
+                .build()
+        ).await;
+
         ElementaryPlugin {
             interface,
             config: config_lock,
@@ -297,6 +381,20 @@ impl RocketBotPlugin for ElementaryPlugin {
                     &output_message,
                 ).await;
             }
+        }
+    }
+
+    async fn channel_command(&self, channel_message: &ChannelMessage, command: &CommandInstance) {
+        if command.name == "elements" {
+            self.channel_command_elements(channel_message, command).await
+        }
+    }
+
+    async fn get_command_help(&self, command_name: &str) -> Option<String> {
+        if command_name == "elements" {
+            Some(include_str!("../help/elements.md").to_owned())
+        } else {
+            None
         }
     }
 

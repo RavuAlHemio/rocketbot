@@ -2369,6 +2369,7 @@ dependencies = [
  "chrono",
  "clap",
  "log",
+ "once_cell",
  "rand",
  "regex",
  "reqwest",
