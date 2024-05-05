@@ -1,13 +1,19 @@
 use std::env;
 use std::io::BufRead;
 
-use env_logger;
 use rocketbot_spelling::{HunspellEngine, SpellingEngine};
 use serde_json;
 
 
 fn run() -> i32 {
-    env_logger::init();
+    // set up tracing
+    let (stderr_non_blocking, _guard) = tracing_appender::non_blocking::NonBlockingBuilder::default()
+        .lossy(false)
+        .finish(std::io::stderr());
+    tracing_subscriber::fmt()
+        .with_env_filter(tracing_subscriber::EnvFilter::from_default_env())
+        .with_writer(stderr_non_blocking)
+        .init();
 
     let args: Vec<String> = env::args().collect();
     if args.len() < 3 {

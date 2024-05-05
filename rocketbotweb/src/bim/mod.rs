@@ -11,9 +11,9 @@ use std::collections::{BTreeMap, HashMap};
 use std::fs::File;
 
 use form_urlencoded;
-use log::{error, warn};
 use rocketbot_bim_common::{VehicleInfo, VehicleNumber};
 use serde::{Deserialize, Serialize};
+use tracing::{error, warn};
 
 use crate::{connect_to_db, get_bot_config};
 

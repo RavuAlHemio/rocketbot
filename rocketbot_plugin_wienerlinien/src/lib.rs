@@ -9,7 +9,6 @@ use std::time::{Duration, Instant};
 use async_trait::async_trait;
 use csv;
 use hyper::body::Buf;
-use log::error;
 use reqwest;
 use rocketbot_interface::send_channel_message;
 use rocketbot_interface::commands::{CommandDefinitionBuilder, CommandInstance, CommandValueType};
@@ -18,6 +17,7 @@ use rocketbot_interface::model::ChannelMessage;
 use rocketbot_interface::sync::{Mutex, RwLock};
 use serde_json;
 use strsim::damerau_levenshtein;
+use tracing::error;
 
 use crate::model::{DepartureLine, DepartureTimeEntry, MonitorWrapper, StoppingPoint};
 

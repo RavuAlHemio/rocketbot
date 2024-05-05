@@ -3,7 +3,6 @@ use std::sync::Weak;
 
 use async_trait::async_trait;
 use chrono::Local;
-use log::{debug, error};
 use rand::{Rng, SeedableRng};
 use rand::rngs::StdRng;
 use regex::Regex;
@@ -16,6 +15,7 @@ use rocketbot_interface::model::{ChannelMessage, PrivateMessage};
 use rocketbot_interface::sync::{Mutex, RwLock};
 use rocketbot_regex_replace::ReplacerRegex;
 use serde_json;
+use tracing::{debug, error};
 
 
 #[derive(Clone, Debug)]

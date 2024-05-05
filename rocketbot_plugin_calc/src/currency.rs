@@ -1,7 +1,7 @@
-use log::{error, warn};
 use minidom::Element;
 use num_bigint::BigInt;
 use reqwest;
+use tracing::{error, warn};
 
 use crate::units::{BaseUnit, DerivedUnit, NumberUnits, UnitDatabase};
 

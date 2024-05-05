@@ -13,7 +13,6 @@ use std::time::{Duration, Instant};
 
 use async_trait::async_trait;
 use chrono::{DateTime, TimeZone, Utc};
-use log::error;
 use num_bigint::BigUint;
 use once_cell::sync::Lazy;
 use regex::Regex;
@@ -24,6 +23,7 @@ use rocketbot_interface::model::ChannelMessage;
 use rocketbot_interface::sync::{Mutex, run_stoppable_task_timeout, RwLock, StoppableTaskResult};
 use serde_json;
 use toml;
+use tracing::error;
 
 use crate::ast::{AstNode, SimplificationState};
 use crate::factor::{PrimeCache, PrimeFactors};

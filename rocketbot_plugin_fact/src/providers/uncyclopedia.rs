@@ -3,7 +3,6 @@ use std::time::Duration;
 
 use async_trait::async_trait;
 use bytes::Buf;
-use log::warn;
 use rand::{RngCore, Rng};
 use regex::Regex;
 use reqwest;
@@ -12,6 +11,7 @@ use rocketbot_interface::sync::Mutex;
 use percent_encoding::{AsciiSet, NON_ALPHANUMERIC, percent_encode};
 use serde::{Deserialize, Serialize};
 use serde_json;
+use tracing::warn;
 use url::Url;
 
 use crate::interface::{FactError, FactProvider};

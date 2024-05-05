@@ -7,7 +7,6 @@ edition = "2021"
 async-trait = { version = "0.1" }
 chrono = { version = "0.4", features = ["serde"] }
 ciborium = { version = "0.2" }
-log = { version = "0.4" }
 once_cell = { version = "1.18" }
 png = { version = "0.17" }
 rand = { version = "0.8" }
@@ -21,6 +20,7 @@ serde_json = { version = "1.0" }
 smallvec = { version = "1.13" }
 tokio = { version = "1.37", features = ["rt"] }
 tokio-postgres = { version = "0.7", features = ["with-chrono-0_4"] }
+tracing = { version = "0.1" }
 
 [dev-dependencies]
 clap = { version = "4.0", features = ["derive"] }

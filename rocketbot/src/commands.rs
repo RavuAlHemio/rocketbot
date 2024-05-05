@@ -1,10 +1,10 @@
 use std::collections::{HashMap, HashSet};
 
-use log::{debug, warn};
 use rocketbot_interface::commands::{
     CommandBehaviors, CommandConfiguration, CommandDefinition, CommandInstance, CommandValue,
     CommandValueType,
 };
+use tracing::{debug, warn};
 
 use crate::string_utils::Token;
 

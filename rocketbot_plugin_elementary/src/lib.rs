@@ -3,7 +3,6 @@ use std::sync::Weak;
 
 use async_trait::async_trait;
 use chrono::Local;
-use log::error;
 use once_cell::sync::Lazy;
 use rand::{Rng, SeedableRng};
 use rand::rngs::StdRng;
@@ -15,6 +14,7 @@ use rocketbot_interface::model::ChannelMessage;
 use rocketbot_interface::sync::{Mutex, RwLock};
 use serde::{Deserialize, Serialize};
 use toml;
+use tracing::error;
 use unicode_normalization::UnicodeNormalization;
 
 

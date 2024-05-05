@@ -5,11 +5,11 @@ use askama::Template;
 use http_body_util::Full;
 use hyper::{Method, Request, Response};
 use hyper::body::{Bytes, Incoming};
-use log::error;
 use rocketbot_bim_common::{VehicleInfo, VehicleNumber};
 use rocketbot_date_time::DateTimeLocalWithWeekday;
 use serde::{Deserialize, Serialize, Serializer};
 use serde::ser::SerializeStruct;
+use tracing::error;
 
 use crate::{get_query_pairs, render_response, return_405, return_500};
 use crate::bim::{

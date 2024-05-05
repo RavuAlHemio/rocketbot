@@ -6,7 +6,6 @@ use std::sync::Weak;
 
 use async_trait::async_trait;
 use chrono::{DateTime, Utc};
-use log::error;
 use rand::{Rng, SeedableRng};
 use rand::rngs::StdRng;
 use rand::seq::SliceRandom;
@@ -18,6 +17,7 @@ use rocketbot_interface::sync::{Mutex, RwLock};
 use serde_json;
 use tokio_postgres::NoTls;
 use tokio_postgres::types::ToSql;
+use tracing::error;
 
 use crate::model::{MessageType, Quote, QuoteAndVoteSum};
 

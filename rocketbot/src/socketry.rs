@@ -19,7 +19,6 @@ use hyper_rustls::{HttpsConnector, HttpsConnectorBuilder};
 use hyper_util::client::legacy::Client as HttpClient;
 use hyper_util::client::legacy::connect::HttpConnector;
 use hyper_util::rt::TokioExecutor;
-use log::{debug, error, info, warn};
 use rand::{Rng, SeedableRng};
 use rand::distributions::{Distribution, Uniform};
 use rand::rngs::StdRng;
@@ -41,6 +40,7 @@ use tokio::sync::Notify;
 use tokio::sync::mpsc;
 use tokio_tungstenite::connect_async;
 use tokio_tungstenite::tungstenite::Message as WebSocketMessage;
+use tracing::{debug, error, info, warn};
 use url::Url;
 
 use crate::commands::parse_command;
@@ -1137,7 +1137,7 @@ async fn run_connections(mut state: ConnectionState) {
         match run_connection(&mut state).await {
             Ok(()) => break, // graceful disconnection
             Err(e) => {
-                log::error!("{}", e);
+                tracing::error!("{}", e);
             },
         };
 

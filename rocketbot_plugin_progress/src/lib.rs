@@ -2,7 +2,6 @@ use std::fmt::Write;
 use std::sync::Weak;
 
 use async_trait::async_trait;
-use log::error;
 use once_cell::sync::Lazy;
 use regex::{Captures, Regex};
 use rocketbot_interface::{JsonValueExtensions, send_channel_message};
@@ -11,6 +10,7 @@ use rocketbot_interface::interfaces::{RocketBotInterface, RocketBotPlugin};
 use rocketbot_interface::model::ChannelMessage;
 use rocketbot_interface::sync::RwLock;
 use serde_json;
+use tracing::error;
 
 
 static PROGRESS_INDICATOR_RE: Lazy<Regex> = Lazy::new(|| Regex::new(concat!(

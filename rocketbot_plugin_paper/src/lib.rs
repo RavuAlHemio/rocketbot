@@ -4,7 +4,6 @@ use std::sync::Weak;
 
 use async_trait::async_trait;
 use bigdecimal::BigDecimal;
-use log::error;
 use num_bigint::BigInt;
 use num_traits::{FromPrimitive, One, Zero};
 use once_cell::sync::Lazy;
@@ -15,6 +14,7 @@ use rocketbot_interface::interfaces::{RocketBotInterface, RocketBotPlugin};
 use rocketbot_interface::model::ChannelMessage;
 use rocketbot_interface::sync::RwLock;
 use serde_json;
+use tracing::error;
 
 
 static PAPER_RE: Lazy<Regex> = Lazy::new(|| Regex::new(

@@ -4,7 +4,6 @@ use std::sync::Weak;
 
 use async_trait::async_trait;
 use chrono::{Datelike, Local};
-use log::error;
 use num_bigint::BigInt;
 use once_cell::sync::Lazy;
 use rand::{Rng, SeedableRng};
@@ -19,6 +18,7 @@ use rocketbot_interface::model::ChannelMessage;
 use rocketbot_interface::sync::{Mutex, RwLock};
 use serde::{Deserialize, Serialize};
 use serde_json;
+use tracing::error;
 
 
 static ROLL_REGEX: Lazy<Regex> = Lazy::new(|| Regex::new(concat!(

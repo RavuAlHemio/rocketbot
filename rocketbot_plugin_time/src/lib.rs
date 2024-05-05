@@ -3,7 +3,6 @@ use std::sync::Weak;
 use async_trait::async_trait;
 use chrono::{Datelike, Offset, Timelike, Utc};
 use chrono_tz::TZ_VARIANTS;
-use log::error;
 use rocketbot_geocoding::Geocoder;
 use rocketbot_interface::send_channel_message;
 use rocketbot_interface::commands::{CommandDefinitionBuilder, CommandInstance};
@@ -11,6 +10,7 @@ use rocketbot_interface::interfaces::{RocketBotPlugin, RocketBotInterface};
 use rocketbot_interface::model::ChannelMessage;
 use rocketbot_interface::sync::RwLock;
 use serde_json;
+use tracing::error;
 
 
 struct Config {

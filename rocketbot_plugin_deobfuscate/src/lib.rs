@@ -5,7 +5,6 @@ use std::sync::{Arc, Weak};
 
 use async_trait::async_trait;
 use chrono::Local;
-use log::error;
 use once_cell::sync::Lazy;
 use regex::{Captures, Regex};
 use rocketbot_interface::{JsonValueExtensions, ResultExtensions, send_channel_message};
@@ -13,6 +12,7 @@ use rocketbot_interface::model::ChannelMessage;
 use rocketbot_interface::interfaces::{RocketBotInterface, RocketBotPlugin};
 use rocketbot_interface::sync::Mutex;
 use rocketbot_spelling::{HunspellEngine, SpellingEngine};
+use tracing::error;
 
 use crate::decoders::rot13;
 

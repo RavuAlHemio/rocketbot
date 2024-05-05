@@ -4,11 +4,11 @@ use std::sync::Arc;
 use async_trait::async_trait;
 use bytes::Buf;
 use chrono::{DateTime, Utc};
-use log::debug;
 use reqwest::{self, IntoUrl};
 use rocketbot_interface::sync::Mutex;
 use serde::{Deserialize, Serialize};
 use serde::de::DeserializeOwned;
+use tracing::debug;
 use url::Url;
 
 use crate::{GeocodingError, GeocodingProvider, GeoCoordinates, GeoLocation};

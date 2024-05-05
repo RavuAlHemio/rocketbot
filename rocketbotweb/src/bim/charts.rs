@@ -6,10 +6,10 @@ use askama::Template;
 use http_body_util::Full;
 use hyper::{Method, Request, Response};
 use hyper::body::{Bytes, Incoming};
-use log::error;
 use png;
 use rocketbot_bim_common::VehicleNumber;
 use serde::Serialize;
+use tracing::error;
 
 use crate::{get_query_pairs, render_response, return_400, return_405, return_500};
 use crate::bim::{connect_to_db, obtain_vehicle_extract};

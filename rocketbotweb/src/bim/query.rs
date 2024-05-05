@@ -7,11 +7,11 @@ use chrono::{DateTime, Duration, Local, NaiveDate, Utc};
 use http_body_util::Full;
 use hyper::{Method, Request, Response};
 use hyper::body::{Bytes, Incoming};
-use log::error;
 use rocketbot_bim_common::VehicleNumber;
 use rocketbot_string::NatSortedString;
 use serde::Serialize;
 use tokio_postgres::types::ToSql;
+use tracing::error;
 
 use crate::{get_query_pairs, render_json, render_response, return_400, return_405, return_500};
 use crate::bim::{

@@ -6,12 +6,12 @@ use std::sync::Weak;
 
 use async_trait::async_trait;
 use chrono::Local;
-use log::error;
 use regex::Regex;
 use rocketbot_interface::interfaces::{RocketBotInterface, RocketBotPlugin};
 use rocketbot_interface::model::{Attachment, ChannelMessage, OutgoingMessageWithAttachmentBuilder};
 use serde_json;
 use tokio::sync::RwLock;
+use tracing::error;
 
 use crate::slice_image::SliceImage;
 

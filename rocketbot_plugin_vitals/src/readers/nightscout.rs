@@ -1,8 +1,8 @@
 use async_trait::async_trait;
 use bytes::Buf;
 use chrono::{DateTime, Local, Utc};
-use log::error;
 use serde::{Deserialize, Serialize};
+use tracing::error;
 
 use crate::interface::VitalsReader;
 

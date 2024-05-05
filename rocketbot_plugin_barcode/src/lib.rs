@@ -6,7 +6,6 @@ use std::sync::Weak;
 
 use async_trait::async_trait;
 use chrono::{Duration, NaiveDate, TimeZone, Utc};
-use log::{debug, error};
 use rand::{Rng, SeedableRng};
 use rand::rngs::StdRng;
 use rocketbot_barcode::bitmap::BitmapRenderOptions;
@@ -19,6 +18,7 @@ use rocketbot_interface::commands::{
 use rocketbot_interface::interfaces::{RocketBotInterface, RocketBotPlugin};
 use rocketbot_interface::model::{Attachment, ChannelMessage, OutgoingMessageWithAttachment};
 use rocketbot_interface::sync::RwLock;
+use tracing::{debug, error};
 
 use crate::vaxcert::{encode_vax, make_vax_pdf, normalize_name, PdfSettings, VaxInfo};
 

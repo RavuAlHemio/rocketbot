@@ -1,11 +1,11 @@
 use async_trait::async_trait;
 use bytes::Buf;
 use chrono::{DateTime, Duration, Local, Utc};
-use log::error;
 use num_rational::Rational64;
 use rocketbot_interface::phrase_join;
 use serde::{Deserialize, Serialize};
 use serde::de::DeserializeOwned;
+use tracing::error;
 
 use crate::interface::VitalsReader;
 

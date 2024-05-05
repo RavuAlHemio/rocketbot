@@ -1,12 +1,12 @@
 use std::collections::{BTreeSet, VecDeque};
 
-use log::trace;
 use num_bigint::BigInt;
 use num_traits::Num;
 use pest::Parser;
 use pest::error::Error;
 use pest::iterators::{Pair, Pairs};
 use pest_derive::Parser;
+use tracing::trace;
 
 use crate::ast::{AstNode, AstNodeAtLocation, AstRoot, BinaryOperation, UnaryOperation};
 use crate::numbers::{Number, NumberValue};

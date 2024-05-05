@@ -7,13 +7,13 @@ use std::fmt::Write;
 use std::sync::Weak;
 
 use async_trait::async_trait;
-use log::warn;
 use rocketbot_interface::{send_channel_message, send_private_message};
 use rocketbot_interface::commands::{CommandDefinitionBuilder, CommandInstance};
 use rocketbot_interface::interfaces::{RocketBotInterface, RocketBotPlugin};
 use rocketbot_interface::model::{ChannelMessage, PrivateMessage};
 use rustc_version_runtime;
 use serde_json;
+use tracing::warn;
 
 
 // should be filled in by CI/CD during a build

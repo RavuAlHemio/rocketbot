@@ -14,6 +14,7 @@ use std::slice;
 use chrono::{DateTime, TimeZone, Utc};
 use once_cell::sync::Lazy;
 use serde_json;
+use tracing;
 
 
 static EMPTY_MAP: Lazy<serde_json::Map<String, serde_json::Value>> = Lazy::new(|| serde_json::Map::new());
@@ -199,7 +200,7 @@ impl<T, E: fmt::Display> ResultExtensions<T, E> for Result<T, E> {
         match self {
             Ok(t) => Ok(t),
             Err(e) => {
-                log::error!("{}: {}", error_message, e);
+                tracing::error!("{}: {}", error_message, e);
                 Err(error_message)
             },
         }

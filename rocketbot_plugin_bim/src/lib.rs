@@ -17,7 +17,6 @@ use chrono::{
     Datelike, DateTime, Duration, Local, LocalResult, NaiveDate, NaiveDateTime, Timelike, TimeZone,
     Weekday,
 };
-use log::{debug, error, info};
 use once_cell::sync::{Lazy, OnceCell};
 use rand::{Rng, thread_rng};
 use regex::{Captures, Regex};
@@ -35,6 +34,7 @@ use serde_json;
 use tokio::sync::mpsc;
 use tokio_postgres::NoTls;
 use tokio_postgres::types::ToSql;
+use tracing::{debug, error, info};
 
 use crate::achievements::{get_all_achievements, recalculate_achievements};
 use crate::range_set::RangeSet;

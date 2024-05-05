@@ -2,13 +2,13 @@ use std::sync::Weak;
 
 use async_trait::async_trait;
 use chrono::Local;
-use log::error;
 use md5::{Digest, Md5};
 use regex::Regex;
 use rocketbot_interface::send_channel_message;
 use rocketbot_interface::interfaces::{RocketBotInterface, RocketBotPlugin};
 use rocketbot_interface::model::ChannelMessage;
 use rocketbot_interface::sync::RwLock;
+use tracing::error;
 
 
 #[derive(Clone, Debug)]

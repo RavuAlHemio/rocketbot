@@ -7,10 +7,10 @@ use chrono::{DateTime, Local, NaiveDate, TimeZone};
 use http_body_util::Full;
 use hyper::{Method, Request, Response};
 use hyper::body::{Bytes, Incoming};
-use log::error;
 use rocketbot_bim_common::{VehicleInfo, VehicleNumber};
 use serde::Serialize;
 use tokio_postgres::types::ToSql;
+use tracing::error;
 
 use crate::{get_query_pairs, render_response, return_400, return_405, return_500};
 use crate::bim::{connect_to_db, obtain_company_to_bim_database, obtain_company_to_definition};

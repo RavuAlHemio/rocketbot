@@ -4,9 +4,9 @@ use std::sync::Arc;
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::time::Duration;
 
-use log::{debug, error};
 use tokio;
 use tokio::task::JoinError;
+use tracing::{debug, error};
 
 
 pub struct Mutex<T: ?Sized> {

@@ -3,13 +3,13 @@ use std::sync::Weak;
 
 use async_trait::async_trait;
 use chrono::Local;
-use log::error;
 use regex::Regex;
 use rocketbot_interface::{JsonValueExtensions, send_channel_message};
 use rocketbot_interface::interfaces::{RocketBotInterface, RocketBotPlugin};
 use rocketbot_interface::model::ChannelMessage;
 use rocketbot_interface::sync::{Mutex, RwLock};
 use serde_json;
+use tracing::error;
 
 
 const TIMESTAMP_FORMAT: &str = "%Y-%m-%dT%H:%M:%S%.fZ";

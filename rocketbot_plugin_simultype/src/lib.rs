@@ -3,13 +3,13 @@ use std::sync::Weak;
 
 use async_trait::async_trait;
 use chrono::Local;
-use log::error;
 use rand::{Rng, SeedableRng};
 use rand::rngs::StdRng;
 use rocketbot_interface::interfaces::{RocketBotInterface, RocketBotPlugin};
 use rocketbot_interface::model::{Channel, PrivateConversation, User};
 use rocketbot_interface::sync::{Mutex, RwLock};
 use serde_json;
+use tracing::error;
 
 
 #[derive(Clone, Debug, Eq, PartialEq)]

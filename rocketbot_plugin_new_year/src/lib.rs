@@ -2,11 +2,11 @@ use std::sync::Weak;
 
 use async_trait::async_trait;
 use chrono::{Datelike, Local, TimeZone, Utc};
-use log::error;
 use rocketbot_interface::{JsonValueExtensions, send_channel_message};
 use rocketbot_interface::interfaces::{RocketBotInterface, RocketBotPlugin};
 use rocketbot_interface::sync::RwLock;
 use serde_json;
+use tracing::error;
 
 
 #[derive(Clone, Debug, Eq, Hash, PartialEq)]

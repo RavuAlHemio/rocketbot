@@ -5,7 +5,6 @@ use std::sync::{Arc, Weak};
 
 use async_trait::async_trait;
 use chrono::Local;
-use log::{debug, error};
 use rand::{Rng, RngCore, SeedableRng};
 use rand::rngs::StdRng;
 use rand::seq::SliceRandom;
@@ -14,6 +13,7 @@ use rocketbot_interface::ResultExtensions;
 use rocketbot_interface::interfaces::{RocketBotInterface, RocketBotPlugin};
 use rocketbot_interface::model::{Attachment, ChannelMessage, OutgoingMessageWithAttachmentBuilder};
 use rocketbot_interface::sync::{Mutex, RwLock};
+use tracing::{debug, error};
 
 
 #[derive(Debug)]

@@ -6,10 +6,10 @@ edition = "2021"
 [dependencies]
 async-trait = { version = "0.1" }
 chrono = { version = "0.4" }
-log = { version = "0.4" }
 once_cell = { version = "1.18" }
 regex = { version = "1.9" }
 rocketbot_interface = { path = "../rocketbot_interface" }
 rocketbot_spelling = { path = "../rocketbot_spelling" }
 serde_json = { version = "1.0" }
 tokio = { version = "1.37", features = ["rt"] }
+tracing = { version = "0.1" }

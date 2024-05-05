@@ -5,8 +5,8 @@ use askama::Template;
 use http_body_util::Full;
 use hyper::{Method, Request, Response};
 use hyper::body::{Bytes, Incoming};
-use log::error;
 use serde::{Deserialize, Serialize};
+use tracing::error;
 
 use crate::{get_bot_config, get_query_pairs, render_response, return_405, return_500};
 

@@ -5,7 +5,7 @@ edition = "2021"
 
 [dependencies]
 async-trait = { version = "0.1" }
-log = { version = "0.4" }
 rocketbot_interface = { path = "../rocketbot_interface" }
 serde_json = { version = "1.0" }
 strsim = { version = "0.11" }
+tracing = { version = "0.1" }

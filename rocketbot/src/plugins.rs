@@ -1,8 +1,8 @@
 use std::sync::Weak;
 
-use log::debug;
 use rocketbot_interface::interfaces::{RocketBotInterface, RocketBotPlugin};
 use serde_json;
+use tracing::debug;
 
 use crate::config::CONFIG;
 

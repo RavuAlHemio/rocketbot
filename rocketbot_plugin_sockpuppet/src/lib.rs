@@ -2,13 +2,13 @@ use std::collections::HashSet;
 use std::sync::Weak;
 
 use async_trait::async_trait;
-use log::error;
 use rocketbot_interface::{JsonValueExtensions, send_channel_message_advanced};
 use rocketbot_interface::commands::{CommandDefinitionBuilder, CommandInstance, CommandValueType};
 use rocketbot_interface::interfaces::{RocketBotInterface, RocketBotPlugin};
 use rocketbot_interface::model::{ImpersonationInfo, OutgoingMessage, PrivateMessage};
 use rocketbot_interface::sync::RwLock;
 use serde_json;
+use tracing::error;
 
 
 #[derive(Clone, Debug, Eq, PartialEq)]

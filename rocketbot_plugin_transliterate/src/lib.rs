@@ -7,7 +7,6 @@ use std::ops::DerefMut;
 use std::sync::{Arc, Weak};
 
 use async_trait::async_trait;
-use log::{debug, error};
 use rand::{RngCore, Rng, SeedableRng};
 use rand::rngs::StdRng;
 use rocketbot_interface::{ResultExtensions, send_channel_message};
@@ -16,6 +15,7 @@ use rocketbot_interface::interfaces::{RocketBotInterface, RocketBotPlugin};
 use rocketbot_interface::model::ChannelMessage;
 use rocketbot_interface::sync::{Mutex, RwLock};
 use serde_json;
+use tracing::{debug, error};
 
 use crate::model::{Language, Transformation};
 

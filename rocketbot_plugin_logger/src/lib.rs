@@ -1,12 +1,12 @@
 use std::sync::Weak;
 
 use async_trait::async_trait;
-use log::error;
 use rocketbot_interface::interfaces::{RocketBotInterface, RocketBotPlugin};
 use rocketbot_interface::model::ChannelMessage;
 use rocketbot_interface::sync::RwLock;
 use serde_json;
 use tokio_postgres::NoTls;
+use tracing::error;
 
 
 #[derive(Clone, Debug, Eq, Hash, PartialEq)]

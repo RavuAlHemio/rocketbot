@@ -9,7 +9,6 @@ use std::path::PathBuf;
 use std::sync::Weak;
 
 use async_trait::async_trait;
-use log::error;
 use rand::{Rng, SeedableRng};
 use rand::rngs::StdRng;
 use rocketbot_interface::{JsonValueExtensions, ResultExtensions, send_channel_message};
@@ -18,6 +17,7 @@ use rocketbot_interface::interfaces::{RocketBotInterface, RocketBotPlugin};
 use rocketbot_interface::model::ChannelMessage;
 use rocketbot_interface::sync::RwLock;
 use serde_json;
+use tracing::error;
 
 use crate::grammar::{GeneratorState, Metacommand, Rulebook};
 use crate::parsing::parse_grammar;

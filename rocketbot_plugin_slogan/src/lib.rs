@@ -4,7 +4,6 @@ mod html_entities;
 use std::sync::Weak;
 
 use async_trait::async_trait;
-use log::{debug, error};
 use regex::Regex;
 use rocketbot_interface::{ResultExtensions, send_channel_message, send_private_message};
 use rocketbot_interface::commands::{CommandDefinitionBuilder, CommandInstance};
@@ -15,6 +14,7 @@ use serde_json;
 use sxd_document;
 use sxd_document::dom::Element;
 use sxd_xpath;
+use tracing::{debug, error};
 
 
 #[derive(Clone, Debug)]

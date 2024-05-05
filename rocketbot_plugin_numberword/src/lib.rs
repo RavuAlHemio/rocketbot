@@ -7,13 +7,13 @@ use std::fs::File;
 use std::sync::Weak;
 
 use async_trait::async_trait;
-use log::error;
 use rocketbot_interface::{ResultExtensions, send_channel_message};
 use rocketbot_interface::commands::{CommandDefinitionBuilder, CommandInstance};
 use rocketbot_interface::interfaces::{RocketBotInterface, RocketBotPlugin};
 use rocketbot_interface::model::ChannelMessage;
 use rocketbot_interface::sync::RwLock;
 use serde_json;
+use tracing::error;
 
 use crate::pseudotrie::StringPseudotrie;
 

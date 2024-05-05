@@ -4,13 +4,13 @@ use std::sync::Arc;
 
 use async_trait::async_trait;
 use bytes::Buf;
-use log::debug;
 use reqwest::{self, IntoUrl};
 use rocketbot_interface::{JsonValueExtensions, ResultExtensions};
 use rocketbot_interface::sync::Mutex;
 use serde::{Deserialize, Serialize};
 use serde::de::DeserializeOwned;
 use serde_json;
+use tracing::debug;
 use url::Url;
 
 use crate::{GeoCoordinates, GeocodingError, GeocodingProvider, GeoLocation};

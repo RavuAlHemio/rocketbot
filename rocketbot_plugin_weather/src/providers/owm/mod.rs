@@ -7,7 +7,6 @@ use std::time::Duration as StdDuration;
 use async_trait::async_trait;
 use bytes::Buf;
 use chrono::{Datelike, DateTime, Duration, NaiveDate, TimeZone, Utc, Weekday};
-use log::{debug, error};
 use once_cell::sync::Lazy;
 use regex::Regex;
 use reqwest;
@@ -15,6 +14,7 @@ use rocketbot_interface::JsonValueExtensions;
 use rocketbot_interface::sync::Mutex;
 use serde::de::DeserializeOwned;
 use serde_json;
+use tracing::{debug, error};
 
 use crate::interface::{WeatherError, WeatherProvider};
 use crate::providers::owm::model::{Forecast, StationReading, WeatherState};

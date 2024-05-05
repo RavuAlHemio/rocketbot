@@ -2,12 +2,12 @@ use std::sync::{Arc, Weak};
 
 use async_trait::async_trait;
 use chrono::{DateTime, TimeZone, Timelike, Utc, NaiveDateTime};
-use log::{debug, warn};
 use regex::Regex;
 use rocketbot_interface::JsonValueExtensions;
 use rocketbot_interface::interfaces::{RocketBotInterface, RocketBotPlugin};
 use rocketbot_interface::model::ChannelTextType;
 use serde_json;
+use tracing::{debug, warn};
 
 
 #[derive(Debug)]

@@ -22,7 +22,6 @@ use hyper::body::{Bytes, Incoming};
 use hyper::service::service_fn;
 use hyper_util::rt::{TokioExecutor, TokioIo};
 use hyper_util::server::conn::auto::Builder;
-use log::{debug, error};
 use once_cell::sync::{Lazy, OnceCell};
 use regex::Regex;
 use serde::{Serialize, Deserialize};
@@ -31,6 +30,7 @@ use tokio::net::TcpListener;
 use tokio::sync::{RwLock, RwLockReadGuard};
 use tokio_postgres::{self, NoTls};
 use toml;
+use tracing::{debug, error};
 
 use crate::aliases::{handle_nicks_aliases, handle_plaintext_aliases_for_nick};
 use crate::bim::achievements::handle_bim_achievements;
@@ -349,7 +349,14 @@ async fn handle_request(request: Request<Incoming>) -> Result<Response<Full<Byte
 
 #[tokio::main]
 async fn main() {
-    env_logger::init();
+    // set up tracing
+    let (stderr_non_blocking, _guard) = tracing_appender::non_blocking::NonBlockingBuilder::default()
+        .lossy(false)
+        .finish(std::io::stderr());
+    tracing_subscriber::fmt()
+        .with_env_filter(tracing_subscriber::EnvFilter::from_default_env())
+        .with_writer(stderr_non_blocking)
+        .init();
 
     // get config path
     let args: Vec<OsString> = env::args_os().collect();

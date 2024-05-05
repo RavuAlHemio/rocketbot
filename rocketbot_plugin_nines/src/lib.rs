@@ -4,13 +4,13 @@ use std::sync::Weak;
 
 use async_trait::async_trait;
 use bigdecimal::BigDecimal;
-use log::error;
 use once_cell::sync::Lazy;
 use regex::Regex;
 use rocketbot_interface::send_channel_message;
 use rocketbot_interface::commands::{CommandDefinitionBuilder, CommandInstance};
 use rocketbot_interface::interfaces::{RocketBotInterface, RocketBotPlugin};
 use rocketbot_interface::model::ChannelMessage;
+use tracing::error;
 
 
 static NINES_RE: Lazy<Regex> = Lazy::new(|| Regex::new(concat!(

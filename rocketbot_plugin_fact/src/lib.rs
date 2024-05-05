@@ -5,7 +5,6 @@ pub mod providers;
 use std::sync::{Arc, Weak};
 
 use async_trait::async_trait;
-use log::error;
 use rand::{Rng, RngCore, SeedableRng};
 use rand::rngs::StdRng;
 use rocketbot_interface::{JsonValueExtensions, send_channel_message};
@@ -14,6 +13,7 @@ use rocketbot_interface::interfaces::{RocketBotInterface, RocketBotPlugin};
 use rocketbot_interface::model::ChannelMessage;
 use rocketbot_interface::sync::{Mutex, RwLock};
 use serde_json;
+use tracing::error;
 
 use crate::interface::FactProvider;
 

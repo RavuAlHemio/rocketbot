@@ -5,7 +5,6 @@ use std::sync::Weak;
 use async_trait::async_trait;
 use chrono::{Datelike, Local, NaiveDate, Weekday};
 use julian;
-use log::error;
 use once_cell::sync::Lazy;
 use regex::Regex;
 use rocketbot_interface::send_channel_message;
@@ -15,6 +14,7 @@ use rocketbot_interface::model::ChannelMessage;
 use rocketbot_interface::sync::RwLock;
 use serde::{Deserialize, Serialize};
 use serde_json;
+use tracing::error;
 
 
 const DATE_OUTPUT_FORMAT: &'static str = "%Y-%m-%d";

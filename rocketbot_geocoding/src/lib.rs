@@ -11,12 +11,12 @@ use std::path::Path;
 use std::sync::Arc;
 
 use async_trait::async_trait;
-use log::error;
 use once_cell::sync::Lazy;
 use regex::Regex;
 use rocketbot_interface::ResultExtensions;
 use serde::{Deserialize, Serialize};
 use serde_json;
+use tracing::error;
 
 use crate::country_codes::CountryCodeMapping;
 #[cfg(feature = "confusion")]

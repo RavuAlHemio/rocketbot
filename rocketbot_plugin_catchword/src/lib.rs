@@ -2,7 +2,6 @@ use std::collections::HashMap;
 use std::sync::Weak;
 
 use async_trait::async_trait;
-use log::{debug, error};
 use rand::{Rng, SeedableRng};
 use rand::rngs::StdRng;
 use regex::{Match, Regex};
@@ -13,6 +12,7 @@ use rocketbot_interface::model::ChannelMessage;
 use rocketbot_interface::sync::{Mutex, RwLock};
 use rocketbot_regex_replace::ReplacerRegex;
 use serde_json;
+use tracing::{debug, error};
 
 
 #[derive(Clone, Debug)]

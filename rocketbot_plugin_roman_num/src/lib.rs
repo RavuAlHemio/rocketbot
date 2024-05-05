@@ -2,7 +2,6 @@ use std::collections::{BTreeSet, HashMap};
 use std::sync::Weak;
 
 use async_trait::async_trait;
-use log::error;
 use once_cell::sync::Lazy;
 use rocketbot_interface::send_channel_message;
 use rocketbot_interface::commands::{CommandDefinitionBuilder, CommandInstance};
@@ -11,6 +10,7 @@ use rocketbot_interface::model::ChannelMessage;
 use rocketbot_interface::sync::RwLock;
 use serde::{Deserialize, Serialize};
 use serde_json;
+use tracing::error;
 
 
 static LETTER_TO_VALUE: Lazy<HashMap<char, u16>> = Lazy::new(|| {

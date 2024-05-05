@@ -6,7 +6,6 @@ use std::sync::Weak;
 
 use async_trait::async_trait;
 use chrono::{NaiveDate, Utc};
-use log::error;
 use num_bigint::{BigInt, BigUint};
 use num_traits::ToPrimitive;
 use rocketbot_interface::send_channel_message;
@@ -15,8 +14,10 @@ use rocketbot_interface::interfaces::{RocketBotInterface, RocketBotPlugin};
 use rocketbot_interface::model::ChannelMessage;
 use rocketbot_interface::sync::RwLock;
 use serde_json;
+use tracing::error;
 
 use crate::database::{VaccinationStats, VaccineDatabase};
+
 
 fn with_thou_sep(int_str: &mut String, group_size: usize, sep: char) {
     if group_size == 0 {

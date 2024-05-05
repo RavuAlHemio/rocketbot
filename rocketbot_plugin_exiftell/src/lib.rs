@@ -6,7 +6,6 @@ use async_trait::async_trait;
 use exif;
 use http_body_util::BodyExt;
 use hyper::StatusCode;
-use log::error;
 use num_rational::Rational64;
 use once_cell::unsync::Lazy;
 use rocketbot_geocoding::{Geocoder, GeoCoordinates};
@@ -15,6 +14,7 @@ use rocketbot_interface::interfaces::{RocketBotInterface, RocketBotPlugin};
 use rocketbot_interface::model::{ChannelMessage, OutgoingMessage};
 use rocketbot_interface::sync::RwLock;
 use serde_json;
+use tracing::error;
 
 
 #[derive(Debug)]

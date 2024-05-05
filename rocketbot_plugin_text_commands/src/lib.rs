@@ -3,7 +3,6 @@ use std::fmt::Write;
 use std::sync::{Arc, Weak};
 
 use async_trait::async_trait;
-use log::{debug, error};
 use rand::{Rng, SeedableRng};
 use rand::rngs::StdRng;
 use rocketbot_interface::{JsonValueExtensions, send_channel_message};
@@ -12,6 +11,7 @@ use rocketbot_interface::interfaces::{RocketBotInterface, RocketBotPlugin};
 use rocketbot_interface::model::ChannelMessage;
 use rocketbot_interface::sync::{Mutex, RwLock};
 use serde_json;
+use tracing::{debug, error};
 
 
 #[derive(Clone, Debug, Eq, Hash, Ord, PartialEq, PartialOrd)]

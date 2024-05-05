@@ -3,7 +3,6 @@ use std::sync::Weak;
 
 use async_trait::async_trait;
 use chrono::Local;
-use log::error;
 use regex::{Captures, Regex};
 use rocketbot_interface::{JsonValueExtensions, ResultExtensions, send_channel_message};
 use rocketbot_interface::commands::{CommandDefinitionBuilder, CommandInstance};
@@ -14,6 +13,7 @@ use rocketbot_interface::sync::{Mutex, RwLock};
 use serde::{Deserialize, Serialize};
 use serde_json;
 use toml;
+use tracing::error;
 
 
 #[derive(Clone, Debug, Deserialize, Serialize)]

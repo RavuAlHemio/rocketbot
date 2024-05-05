@@ -3,8 +3,8 @@ pub mod hunspell;
 
 use std::path::PathBuf;
 
-use log::error;
 use serde::{Deserialize, Serialize};
+use tracing::error;
 
 use crate::hunspell::HunspellDictionary;
 

@@ -2,7 +2,6 @@ use std::sync::Weak;
 
 use async_trait::async_trait;
 use chrono::Utc;
-use log::{error, info};
 use rocketbot_interface::{JsonValueExtensions, send_channel_message};
 use rocketbot_interface::commands::{CommandDefinitionBuilder, CommandInstance};
 use rocketbot_interface::interfaces::{RocketBotInterface, RocketBotPlugin};
@@ -10,6 +9,7 @@ use rocketbot_interface::model::ChannelMessage;
 use rocketbot_interface::sync::RwLock;
 use serde_json;
 use tokio_postgres::{self, NoTls};
+use tracing::{error, info};
 
 
 #[derive(Clone, Debug, Eq, Hash, PartialEq)]

@@ -6,13 +6,13 @@ use std::collections::HashMap;
 use std::sync::Weak;
 
 use async_trait::async_trait;
-use log::{error, info};
 use rocketbot_interface::{JsonValueExtensions, send_channel_message};
 use rocketbot_interface::commands::{CommandBehaviors, CommandDefinitionBuilder, CommandInstance};
 use rocketbot_interface::interfaces::{RocketBotInterface, RocketBotPlugin};
 use rocketbot_interface::model::ChannelMessage;
 use rocketbot_interface::sync::{Mutex, RwLock};
 use serde_json;
+use tracing::{error, info};
 
 use crate::commands::Transformer;
 use crate::parsing::parse_replacement_commands;

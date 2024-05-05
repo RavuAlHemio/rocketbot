@@ -19,7 +19,14 @@ use crate::socketry::connect;
 
 
 async fn run() -> Result<(), GeneralError> {
-    env_logger::init();
+    // set up tracing
+    let (stderr_non_blocking, _guard) = tracing_appender::non_blocking::NonBlockingBuilder::default()
+        .lossy(false)
+        .finish(std::io::stderr());
+    tracing_subscriber::fmt()
+        .with_env_filter(tracing_subscriber::EnvFilter::from_default_env())
+        .with_writer(stderr_non_blocking)
+        .init();
 
     // get config path and load config
     let args_os: Vec<OsString> = std::env::args_os().collect();

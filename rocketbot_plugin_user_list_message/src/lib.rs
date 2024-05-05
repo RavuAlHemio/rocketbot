@@ -2,12 +2,12 @@ use std::collections::{HashMap, HashSet};
 use std::sync::Weak;
 
 use async_trait::async_trait;
-use log::{debug, warn};
 use rocketbot_interface::send_channel_message;
 use rocketbot_interface::interfaces::{RocketBotInterface, RocketBotPlugin};
 use rocketbot_interface::model::Channel;
 use rocketbot_interface::sync::Mutex;
 use serde_json;
+use tracing::{debug, warn};
 
 
 #[derive(Clone, Debug, Eq, PartialEq)]

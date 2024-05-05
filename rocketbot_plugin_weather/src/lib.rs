@@ -6,7 +6,6 @@ use std::collections::HashMap;
 use std::sync::Weak;
 
 use async_trait::async_trait;
-use log::{error, warn};
 use once_cell::sync::Lazy;
 use regex::Regex;
 use rocketbot_geocoding::{Geocoder, GeoCoordinates};
@@ -16,6 +15,7 @@ use rocketbot_interface::interfaces::{RocketBotInterface, RocketBotPlugin};
 use rocketbot_interface::model::ChannelMessage;
 use rocketbot_interface::sync::RwLock;
 use serde_json;
+use tracing::{error, warn};
 
 use crate::interface::WeatherProvider;
 
