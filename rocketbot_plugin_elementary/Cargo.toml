@@ -18,5 +18,5 @@ unicode-normalization = { version = "0.1" }
 
 [dev-dependencies]
 clap = { version = "4.0", features = ["derive"] }
-reqwest = { version = "0.11", features = ["rustls-tls"] }
-tokio = { version = "1.32", features = ["macros", "rt-multi-thread"] }
+reqwest = { version = "0.12", features = ["rustls-tls"] }
+tokio = { version = "1.37", features = ["macros", "rt-multi-thread"] }

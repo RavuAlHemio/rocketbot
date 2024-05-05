@@ -4,7 +4,9 @@ use std::str::FromStr;
 
 use askama::Template;
 use chrono::{DateTime, Local};
-use hyper::{Body, Method, Request, Response};
+use http_body_util::Full;
+use hyper::{Method, Request, Response};
+use hyper::body::{Bytes, Incoming};
 use log::error;
 use rocketbot_bim_common::{CouplingMode, VehicleInfo, VehicleNumber};
 use rocketbot_date_time::DateTimeLocalWithWeekday;
@@ -82,7 +84,7 @@ struct BimRideByIdTemplate {
 }
 
 
-pub(crate) async fn handle_bim_detail(request: &Request<Body>) -> Result<Response<Body>, Infallible> {
+pub(crate) async fn handle_bim_detail(request: &Request<Incoming>) -> Result<Response<Full<Bytes>>, Infallible> {
     let query_pairs = get_query_pairs(request);
 
     if request.method() != Method::GET {
@@ -193,7 +195,7 @@ pub(crate) async fn handle_bim_detail(request: &Request<Body>) -> Result<Respons
     }
 }
 
-pub(crate) async fn handle_bim_line_detail(request: &Request<Body>) -> Result<Response<Body>, Infallible> {
+pub(crate) async fn handle_bim_line_detail(request: &Request<Incoming>) -> Result<Response<Full<Bytes>>, Infallible> {
     let query_pairs = get_query_pairs(request);
 
     if request.method() != Method::GET {
@@ -281,7 +283,7 @@ pub(crate) async fn handle_bim_line_detail(request: &Request<Body>) -> Result<Re
 }
 
 
-pub(crate) async fn handle_bim_ride_by_id(request: &Request<Body>) -> Result<Response<Body>, Infallible> {
+pub(crate) async fn handle_bim_ride_by_id(request: &Request<Incoming>) -> Result<Response<Full<Bytes>>, Infallible> {
     let query_pairs = get_query_pairs(request);
 
     if request.method() != Method::GET {

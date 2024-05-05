@@ -2,7 +2,9 @@ use std::collections::{BTreeSet, HashMap};
 use std::convert::Infallible;
 
 use askama::Template;
-use hyper::{Body, Method, Request, Response};
+use http_body_util::Full;
+use hyper::{Method, Request, Response};
+use hyper::body::{Bytes, Incoming};
 use log::error;
 use serde::{Deserialize, Serialize};
 
@@ -22,7 +24,7 @@ struct AliasPart {
 }
 
 
-pub(crate) async fn handle_plaintext_aliases_for_nick(request: &Request<Body>) -> Result<Response<Body>, Infallible> {
+pub(crate) async fn handle_plaintext_aliases_for_nick(request: &Request<Incoming>) -> Result<Response<Full<Bytes>>, Infallible> {
     let query_pairs = get_query_pairs(request);
 
     if request.method() != Method::GET {
@@ -36,7 +38,7 @@ pub(crate) async fn handle_plaintext_aliases_for_nick(request: &Request<Body>) -
             return Response::builder()
                 .status(400)
                 .header("Content-Type", "text/plain; charset=utf-8")
-                .body(Body::from("GET parameter \"nick\" required."))
+                .body(Full::new(Bytes::from("GET parameter \"nick\" required.")))
                 .or_else(|e| {
                     error!("failed to assemble plaintext response: {}", e);
                     return return_500();
@@ -90,14 +92,14 @@ pub(crate) async fn handle_plaintext_aliases_for_nick(request: &Request<Body>) -
     Response::builder()
         .status(200)
         .header("Content-Type", "text/plain; charset=utf-8")
-        .body(Body::from(body))
+        .body(Full::new(Bytes::from(body)))
         .or_else(|e| {
             error!("failed to assemble plaintext response: {}", e);
             return return_500();
         })
 }
 
-pub(crate) async fn handle_nicks_aliases(request: &Request<Body>) -> Result<Response<Body>, Infallible> {
+pub(crate) async fn handle_nicks_aliases(request: &Request<Incoming>) -> Result<Response<Full<Bytes>>, Infallible> {
     let query_pairs = get_query_pairs(request);
 
     if request.method() != Method::GET {

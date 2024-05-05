@@ -7,9 +7,11 @@ edition = "2021"
 askama = { version = "0.12" }
 chrono = { version = "0.4", features = ["serde"] }
 ciborium = { version = "0.2" }
-env_logger = { version = "0.10" }
+env_logger = { version = "0.11" }
 form_urlencoded = { version = "1.2" }
-hyper = { version = "0.14", features = ["client", "http1", "http2", "server", "tcp"] }
+http-body-util = { version = "0.1" }
+hyper = { version = "1.3", features = ["client", "http1", "http2", "server"] }
+hyper-util = { version = "0.1", features = ["http1", "http2", "server"] }
 indexmap = { version = "2.0", features = ["serde"] }
 log = { version = "0.4" }
 once_cell = { version = "1.18" }
@@ -20,7 +22,7 @@ rocketbot_date_time = { path = "../rocketbot_date_time" }
 rocketbot_string = { path = "../rocketbot_string", features = ["serde"] }
 serde = { version = "1.0", features = ["derive"] }
 serde_json = { version = "1.0" }
-tokio = { version = "1.32", features = ["macros", "rt-multi-thread"] }
+tokio = { version = "1.37", features = ["macros", "rt-multi-thread"] }
 tokio-postgres = { version = "0.7", features = ["with-chrono-0_4", "with-serde_json-1"] }
 toml = { version = "0.8" }
 unicode-normalization = { version = "0.1" }

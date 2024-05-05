@@ -2,7 +2,9 @@ use std::collections::{BTreeSet, HashMap};
 use std::convert::Infallible;
 
 use askama::Template;
-use hyper::{Body, Method, Request, Response};
+use http_body_util::Full;
+use hyper::{Method, Request, Response};
+use hyper::body::{Bytes, Incoming};
 use log::error;
 use serde::{Deserialize, Serialize};
 
@@ -21,7 +23,7 @@ struct ThanksTemplate {
 }
 
 
-pub(crate) async fn handle_thanks(request: &Request<Body>) -> Result<Response<Body>, Infallible> {
+pub(crate) async fn handle_thanks(request: &Request<Incoming>) -> Result<Response<Full<Bytes>>, Infallible> {
     let query_pairs = get_query_pairs(request);
 
     if request.method() != Method::GET {

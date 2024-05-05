@@ -5,7 +5,8 @@ edition = "2021"
 
 [dependencies]
 async-trait = { version = "0.1" }
-hyper = { version = "0.14" }
+http-body-util = { version = "0.1" }
+hyper = { version = "1.3" }
 kamadak-exif = { version = "0.5" }
 log = { version = "0.4" }
 num-rational = { version = "0.4" }

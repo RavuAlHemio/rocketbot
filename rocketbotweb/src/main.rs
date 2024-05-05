@@ -16,14 +16,18 @@ use std::path::PathBuf;
 
 use askama::Template;
 use form_urlencoded;
-use hyper::{Body, Method, Request, Response, Server};
-use hyper::service::{make_service_fn, service_fn};
+use http_body_util::Full;
+use hyper::{Method, Request, Response};
+use hyper::body::{Bytes, Incoming};
+use hyper::service::service_fn;
+use hyper_util::rt::{TokioExecutor, TokioIo};
+use hyper_util::server::conn::auto::Builder;
 use log::{debug, error};
 use once_cell::sync::{Lazy, OnceCell};
 use regex::Regex;
 use serde::{Serialize, Deserialize};
 use serde_json;
-use tokio;
+use tokio::net::TcpListener;
 use tokio::sync::{RwLock, RwLockReadGuard};
 use tokio_postgres::{self, NoTls};
 use toml;
@@ -82,7 +86,7 @@ fn get_query_pairs<T>(request: &Request<T>) -> HashMap<Cow<str>, Cow<str>> {
 
 
 // query_pairs is queried for "format" to decide between HTML and JSON
-async fn render_response<S: Serialize + Template>(value: &S, query_pairs: &HashMap<Cow<'_, str>, Cow<'_, str>>, status: u16, headers: Vec<(String, String)>) -> Option<Response<Body>> {
+async fn render_response<S: Serialize + Template>(value: &S, query_pairs: &HashMap<Cow<'_, str>, Cow<'_, str>>, status: u16, headers: Vec<(String, String)>) -> Option<Response<Full<Bytes>>> {
     if query_pairs.get("format").map(|f| f == "json").unwrap_or(false) {
         render_json(value, status, headers).await
     } else {
@@ -90,7 +94,7 @@ async fn render_response<S: Serialize + Template>(value: &S, query_pairs: &HashM
     }
 }
 
-async fn render_json<S: Serialize>(value: &S, status: u16, headers: Vec<(String, String)>) -> Option<Response<Body>> {
+async fn render_json<S: Serialize>(value: &S, status: u16, headers: Vec<(String, String)>) -> Option<Response<Full<Bytes>>> {
     let rendered = match serde_json::to_string_pretty(value) {
         Ok(s) => s,
         Err(e) => {
@@ -105,7 +109,7 @@ async fn render_json<S: Serialize>(value: &S, status: u16, headers: Vec<(String,
     for (k, v) in &headers {
         builder = builder.header(k, v);
     }
-    match builder.body(Body::from(rendered)) {
+    match builder.body(Full::new(Bytes::from(rendered))) {
         Ok(r) => Some(r),
         Err(e) => {
             error!("failed to assemble response: {}", e);
@@ -114,7 +118,7 @@ async fn render_json<S: Serialize>(value: &S, status: u16, headers: Vec<(String,
     }
 }
 
-async fn render_template<T: Template>(value: &T, status: u16, headers: Vec<(String, String)>) -> Option<Response<Body>> {
+async fn render_template<T: Template>(value: &T, status: u16, headers: Vec<(String, String)>) -> Option<Response<Full<Bytes>>> {
     let rendered = match value.render() {
         Ok(s) => s,
         Err(e) => {
@@ -129,7 +133,7 @@ async fn render_template<T: Template>(value: &T, status: u16, headers: Vec<(Stri
     for (k, v) in &headers {
         builder = builder.header(k, v);
     }
-    match builder.body(Body::from(rendered)) {
+    match builder.body(Full::new(Bytes::from(rendered))) {
         Ok(r) => Some(r),
         Err(e) => {
             error!("failed to assemble response: {}", e);
@@ -189,7 +193,7 @@ async fn connect_to_db() -> Option<tokio_postgres::Client> {
 }
 
 
-async fn return_404(query_pairs: &HashMap<Cow<'_, str>, Cow<'_, str>>) -> Result<Response<Body>, Infallible> {
+async fn return_404(query_pairs: &HashMap<Cow<'_, str>, Cow<'_, str>>) -> Result<Response<Full<Bytes>>, Infallible> {
     let template = Error404Template;
     match render_response(&template, query_pairs, 404, vec![]).await {
         Some(r) => Ok(r),
@@ -197,7 +201,7 @@ async fn return_404(query_pairs: &HashMap<Cow<'_, str>, Cow<'_, str>>) -> Result
     }
 }
 
-async fn return_400(reason: &str, query_pairs: &HashMap<Cow<'_, str>, Cow<'_, str>>) -> Result<Response<Body>, Infallible> {
+async fn return_400(reason: &str, query_pairs: &HashMap<Cow<'_, str>, Cow<'_, str>>) -> Result<Response<Full<Bytes>>, Infallible> {
     let template = Error400Template {
         reason: reason.to_owned(),
     };
@@ -207,7 +211,7 @@ async fn return_400(reason: &str, query_pairs: &HashMap<Cow<'_, str>, Cow<'_, st
     }
 }
 
-async fn return_405(query_pairs: &HashMap<Cow<'_, str>, Cow<'_, str>>) -> Result<Response<Body>, Infallible> {
+async fn return_405(query_pairs: &HashMap<Cow<'_, str>, Cow<'_, str>>) -> Result<Response<Full<Bytes>>, Infallible> {
     let template = Error405Template {
         allowed_methods: vec!["GET".to_owned()],
     };
@@ -220,17 +224,17 @@ async fn return_405(query_pairs: &HashMap<Cow<'_, str>, Cow<'_, str>>) -> Result
     }
 }
 
-fn return_500() -> Result<Response<Body>, Infallible> {
+fn return_500() -> Result<Response<Full<Bytes>>, Infallible> {
     let response_res = Response::builder()
         .header("Content-Type", "text/plain; charset=utf-8")
-        .body(Body::from("500 Internal Server Error"));
+        .body(Full::new(Bytes::from("500 Internal Server Error")));
     match response_res {
         Err(e) => panic!("failed to construct 500 response: {}", e),
         Ok(b) => Ok(b),
     }
 }
 
-async fn handle_index(request: &Request<Body>) -> Result<Response<Body>, Infallible> {
+async fn handle_index(request: &Request<Incoming>) -> Result<Response<Full<Bytes>>, Infallible> {
     let query_pairs = get_query_pairs(request);
 
     if request.method() != Method::GET {
@@ -244,7 +248,7 @@ async fn handle_index(request: &Request<Body>) -> Result<Response<Body>, Infalli
     }
 }
 
-async fn handle_static(request: &Request<Body>, caps: &regex::Captures<'_>) -> Result<Response<Body>, Infallible> {
+async fn handle_static(request: &Request<Incoming>, caps: &regex::Captures<'_>) -> Result<Response<Full<Bytes>>, Infallible> {
     let query_pairs = get_query_pairs(&request);
     let filename = caps.name("static_filename")
         .expect("failed to match static_filename")
@@ -283,7 +287,7 @@ async fn handle_static(request: &Request<Body>, caps: &regex::Captures<'_>) -> R
     let response_res = Response::builder()
         .status(200)
         .header("Content-Type", content_type)
-        .body(Body::from(static_data));
+        .body(Full::new(Bytes::from(static_data)));
     match response_res {
         Ok(r) => Ok(r),
         Err(e) => {
@@ -294,7 +298,7 @@ async fn handle_static(request: &Request<Body>, caps: &regex::Captures<'_>) -> R
 }
 
 
-async fn handle_request(request: Request<Body>) -> Result<Response<Body>, Infallible> {
+async fn handle_request(request: Request<Incoming>) -> Result<Response<Full<Bytes>>, Infallible> {
     match request.uri().path() {
         "/" => handle_index(&request).await,
         "/topquotes" => handle_top_quotes(&request).await,
@@ -365,13 +369,21 @@ async fn main() {
     CONFIG.set(RwLock::new(config))
         .expect("failed to set initial config");
 
-    let make_service = make_service_fn(|_conn| async {
-        Ok::<_, Infallible>(service_fn(handle_request))
-    });
-    let server = Server::bind(&listen_address)
-        .serve(make_service);
-
-    if let Err(e) = server.await {
-        eprintln!("server error: {}", e);
+    let listener = TcpListener::bind(listen_address).await
+        .expect("failed to create TCP listener");
+    loop {
+        let (stream, remote_addr) = listener.accept().await
+            .expect("failed to accept incoming TCP connection");
+        let io = TokioIo::new(stream);
+        tokio::task::spawn(async move {
+            let serve_result = Builder::new(TokioExecutor::new())
+                .http1()
+                .http2()
+                .serve_connection(io, service_fn(handle_request))
+                .await;
+            if let Err(e) = serve_result {
+                error!("error serving connection from {}: {}", remote_addr, e);
+            }
+        });
     }
 }

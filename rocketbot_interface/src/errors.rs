@@ -38,7 +38,7 @@ impl fmt::Display for ChannelTypeParseError {
 pub enum HttpError {
     MissingUserId,
     MissingAuthToken,
-    ObtainingResponse(hyper::Error),
+    ObtainingResponse(hyper_util::client::legacy::Error),
     ObtainingResponseBody(hyper::Error),
     DecodingAsGzip(std::io::Error),
     DecodingAsUtf8(FromUtf8Error),

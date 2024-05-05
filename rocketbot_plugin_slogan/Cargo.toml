@@ -8,7 +8,7 @@ async-trait = { version = "0.1" }
 form_urlencoded = { version = "1.2" }
 log = { version = "0.4" }
 regex = { version = "1.9" }
-reqwest = { version = "0.11", features = ["rustls-tls"] }
+reqwest = { version = "0.12", features = ["rustls-tls"] }
 rocketbot_interface = { path = "../rocketbot_interface" }
 serde_json = { version = "1.0" }
 sxd-document = { version = "0.3" }
@@ -16,4 +16,4 @@ sxd-xpath = { version = "0.4" }
 
 [dev-dependencies]
 serde = { version = "1.0", features = ["derive"] }
-tokio = { version = "1.32", features = ["macros", "rt-multi-thread"] }
+tokio = { version = "1.37", features = ["macros", "rt-multi-thread"] }

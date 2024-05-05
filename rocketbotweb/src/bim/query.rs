@@ -4,7 +4,9 @@ use std::convert::Infallible;
 
 use askama::Template;
 use chrono::{DateTime, Duration, Local, NaiveDate, Utc};
-use hyper::{Body, Method, Request, Response};
+use http_body_util::Full;
+use hyper::{Method, Request, Response};
+use hyper::body::{Bytes, Incoming};
 use log::error;
 use rocketbot_bim_common::VehicleNumber;
 use rocketbot_string::NatSortedString;
@@ -138,7 +140,7 @@ fn cow_to_owned_or_empty_to_none<'a, 'b>(val: Option<&'a Cow<'b, str>>) -> Optio
 }
 
 
-pub(crate) async fn handle_bim_query(request: &Request<Body>) -> Result<Response<Body>, Infallible> {
+pub(crate) async fn handle_bim_query(request: &Request<Incoming>) -> Result<Response<Full<Bytes>>, Infallible> {
     let query_pairs = get_query_pairs(request);
     if request.method() != Method::GET {
         return return_405(&query_pairs).await;
@@ -391,7 +393,7 @@ pub(crate) async fn handle_bim_query(request: &Request<Body>) -> Result<Response
     }
 }
 
-pub(crate) async fn handle_bim_vehicle_status(request: &Request<Body>) -> Result<Response<Body>, Infallible> {
+pub(crate) async fn handle_bim_vehicle_status(request: &Request<Incoming>) -> Result<Response<Full<Bytes>>, Infallible> {
     let query_pairs = get_query_pairs(request);
     if request.method() != Method::GET {
         return return_405(&query_pairs).await;

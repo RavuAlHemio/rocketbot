@@ -1,7 +1,9 @@
 use std::convert::Infallible;
 
 use askama::Template;
-use hyper::{Body, Method, Request, Response};
+use http_body_util::Full;
+use hyper::{Method, Request, Response};
+use hyper::body::{Bytes, Incoming};
 use log::error;
 use serde::{Deserialize, Serialize};
 
@@ -42,7 +44,7 @@ struct QuoteVotePart {
 }
 
 
-pub(crate) async fn handle_top_quotes(request: &Request<Body>) -> Result<Response<Body>, Infallible> {
+pub(crate) async fn handle_top_quotes(request: &Request<Incoming>) -> Result<Response<Full<Bytes>>, Infallible> {
     let query_pairs = get_query_pairs(request);
 
     if request.method() != Method::GET {
@@ -115,7 +117,7 @@ pub(crate) async fn handle_top_quotes(request: &Request<Body>) -> Result<Respons
 }
 
 
-pub(crate) async fn handle_quotes_votes(request: &Request<Body>) -> Result<Response<Body>, Infallible> {
+pub(crate) async fn handle_quotes_votes(request: &Request<Incoming>) -> Result<Response<Full<Bytes>>, Infallible> {
     let query_pairs = get_query_pairs(request);
 
     if request.method() != Method::GET {

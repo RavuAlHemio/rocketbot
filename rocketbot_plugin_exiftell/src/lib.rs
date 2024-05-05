@@ -4,6 +4,7 @@ use std::sync::Weak;
 
 use async_trait::async_trait;
 use exif;
+use http_body_util::BodyExt;
 use hyper::StatusCode;
 use log::error;
 use num_rational::Rational64;
@@ -283,13 +284,13 @@ impl RocketBotPlugin for ExifTellPlugin {
                 Ok(r) => r,
                 Err(_) => continue,
             };
-            let (parts, mut body) = download_response.into_parts();
+            let (parts, body) = download_response.into_parts();
             if parts.status != StatusCode::OK {
                 error!("obtaining attachment {:?} led to error code {}", attachment.title_link, parts.status);
                 continue;
             }
-            let attachment_bytes = match hyper::body::to_bytes(&mut body).await {
-                Ok(b) => b.to_vec(),
+            let attachment_bytes = match body.collect().await {
+                Ok(b) => b.to_bytes().to_vec(),
                 Err(e) => {
                     error!("error obtaining bytes from response for attachment {:?}: {}", attachment.title_link, e);
                     continue;

@@ -154,7 +154,7 @@ pub trait RocketBotInterface : Send + Sync {
     async fn remove_reaction(&self, message_id: &str, emoji_short_name: &str);
 
     /// Obtains a resource from the Rocket.Chat server via HTTP or HTTPS.
-    async fn obtain_http_resource(&self, path: &str) -> Result<hyper::Response<hyper::Body>, HttpError>;
+    async fn obtain_http_resource(&self, path: &str) -> Result<hyper::Response<hyper::body::Incoming>, HttpError>;
 
     /// Broadcasts, for the given channel, whether the bot is typing or not.
     async fn set_channel_typing_status(&self, channel_name: &str, typing: bool);

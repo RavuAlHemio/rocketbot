@@ -12,9 +12,13 @@ use async_trait::async_trait;
 use chrono::{DateTime, TimeZone, Utc};
 use flate2::read::GzDecoder;
 use futures_util::{SinkExt, StreamExt};
+use http_body_util::{BodyExt, Full};
 use hyper::StatusCode;
-use hyper::client::HttpConnector;
+use hyper::body::{Bytes, Incoming};
 use hyper_rustls::{HttpsConnector, HttpsConnectorBuilder};
+use hyper_util::client::legacy::Client as HttpClient;
+use hyper_util::client::legacy::connect::HttpConnector;
+use hyper_util::rt::TokioExecutor;
 use log::{debug, error, info, warn};
 use rand::{Rng, SeedableRng};
 use rand::distributions::{Distribution, Uniform};
@@ -194,7 +198,7 @@ struct SharedConnectionState {
     command_config: CommandConfiguration,
     channel_commands: RwLock<HashMap<String, CommandDefinition>>,
     private_message_commands: RwLock<HashMap<String, CommandDefinition>>,
-    http_client: hyper::Client<HttpsConnector<HttpConnector>>,
+    http_client: HttpClient<HttpsConnector<HttpConnector>, Full<Bytes>>,
     my_user_id: RwLock<Option<String>>,
     my_auth_token: RwLock<Option<String>>,
     max_message_length: RwLock<Option<usize>>,
@@ -216,7 +220,7 @@ impl SharedConnectionState {
         command_config: CommandConfiguration,
         channel_commands: RwLock<HashMap<String, CommandDefinition>>,
         private_message_commands: RwLock<HashMap<String, CommandDefinition>>,
-        http_client: hyper::Client<HttpsConnector<HttpConnector>>,
+        http_client: HttpClient<HttpsConnector<HttpConnector>, Full<Bytes>>,
         my_user_id: RwLock<Option<String>>,
         my_auth_token: RwLock<Option<String>>,
         max_message_length: RwLock<Option<usize>>,
@@ -852,7 +856,7 @@ impl RocketBotInterface for ServerConnection {
             .expect("failed to enqueue remove-reaction message");
     }
 
-    async fn obtain_http_resource(&self, path: &str) -> Result<hyper::Response<hyper::Body>, HttpError> {
+    async fn obtain_http_resource(&self, path: &str) -> Result<hyper::Response<hyper::body::Incoming>, HttpError> {
         let query_options: Vec<(String, Option<String>)> = Vec::with_capacity(0);
         get_http_from_server(&self.shared_state, path, query_options).await
     }
@@ -1019,7 +1023,7 @@ pub(crate) async fn connect() -> Arc<ServerConnection> {
         .enable_http1()
         .enable_http2()
         .build();
-    let http_client = hyper::Client::builder()
+    let http_client = hyper_util::client::legacy::Client::builder(TokioExecutor::new())
         .build(https_connector);
     let my_user_id: RwLock<Option<String>> = RwLock::new(
         "SharedConnectionState::my_user_id",
@@ -1392,7 +1396,7 @@ async fn do_send_any_message_with_attachment(shared_state: &SharedConnectionStat
         .header("Content-Type", format!("multipart/form-data; boundary={}", boundary_text))
         .header("X-User-Id", &user_id)
         .header("X-Auth-Token", auth_token)
-        .body(hyper::Body::from(body))
+        .body(Full::new(Bytes::from(body)))
         .expect("failed to construct request");
 
     // send
@@ -1407,9 +1411,9 @@ async fn do_send_any_message_with_attachment(shared_state: &SharedConnectionStat
     };
 
     // obtain content
-    let (response_header, mut response_body) = response.into_parts();
-    let response_bytes: Vec<u8> = match hyper::body::to_bytes(&mut response_body).await {
-        Ok(rb) => rb.to_vec(),
+    let (response_header, response_body) = response.into_parts();
+    let response_bytes: Vec<u8> = match response_body.collect().await {
+        Ok(rb) => rb.to_bytes().to_vec(),
         Err(e) => {
             error!("cannot send message with attachment; failed to obtain response bytes: {}", e);
             return None;
@@ -2499,7 +2503,7 @@ async fn distribute_private_message_commands(private_message: &PrivateMessage, s
     }
 }
 
-async fn perform_http_json(state: &SharedConnectionState, request: hyper::Request<hyper::Body>) -> Result<serde_json::Value, HttpError> {
+async fn perform_http_json(state: &SharedConnectionState, request: hyper::Request<Full<Bytes>>) -> Result<serde_json::Value, HttpError> {
     let full_uri = request.uri().clone();
 
     let response_res = state.http_client
@@ -2511,9 +2515,9 @@ async fn perform_http_json(state: &SharedConnectionState, request: hyper::Reques
             return Err(HttpError::ObtainingResponse(e));
         },
     };
-    let (parts, mut body) = response.into_parts();
-    let response_bytes = match hyper::body::to_bytes(&mut body).await {
-        Ok(b) => b.to_vec(),
+    let (parts, body) = response.into_parts();
+    let response_bytes = match body.collect().await {
+        Ok(b) => b.to_bytes().to_vec(),
         Err(e) => {
             error!("error getting bytes from response for {}: {}", full_uri, e);
             return Err(HttpError::ObtainingResponseBody(e));
@@ -2563,10 +2567,10 @@ async fn obtain_request_for_http_from_server<Q, QK, QV, H, HK, HV>(
     state: &SharedConnectionState,
     uri_path: &str,
     method: &str,
-    body: hyper::Body,
+    body: Full<Bytes>,
     query_options: Q,
     headers: H,
-) -> Result<hyper::Request<hyper::Body>, HttpError>
+) -> Result<hyper::Request<Full<Bytes>>, HttpError>
     where
         Q: IntoIterator<Item = (QK, Option<QV>)>,
         QK: AsRef<str>,
@@ -2633,17 +2637,17 @@ async fn obtain_request_for_http_from_server<Q, QK, QV, H, HK, HV>(
     Ok(request)
 }
 
-async fn get_http_from_server<Q, K, V>(state: &SharedConnectionState, uri_path: &str, query_options: Q) -> Result<hyper::Response<hyper::Body>, HttpError>
+async fn get_http_from_server<Q, K, V>(state: &SharedConnectionState, uri_path: &str, query_options: Q) -> Result<hyper::Response<Incoming>, HttpError>
     where
         Q: IntoIterator<Item = (K, Option<V>)>,
         K: AsRef<str>,
         V: AsRef<str>,
 {
     let no_headers: [(&str, &str); 0] = [];
-    let request: hyper::Request<hyper::Body> = obtain_request_for_http_from_server(
+    let request: hyper::Request<Full<Bytes>> = obtain_request_for_http_from_server(
         &state, uri_path,
         "GET",
-        hyper::Body::empty(),
+        Full::new(Bytes::new()),
         query_options,
         no_headers,
     ).await?;
@@ -2671,7 +2675,7 @@ async fn get_api_json<Q, K, V>(state: &SharedConnectionState, uri_path: &str, qu
         &state,
         uri_path,
         "GET",
-        hyper::Body::empty(),
+        Full::new(Bytes::new()),
         query_options,
         no_headers,
     ).await?;
@@ -2691,7 +2695,7 @@ async fn post_api_json<Q, K, V>(
 {
     let body_string = serde_json::to_string(&body_json)
         .expect("failed to serialize JSON value");
-    let body = hyper::Body::from(body_string);
+    let body = Full::new(Bytes::from(body_string));
     let headers: [(&str, &str); 1] = [
         ("Content-Type", "application/json"),
     ];
@@ -2805,7 +2809,7 @@ async fn obtain_builtin_emoji(state: &ConnectionState) -> Vec<Emoji> {
     let request = hyper::Request::builder()
         .method("GET")
         .uri(emoji_json_url)
-        .body(hyper::Body::empty())
+        .body(Full::new(Bytes::new()))
         .expect("failed to construct request");
 
     let json_value = match perform_http_json(&state.shared_state, request).await {

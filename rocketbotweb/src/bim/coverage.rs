@@ -4,7 +4,9 @@ use std::convert::Infallible;
 
 use askama::Template;
 use chrono::{DateTime, Local, NaiveDate, TimeZone};
-use hyper::{Body, Method, Request, Response};
+use http_body_util::Full;
+use hyper::{Method, Request, Response};
+use hyper::body::{Bytes, Incoming};
 use log::error;
 use rocketbot_bim_common::{VehicleInfo, VehicleNumber};
 use serde::Serialize;
@@ -294,7 +296,7 @@ async fn get_company_to_vehicles_is_last_rider(
 }
 
 
-pub(crate) async fn handle_bim_coverage(request: &Request<Body>) -> Result<Response<Body>, Infallible> {
+pub(crate) async fn handle_bim_coverage(request: &Request<Incoming>) -> Result<Response<Full<Bytes>>, Infallible> {
     let query_pairs = get_query_pairs(request);
 
     if request.method() != Method::GET {
@@ -581,7 +583,7 @@ pub(crate) async fn handle_bim_coverage(request: &Request<Body>) -> Result<Respo
     }
 }
 
-pub(crate) async fn handle_bim_coverage_field(request: &Request<Body>) -> Result<Response<Body>, Infallible> {
+pub(crate) async fn handle_bim_coverage_field(request: &Request<Incoming>) -> Result<Response<Full<Bytes>>, Infallible> {
     let query_pairs = get_query_pairs(request);
 
     if request.method() != Method::GET {
@@ -711,7 +713,7 @@ pub(crate) async fn handle_bim_coverage_field(request: &Request<Body>) -> Result
         }
     }
 
-    let body = Body::from(png_bytes);
+    let body = Full::new(Bytes::from(png_bytes));
     let resp_res = Response::builder()
         .header("Content-Type", "image/png")
         .body(body);

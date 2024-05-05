@@ -138,7 +138,7 @@ pub(crate) fn encode_vax(vax_info: &VaxInfo) -> String {
     {
         let mut full_cbor = minicbor::Encoder::new(&mut full);
         full_cbor
-            .tag(Tag::Unassigned(0x12)).unwrap().array(4).unwrap()
+            .tag(Tag::new(0x12)).unwrap().array(4).unwrap()
                 .bytes(&protected).unwrap()
                 .map(0).unwrap() // unprotected is empty
                 .bytes(&payload).unwrap()

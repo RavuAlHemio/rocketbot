@@ -3,7 +3,9 @@ use std::convert::Infallible;
 use std::fmt::Write;
 
 use askama::Template;
-use hyper::{Body, Method, Request, Response};
+use http_body_util::Full;
+use hyper::{Method, Request, Response};
+use hyper::body::{Bytes, Incoming};
 use log::error;
 use png;
 use rocketbot_bim_common::VehicleNumber;
@@ -183,7 +185,7 @@ impl FirstRiderPieTemplate {
 }
 
 
-pub(crate) async fn handle_bim_latest_rider_count_over_time_image(request: &Request<Body>) -> Result<Response<Body>, Infallible> {
+pub(crate) async fn handle_bim_latest_rider_count_over_time_image(request: &Request<Incoming>) -> Result<Response<Full<Bytes>>, Infallible> {
     let query_pairs = get_query_pairs(request);
     if request.method() != Method::GET {
         return return_405(&query_pairs).await;
@@ -293,7 +295,7 @@ pub(crate) async fn handle_bim_latest_rider_count_over_time_image(request: &Requ
 
         let response_res = Response::builder()
             .header("Content-Type", "text/tab-separated-values; charset=utf-8")
-            .body(Body::from(tsv_output));
+            .body(Full::new(Bytes::from(tsv_output)));
         match response_res {
             Ok(r) => return Ok(r),
             Err(e) => {
@@ -400,7 +402,7 @@ pub(crate) async fn handle_bim_latest_rider_count_over_time_image(request: &Requ
 
     let response_res = Response::builder()
         .header("Content-Type", "image/png")
-        .body(Body::from(png_bytes));
+        .body(Full::new(Bytes::from(png_bytes)));
     match response_res {
         Ok(r) => Ok(r),
         Err(e) => {
@@ -411,7 +413,7 @@ pub(crate) async fn handle_bim_latest_rider_count_over_time_image(request: &Requ
 }
 
 
-pub(crate) async fn handle_bim_latest_rider_count_over_time(request: &Request<Body>) -> Result<Response<Body>, Infallible> {
+pub(crate) async fn handle_bim_latest_rider_count_over_time(request: &Request<Incoming>) -> Result<Response<Full<Bytes>>, Infallible> {
     let query_pairs = get_query_pairs(request);
     if request.method() != Method::GET {
         return return_405(&query_pairs).await;
@@ -492,7 +494,7 @@ pub(crate) async fn handle_bim_latest_rider_count_over_time(request: &Request<Bo
 }
 
 
-pub(crate) async fn handle_bim_histogram_by_day_of_week(request: &Request<Body>) -> Result<Response<Body>, Infallible> {
+pub(crate) async fn handle_bim_histogram_by_day_of_week(request: &Request<Incoming>) -> Result<Response<Full<Bytes>>, Infallible> {
     let query_pairs = get_query_pairs(request);
     if request.method() != Method::GET {
         return return_405(&query_pairs).await;
@@ -552,7 +554,7 @@ pub(crate) async fn handle_bim_histogram_by_day_of_week(request: &Request<Body>)
 }
 
 
-pub(crate) async fn handle_bim_histogram_by_vehicle_ride_count_group(request: &Request<Body>) -> Result<Response<Body>, Infallible> {
+pub(crate) async fn handle_bim_histogram_by_vehicle_ride_count_group(request: &Request<Incoming>) -> Result<Response<Full<Bytes>>, Infallible> {
     let query_pairs = get_query_pairs(request);
     if request.method() != Method::GET {
         return return_405(&query_pairs).await;
@@ -671,7 +673,7 @@ pub(crate) async fn handle_bim_histogram_by_vehicle_ride_count_group(request: &R
     }
 }
 
-pub(crate) async fn handle_bim_histogram_by_line_ride_count_group(request: &Request<Body>) -> Result<Response<Body>, Infallible> {
+pub(crate) async fn handle_bim_histogram_by_line_ride_count_group(request: &Request<Incoming>) -> Result<Response<Full<Bytes>>, Infallible> {
     let query_pairs = get_query_pairs(request);
     if request.method() != Method::GET {
         return return_405(&query_pairs).await;
@@ -792,7 +794,7 @@ pub(crate) async fn handle_bim_histogram_by_line_ride_count_group(request: &Requ
     }
 }
 
-pub(crate) async fn handle_bim_last_rider_pie(request: &Request<Body>) -> Result<Response<Body>, Infallible> {
+pub(crate) async fn handle_bim_last_rider_pie(request: &Request<Incoming>) -> Result<Response<Full<Bytes>>, Infallible> {
     let query_pairs = get_query_pairs(request);
     if request.method() != Method::GET {
         return return_405(&query_pairs).await;
@@ -884,7 +886,7 @@ pub(crate) async fn handle_bim_last_rider_pie(request: &Request<Body>) -> Result
     }
 }
 
-pub(crate) async fn handle_bim_histogram_fixed_coupling(request: &Request<Body>) -> Result<Response<Body>, Infallible> {
+pub(crate) async fn handle_bim_histogram_fixed_coupling(request: &Request<Incoming>) -> Result<Response<Full<Bytes>>, Infallible> {
     let query_pairs = get_query_pairs(request);
     if request.method() != Method::GET {
         return return_405(&query_pairs).await;
@@ -1008,7 +1010,7 @@ pub(crate) async fn handle_bim_histogram_fixed_coupling(request: &Request<Body>)
     }
 }
 
-pub(crate) async fn handle_bim_global_stats(request: &Request<Body>) -> Result<Response<Body>, Infallible> {
+pub(crate) async fn handle_bim_global_stats(request: &Request<Incoming>) -> Result<Response<Full<Bytes>>, Infallible> {
     let query_pairs = get_query_pairs(request);
     if request.method() != Method::GET {
         return return_405(&query_pairs).await;
@@ -1058,7 +1060,7 @@ pub(crate) async fn handle_bim_global_stats(request: &Request<Body>) -> Result<R
     }
 }
 
-pub(crate) async fn handle_bim_first_rider_pie(request: &Request<Body>) -> Result<Response<Body>, Infallible> {
+pub(crate) async fn handle_bim_first_rider_pie(request: &Request<Incoming>) -> Result<Response<Full<Bytes>>, Infallible> {
     let query_pairs = get_query_pairs(request);
     if request.method() != Method::GET {
         return return_405(&query_pairs).await;
