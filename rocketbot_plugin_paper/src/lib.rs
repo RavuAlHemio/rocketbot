@@ -220,6 +220,43 @@ fn si_prefix(mut value: BigDecimal) -> (&'static str, BigDecimal) {
     (SI_THOUSANDS[index_with_offset_usize], value)
 }
 
+fn to_decimal_string(dec: &BigDecimal) -> String {
+    if dec < &BigDecimal::zero() {
+        let positive_dec = -dec;
+        let mut ret = to_decimal_string(&positive_dec);
+        ret.insert(0, '-');
+        return ret;
+    }
+
+    assert!(dec >= &BigDecimal::zero());
+
+    let (bi, exp) = dec.as_bigint_and_exponent();
+    let mut bi_string = bi.to_string();
+    if exp > 0 {
+        let exp_usize: usize = exp.try_into().unwrap();
+
+        // negative exponent
+        // 12345, exp = 5 => 0.12345
+        let mut chars: Vec<char> = bi_string.chars().collect();
+        chars.reverse();
+        while chars.len() <= exp_usize {
+            chars.push('0');
+        }
+        chars.reverse();
+
+        chars.insert(chars.len() - exp_usize, '.');
+
+        bi_string.clear();
+        bi_string.extend(chars.as_slice());
+    } else {
+        // positive (or zero) exponent
+        for _ in 0..(-exp) {
+            bi_string.push('0');
+        }
+    }
+    bi_string
+}
+
 fn to_scientific(dec: &BigDecimal) -> String {
     let (bi, exp) = dec.as_bigint_and_exponent();
     let mut bi_string = bi.to_string();
@@ -241,7 +278,7 @@ fn to_scientific(dec: &BigDecimal) -> String {
 }
 
 fn maybe_to_scientific(dec: &BigDecimal) -> String {
-    let standard = dec.to_string();
+    let standard = to_decimal_string(dec);
     if standard.starts_with("0.00000") || standard.ends_with("000000") {
         to_scientific(&dec)
     } else {
@@ -483,6 +520,59 @@ mod tests {
         test_paper_sizes(99999);
     }
 
+    #[test]
+    fn test_to_decimal_string() {
+        fn ttds(digits: i64, scale: i64, expected: &str) {
+            let decimal = BigDecimal::new(BigInt::from(digits), scale);
+            let string = to_decimal_string(&decimal);
+            assert_eq!(&string, expected);
+        }
+
+        ttds(0, 0, "0");
+        ttds(1, 0, "1");
+        ttds(1, 1, "0.1");
+        ttds(1, 2, "0.01");
+        ttds(1, 3, "0.001");
+        ttds(1, -1, "10");
+        ttds(1, -2, "100");
+        ttds(1, -3, "1000");
+        ttds(12345, 0, "12345");
+        ttds(12345, 1, "1234.5");
+        ttds(12345, 2, "123.45");
+        ttds(12345, 3, "12.345");
+        ttds(12345, 4, "1.2345");
+        ttds(12345, 5, "0.12345");
+        ttds(12345, 6, "0.012345");
+        ttds(12345, 7, "0.0012345");
+        ttds(12345, 8, "0.00012345");
+        ttds(12345, -1, "123450");
+        ttds(12345, -2, "1234500");
+        ttds(12345, -3, "12345000");
+        ttds(12345, -4, "123450000");
+        ttds(12345, -5, "1234500000");
+        ttds(-1, 0, "-1");
+        ttds(-1, 1, "-0.1");
+        ttds(-1, 2, "-0.01");
+        ttds(-1, 3, "-0.001");
+        ttds(-1, -1, "-10");
+        ttds(-1, -2, "-100");
+        ttds(-1, -3, "-1000");
+        ttds(-12345, 0, "-12345");
+        ttds(-12345, 1, "-1234.5");
+        ttds(-12345, 2, "-123.45");
+        ttds(-12345, 3, "-12.345");
+        ttds(-12345, 4, "-1.2345");
+        ttds(-12345, 5, "-0.12345");
+        ttds(-12345, 6, "-0.012345");
+        ttds(-12345, 7, "-0.0012345");
+        ttds(-12345, 8, "-0.00012345");
+        ttds(-12345, -1, "-123450");
+        ttds(-12345, -2, "-1234500");
+        ttds(-12345, -3, "-12345000");
+        ttds(-12345, -4, "-123450000");
+        ttds(-12345, -5, "-1234500000");
+    }
+
     fn test_single_precision(
         series: &str,
         order: i64,
@@ -502,8 +592,11 @@ mod tests {
         let long_prec = long_val.with_prec(prec);
         let short_prec = short_val.with_prec(prec);
 
-        assert_eq!(expect_long_str, long_prec.to_string());
-        assert_eq!(expect_short_str, short_prec.to_string());
+        let long_prec_string = to_decimal_string(&long_prec);
+        let short_prec_string = to_decimal_string(&short_prec);
+
+        assert_eq!(expect_long_str, long_prec_string);
+        assert_eq!(expect_short_str, short_prec_string);
     }
 
     #[test]
