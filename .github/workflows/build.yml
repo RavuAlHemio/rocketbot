@@ -4,6 +4,8 @@ jobs:
   build-arch-debug:
     runs-on: ubuntu-latest
     container: archlinux:base-devel
+    env:
+      RUST_BACKTRACE: 1
     steps:
       - name: update packages
         run: pacman -Syu --noconfirm
@@ -53,6 +55,8 @@ jobs:
   build-arch-release:
     runs-on: ubuntu-latest
     container: archlinux:base-devel
+    env:
+      RUST_BACKTRACE: 1
     steps:
       - name: update packages
         run: pacman -Syu --noconfirm
@@ -102,6 +106,8 @@ jobs:
   build-sedify:
     runs-on: ubuntu-latest
     container: archlinux:base-devel
+    env:
+      RUST_BACKTRACE: 1
     steps:
       - name: update packages
         run: pacman -Syu --noconfirm
@@ -130,6 +136,7 @@ jobs:
       LC_ALL: C.UTF-8
       DEBIAN_FRONTEND: noninteractive
       TZ: Etc/UTC
+      RUST_BACKTRACE: 1
     steps:
       - name: update apt database
         run: apt-get -y update
