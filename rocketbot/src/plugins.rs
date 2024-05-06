@@ -119,6 +119,8 @@ pub(crate) async fn load_plugins(iface: Weak<dyn RocketBotInterface>) -> Vec<Plu
                 Box::new(rocketbot_plugin_transliterate::TransliteratePlugin::new(iface_weak, inner_config).await)
             } else if plugin_config.name == "url" {
                 Box::new(rocketbot_plugin_url::UrlPlugin::new(iface_weak, inner_config).await)
+            } else if plugin_config.name == "url_commands" {
+                Box::new(rocketbot_plugin_url_commands::UrlCommandsPlugin::new(iface_weak, inner_config).await)
             } else if plugin_config.name == "user_list_message" {
                 Box::new(rocketbot_plugin_user_list_message::UserListMessagePlugin::new(iface_weak, inner_config).await)
             } else if plugin_config.name == "vaccine" {
