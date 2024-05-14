@@ -54,27 +54,27 @@ impl DocumentExt for sxd_document::dom::Document<'_> {
 }
 
 
-trait ElementExt {
-    fn child_elements_named(&self, local_name: &str) -> Vec<Element>;
-    fn first_child_element_named(&self, local_name: &str) -> Option<Element>;
-    fn first_text_rec(&self) -> Option<String>;
+trait ElementExt<'d> {
+    fn child_elements_named<'s, 'n>(&'s self, local_name: &'n str) -> Vec<Element<'d>>;
+    fn first_child_element_named<'s, 'n>(&'s self, local_name: &'n str) -> Option<Element<'d>>;
+    fn first_text_rec<'s>(&'s self) -> Option<String>;
 }
-impl ElementExt for sxd_document::dom::Element<'_> {
-    fn child_elements_named(&self, local_name: &str) -> Vec<Element> {
+impl<'d> ElementExt<'d> for sxd_document::dom::Element<'d> {
+    fn child_elements_named<'s, 'n>(&'s self, local_name: &'n str) -> Vec<Element<'d>> {
         self
             .children().into_iter()
             .filter_map(|c| c.element())
             .filter(|e| e.name().local_part() == local_name)
             .collect()
     }
-    fn first_child_element_named(&self, local_name: &str) -> Option<Element> {
+    fn first_child_element_named<'s, 'n>(&'s self, local_name: &'n str) -> Option<Element<'d>> {
         self
             .children().into_iter()
             .filter_map(|c| c.element())
             .filter(|e| e.name().local_part() == local_name)
             .nth(0)
     }
-    fn first_text_rec(&self) -> Option<String> {
+    fn first_text_rec<'s>(&'s self) -> Option<String> {
         use sxd_document::dom::ChildOfElement;
         for child in self.children() {
             match child {
@@ -121,6 +121,7 @@ async fn process_page(
 
     let page_xml_notag = wiki_parser.parse_article(page_title, page_source)
         .expect("parsing wikitext failed");
+    println!("{}", page_xml_notag);
     let page_xml = format!("<?xml version=\"1.0\"?>{}", page_xml_notag);
 
     let page_package = sxd_document::parser::parse(&page_xml)
@@ -129,7 +130,11 @@ async fn process_page(
 
     let html = page.document_element().expect("no document element");
     let body = html.first_child_element_named("body").expect("no body element");
-    let table = body.first_child_element_named("table").expect("no table element");
+    let table = body.child_elements_named("section")
+        .into_iter()
+        .flat_map(|section| section.child_elements_named("table"))
+        .nth(0)
+        .expect("no table element in any section");
     let tbody = table.first_child_element_named("tbody").expect("no tbody element");
     let first_table_rows = tbody.child_elements_named("tr");
 
