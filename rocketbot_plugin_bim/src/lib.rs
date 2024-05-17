@@ -3554,7 +3554,9 @@ impl BimPlugin {
             for (rider, pm) in &riders_and_balances {
                 write_expect!(ret, "\n{}: {:+} (+{} -{})", rider, pm.plus - pm.minus, pm.plus, pm.minus);
             }
-            if first_ride_count > 0 {
+            if first_ride_count == 1 {
+                write_expect!(ret, "\n(one first ride)");
+            } else if first_ride_count > 0 {
                 write_expect!(ret, "\n({} first rides)", first_ride_count);
             }
             ret
