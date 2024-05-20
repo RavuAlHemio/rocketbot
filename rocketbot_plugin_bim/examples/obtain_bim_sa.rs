@@ -340,6 +340,7 @@ async fn main() {
                 .expect("failed to decode page as UTF-8");
             let html = Html::parse_document(&page_string);
 
+            let empty_vehicle = VehicleInfoBuilder::new();
             let mut current_vehicle = VehicleInfoBuilder::new();
             for car_line in html.root_element().select(&car_line_sel) {
                 if config.multiline_tables {
@@ -347,8 +348,15 @@ async fn main() {
                     if tr_classes.contains("first-line") {
                         // new vehicle!
                         current_vehicle.modify_with_type_mapping(&config.type_mapping);
-                        if let Ok(veh) = current_vehicle.try_build() {
-                            vehicles.push(veh);
+                        match current_vehicle.try_build() {
+                            Ok(veh) => {
+                                vehicles.push(veh);
+                            },
+                            Err(e) => {
+                                if e != empty_vehicle {
+                                    eprintln!("failed to assemble vehicle {:?}", e);
+                                }
+                            },
                         }
                         current_vehicle = VehicleInfoBuilder::new();
                     }
