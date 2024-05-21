@@ -3690,6 +3690,159 @@ impl BimPlugin {
         ).await;
     }
 
+    async fn channel_command_bimfixedmonopolies(&self, channel_message: &ChannelMessage, command: &CommandInstance) {
+        let interface = match self.interface.upgrade() {
+            None => return,
+            Some(i) => i,
+        };
+
+        let config_guard = self.config.read().await;
+        let company = command.options.get("company")
+            .or_else(|| command.options.get("c"))
+            .map(|v| v.as_str().unwrap())
+            .unwrap_or(config_guard.default_company.as_str());
+
+        let database = match self.load_bim_database(&config_guard, company) {
+            Some(db) => db,
+            None => {
+                send_channel_message!(
+                    interface,
+                    &channel_message.channel.name,
+                    "No vehicle database exists for this company, so I don't know of any fixed couplings. :disappointed:",
+                ).await;
+                return;
+            },
+        };
+        let ride_conn = match connect_ride_db(&config_guard).await {
+            Ok(c) => c,
+            Err(_) => {
+                send_channel_message!(
+                    interface,
+                    &channel_message.channel.name,
+                    "Failed to open database connection. :disappointed:",
+                ).await;
+                return;
+            },
+        };
+
+        let query = "
+            SELECT rarv.rider_username
+            FROM bim.rides_and_ridden_vehicles rarv
+            WHERE
+                rarv.company = $1
+                AND rarv.vehicle_number = $2
+                AND NOT EXISTS (
+                    SELECT 1
+                    FROM bim.rides_and_ridden_vehicles rarv2
+                    WHERE rarv2.company = rarv.company
+                    AND rarv2.vehicle_number = rarv.vehicle_number
+                    AND rarv2.\"timestamp\" > rarv.\"timestamp\"
+                )
+        ";
+        let statement = match ride_conn.prepare(query).await {
+            Ok(s) => s,
+            Err(e) => {
+                error!("failed to prepare rider query: {}", e);
+                send_channel_message!(
+                    interface,
+                    &channel_message.channel.name,
+                    "Failed to prepare rider query. :disappointed:",
+                ).await;
+                return;
+            },
+        };
+
+        let mut rider_to_coupling_length_to_count = BTreeMap::new();
+        for vehicle in database.values() {
+            if vehicle.fixed_coupling.len() == 0 {
+                // not a fixed coupling
+                continue;
+            }
+
+            if vehicle.fixed_coupling.first().map(|f| f == &vehicle.number).unwrap_or(false) {
+                // we are not the first vehicle in the coupling
+                continue;
+            }
+
+            // alright, look it up
+            let mut riders = HashSet::new();
+            for vehicle_number in &vehicle.fixed_coupling {
+                match ride_conn.query(&statement, &[&company, &vehicle_number.as_str()]).await {
+                    Ok(mut rr) => {
+                        if rr.len() == 0 {
+                            // this vehicle does not have a last rider
+                            // => nobody can have a monopoly
+                            riders.clear();
+                            break;
+                        }
+                        if rr.len() != 1 {
+                            error!("obtained more than one rider row ({} rows) for company {:?} vehicle {:?}", rr.len(), company, vehicle.number);
+                            riders.clear();
+                            break;
+                        }
+
+                        let row = rr.remove(0);
+                        let rider_username: String = row.get(0);
+                        riders.insert(rider_username);
+                    },
+                    Err(e) => {
+                        error!("failed to obtain latest rider for company {:?} vehicle {:?}: {}", company, vehicle.number, e);
+                        riders.clear();
+                        break;
+                    },
+                };
+            }
+
+            if riders.len() == 1 {
+                // monopoly!
+                let rider_username = riders.iter().nth(0).map(|ru| ru.clone()).unwrap();
+
+                let monopoly_count = rider_to_coupling_length_to_count
+                    .entry(rider_username)
+                    .or_insert_with(|| BTreeMap::new())
+                    .entry(vehicle.fixed_coupling.len())
+                    .or_insert(0usize);
+                *monopoly_count += 1;
+            }
+        }
+
+        if rider_to_coupling_length_to_count.len() == 0 {
+            send_channel_message!(
+                interface,
+                &channel_message.channel.name,
+                "It\u{2019}s a free market\u{2014}there are no monopolies!",
+            ).await;
+            return;
+        }
+
+        let mut riders_and_total_count: Vec<(&String, usize)> = rider_to_coupling_length_to_count
+            .iter()
+            .map(|(r, cltc)| (r, cltc.values().map(|count| *count).sum()))
+            .collect();
+        riders_and_total_count.sort_unstable_by_key(|(rider, total_count)| (usize::MAX - total_count, *rider));
+
+        let mut response_body = format!("Fixed-coupling monopolies for company {}:", company);
+        for (rider, total_count) in riders_and_total_count {
+            write!(response_body, "\n{}: {} (", rider, total_count).unwrap();
+            let mut first_coupling_length = true;
+            for (coupling_length, count) in rider_to_coupling_length_to_count.get(rider).unwrap() {
+                if first_coupling_length {
+                    first_coupling_length = false;
+                } else {
+                    write!(response_body, ", ").unwrap();
+                }
+                write!(response_body, "{}\u{D7}{}", count, coupling_length).unwrap();
+            }
+            write!(response_body, ")").unwrap();
+        }
+
+        send_channel_message!(
+            interface,
+            &channel_message.channel.name,
+            &response_body,
+        ).await;
+    }
+
     #[inline]
     fn weekday_abbr2(weekday: Weekday) -> &'static str {
         match weekday {
@@ -4251,13 +4404,24 @@ impl RocketBotPlugin for BimPlugin {
             &CommandDefinitionBuilder::new(
                 "bimdivscore",
                 "bim",
-                "{cpfx}bimdivscore [-n]",
+                "{cpfx}bimdivscore [{sopfx}n]",
                 "A list of riders and their divisibility scores.",
             )
                 .add_flag("n")
                 .add_flag("sort-by-number")
                 .add_lookback_flags()
                 .build()
+        ).await;
+        my_interface.register_channel_command(
+            &CommandDefinitionBuilder::new(
+                "bimfixedmonopolies",
+                "bim",
+                "{cpfx}bimfixedmonopolies [{sopfx}c COMPANY]",
+                "A list of riders and the fixed couplings that fully belong only to them.",
+            )
+            .add_option("company", CommandValueType::String)
+            .add_option("c", CommandValueType::String)
+            .build()
         ).await;
 
         // set up the achievement update loop
@@ -4354,6 +4518,8 @@ impl RocketBotPlugin for BimPlugin {
             self.channel_command_lastbimriderbalance(channel_message, command).await
         } else if command.name == "bimdivscore" {
             self.channel_command_bimdivscore(channel_message, command).await
+        } else if command.name == "bimfixedmonopolies" {
+            self.channel_command_bimfixedmonopolies(channel_message, command).await
         }
     }
 
@@ -4406,6 +4572,8 @@ impl RocketBotPlugin for BimPlugin {
             Some(include_str!("../help/lastbimriderbalance.md").to_owned())
         } else if command_name == "bimdivscore" {
             Some(include_str!("../help/bimdivscore.md").to_owned())
+        } else if command_name == "bimfixedmonopolies" {
+            Some(include_str!("../help/bimfixedmonopolies.md").to_owned())
         } else {
             None
         }
