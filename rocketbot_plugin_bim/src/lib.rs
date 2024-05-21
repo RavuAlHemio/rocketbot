@@ -3759,7 +3759,7 @@ impl BimPlugin {
                 continue;
             }
 
-            if vehicle.fixed_coupling.first().map(|f| f == &vehicle.number).unwrap_or(false) {
+            if !vehicle.fixed_coupling.first().map(|f| f == &vehicle.number).unwrap_or(false) {
                 // we are not the first vehicle in the coupling
                 continue;
             }
