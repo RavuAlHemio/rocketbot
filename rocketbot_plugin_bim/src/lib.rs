@@ -3825,6 +3825,7 @@ impl BimPlugin {
         for (rider, total_count) in riders_and_total_count {
             write!(response_body, "\n{}: {} (", rider, total_count).unwrap();
             let mut first_coupling_length = true;
+            let mut total_points = 0;
             for (coupling_length, count) in rider_to_coupling_length_to_count.get(rider).unwrap() {
                 if first_coupling_length {
                     first_coupling_length = false;
@@ -3832,8 +3833,9 @@ impl BimPlugin {
                     write!(response_body, ", ").unwrap();
                 }
                 write!(response_body, "{}\u{D7}{}", count, coupling_length).unwrap();
+                total_points += count * coupling_length;
             }
-            write!(response_body, ")").unwrap();
+            write!(response_body, "), {} points", total_points).unwrap();
         }
 
         send_channel_message!(
