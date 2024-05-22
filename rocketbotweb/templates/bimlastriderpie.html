@@ -8,9 +8,11 @@
 {% endblock %}
 
 {% block content %}
-<p id="pie-controls"></p>
-<p>
-    <canvas id="chart-canvas"></canvas>
-</p>
+<div id="chart-outer">
+    <p id="pie-controls"></p>
+    <div id="chart-container">
+        <canvas id="chart-canvas"></canvas>
+    </div>
+</div>
 <script type="application/json" id="chart-data">{{ self.json_data()|safe }}</script>
 {% endblock %}

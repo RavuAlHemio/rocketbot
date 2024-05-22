@@ -8,9 +8,11 @@
 {% endblock %}
 
 {% block content %}
-<p><label><input type="checkbox" id="bim-charting-log-plot-checkbox" /> log plot</label></p>
-<p>
-    <canvas id="chart-canvas"></canvas>
-</p>
+<div id="chart-outer">
+    <p><label><input type="checkbox" id="bim-charting-log-plot-checkbox" /> log plot</label></p>
+    <div id="chart-container">
+        <canvas id="chart-canvas"></canvas>
+    </div>
+</div>
 <script type="application/json" id="chart-data">{{ self.json_data()|safe }}</script>
 {% endblock %}

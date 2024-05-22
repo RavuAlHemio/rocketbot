@@ -100,6 +100,7 @@ export module Charting {
                 datasets: datasets,
             },
             options: {
+                maintainAspectRatio: false,
                 scales: {
                     "yRegular": {
                         display: true,
@@ -148,6 +149,7 @@ export module Charting {
                 datasets: datasets,
             },
             options: {
+                maintainAspectRatio: false,
                 scales: {
                     y: {
                         ticks: {
@@ -247,6 +249,9 @@ export module Charting {
             type: "pie",
             data: {
                 datasets: [],
+            },
+            options: {
+                maintainAspectRatio: false,
             },
         });
 
@@ -377,6 +382,9 @@ export module Charting {
             type: "pie",
             data: {
                 datasets: [],
+            },
+            options: {
+                maintainAspectRatio: false,
             },
         });
 
@@ -543,6 +551,7 @@ export module Charting {
                 datasets: [],
             },
             options: {
+                maintainAspectRatio: false,
                 scales: {
                     "yRegular": {
                         position: "left",
@@ -665,6 +674,9 @@ export module Charting {
                     },
                 ],
                 labels: reducedCompanyNames,
+            },
+            options: {
+                maintainAspectRatio: false,
             },
         });
     }

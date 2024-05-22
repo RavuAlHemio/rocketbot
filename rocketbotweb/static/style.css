@@ -1,5 +1,6 @@
 body {
   font-family: sans-serif;
+  margin: 8px;
 }
 
 table.top-quotes .score.unchanged,
@@ -275,4 +276,13 @@ td.numeric-field {
 
 table.bim-ride-query table.vehicles td.type {
   padding-right: 0.5em;
+}
+
+#chart-outer {
+  display: flex;
+  flex-direction: column;
+  height: calc(100vh - 16px);
+}
+#chart-container {
+  flex-grow: 1;
 }

@@ -8,11 +8,13 @@
 {% endblock %}
 
 {% block content %}
-<p class="total-rides">
-    Total rides: <span class="value">{{ self.total_rides }}</span>
-</p>
-<p>
-    <canvas id="chart-canvas"></canvas>
-</p>
+<div id="chart-outer">
+    <p class="total-rides">
+        Total rides: <span class="value">{{ self.total_rides }}</span>
+    </p>
+    <div id="chart-container">
+        <canvas id="chart-canvas"></canvas>
+    </div>
+</div>
 <script type="application/json" id="chart-data">{{ self.json_data()|safe }}</script>
 {% endblock %}
