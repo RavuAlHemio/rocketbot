@@ -11,7 +11,7 @@ use serde::{Deserialize, Serialize, Serializer};
 use serde::ser::SerializeStruct;
 use tracing::error;
 
-use crate::{get_query_pairs, render_response, return_405, return_500};
+use crate::{get_config, get_query_pairs, render_response, return_405, return_500};
 use crate::bim::{
     connect_to_db, obtain_company_to_bim_database, obtain_company_to_definition,
 };
@@ -168,6 +168,14 @@ impl RideRow {
     }
 }
 
+#[derive(Clone, Debug, Deserialize, Eq, Hash, Ord, PartialEq, PartialOrd, Serialize)]
+struct OddsEndsTable {
+    pub title: String,
+    pub description: Option<String>,
+    pub column_titles: Vec<String>,
+    pub rows: Vec<Vec<String>>,
+}
+
 
 #[derive(Clone, Debug, Deserialize, Eq, Hash, PartialEq, Serialize, Template)]
 #[template(path = "bimrides.html")]
@@ -188,6 +196,12 @@ struct BimVehicleTemplate {
     pub per_rider: bool,
     pub all_riders: BTreeSet<String>,
     pub company_to_vehicle_to_profile: BTreeMap<String, BTreeMap<VehicleNumber, VehicleProfile>>,
+}
+
+#[derive(Clone, Debug, Eq, Hash, Ord, PartialEq, PartialOrd, Serialize, Template)]
+#[template(path = "bimoddsends.html")]
+struct BimOddsEndsTemplate {
+    pub tables: Vec<OddsEndsTable>,
 }
 
 
@@ -547,3 +561,59 @@ pub(crate) async fn handle_bim_vehicles(request: &Request<Incoming>) -> Result<R
         None => return_500(),
     }
 }
+
+
+pub(crate) async fn handle_bim_odds_ends(request: &Request<Incoming>) -> Result<Response<Full<Bytes>>, Infallible> {
+    let query_pairs = get_query_pairs(request);
+
+    if request.method() != Method::GET {
+        return return_405(&query_pairs).await;
+    }
+
+    let config_guard = match get_config().await {
+        Some(cg) => cg,
+        None => return return_500(),
+    };
+    let db_conn = match connect_to_db().await {
+        Some(c) => c,
+        None => return return_500(),
+    };
+
+    let mut tables = Vec::with_capacity(config_guard.bim_odds_ends.len());
+    for odd_end in &config_guard.bim_odds_ends {
+        let title = odd_end.title.clone();
+        let description = odd_end.description.clone();
+        let column_titles = odd_end.column_titles.clone();
+        let db_rows = match db_conn.query(&odd_end.query, &[]).await {
+            Ok(r) => r,
+            Err(e) => {
+                error!("failed to execute query {:?} (skipping table): {}", odd_end.query, e);
+                continue;
+            },
+        };
+        let mut rows = Vec::with_capacity(db_rows.len());
+        for db_row in db_rows {
+            let mut row = Vec::with_capacity(db_row.len());
+            for i in 0..db_row.len() {
+                let value: String = db_row.get(i);
+                row.push(value);
+            }
+            rows.push(row);
+        }
+        tables.push(OddsEndsTable {
+            title,
+            description,
+            column_titles,
+            rows,
+        });
+    }
+
+    let template = BimOddsEndsTemplate {
+        tables,
+    };
+    match render_response(&template, &query_pairs, 200, vec![]).await {
+        Some(r) => Ok(r),
+        None => return_500(),
+    }
+}
+

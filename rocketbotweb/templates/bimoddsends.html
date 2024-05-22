@@ -1,0 +1,39 @@
+{% extends "base.html" %}
+
+{% block title %}Public Transport Odds and Ends{% endblock %}
+
+{% block content %}
+<main>
+
+<h1>Public Transport Odds and Ends</h1>
+
+{% for table in tables %}
+
+<section class="bim-odd-end-section">
+<h2>{{ table.title|escape }}</h2>
+
+{% if let Some(description) = table.description %}
+<p class="description">{{ description|escape }}</p>
+{% endif %}
+
+<table class="booktable">
+  <tr>
+    {% for column_title in table.column_titles %}
+      <th>{{ column_title|escape }}</th>
+    {% endfor %}
+  </tr>
+  {% for row in table.rows %}
+  <tr>
+    {% for cell in row %}
+    <td>{{ cell|escape }}</td>
+    {% endfor %}
+  </tr>
+  {% endfor %}
+</table>
+
+</section>
+
+{% endfor %}
+
+</main>
+{% endblock %}
