@@ -617,28 +617,30 @@ pub(crate) async fn handle_bim_odds_ends(request: &Request<Incoming>) -> Result<
 
             // enrich with links
             for i in 0..row.len() {
-                let link_format_opt = odd_end.column_link_formats
+                let link_format = odd_end.column_link_formats
                     .get(i)
-                    .map(|inner| inner.as_ref())
-                    .flatten();
-                if let Some(link_format) = link_format_opt {
-                    let link = PLACEHOLDER_REGEX.replace_all(link_format, |caps: &Captures| {
-                        let placeholder_name = caps.get(1).expect("placeholder name not captured").as_str();
-                        if placeholder_name == "o" {
-                            // opening curly brace
-                            "{"
-                        } else if placeholder_name == "c" {
-                            // closing curly brace
-                            "}"
-                        } else {
-                            // column index
-                            let column_index: usize = placeholder_name.parse()
-                                .expect("placeholder index not parsable as usize");
-                            row[column_index].value.as_str()
-                        }
-                    });
-                    row[i].link = Some(link.into_owned());
+                    .map(|lf| lf.as_str())
+                    .unwrap_or("");
+                if link_format.len() == 0 {
+                    continue;
                 }
+
+                let link = PLACEHOLDER_REGEX.replace_all(link_format, |caps: &Captures| {
+                    let placeholder_name = caps.get(1).expect("placeholder name not captured").as_str();
+                    if placeholder_name == "o" {
+                        // opening curly brace
+                        "{"
+                    } else if placeholder_name == "c" {
+                        // closing curly brace
+                        "}"
+                    } else {
+                        // column index
+                        let column_index: usize = placeholder_name.parse()
+                            .expect("placeholder index not parsable as usize");
+                        row[column_index].value.as_str()
+                    }
+                });
+                row[i].link = Some(link.into_owned());
             }
 
             rows.push(row);
