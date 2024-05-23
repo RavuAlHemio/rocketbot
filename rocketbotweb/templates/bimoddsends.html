@@ -25,7 +25,11 @@
   {% for row in table.rows %}
   <tr>
     {% for cell in row %}
-    <td>{{ cell|escape }}</td>
+      {% if let Some(link) = cell.link %}
+      <td><a href="{{ link|escape }}">{{ cell.value|escape }}</a></td>
+      {% else %}
+      <td>{{ cell.value|escape }}</td>
+      {% endif %}
     {% endfor %}
   </tr>
   {% endfor %}

@@ -5,6 +5,8 @@ use askama::Template;
 use http_body_util::Full;
 use hyper::{Method, Request, Response};
 use hyper::body::{Bytes, Incoming};
+use once_cell::sync::Lazy;
+use regex::{Captures, Regex};
 use rocketbot_bim_common::{VehicleInfo, VehicleNumber};
 use rocketbot_date_time::DateTimeLocalWithWeekday;
 use serde::{Deserialize, Serialize, Serializer};
@@ -16,6 +18,11 @@ use crate::bim::{
     connect_to_db, obtain_company_to_bim_database, obtain_company_to_definition,
 };
 use crate::templating::filters;
+
+
+static PLACEHOLDER_REGEX: Lazy<Regex> = Lazy::new(|| Regex::new(
+    "\\{([oc]|[0-9]+)\\}"
+).expect("failed to compile placeholder regex"));
 
 
 #[derive(Clone, Debug, Eq, Hash, PartialEq)]
@@ -173,7 +180,13 @@ struct OddsEndsTable {
     pub title: String,
     pub description: Option<String>,
     pub column_titles: Vec<String>,
-    pub rows: Vec<Vec<String>>,
+    pub rows: Vec<Vec<OddsEndsCell>>,
+}
+
+#[derive(Clone, Debug, Deserialize, Eq, Hash, Ord, PartialEq, PartialOrd, Serialize)]
+struct OddsEndsCell {
+    pub value: String,
+    pub link: Option<String>,
 }
 
 
@@ -596,8 +609,38 @@ pub(crate) async fn handle_bim_odds_ends(request: &Request<Incoming>) -> Result<
             let mut row = Vec::with_capacity(db_row.len());
             for i in 0..db_row.len() {
                 let value: String = db_row.get(i);
-                row.push(value);
+                row.push(OddsEndsCell {
+                    value,
+                    link: None,
+                });
             }
+
+            // enrich with links
+            for i in 0..row.len() {
+                let link_format_opt = odd_end.column_link_formats
+                    .get(i)
+                    .map(|inner| inner.as_ref())
+                    .flatten();
+                if let Some(link_format) = link_format_opt {
+                    let link = PLACEHOLDER_REGEX.replace_all(link_format, |caps: &Captures| {
+                        let placeholder_name = caps.get(1).expect("placeholder name not captured").as_str();
+                        if placeholder_name == "o" {
+                            // opening curly brace
+                            "{"
+                        } else if placeholder_name == "c" {
+                            // closing curly brace
+                            "}"
+                        } else {
+                            // column index
+                            let column_index: usize = placeholder_name.parse()
+                                .expect("placeholder index not parsable as usize");
+                            row[column_index].value.as_str()
+                        }
+                    });
+                    row[i].link = Some(link.into_owned());
+                }
+            }
+
             rows.push(row);
         }
         tables.push(OddsEndsTable {
@@ -616,4 +659,3 @@ pub(crate) async fn handle_bim_odds_ends(request: &Request<Incoming>) -> Result<
         None => return_500(),
     }
 }
-

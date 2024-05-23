@@ -19,4 +19,5 @@ pub struct BimOddEndConfig {
     #[serde(default)] pub description: Option<String>,
     pub query: String,
     pub column_titles: Vec<String>,
+    pub column_link_formats: Vec<Option<String>>,
 }
