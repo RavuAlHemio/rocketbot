@@ -7,9 +7,18 @@
 
 <h1>Public Transport Odds and Ends</h1>
 
+<section class="bim-odd-end-navigation">
+  <p>
+    {% for table in tables %}
+      {% !if loop.first %}&middot;{% endif %}
+      <a href="#odd-end-{{ loop.index }}">{{ table.title|escape }}</a>
+    {% endfor %}
+  </p>
+</section>
+
 {% for table in tables %}
 
-<section class="bim-odd-end-section">
+<section class="bim-odd-end-section" id="odd-end-{{ loop.index }}">
 <h2>{{ table.title|escape }}</h2>
 
 {% if let Some(description) = table.description %}
