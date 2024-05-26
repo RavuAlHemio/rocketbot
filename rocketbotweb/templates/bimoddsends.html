@@ -10,7 +10,7 @@
 <section class="bim-odd-end-navigation">
   <p>
     {% for table in tables %}
-      {% !if loop.first %}&middot;{% endif %}
+      {% if !loop.first %}&middot;{% endif %}
       <a href="#odd-end-{{ loop.index }}">{{ table.title|escape }}</a>
     {% endfor %}
   </p>
