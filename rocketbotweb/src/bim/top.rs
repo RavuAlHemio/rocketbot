@@ -251,6 +251,7 @@ pub(crate) async fn handle_wide_bims(request: &Request<Incoming>) -> Result<Resp
                 AND vadrc.vehicle_number = rav.vehicle_number
             WHERE
                 vadrc.rider_count = $1
+                AND rav.coupling_mode = 'R'
         ",
         &[&rider_count],
     ).await;
