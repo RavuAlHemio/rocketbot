@@ -234,9 +234,9 @@ main.bim-coverage .vehicles-box {
 }
 main.bim-coverage .vehicles-box .floaty {
   display: inline-block;
-  padding: 1px;
+  padding: 1px 0.2em;
   margin-bottom: 0.2em;
-  min-width: 3em;
+  min-width: 2.7em;
   text-align: center;
 }
 main.bim-coverage .vehicles-box .block-name::after {
