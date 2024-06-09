@@ -156,7 +156,7 @@ impl RocketBotPlugin for TimePlugin {
             &CommandDefinitionBuilder::new(
                 "time",
                 "time",
-                "{cpfx}time [-r] LOCATION",
+                "{cpfx}time [{sopfx}n] LOCATION",
                 "Shows the current time at the given location.",
             )
                 .add_flag("not")
