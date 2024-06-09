@@ -40,37 +40,42 @@ impl TimePlugin {
             }
         }
 
-        // geocode the location
-        let loc = match config_guard.geocoder.geocode(location).await {
-            Ok(l) => l,
-            Err(e) => {
-                for (i, provider_error) in e.iter().enumerate() {
-                    error!("error geocoding {:?} with provider {}: {}", location, i, provider_error);
+        let loc;
+        let (loc_name, timezone) = if location == "UTC" {
+            ("the UTC timezone", &chrono_tz::Tz::Etc__UTC)
+        } else {
+            // geocode the location
+            loc = match config_guard.geocoder.geocode(location).await {
+                Ok(l) => l,
+                Err(e) => {
+                    for (i, provider_error) in e.iter().enumerate() {
+                        error!("error geocoding {:?} with provider {}: {}", location, i, provider_error);
+                    }
+                    return;
                 }
-                return;
+            };
+    
+            let timezone_name = match config_guard.geocoder.reverse_geocode_timezone(loc.coordinates).await {
+                Ok(tz) => tz,
+                Err(e) => {
+                    for (i, provider_error) in e.iter().enumerate() {
+                        error!("error reverse-geocoding timezone for {:?} with provider {}: {}", loc.coordinates, i, provider_error);
+                    }
+                    return;
+                },
+            };
+    
+            // find the timezone
+            let timezone_opt = TZ_VARIANTS.iter()
+                .filter(|tz| tz.name() == timezone_name)
+                .nth(0);
+            match timezone_opt {
+                Some(tz) => (loc.place.as_str(), tz),
+                None => {
+                    error!("no timezone {:?} found", timezone_name);
+                    return;
+                },
             }
-        };
-
-        let timezone_name = match config_guard.geocoder.reverse_geocode_timezone(loc.coordinates).await {
-            Ok(tz) => tz,
-            Err(e) => {
-                for (i, provider_error) in e.iter().enumerate() {
-                    error!("error reverse-geocoding timezone for {:?} with provider {}: {}", loc.coordinates, i, provider_error);
-                }
-                return;
-            },
-        };
-
-        // find the timezone
-        let timezone_opt = TZ_VARIANTS.iter()
-            .filter(|tz| tz.name() == timezone_name)
-            .nth(0);
-        let timezone = match timezone_opt {
-            Some(tz) => tz,
-            None => {
-                error!("no timezone {:?} found", timezone_name);
-                return;
-            },
         };
 
         let night_owl_time =
@@ -103,7 +108,7 @@ impl TimePlugin {
         };
         let response = format!(
             "The time in {} is {}{:04}-{:02}-{:02} {:02}:{:02}:{:02} ({}).",
-            loc.place,
+            loc_name,
             minus, abs_y, m, d, h, min, s,
             time.offset().fix(),
         );
