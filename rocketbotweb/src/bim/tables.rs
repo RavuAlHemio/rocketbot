@@ -1,3 +1,4 @@
+use std::borrow::Cow;
 use std::collections::{BTreeMap, BTreeSet, HashMap};
 use std::convert::Infallible;
 
@@ -21,7 +22,7 @@ use crate::templating::filters;
 
 
 static PLACEHOLDER_REGEX: Lazy<Regex> = Lazy::new(|| Regex::new(
-    "\\{([oc]|[0-9]+)\\}"
+    "\\{([oc]|[0-9]+u?)\\}"
 ).expect("failed to compile placeholder regex"));
 
 
@@ -629,15 +630,28 @@ pub(crate) async fn handle_bim_odds_ends(request: &Request<Incoming>) -> Result<
                     let placeholder_name = caps.get(1).expect("placeholder name not captured").as_str();
                     if placeholder_name == "o" {
                         // opening curly brace
-                        "{"
+                        Cow::Borrowed("{")
                     } else if placeholder_name == "c" {
                         // closing curly brace
-                        "}"
+                        Cow::Borrowed("}")
                     } else {
                         // column index
-                        let column_index: usize = placeholder_name.parse()
-                            .expect("placeholder index not parsable as usize");
-                        row[column_index].value.as_str()
+                        let (column_index, url_encode) = if let Some(placeholder_number) = placeholder_name.strip_suffix("u") {
+                            let column_index: usize = placeholder_number.parse()
+                                .expect("placeholder index not parsable as usize");
+                            (column_index, true)
+                        } else {
+                            let column_index: usize = placeholder_name.parse()
+                                .expect("placeholder index not parsable as usize");
+                            (column_index, false)
+                        };
+
+                        let unencoded = row[column_index].value.as_str();
+                        if url_encode {
+                            Cow::Owned(crate::templating::filters::encode_query_parameter(unencoded).unwrap())
+                        } else {
+                            Cow::Borrowed(unencoded)
+                        }
                     }
                 });
                 row[i].link = Some(link.into_owned());
