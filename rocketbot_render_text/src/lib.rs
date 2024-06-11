@@ -31,7 +31,9 @@ impl<'a> TextRenderer<'a> {
     ///
     /// Any pixels not contained in the map can be assumed to be blank (equivalent to intensity value
     /// 0).
-    pub fn render_text(&self, text: &str) -> HashMap<(u32, u32), u8> {
+    ///
+    /// Also returns the width of the rendered text.
+    pub fn render_text_with_width(&self, text: &str) -> (HashMap<(u32, u32), u8>, f32) {
         // load font
         let metrics = self.font.metrics(&[]);
         let ascender_px_f32 = metrics.ascent * self.size_px / f32::from(metrics.units_per_em);
@@ -95,7 +97,16 @@ impl<'a> TextRenderer<'a> {
             pos_x += glyph.advance;
         }
 
-        pixel_values
+        (pixel_values, pos_x)
+    }
+
+    /// Renders the given text using the built-in font and returns a map of coordinates to pixel
+    /// intensity values, where higher values are more intense.
+    ///
+    /// Any pixels not contained in the map can be assumed to be blank (equivalent to intensity value
+    /// 0).
+    pub fn render_text(&self, text: &str) -> HashMap<(u32, u32), u8> {
+        self.render_text_with_width(text).0
     }
 
     /// Obtains the line height, in pixels, of the font being used.

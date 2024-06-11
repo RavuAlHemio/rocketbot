@@ -3,27 +3,27 @@
 //! Generally, the following structure is rendered:
 //!
 //! ```plain
-//! ┌─────────┬─────────┬───────────────────────────┬───────────────────────────────────┬─────┐
-//! │ vehicle │         │ ravu.al.hemio             │ other                             | Σ   |
-//! ├─────────┼─────────┼───────────────────────────┼───────────────────────────────────┼─────┤
-//! │ 4096    │ same    │  1x (09:16/25)            │  1x (paulchen 24.02.2023 22:03/5) |  2x |
-//! │         │ coupled │ 12x (25.02.2023 22:03/25) │  9x (Steve    23.02.2023 22:00/5) | 21x |
-//! │         │ Σ       │ 13x                       │ 10x                               | 23x |
-//! ├─────────┼─────────┼───────────────────────────┼───────────────────────────────────┼─────┤
-//! │ 1496    │ same    │  1x (09:16/25)            │  1x (paulchen 24.02.2023 22:03/5) |  2x |
-//! │         │ coupled │ 12x (25.02.2023 22:03/25) │ 12x (Steve    23.02.2023 22:00/5) | 24x |
-//! │         │ Σ       │ 13x                       │ 13x                               | 26x |
-//! └─────────┴─────────┴───────────────────────────┴───────────────────────────────────┴─────┘
+//! ┌─────────┬─────────┬──────────────────────────────┬──────────────────────────────────────┬────────┐
+//! │ vehicle │         │ ravu.al.hemio                │ other                                | Σ      |
+//! ├─────────┼─────────┼──────────────────────────────┼──────────────────────────────────────┼────────┤
+//! │ 4096    │ same    │ 1|  2¦ (09:16/25)            │ 1|  2¦ (paulchen 24.02.2023 22:03/5) | 2|  4¦ |
+//! │         │ coupled │ 1| 12¦ (25.02.2023 22:03/25) │ 1|  9¦ (Steve    23.02.2023 22:00/5) | 2| 21¦ |
+//! │         │ Σ       │ 2| 13¦                       │ 2| 10¦                               | 4| 23¦ |
+//! ├─────────┼─────────┼──────────────────────────────┼──────────────────────────────────────┼────────┤
+//! │ 1496    │ same    │ 1|  2¦ (09:16/25)            │ 1|  2¦ (paulchen 24.02.2023 22:03/5) | 2|  4¦ |
+//! │         │ coupled │ 1| 12¦ (25.02.2023 22:03/25) │ 1|  9¦ (Steve    23.02.2023 22:00/5) | 2| 21¦ |
+//! │         │ Σ       │ 2| 13¦                       │ 2| 10¦                               | 4| 23¦ |
+//! └─────────┴─────────┴──────────────────────────────┴──────────────────────────────────────┴────────┘
 //! ```
 //!
 //! The headers and data are actually arranged in the following columns for improved visual
 //! alignment:
 //!
 //! ```plain
-//!   ╭──0──╮   ╭──1──╮   ╭──────────2+3───────────╮   ╭─────────────4+5+6──────────────╮   ╭7─╮
-//! │ vehicle │         │ ravu.al.hemio              │ other                              | Σ    |
-//! │ 4096    │ same    │ 421x (09:16/25)            │ 421x (paulchen 24.02.2023 22:03/5) | 842x |
-//!   ╰──0──╯   ╰──1──╯   ╰2r╯╰─────────3──────────╯   ╰4r╯╰───5────╯╰────────6─────────╯   ╰7r╯
+//!   ╭──0──╮   ╭──1──╮   ╭─────────2+3+4──────────╮   ╭───────────────5+6+7+8───────────────╮   ╭──8+9──╮
+//! │ vehicle │         │ ravu.al.hemio              │ other                                   | Σ         |
+//! │ 4096    │ same    │ 421| 421¦ (09:16/25)       │ 421| 421¦ (paulchen 24.02.2023 22:03/5) | 842| 842¦ |
+//!   ╰──0──╯   ╰──1──╯   ╰2r─╯╰3r╯╰───────4───────╯   ╰5r─╯╰6r╯╰───7─────╯╰────────8────────╯   ╰8r─╯╰9r╯
 //! ```
 //!
 //! (Columns marked with `r` are right-aligned, the others are left-aligned.)
@@ -114,12 +114,22 @@ pub struct RideTableVehicle {
     /// The type of this vehicle, if known.
     pub vehicle_type: Option<String>,
 
+    /// The number of times this vehicle (exactly) was ridden in a row by the rider registering the
+    /// ride.
+    #[serde(default)]
+    pub my_same_count_streak: i64,
+
     /// The number of times this vehicle (exactly) was ridden by the rider registering the ride.
     #[serde(default)]
     pub my_same_count: i64,
 
     /// The last time this vehicle (exactly) was ridden by the rider registering the ride.
     pub my_same_last: Option<Ride>,
+
+    /// The number of times a vehicle coupled with this one was ridden in a row by the rider
+    /// registering the ride.
+    #[serde(default)]
+    pub my_coupled_count_streak: i64,
 
     /// The number of times a vehicle coupled with this one was ridden by the rider registering the
     /// ride.
@@ -130,6 +140,10 @@ pub struct RideTableVehicle {
     /// rider registering the ride.
     pub my_coupled_last: Option<Ride>,
 
+    /// The number of times this vehicle (exactly) was ridden by a different rider in a row.
+    #[serde(default)]
+    pub other_same_count_streak: i64,
+
     /// The number of times this vehicle (exactly) was ridden by a different rider.
     #[serde(default)]
     pub other_same_count: i64,
@@ -138,8 +152,12 @@ pub struct RideTableVehicle {
     /// different rider.
     pub other_same_last: Option<UserRide>,
 
-    /// The number of times a vehicle coupled with this one was ridden by the rider registering the
-    /// ride.
+    /// The number of times a vehicle coupled with this one was ridden by a different rider in a
+    /// row.
+    #[serde(default)]
+    pub other_coupled_count_streak: i64,
+
+    /// The number of times a vehicle coupled with this one was ridden by a different rider.
     #[serde(default)]
     pub other_coupled_count: i64,
 
@@ -364,6 +382,7 @@ pub fn draw_ride_table(
     let line_height = renderer.font_line_height();
     const HORIZONTAL_MARGIN: u32 = 8;
     const COLUMN_SPACING: u32 = 16;
+    let font_space_width = renderer.render_text_with_width(" ").1 as u32;
 
     // render each required piece
     let ride_text = if let Some(line) = &table.line {
@@ -380,20 +399,29 @@ pub fn draw_ride_table(
 
     let mut vehicle_numbers = Vec::with_capacity(table.vehicles.len());
     let mut vehicle_types = Vec::with_capacity(table.vehicles.len());
+    let mut my_same_streaks = Vec::with_capacity(table.vehicles.len());
     let mut my_same_counts = Vec::with_capacity(table.vehicles.len());
     let mut my_same_rides = Vec::with_capacity(table.vehicles.len());
+    let mut my_coupled_streaks = Vec::with_capacity(table.vehicles.len());
     let mut my_coupled_counts = Vec::with_capacity(table.vehicles.len());
     let mut my_coupled_rides = Vec::with_capacity(table.vehicles.len());
+    let mut other_same_streaks = Vec::with_capacity(table.vehicles.len());
     let mut other_same_counts = Vec::with_capacity(table.vehicles.len());
     let mut other_same_names = Vec::with_capacity(table.vehicles.len());
     let mut other_same_rides = Vec::with_capacity(table.vehicles.len());
+    let mut other_coupled_streaks = Vec::with_capacity(table.vehicles.len());
     let mut other_coupled_counts = Vec::with_capacity(table.vehicles.len());
     let mut other_coupled_names = Vec::with_capacity(table.vehicles.len());
     let mut other_coupled_rides = Vec::with_capacity(table.vehicles.len());
+    let mut same_streak_sums = Vec::with_capacity(table.vehicles.len());
     let mut same_sums = Vec::with_capacity(table.vehicles.len());
+    let mut coupled_streak_sums = Vec::with_capacity(table.vehicles.len());
     let mut coupled_sums = Vec::with_capacity(table.vehicles.len());
+    let mut my_streak_sums = Vec::with_capacity(table.vehicles.len());
     let mut my_sums = Vec::with_capacity(table.vehicles.len());
+    let mut other_streak_sums = Vec::with_capacity(table.vehicles.len());
     let mut other_sums = Vec::with_capacity(table.vehicles.len());
+    let mut total_streak_sums = Vec::with_capacity(table.vehicles.len());
     let mut total_sums = Vec::with_capacity(table.vehicles.len());
     let mut vehicle_has_coupled = Vec::with_capacity(table.vehicles.len());
 
@@ -410,7 +438,8 @@ pub fn draw_ride_table(
             vehicle_types.push(HashMap::new());
         }
 
-        my_same_counts.push(renderer.render_text(&format!("{}\u{D7}", vehicle.my_same_count)));
+        my_same_streaks.push(renderer.render_text(&format!("{}|", vehicle.my_same_count_streak)));
+        my_same_counts.push(renderer.render_text(&format!("{}\u{A6}", vehicle.my_same_count)));
         if let Some(my_same_last) = &vehicle.my_same_last {
             let render_me = format!(" ({})", my_same_last.stringify(table.relative_time));
             let rendered = if vehicle.is_my_same_most_recent() {
@@ -423,7 +452,8 @@ pub fn draw_ride_table(
             my_same_rides.push(HashMap::new());
         }
 
-        my_coupled_counts.push(renderer.render_text(&format!("{}\u{D7}", vehicle.my_coupled_count)));
+        my_coupled_streaks.push(renderer.render_text(&format!("{}|", vehicle.my_coupled_count_streak)));
+        my_coupled_counts.push(renderer.render_text(&format!("{}\u{A6}", vehicle.my_coupled_count)));
         if let Some(my_coupled_last) = &vehicle.my_coupled_last {
             let render_me = format!(" ({})", my_coupled_last.stringify(table.relative_time));
             let rendered = if vehicle.is_my_coupled_most_recent() {
@@ -436,7 +466,8 @@ pub fn draw_ride_table(
             my_coupled_rides.push(HashMap::new());
         }
 
-        other_same_counts.push(renderer.render_text(&format!("{}\u{D7}", vehicle.other_same_count)));
+        other_same_streaks.push(renderer.render_text(&format!("{}|", vehicle.other_same_count_streak)));
+        other_same_counts.push(renderer.render_text(&format!("{}\u{A6}", vehicle.other_same_count)));
         if let Some(other_same_last) = &vehicle.other_same_last {
             let render_me_name = format!(" ({}", other_same_last.rider_username);
             let render_me_ride = format!(" {})", other_same_last.ride.stringify(table.relative_time));
@@ -458,7 +489,8 @@ pub fn draw_ride_table(
             other_same_rides.push(HashMap::new());
         }
 
-        other_coupled_counts.push(renderer.render_text(&format!("{}\u{D7}", vehicle.other_coupled_count)));
+        other_coupled_streaks.push(renderer.render_text(&format!("{}| ", vehicle.other_coupled_count_streak)));
+        other_coupled_counts.push(renderer.render_text(&format!("{}\u{A6}", vehicle.other_coupled_count)));
         if let Some(other_coupled_last) = &vehicle.other_coupled_last {
             let render_me_name = format!(" ({}", other_coupled_last.rider_username);
             let render_me_ride = format!(" {})", other_coupled_last.ride.stringify(table.relative_time));
@@ -480,12 +512,20 @@ pub fn draw_ride_table(
             other_coupled_rides.push(HashMap::new());
         }
 
-        same_sums.push(renderer.render_text(&format!("{}\u{D7}", vehicle.my_same_count + vehicle.other_same_count)));
-        coupled_sums.push(renderer.render_text(&format!("{}\u{D7}", vehicle.my_coupled_count + vehicle.other_coupled_count)));
-        my_sums.push(renderer.render_text(&format!("{}\u{D7}", vehicle.my_same_count + vehicle.my_coupled_count)));
-        other_sums.push(renderer.render_text(&format!("{}\u{D7}", vehicle.other_same_count + vehicle.other_coupled_count)));
+        same_streak_sums.push(renderer.render_text(&format!("{}| ", vehicle.my_same_count_streak + vehicle.other_same_count_streak)));
+        same_sums.push(renderer.render_text(&format!("{}\u{A6}", vehicle.my_same_count + vehicle.other_same_count)));
+        coupled_streak_sums.push(renderer.render_text(&format!("{}| ", vehicle.my_coupled_count_streak + vehicle.other_coupled_count_streak)));
+        coupled_sums.push(renderer.render_text(&format!("{}\u{A6}", vehicle.my_coupled_count + vehicle.other_coupled_count)));
+        my_streak_sums.push(renderer.render_text(&format!("{}| ", vehicle.my_same_count_streak + vehicle.my_coupled_count_streak)));
+        my_sums.push(renderer.render_text(&format!("{}\u{A6}", vehicle.my_same_count + vehicle.my_coupled_count)));
+        other_streak_sums.push(renderer.render_text(&format!("{}| ", vehicle.other_same_count_streak + vehicle.other_coupled_count_streak)));
+        other_sums.push(renderer.render_text(&format!("{}\u{A6}", vehicle.other_same_count + vehicle.other_coupled_count)));
+        total_streak_sums.push(renderer.render_text(&format!(
+            "{}| ",
+            vehicle.my_same_count_streak + vehicle.my_coupled_count_streak + vehicle.other_same_count_streak + vehicle.other_coupled_count_streak,
+        )));
         total_sums.push(renderer.render_text(&format!(
-            "{}\u{D7}",
+            "{}\u{A6}",
             vehicle.my_same_count + vehicle.my_coupled_count + vehicle.other_same_count + vehicle.other_coupled_count,
         )));
 
@@ -499,20 +539,29 @@ pub fn draw_ride_table(
     }
 
     assert_eq!(vehicle_types.len(), vehicle_numbers.len());
+    assert_eq!(my_same_streaks.len(), vehicle_numbers.len());
     assert_eq!(my_same_counts.len(), vehicle_numbers.len());
     assert_eq!(my_same_rides.len(), vehicle_numbers.len());
+    assert_eq!(my_coupled_streaks.len(), vehicle_numbers.len());
     assert_eq!(my_coupled_counts.len(), vehicle_numbers.len());
     assert_eq!(my_coupled_rides.len(), vehicle_numbers.len());
+    assert_eq!(other_same_streaks.len(), vehicle_numbers.len());
     assert_eq!(other_same_counts.len(), vehicle_numbers.len());
     assert_eq!(other_same_names.len(), vehicle_numbers.len());
     assert_eq!(other_same_rides.len(), vehicle_numbers.len());
+    assert_eq!(other_coupled_streaks.len(), vehicle_numbers.len());
     assert_eq!(other_coupled_counts.len(), vehicle_numbers.len());
     assert_eq!(other_coupled_names.len(), vehicle_numbers.len());
     assert_eq!(other_coupled_rides.len(), vehicle_numbers.len());
+    assert_eq!(same_streak_sums.len(), vehicle_numbers.len());
     assert_eq!(same_sums.len(), vehicle_numbers.len());
+    assert_eq!(coupled_streak_sums.len(), vehicle_numbers.len());
     assert_eq!(coupled_sums.len(), vehicle_numbers.len());
+    assert_eq!(my_streak_sums.len(), vehicle_numbers.len());
     assert_eq!(my_sums.len(), vehicle_numbers.len());
+    assert_eq!(other_streak_sums.len(), vehicle_numbers.len());
     assert_eq!(other_sums.len(), vehicle_numbers.len());
+    assert_eq!(total_streak_sums.len(), vehicle_numbers.len());
     assert_eq!(total_sums.len(), vehicle_numbers.len());
 
     // calculate table widths
@@ -526,40 +575,54 @@ pub fn draw_ride_table(
             .chain(once(&coupled_tag))
             .chain(once(&sum_heading_and_tag))
     );
+    let my_streak_width = calculate_width(
+        my_same_streaks.iter()
+            .chain(&my_coupled_streaks)
+            .chain(&my_streak_sums)
+    );
     let my_count_width = calculate_width(
         my_same_counts.iter()
             .chain(&my_coupled_counts)
             .chain(&my_sums)
-    );
+    ) + font_space_width;
     let my_ride_width = calculate_width(
         my_same_rides.iter()
             .chain(&my_coupled_rides)
     );
+    let other_streak_width = calculate_width(
+        other_same_streaks.iter()
+            .chain(&other_coupled_streaks)
+            .chain(&other_streak_sums)
+    );
     let other_count_width = calculate_width(
         other_same_counts.iter()
             .chain(&other_coupled_counts)
-    );
-    let other_name_width = calculate_width(
-        other_same_names
-            .iter()
-            .chain(&other_coupled_names)
             .chain(&other_sums)
+    ) + font_space_width;
+    let other_name_width = calculate_width(
+        other_same_names.iter()
+            .chain(&other_coupled_names)
     );
     let other_ride_width = calculate_width(
-        other_same_rides
-            .iter()
+        other_same_rides.iter()
             .chain(&other_coupled_rides)
     );
-    let sum_column_width = calculate_width(
-        once(&sum_heading_and_tag)
-            .chain(&same_sums)
+    let sum_streak_width = calculate_width(
+        same_streak_sums.iter()
+            .chain(&coupled_streak_sums)
+            .chain(&total_streak_sums)
+    );
+    let sum_count_width = calculate_width(
+        same_sums.iter()
             .chain(&coupled_sums)
             .chain(&total_sums)
-    );
+    ) + font_space_width;
     let rider_columns_width = calculate_width(once(&rider_username_heading))
-        .max(my_count_width + my_ride_width);
+        .max(my_streak_width + my_count_width + my_ride_width);
     let other_columns_width = calculate_width(once(&other_heading))
-        .max(other_count_width + other_name_width + other_ride_width);
+        .max(other_streak_width + other_count_width + other_name_width + other_ride_width);
+    let sum_column_width = calculate_width(once(&sum_heading_and_tag))
+        .max(sum_streak_width + sum_count_width);
     let full_table_width =
         HORIZONTAL_MARGIN
         + vehicle_number_width + COLUMN_SPACING
@@ -605,7 +668,10 @@ pub fn draw_ride_table(
             let mut sub_x_cursor = x_cursor;
 
             // calculation for right-alignment:
+            let this_my_streak_width = calculate_width(once(&my_same_streaks[i]));
             let this_my_count_width = calculate_width(once(&my_same_counts[i]));
+            place_on_canvas(&mut canvas, &my_same_streaks[i], sub_x_cursor + my_streak_width - this_my_streak_width, y_cursor);
+            sub_x_cursor += my_streak_width;
             place_on_canvas(&mut canvas, &my_same_counts[i], sub_x_cursor + my_count_width - this_my_count_width, y_cursor);
             sub_x_cursor += my_count_width;
             place_on_canvas(&mut canvas, &my_same_rides[i], sub_x_cursor, y_cursor);
@@ -617,7 +683,10 @@ pub fn draw_ride_table(
             let mut sub_x_cursor = x_cursor;
 
             // calculation for right-alignment:
+            let this_other_streak_width = calculate_width(once(&other_same_streaks[i]));
             let this_other_count_width = calculate_width(once(&other_same_counts[i]));
+            place_on_canvas(&mut canvas, &other_same_streaks[i], sub_x_cursor + other_streak_width - this_other_streak_width, y_cursor);
+            sub_x_cursor += other_streak_width;
             place_on_canvas(&mut canvas, &other_same_counts[i], sub_x_cursor + other_count_width - this_other_count_width, y_cursor);
             sub_x_cursor += other_count_width;
             place_on_canvas(&mut canvas, &other_same_names[i], sub_x_cursor, y_cursor);
@@ -628,8 +697,11 @@ pub fn draw_ride_table(
             x_cursor += other_columns_width + COLUMN_SPACING;
         }
         // calculation for right-alignment:
+        let this_streak_sum_width = calculate_width(once(&same_streak_sums[i]));
         let this_sum_width = calculate_width(once(&same_sums[i]));
-        place_on_canvas(&mut canvas, &same_sums[i], x_cursor + sum_column_width - this_sum_width, y_cursor);
+        place_on_canvas(&mut canvas, &same_streak_sums[i], x_cursor + sum_streak_width - this_streak_sum_width, y_cursor);
+        x_cursor += sum_streak_width;
+        place_on_canvas(&mut canvas, &same_sums[i], x_cursor + sum_count_width - this_sum_width, y_cursor);
 
         if vehicle_has_coupled[i] {
             y_cursor += line_height;
@@ -645,7 +717,10 @@ pub fn draw_ride_table(
                 let mut sub_x_cursor = x_cursor;
 
                 // calculation for right-alignment:
+                let this_my_streak_width = calculate_width(once(&my_coupled_streaks[i]));
                 let this_my_count_width = calculate_width(once(&my_coupled_counts[i]));
+                place_on_canvas(&mut canvas, &my_coupled_streaks[i], sub_x_cursor + my_streak_width - this_my_streak_width, y_cursor);
+                sub_x_cursor += my_streak_width;
                 place_on_canvas(&mut canvas, &my_coupled_counts[i], sub_x_cursor + my_count_width - this_my_count_width, y_cursor);
                 sub_x_cursor += my_count_width;
                 place_on_canvas(&mut canvas, &my_coupled_rides[i], sub_x_cursor, y_cursor);
@@ -657,7 +732,10 @@ pub fn draw_ride_table(
                 let mut sub_x_cursor = x_cursor;
 
                 // calculation for right-alignment:
+                let this_other_streak_width = calculate_width(once(&other_coupled_streaks[i]));
                 let this_other_count_width = calculate_width(once(&other_coupled_counts[i]));
+                place_on_canvas(&mut canvas, &other_coupled_streaks[i], sub_x_cursor + other_streak_width - this_other_streak_width, y_cursor);
+                sub_x_cursor += other_streak_width;
                 place_on_canvas(&mut canvas, &other_coupled_counts[i], sub_x_cursor + other_count_width - this_other_count_width, y_cursor);
                 sub_x_cursor += other_count_width;
                 place_on_canvas(&mut canvas, &other_coupled_names[i], sub_x_cursor, y_cursor);
@@ -668,8 +746,11 @@ pub fn draw_ride_table(
                 x_cursor += other_columns_width + COLUMN_SPACING;
             }
             // calculation for right-alignment:
+            let this_streak_sum_width = calculate_width(once(&coupled_streak_sums[i]));
             let this_sum_width = calculate_width(once(&coupled_sums[i]));
-            place_on_canvas(&mut canvas, &coupled_sums[i], x_cursor + sum_column_width - this_sum_width, y_cursor);
+            place_on_canvas(&mut canvas, &coupled_streak_sums[i], x_cursor + sum_streak_width - this_streak_sum_width, y_cursor);
+            x_cursor += sum_streak_width;
+            place_on_canvas(&mut canvas, &coupled_sums[i], x_cursor + sum_count_width - this_sum_width, y_cursor);
 
             y_cursor += line_height;
             x_cursor = HORIZONTAL_MARGIN;
@@ -679,19 +760,36 @@ pub fn draw_ride_table(
             x_cursor += vehicle_number_width + COLUMN_SPACING;
             place_on_canvas(&mut canvas, &sum_heading_and_tag, x_cursor, y_cursor);
             x_cursor += same_coupled_width + COLUMN_SPACING;
+            {
+                let mut sub_x_cursor = x_cursor;
+
+                // calculation for right-alignment:
+                let this_my_streak_width = calculate_width(once(&my_streak_sums[i]));
+                let this_my_count_width = calculate_width(once(&my_sums[i]));
+                place_on_canvas(&mut canvas, &my_streak_sums[i], sub_x_cursor + my_streak_width - this_my_streak_width, y_cursor);
+                sub_x_cursor += my_streak_width;
+                place_on_canvas(&mut canvas, &my_sums[i], sub_x_cursor + my_count_width - this_my_count_width, y_cursor);
+
+                x_cursor += rider_columns_width + COLUMN_SPACING;
+            }
+            {
+                let mut sub_x_cursor = x_cursor;
+
+                // calculation for right-alignment:
+                let this_other_streak_width = calculate_width(once(&other_streak_sums[i]));
+                let this_other_count_width = calculate_width(once(&other_sums[i]));
+                place_on_canvas(&mut canvas, &other_streak_sums[i], sub_x_cursor + other_streak_width - this_other_streak_width, y_cursor);
+                sub_x_cursor += other_streak_width;
+                place_on_canvas(&mut canvas, &other_sums[i], sub_x_cursor + other_count_width - this_other_count_width, y_cursor);
+
+                x_cursor += other_columns_width + COLUMN_SPACING;
+            }
             // calculation for right-alignment:
-            let this_my_count_width = calculate_width(once(&my_sums[i]));
-            place_on_canvas(&mut canvas, &my_sums[i], x_cursor + my_count_width - this_my_count_width, y_cursor);
-            // skip over all the rider columns
-            x_cursor += rider_columns_width + COLUMN_SPACING;
-            // calculation for right-alignment:
-            let this_other_count_width = calculate_width(once(&other_sums[i]));
-            place_on_canvas(&mut canvas, &other_sums[i], x_cursor + other_count_width - this_other_count_width, y_cursor);
-            // skip over all the other-rider columns
-            x_cursor += other_columns_width + COLUMN_SPACING;
-            // calculation for right-alignment:
+            let this_streak_sum_width = calculate_width(once(&total_streak_sums[i]));
             let this_sum_width = calculate_width(once(&total_sums[i]));
-            place_on_canvas(&mut canvas, &total_sums[i], x_cursor + sum_column_width - this_sum_width, y_cursor);
+            place_on_canvas(&mut canvas, &total_streak_sums[i], x_cursor + sum_streak_width - this_streak_sum_width, y_cursor);
+            x_cursor += sum_streak_width;
+            place_on_canvas(&mut canvas, &total_sums[i], x_cursor + sum_count_width - this_sum_width, y_cursor);
         } else if vehicle_types[i].len() > 0 {
             // add vehicle type below
             y_cursor += line_height;

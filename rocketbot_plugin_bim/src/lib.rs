@@ -4729,7 +4729,18 @@ pub async fn add_ride(
     sandbox: bool,
     highlight_coupled_rides: bool,
 ) -> Result<(i64, Vec<RideTableVehicle>), tokio_postgres::Error> {
-    let prev_my_same_count_stmt = ride_conn.prepare(
+    async fn prepare_pair(
+        ride_conn: &tokio_postgres::Transaction<'_>,
+        count_query: &str,
+        streak_suffix: &str,
+    ) -> Result<(tokio_postgres::Statement, tokio_postgres::Statement), tokio_postgres::Error> {
+        let count_stmt = ride_conn.prepare(count_query).await?;
+        let streak_stmt = ride_conn.prepare(&format!("{} {}", count_query, streak_suffix)).await?;
+        Ok((count_stmt, streak_stmt))
+    }
+
+    let (prev_my_same_count_stmt, prev_my_same_streak_stmt) = prepare_pair(
+        ride_conn,
         "
             SELECT CAST(COUNT(*) AS bigint)
             FROM bim.rides r
@@ -4739,6 +4750,18 @@ pub async fn add_ride(
                 AND rv.vehicle_number = $2
                 AND r.rider_username = $3
                 AND rv.coupling_mode = 'R'
+        ",
+        "
+                AND NOT EXISTS (
+                    SELECT 1
+                    FROM bim.rides r2
+                    INNER JOIN bim.ride_vehicles rv2 ON rv2.ride_id = r2.id
+                    WHERE r2.company = r.company
+                    AND rv2.vehicle_number = rv.vehicle_number
+                    AND r2.rider_username <> r.rider_username
+                    AND rv2.coupling_mode = 'R'
+                    AND r2.\"timestamp\" > r.\"timestamp\"
+                )
         ",
     ).await?;
     let prev_my_same_row_stmt = ride_conn.prepare(
@@ -4755,7 +4778,8 @@ pub async fn add_ride(
             LIMIT 1
         ",
     ).await?;
-    let prev_my_coupled_count_stmt = ride_conn.prepare(
+    let (prev_my_coupled_count_stmt, prev_my_coupled_streak_stmt) = prepare_pair(
+        ride_conn,
         "
             SELECT CAST(COUNT(*) AS bigint)
             FROM bim.rides r
@@ -4765,6 +4789,18 @@ pub async fn add_ride(
                 AND rv.vehicle_number = $2
                 AND r.rider_username = $3
                 AND rv.coupling_mode <> 'R'
+        ",
+        "
+                AND NOT EXISTS (
+                    SELECT 1
+                    FROM bim.rides r2
+                    INNER JOIN bim.ride_vehicles rv2 ON rv2.ride_id = r2.id
+                    WHERE r2.company = r.company
+                    AND rv2.vehicle_number = rv.vehicle_number
+                    AND r2.rider_username <> r.rider_username
+                    AND rv2.coupling_mode <> 'R'
+                    AND r2.\"timestamp\" > r.\"timestamp\"
+                )
         ",
     ).await?;
     let prev_my_coupled_row_stmt = ride_conn.prepare(
@@ -4781,7 +4817,8 @@ pub async fn add_ride(
             LIMIT 1
         ",
     ).await?;
-    let prev_other_same_count_stmt = ride_conn.prepare(
+    let (prev_other_same_count_stmt, prev_other_same_streak_stmt) = prepare_pair(
+        ride_conn,
         "
             SELECT CAST(COUNT(*) AS bigint)
             FROM bim.rides r
@@ -4791,6 +4828,18 @@ pub async fn add_ride(
                 AND rv.vehicle_number = $2
                 AND r.rider_username <> $3
                 AND rv.coupling_mode = 'R'
+        ",
+        "
+                AND NOT EXISTS (
+                    SELECT 1
+                    FROM bim.rides r2
+                    INNER JOIN bim.ride_vehicles rv2 ON rv2.ride_id = r2.id
+                    WHERE r2.company = r.company
+                    AND rv2.vehicle_number = rv.vehicle_number
+                    AND r2.rider_username <> r.rider_username
+                    AND rv2.coupling_mode = 'R'
+                    AND r2.\"timestamp\" > r.\"timestamp\"
+                )
         ",
     ).await?;
     let prev_other_same_row_stmt = ride_conn.prepare(
@@ -4807,7 +4856,8 @@ pub async fn add_ride(
             LIMIT 1
         ",
     ).await?;
-    let prev_other_coupled_count_stmt = ride_conn.prepare(
+    let (prev_other_coupled_count_stmt, prev_other_coupled_streak_stmt) = prepare_pair(
+        ride_conn,
         "
             SELECT CAST(COUNT(*) AS bigint)
             FROM bim.rides r
@@ -4817,6 +4867,18 @@ pub async fn add_ride(
                 AND rv.vehicle_number = $2
                 AND r.rider_username <> $3
                 AND rv.coupling_mode <> 'R'
+        ",
+        "
+                AND NOT EXISTS (
+                    SELECT 1
+                    FROM bim.rides r2
+                    INNER JOIN bim.ride_vehicles rv2 ON rv2.ride_id = r2.id
+                    WHERE r2.company = r.company
+                    AND rv2.vehicle_number = rv.vehicle_number
+                    AND r2.rider_username <> r.rider_username
+                    AND rv2.coupling_mode <> 'R'
+                    AND r2.\"timestamp\" > r.\"timestamp\"
+                )
         ",
     ).await?;
     let prev_other_coupled_row_stmt = ride_conn.prepare(
@@ -4836,6 +4898,13 @@ pub async fn add_ride(
 
     let mut vehicle_data = Vec::new();
     for vehicle in vehicles {
+        let prev_my_same_streak: i64 = {
+            let prev_my_same_streak_row = ride_conn.query_one(
+                &prev_my_same_streak_stmt,
+                &[&company, &vehicle.number.as_str(), &rider_username],
+            ).await?;
+            prev_my_same_streak_row.get(0)
+        };
         let prev_my_same_count: i64 = {
             let prev_my_same_count_row = ride_conn.query_one(
                 &prev_my_same_count_stmt,
@@ -4853,6 +4922,13 @@ pub async fn add_ride(
             (prev_my_same_timestamp, prev_my_same_line)
         };
 
+        let prev_my_coupled_streak: i64 = {
+            let prev_my_coupled_streak_row = ride_conn.query_one(
+                &prev_my_coupled_streak_stmt,
+                &[&company, &vehicle.number.as_str(), &rider_username],
+            ).await?;
+            prev_my_coupled_streak_row.get(0)
+        };
         let prev_my_coupled_count: i64 = {
             let prev_my_coupled_count_row = ride_conn.query_one(
                 &prev_my_coupled_count_stmt,
@@ -4870,6 +4946,13 @@ pub async fn add_ride(
             (prev_my_coupled_timestamp, prev_my_coupled_line)
         };
 
+        let prev_other_same_streak: i64 = {
+            let prev_other_same_streak_row = ride_conn.query_one(
+                &prev_other_same_streak_stmt,
+                &[&company, &vehicle.number.as_str(), &rider_username],
+            ).await?;
+            prev_other_same_streak_row.get(0)
+        };
         let prev_other_same_count: i64 = {
             let prev_other_same_count_row = ride_conn.query_one(
                 &prev_other_same_count_stmt,
@@ -4888,6 +4971,13 @@ pub async fn add_ride(
             (prev_other_same_timestamp, prev_other_same_line, prev_other_same_rider)
         };
 
+        let prev_other_coupled_streak: i64 = {
+            let prev_other_coupled_streak_row = ride_conn.query_one(
+                &prev_other_coupled_streak_stmt,
+                &[&company, &vehicle.number.as_str(), &rider_username],
+            ).await?;
+            prev_other_coupled_streak_row.get(0)
+        };
         let prev_other_coupled_count: i64 = {
             let prev_other_coupled_count_row = ride_conn.query_one(
                 &prev_other_coupled_count_stmt,
@@ -4909,16 +4999,19 @@ pub async fn add_ride(
         vehicle_data.push(RideTableVehicle {
             vehicle_number: vehicle.number.clone().into_string(),
             vehicle_type: vehicle.type_code.clone(),
+            my_same_count_streak: prev_my_same_streak,
             my_same_count: prev_my_same_count,
             my_same_last: prev_my_same_timestamp.map(|timestamp| Ride {
                 timestamp,
                 line: prev_my_same_line,
             }),
+            my_coupled_count_streak: prev_my_coupled_streak,
             my_coupled_count: prev_my_coupled_count,
             my_coupled_last: prev_my_coupled_timestamp.map(|timestamp| Ride {
                 timestamp,
                 line: prev_my_coupled_line,
             }),
+            other_same_count_streak: prev_other_same_streak,
             other_same_count: prev_other_same_count,
             other_same_last: prev_other_same_timestamp.map(|timestamp| UserRide {
                 rider_username: prev_other_same_rider.unwrap(),
@@ -4927,6 +5020,7 @@ pub async fn add_ride(
                     line: prev_other_same_line,
                 },
             }),
+            other_coupled_count_streak: prev_other_coupled_streak,
             other_coupled_count: prev_other_coupled_count,
             other_coupled_last: prev_other_coupled_timestamp.map(|timestamp| UserRide {
                 rider_username: prev_other_coupled_rider.unwrap(),
