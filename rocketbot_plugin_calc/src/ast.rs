@@ -64,7 +64,11 @@ pub(crate) struct AstRoot {
 pub(crate) enum SimplificationError {
     ConstantNotFound(String),
     FunctionNotFound(String),
-    IncorrectArgCount(String, usize, usize),
+    IncorrectArgCount {
+        function_name: String,
+        expected: usize,
+        obtained: usize,
+    },
     UnexpectedOperandType(String),
     NonIntegralValue(f64),
     Timeout,
@@ -95,8 +99,8 @@ impl fmt::Display for SimplificationError {
                 => write!(f, "constant {:?} not found", c),
             SimplificationError::FunctionNotFound(n)
                 => write!(f, "function {:?} not found", n),
-            SimplificationError::IncorrectArgCount(n, expected, got)
-                => write!(f, "{} arguments given to function {:?} which expects {} arguments", expected, n, got),
+            SimplificationError::IncorrectArgCount { function_name, expected, obtained }
+                => write!(f, "{} arguments given to function {:?} which expects {} arguments", obtained, function_name, expected),
             SimplificationError::UnexpectedOperandType(t)
                 => write!(f, "operand type {} unexpected", t),
             SimplificationError::NonIntegralValue(fv)

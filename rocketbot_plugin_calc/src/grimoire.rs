@@ -82,13 +82,24 @@ pub(crate) fn get_canonical_functions() -> HashMap<String, BuiltInFunction> {
 }
 
 
+fn check_arg_count(name: &'static str, expected: usize, obtained: usize) -> Result<(), SimplificationError> {
+    if expected != obtained {
+        Err(SimplificationError::IncorrectArgCount {
+            function_name: name.to_owned(),
+            expected,
+            obtained,
+        })
+    } else {
+        Ok(())
+    }
+}
+
+
 fn f64_f64<F>(name: &'static str, inner: F) -> BuiltInFunction
     where F: Fn(f64) -> f64 + 'static
 {
     Box::new(move |_state, operands| {
-        if operands.len() != 1 {
-            return Err(SimplificationError::IncorrectArgCount(name.to_owned(), 1, operands.len()));
-        }
+        check_arg_count(name, 1, operands.len())?;
 
         let (operand, units): (f64, NumberUnits) = match &operands[0].node {
             AstNode::Number(n) => {
@@ -112,9 +123,7 @@ fn f64_f64asint<F>(name: &'static str, inner: F) -> BuiltInFunction
     where F: Fn(f64) -> f64 + 'static
 {
     Box::new(move |_state, operands| {
-        if operands.len() != 1 {
-            return Err(SimplificationError::IncorrectArgCount(name.to_owned(), 1, operands.len()));
-        }
+        check_arg_count(name, 1, operands.len())?;
 
         let (operand, units): (f64, NumberUnits) = match &operands[0].node {
             AstNode::Number(n) => {
@@ -143,9 +152,7 @@ fn f64_f64_f64<F>(name: &'static str, inner: F) -> BuiltInFunction
     where F: Fn(f64, f64) -> f64 + 'static
 {
     Box::new(move |_state, operands| {
-        if operands.len() != 2 {
-            return Err(SimplificationError::IncorrectArgCount(name.to_owned(), 2, operands.len()));
-        }
+        check_arg_count(name, 2, operands.len())?;
 
         let (left, left_units): (f64, NumberUnits) = match &operands[0].node {
             AstNode::Number(n) => {
@@ -181,9 +188,7 @@ fn f64_multi_f64<F, const ARG_COUNT: usize>(name: &'static str, inner: F) -> Bui
     where F: Fn([f64; ARG_COUNT]) -> f64 + 'static
 {
     Box::new(move |_state, operands| {
-        if operands.len() != ARG_COUNT {
-            return Err(SimplificationError::IncorrectArgCount(name.to_owned(), ARG_COUNT, operands.len()));
-        }
+        check_arg_count(name, ARG_COUNT, operands.len())?;
 
         let mut f64_operands = [0.0; ARG_COUNT];
         for i in 0..ARG_COUNT {
@@ -336,9 +341,7 @@ fn ellipsoid_distance_deg_array(operands: [f64; 6]) -> f64 {
 /// Takes two operands and attempts to convert the first operand to the unit of the second. The
 /// numeric value of the second operand is ignored; only the unit is taken into account.
 fn coerce(state: &SimplificationState, operands: &[AstNodeAtLocation]) -> BuiltInFuncResult {
-    if operands.len() != 2 {
-        return Err(SimplificationError::IncorrectArgCount("coerce".to_owned(), 2, operands.len()));
-    }
+    check_arg_count("coerce", 2, operands.len())?;
 
     let left_number = match &operands[0].node {
         AstNode::Number(n) => n,
@@ -361,9 +364,7 @@ fn coerce(state: &SimplificationState, operands: &[AstNodeAtLocation]) -> BuiltI
 ///
 /// Units can be stripped from a number by passing a unitless value as the second operand.
 fn set_unit(_state: &SimplificationState, operands: &[AstNodeAtLocation]) -> BuiltInFuncResult {
-    if operands.len() != 2 {
-        return Err(SimplificationError::IncorrectArgCount("setunit".to_owned(), 2, operands.len()));
-    }
+    check_arg_count("setunit", 2, operands.len())?;
 
     let left_number = match &operands[0].node {
         AstNode::Number(n) => n,
@@ -382,9 +383,7 @@ fn set_unit(_state: &SimplificationState, operands: &[AstNodeAtLocation]) -> Bui
 
 /// Takes a single operand and returns its value converted to base units.
 fn to_base_units(state: &SimplificationState, operands: &[AstNodeAtLocation]) -> BuiltInFuncResult {
-    if operands.len() != 1 {
-        return Err(SimplificationError::IncorrectArgCount("baseunits".to_owned(), 1, operands.len()));
-    }
+    check_arg_count("baseunits", 1, operands.len())?;
 
     let number = match &operands[0].node {
         AstNode::Number(n) => n,
