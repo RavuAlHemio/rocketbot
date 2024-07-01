@@ -1,5 +1,7 @@
 mod achievements;
+mod date_time;
 mod range_set;
+mod short_last_rider_status;
 pub mod table_draw;
 
 
@@ -15,7 +17,6 @@ use std::sync::{Arc, Weak};
 use async_trait::async_trait;
 use chrono::{
     Datelike, DateTime, Duration, Local, LocalResult, NaiveDate, NaiveDateTime, Timelike, TimeZone,
-    Weekday,
 };
 use once_cell::sync::{Lazy, OnceCell};
 use rand::{Rng, thread_rng};
@@ -37,6 +38,7 @@ use tokio_postgres::types::ToSql;
 use tracing::{debug, error, info};
 
 use crate::achievements::{get_all_achievements, recalculate_achievements};
+use crate::date_time::{canonical_date_format, weekday_abbr2};
 use crate::range_set::RangeSet;
 use crate::table_draw::{draw_ride_table, Ride, RideTableData, RideTableVehicle, UserRide};
 
@@ -571,17 +573,19 @@ impl BimPlugin {
 
             // query ride count
             let count_row_opt_res = ride_conn.query_opt(
-                "
-                    SELECT
-                        CAST(COALESCE(COUNT(*), 0) AS bigint) total_ride_count
-                    FROM
-                        bim.rides r
-                        INNER JOIN bim.ride_vehicles rv
-                            ON rv.ride_id = r.id
-                    WHERE
-                        r.company = $1
-                        AND rv.vehicle_number = $2
-                ",
+                &format!(
+                    "
+                        SELECT
+                            CAST(COALESCE(COUNT(*), 0) AS bigint) total_ride_count
+                        FROM
+                            bim.rides_and_vehicles rav
+                        WHERE
+                            rav.company = $1
+                            AND rav.vehicle_number = $2
+                            {}
+                    ",
+                    if config.highlight_coupled_rides { "" } else { "AND rav.coupling_mode = 'R'" },
+                ),
                 &[&company, &vehicle_number.as_str()],
             ).await;
             let count: i64 = match count_row_opt_res {
@@ -600,52 +604,49 @@ impl BimPlugin {
             };
 
             let now = Local::now();
-            for (is_you, operator) in &[(true, "="), (false, "<>")] {
-                let ride_row_opt_res = ride_conn.query_opt(
-                    &format!(
-                        "
-                            SELECT
-                                r.rider_username,
-                                r.\"timestamp\",
-                                r.line
-                            FROM
-                                bim.rides r
-                                INNER JOIN bim.ride_vehicles rv
-                                    ON rv.ride_id = r.id
-                            WHERE
-                                r.company = $1
-                                AND rv.vehicle_number = $2
-                                AND r.rider_username {} $3
-                            ORDER BY
-                                r.\"timestamp\" DESC
-                            LIMIT 1
-                        ",
-                        operator,
-                    ),
-                    &[&company, &vehicle_number.as_str(), &username],
-                ).await;
-                match ride_row_opt_res {
-                    Ok(Some(lrr)) => {
-                        let last_rider_username: String = lrr.get(0);
-                        let last_ride: DateTime<Local> = lrr.get(1);
-                        let last_line: Option<String> = lrr.get(2);
+            let short_status = crate::short_last_rider_status::get(
+                &ride_conn,
+                company,
+                vehicle_number,
+                username,
+                config.highlight_coupled_rides,
+            ).await?;
 
-                        write_expect!(ret,
-                            " {} last rode it {}",
-                            if *is_you { "You" } else { last_rider_username.as_str() },
-                            BimPlugin::canonical_date_format_relative(&last_ride, &now, true, true),
-                        );
-                        if let Some(ll) = last_line {
-                            write_expect!(ret, " on line {}", ll);
-                        }
-                        ret.push('.');
-                    },
-                    Ok(None) => {},
-                    Err(e) => {
-                        error!("failed to obtain last rider (is_you={:?}): {}", is_you, e);
-                        return None;
-                    },
-                };
+            match (&short_status.my, &short_status.other) {
+                (None, None) => {
+                    // not much to add
+                },
+                (Some(my), None) => {
+                    // only the user rode it
+                    write_expect!(ret, " _");
+                    my.write_relative_date(&mut ret, &now).unwrap();
+                    write_expect!(ret, "_");
+                },
+                (None, Some(other)) => {
+                    // only someone else rode it
+                    write_expect!(ret, " _");
+                    other.write_relative_date(&mut ret, &now).unwrap();
+                    write_expect!(ret, "_");
+                },
+                (Some(my), Some(other)) => {
+                    // both the user and someone else rode it
+                    write_expect!(ret, " ");
+                    if my.timestamp >= other.timestamp {
+                        write_expect!(ret, "_");
+                    }
+                    my.write_relative_date(&mut ret, &now).unwrap();
+                    if my.timestamp >= other.timestamp {
+                        write_expect!(ret, "_");
+                    }
+                    write_expect!(ret, " ");
+                    if my.timestamp < other.timestamp {
+                        write_expect!(ret, "_");
+                    }
+                    other.write_relative_date(&mut ret, &now).unwrap();
+                    if my.timestamp < other.timestamp {
+                        write_expect!(ret, "_");
+                    }
+                },
             }
 
             Some(ret)
@@ -1685,7 +1686,7 @@ impl BimPlugin {
         for (date, ride_count) in &date_and_ride_count {
             top_text.push_str(&format!(
                 "\n{} {}: {} rides",
-                Self::weekday_abbr2(date.weekday()),
+                weekday_abbr2(date.weekday()),
                 date.format("%Y-%m-%d"),
                 ride_count,
             ));
@@ -3845,56 +3846,6 @@ impl BimPlugin {
         ).await;
     }
 
-    #[inline]
-    fn weekday_abbr2(weekday: Weekday) -> &'static str {
-        match weekday {
-            Weekday::Mon => "Mo",
-            Weekday::Tue => "Tu",
-            Weekday::Wed => "We",
-            Weekday::Thu => "Th",
-            Weekday::Fri => "Fr",
-            Weekday::Sat => "Sa",
-            Weekday::Sun => "Su",
-        }
-    }
-
-    fn canonical_date_format<Tz: TimeZone>(date_time: &DateTime<Tz>, on_at: bool, seconds: bool) -> String
-            where Tz::Offset: fmt::Display {
-        let dow = Self::weekday_abbr2(date_time.weekday());
-        let date_formatted = date_time.format("%Y-%m-%d");
-        let time_formatted = if seconds {
-            date_time.format("%H:%M:%S")
-        } else {
-            date_time.format("%H:%M")
-        };
-        if on_at {
-            format!("on {} {} at {}", dow, date_formatted, time_formatted)
-        } else {
-            format!("{} {} {}", dow, date_formatted, time_formatted)
-        }
-    }
-
-    fn canonical_date_format_relative<Tz: TimeZone, Tz2: TimeZone>(date_time: &DateTime<Tz>, relative_to: &DateTime<Tz2>, on_at: bool, seconds: bool) -> String
-            where Tz::Offset: fmt::Display, Tz2::Offset: fmt::Display {
-        let night_owl_date = get_night_owl_date(date_time);
-        let night_owl_relative = get_night_owl_date(relative_to);
-        if night_owl_date == night_owl_relative {
-            // only output time
-            let time_formatted = if seconds {
-                date_time.format("%H:%M:%S")
-            } else {
-                date_time.format("%H:%M")
-            };
-            if on_at {
-                format!("at {}", time_formatted)
-            } else {
-                time_formatted.to_string()
-            }
-        } else {
-            BimPlugin::canonical_date_format(date_time, on_at, seconds)
-        }
-    }
-
     fn english_adverbial_number(num: i64) -> String {
         match num {
             1 => "once".to_owned(),
@@ -4682,13 +4633,13 @@ async fn do_update_achievements(
                         .count();
 
                     let mut message = format!(
-                        "{} unlocked *{}* ({}){} {}",
+                        "{} unlocked *{}* ({}){} ",
                         user,
                         ach_def.name,
                         ach_def.description,
                         if data.explicit { ", fulfilling the criteria" } else { "" },
-                        BimPlugin::canonical_date_format(&new_timestamp, true, false),
                     );
+                    canonical_date_format(&mut message, &new_timestamp, true, false).unwrap();
                     match previous_count {
                         0 => if data.explicit {
                             write!(message, ", among the first to do so!")
