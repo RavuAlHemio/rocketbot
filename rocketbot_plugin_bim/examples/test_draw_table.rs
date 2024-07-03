@@ -29,7 +29,7 @@ fn main() {
     let mut png_buf = Vec::new();
     {
         let cursor = Cursor::new(&mut png_buf);
-        map_to_png(cursor, &table_canvas, MARGIN, MARGIN, MARGIN, MARGIN)
+        map_to_png(cursor, &table_canvas, MARGIN, MARGIN, MARGIN, MARGIN, &[])
             .expect("failed to write PNG data");
     }
 
