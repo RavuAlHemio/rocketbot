@@ -1,5 +1,6 @@
 use std::collections::HashMap;
 
+use png::text_metadata::ITXtChunk;
 use swash::FontRef;
 use swash::scale::{Render, ScaleContext, Source, StrikeWith};
 use swash::shape::ShapeContext;
@@ -143,6 +144,7 @@ pub fn map_to_png<W: std::io::Write>(
     bottom_margin: u32,
     left_margin: u32,
     right_margin: u32,
+    itxt_blocks: &[(&str, &str)],
 ) -> Result<(), png::EncodingError> {
     let (mut width, mut height) = map_to_dimensions(&map);
     width += left_margin + right_margin;
@@ -155,6 +157,12 @@ pub fn map_to_png<W: std::io::Write>(
     let mut encoder = png::Encoder::new(writer, width, height);
     encoder.set_depth(png::BitDepth::Eight);
     let mut writer = encoder.write_header()?;
+
+    for (key, value) in itxt_blocks {
+        let mut itxt_chunk = ITXtChunk::new(*key, *value);
+        itxt_chunk.compressed = true;
+        writer.write_text_chunk(&itxt_chunk)?;
+    }
 
     let mut pixel_buf = vec![0u8; pixel_count];
     for y in 0..height {

@@ -818,11 +818,23 @@ impl BimPlugin {
 
         // render the table
         let table_canvas = draw_ride_table(&ride_table);
+        let table_data_string = match serde_json::to_string(&ride_table) {
+            Ok(tds) => Some(tds),
+            Err(e) => {
+                error!("error serializing ride table data: {}", e);
+                None
+            },
+        };
         let mut png_buf = Vec::new();
         {
             let cursor = Cursor::new(&mut png_buf);
             const MARGIN: u32 = 8;
-            map_to_png(cursor, &table_canvas, MARGIN, MARGIN, MARGIN, MARGIN)
+            let text_blocks: &[(&str, &str)] = if let Some(tds) = table_data_string.as_ref() {
+                &[("bimride", tds.as_str())]
+            } else {
+                &[]
+            };
+            map_to_png(cursor, &table_canvas, MARGIN, MARGIN, MARGIN, MARGIN, text_blocks)
                 .expect("failed to write PNG data");
         }
 
