@@ -39,6 +39,8 @@ pub(crate) async fn load_plugins(iface: Weak<dyn RocketBotInterface>) -> Vec<Plu
                 Box::new(rocketbot_plugin_belch::BelchPlugin::new(iface_weak, inner_config).await)
             } else if plugin_config.name == "bim" {
                 Box::new(rocketbot_plugin_bim::BimPlugin::new(iface_weak, inner_config).await)
+            } else if plugin_config.name == "bim_react" {
+                Box::new(rocketbot_plugin_bim_react::BimReactPlugin::new(iface_weak, inner_config).await)
             } else if plugin_config.name == "calc" {
                 Box::new(rocketbot_plugin_calc::CalcPlugin::new(iface_weak, inner_config).await)
             } else if plugin_config.name == "catchword" {

@@ -2408,6 +2408,7 @@ dependencies = [
  "rocketbot_plugin_barcode",
  "rocketbot_plugin_belch",
  "rocketbot_plugin_bim",
+ "rocketbot_plugin_bim_react",
  "rocketbot_plugin_calc",
  "rocketbot_plugin_catchword",
  "rocketbot_plugin_config_user_alias",
@@ -2627,6 +2628,23 @@ dependencies = [
  "tracing",
  "url",
  "zip",
+]
+
+[[package]]
+name = "rocketbot_plugin_bim_react"
+version = "0.1.0"
+dependencies = [
+ "async-trait",
+ "chrono",
+ "http-body-util",
+ "hyper",
+ "png",
+ "regex",
+ "rocketbot_bim_common",
+ "rocketbot_interface",
+ "serde",
+ "serde_json",
+ "tracing",
 ]
 
 [[package]]
