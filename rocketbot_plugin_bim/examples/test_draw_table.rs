@@ -3,7 +3,8 @@ use std::ffi::OsString;
 use std::fs::File;
 use std::io::{Cursor, Write};
 
-use rocketbot_plugin_bim::table_draw::{draw_ride_table, RideTableData};
+use rocketbot_bim_common::ride_table::RideTableData;
+use rocketbot_plugin_bim::table_draw::draw_ride_table;
 use rocketbot_render_text::map_to_png;
 use serde_json;
 

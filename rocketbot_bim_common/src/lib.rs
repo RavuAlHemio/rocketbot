@@ -1,9 +1,11 @@
 pub mod achievements;
+pub mod ride_table;
 
 
 use std::collections::BTreeMap;
 use std::fmt;
 
+use chrono::{DateTime, TimeZone};
 use indexmap::IndexSet;
 use rocketbot_string::NatSortedString;
 use serde::{Deserialize, Serialize};
@@ -158,4 +160,24 @@ impl<'a> LastRider<'a> {
             _ => false,
         }
     }
+}
+
+
+/// Formats a timestamp, possibly relative to another timestamp.
+///
+/// If an anchor timestamp is provided and the timestamp has happened less than 24h before the
+/// anchor timestamp, the timestamp is formatted as time-only. Otherwise, it is formatted as date
+/// and time.
+fn format_timestamp<Tz1: TimeZone, Tz2: TimeZone>(
+    timestamp: DateTime<Tz1>,
+    anchor_timestamp: Option<DateTime<Tz2>>,
+) -> String
+    where
+        Tz1::Offset: fmt::Display {
+    if let Some(anchor) = anchor_timestamp {
+        if anchor >= timestamp && anchor.signed_duration_since(timestamp.clone()).num_hours() < 24 {
+            return timestamp.format("%H:%M").to_string();
+        }
+    }
+    timestamp.format("%d.%m.%Y %H:%M").to_string()
 }

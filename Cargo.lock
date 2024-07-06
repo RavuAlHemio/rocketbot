@@ -2479,11 +2479,13 @@ dependencies = [
 name = "rocketbot_bim_common"
 version = "0.1.0"
 dependencies = [
+ "chrono",
  "indexmap",
  "regex",
  "rocketbot_date_time",
  "rocketbot_string",
  "serde",
+ "smallvec",
 ]
 
 [[package]]
@@ -2618,7 +2620,6 @@ dependencies = [
  "scraper",
  "serde",
  "serde_json",
- "smallvec",
  "sxd-document",
  "sxd-xpath",
  "tokio",

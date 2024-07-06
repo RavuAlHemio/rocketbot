@@ -23,6 +23,7 @@ use rand::{Rng, thread_rng};
 use regex::{Captures, Regex};
 use rocketbot_bim_common::{CouplingMode, LastRider, VehicleInfo, VehicleNumber};
 use rocketbot_bim_common::achievements::ACHIEVEMENT_DEFINITIONS;
+use rocketbot_bim_common::ride_table::{Ride, RideTableData, RideTableVehicle, UserRide};
 use rocketbot_interface::{JsonValueExtensions, phrase_join, ResultExtensions, send_channel_message};
 use rocketbot_interface::commands::{CommandDefinitionBuilder, CommandInstance, CommandValueType};
 use rocketbot_interface::interfaces::{RocketBotInterface, RocketBotPlugin};
@@ -40,7 +41,7 @@ use tracing::{debug, error, info};
 use crate::achievements::{get_all_achievements, recalculate_achievements};
 use crate::date_time::{canonical_date_format, weekday_abbr2};
 use crate::range_set::RangeSet;
-use crate::table_draw::{draw_ride_table, Ride, RideTableData, RideTableVehicle, UserRide};
+use crate::table_draw::draw_ride_table;
 
 
 const INVISIBLE_JOINER: &str = "\u{2060}"; // WORD JOINER
