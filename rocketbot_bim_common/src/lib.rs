@@ -164,7 +164,7 @@ impl<'a> LastRider<'a> {
     #[inline]
     pub const fn is_specific_somebody_else(&self, who: &str) -> bool {
         match self {
-            Self::SomebodyElse(se) => se == who,
+            Self::SomebodyElse(se) => *se == who,
             _ => false,
         }
     }
