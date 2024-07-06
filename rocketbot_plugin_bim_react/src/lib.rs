@@ -29,6 +29,9 @@ struct Config {
     #[serde(default = "Config::default_vehicle_taken_by_me_emoji")]
     pub vehicle_taken_by_me_emoji: Option<String>,
 
+    #[serde(default = "Config::default_vehicle_taken_from_me_emoji")]
+    pub vehicle_taken_from_me_emoji: Option<String>,
+
     #[serde(default = "Config::default_vehicle_taken_by_other_emoji")]
     pub vehicle_taken_by_other_emoji: Option<String>,
 
@@ -41,6 +44,7 @@ struct Config {
 impl Config {
     fn default_first_ride_emoji() -> Option<String> { Some("tada".to_owned()) }
     fn default_vehicle_taken_by_me_emoji() -> Option<String> { Some("slight_smile".to_owned()) }
+    fn default_vehicle_taken_from_me_emoji() -> Option<String> { Some("angry".to_owned()) }
     fn default_vehicle_taken_by_other_emoji() -> Option<String> { Some("thumbsup".to_owned()) }
     fn default_vehicle_remains_emoji() -> Option<String> { Some("recycle".to_owned()) }
     fn default_vehicle_remains_recently_emoji() -> Option<String> { Some("repeat_one".to_owned()) }
@@ -155,6 +159,7 @@ impl RocketBotPlugin for BimReactPlugin {
             let ridden_vehicles = bimride.vehicles.iter().filter(|v| v.coupling_mode == CouplingMode::Ridden);
             let mut first_ever_vehicles = 0;
             let mut my_taken_vehicles = 0;
+            let mut taken_from_me_vehicles = 0;
             let mut other_taken_vehicles = 0;
             let mut other_recently_same_vehicles = 0;
             let mut other_same_vehicles = 0;
@@ -178,6 +183,8 @@ impl RocketBotPlugin for BimReactPlugin {
                     if bimride.rider_username == config.my_username {
                         // to me!
                         my_taken_vehicles += 1;
+                    } else if vehicle.last_highlighted_rider().is_specific_somebody_else(&config.my_username) {
+                        taken_from_me_vehicles += 1;
                     } else {
                         other_taken_vehicles += 1;
                     }
@@ -189,6 +196,8 @@ impl RocketBotPlugin for BimReactPlugin {
                 config.first_ride_emoji.as_deref()
             } else if my_taken_vehicles > 0 {
                 config.vehicle_taken_by_me_emoji.as_deref()
+            } else if taken_from_me_vehicles > 0 {
+                config.vehicle_taken_from_me_emoji.as_deref()
             } else if other_taken_vehicles > 0 {
                 config.vehicle_taken_by_other_emoji.as_deref()
             } else if other_recently_same_vehicles > 0 {
