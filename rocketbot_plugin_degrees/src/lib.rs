@@ -97,7 +97,7 @@ impl RocketBotPlugin for DegreesPlugin {
 
         let attachment = Attachment::new(
             slice_png,
-            "degrees".to_owned(),
+            "degrees.png".to_owned(),
             "image/png".to_owned(),
             None,
         );
