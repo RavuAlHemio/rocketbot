@@ -1399,6 +1399,8 @@ async fn do_send_any_message_with_attachment(shared_state: &SharedConnectionStat
         .body(Full::new(Bytes::from(body)))
         .expect("failed to construct request");
 
+    debug!("sending message with attachment: {:?}", request);
+
     // send
     let response_res = shared_state.http_client
         .request(request).await;
