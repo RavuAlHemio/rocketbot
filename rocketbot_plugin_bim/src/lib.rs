@@ -1,6 +1,7 @@
 mod achievements;
 mod date_time;
 mod range_set;
+mod serde;
 mod short_last_rider_status;
 pub mod table_draw;
 
@@ -15,6 +16,7 @@ use std::num::ParseIntError;
 use std::sync::{Arc, Weak};
 
 use async_trait::async_trait;
+use bigdecimal::{BigDecimal, Zero};
 use chrono::{
     Datelike, DateTime, Duration, Local, LocalResult, NaiveDate, NaiveDateTime, Timelike, TimeZone,
 };
@@ -31,7 +33,7 @@ use rocketbot_interface::model::{Attachment, ChannelMessage, OutgoingMessageWith
 use rocketbot_interface::serde::serde_opt_regex;
 use rocketbot_interface::sync::RwLock;
 use rocketbot_render_text::map_to_png;
-use serde::{Deserialize, Serialize};
+use ::serde::{Deserialize, Serialize};
 use serde_json;
 use tokio::sync::mpsc;
 use tokio_postgres::NoTls;
@@ -217,6 +219,7 @@ pub struct CompanyDefinition {
     pub bim_database_path: Option<String>,
     #[serde(with = "serde_opt_regex")] pub vehicle_number_regex: Option<Regex>,
     #[serde(with = "serde_opt_regex")] pub line_number_regex: Option<Regex>,
+    #[serde(with = "crate::serde::serde_opt_big_decimal")] pub default_price: Option<BigDecimal>,
     #[serde(skip)] vehicle_and_line_regex: OnceCell<Regex>,
 }
 impl CompanyDefinition {
@@ -297,6 +300,7 @@ impl CompanyDefinition {
             bim_database_path: None,
             vehicle_number_regex: None,
             line_number_regex: None,
+            default_price: None,
             vehicle_and_line_regex: OnceCell::new(),
         }
     }
@@ -755,6 +759,70 @@ impl BimPlugin {
             channel_message.message.sender.username.as_str()
         };
 
+        let regular_price_string = command.options.get("price")
+            .or_else(|| command.options.get("P"))
+            .map(|v| v.as_str().expect("--price not a string?!"));
+        let use_default_price = command.flags.contains("default-price") || command.flags.contains("D");
+        let actual_price_string = command.options.get("actual-price")
+            .or_else(|| command.options.get("A"))
+            .map(|v| v.as_str().expect("--actual-price not a string?!"));
+
+        let regular_price: BigDecimal = if use_default_price {
+            if regular_price_string.is_some() {
+                send_channel_message!(
+                    interface,
+                    &channel_message.channel.name,
+                    "`-P`/`--price` and `-D`/`--default-price` are mutually exclusive.",
+                ).await;
+                return;
+            }
+
+            match &company_def.default_price {
+                Some(dp) => dp.clone(),
+                None => {
+                    send_channel_message!(
+                        interface,
+                        &channel_message.channel.name,
+                        "`-D`/`--default-price` used but the chosen company does not have a default price.",
+                    ).await;
+                    return;
+                },
+            }
+        } else {
+            match regular_price_string {
+                Some(rps) => {
+                    match rps.parse() {
+                        Ok(rp) => rp,
+                        Err(_) => {
+                            send_channel_message!(
+                                interface,
+                                &channel_message.channel.name,
+                                "Failed to parse regular price.",
+                            ).await;
+                            return;
+                        },
+                    }
+                },
+                None => BigDecimal::zero(),
+            }
+        };
+        let actual_price = match actual_price_string {
+            Some(aps) => {
+                match aps.parse() {
+                    Ok(ap) => ap,
+                    Err(_) => {
+                        send_channel_message!(
+                            interface,
+                            &channel_message.channel.name,
+                            "Failed to parse actual price.",
+                        ).await;
+                        return;
+                    },
+                }
+            },
+            None => BigDecimal::zero(),
+        };
+
         let bim_database_opt = self.load_bim_database(&config_guard, company);
         let mut ride_conn = match connect_ride_db(&config_guard).await {
             Ok(c) => c,
@@ -775,6 +843,8 @@ impl BimPlugin {
             company_def,
             rider_username,
             ride_timestamp,
+            &regular_price,
+            &actual_price,
             &command.rest,
             config_guard.allow_fixed_coupling_combos,
             sandbox,
@@ -2396,6 +2466,12 @@ impl BimPlugin {
         let new_vehicles_str = command.options.get("v")
             .or_else(|| command.options.get("vehicles"))
             .map(|cv| cv.as_str().unwrap());
+        let new_price_str = command.options.get("P")
+            .or_else(|| command.options.get("price"))
+            .map(|cv| cv.as_str().unwrap());
+        let new_actual_price_str = command.options.get("A")
+            .or_else(|| command.options.get("actual-price"))
+            .map(|cv| cv.as_str().unwrap());
 
         let is_admin = config_guard.admin_usernames.contains(sender_username);
 
@@ -2429,7 +2505,16 @@ impl BimPlugin {
             }
         }
 
-        if delete && (new_rider.is_some() || new_company.is_some() || new_line.is_some() || new_timestamp_str.is_some() || new_vehicles_str.is_some()) {
+        let modifier_set = new_rider.is_some()
+            || new_company.is_some()
+            || new_line.is_some()
+            || new_timestamp_str.is_some()
+            || new_vehicles_str.is_some()
+            || new_price_str.is_some()
+            || new_actual_price_str.is_some()
+            ;
+
+        if delete && modifier_set {
             send_channel_message!(
                 interface,
                 &channel_message.channel.name,
@@ -2438,7 +2523,7 @@ impl BimPlugin {
             return;
         }
 
-        if !delete && new_rider.is_none() && new_company.is_none() && new_line.is_none() && new_timestamp_str.is_none() && new_vehicles_str.is_none() {
+        if !delete && !modifier_set {
             send_channel_message!(
                 interface,
                 &channel_message.channel.name,
@@ -2469,6 +2554,38 @@ impl BimPlugin {
             match nt {
                 Some(t) => Some(t),
                 None => return, // error message already output
+            }
+        } else {
+            None
+        };
+
+        let new_price_opt: Option<BigDecimal> = if let Some(nps) = new_price_str {
+            match nps.parse() {
+                Ok(np) => Some(np),
+                Err(_) => {
+                    send_channel_message!(
+                        interface,
+                        &channel_message.channel.name,
+                        "Failed to parse new price.",
+                    ).await;
+                    return;
+                },
+            }
+        } else {
+            None
+        };
+
+        let new_actual_price_opt: Option<BigDecimal> = if let Some(naps) = new_actual_price_str {
+            match naps.parse() {
+                Ok(nap) => Some(nap),
+                Err(_) => {
+                    send_channel_message!(
+                        interface,
+                        &channel_message.channel.name,
+                        "Failed to parse actual new price.",
+                    ).await;
+                    return;
+                },
             }
         } else {
             None
@@ -2607,7 +2724,7 @@ impl BimPlugin {
         let mut props: Vec<String> = Vec::new();
         let mut values: Vec<&(dyn ToSql + Sync)> = Vec::new();
 
-        let (remember_new_rider, remember_new_company, remember_new_line, remember_new_timestamp);
+        let (remember_new_rider, remember_new_company, remember_new_line, remember_new_timestamp, remember_new_price, remember_new_actual_price);
         if let Some(nr) = new_rider {
             remember_new_rider = nr.to_owned();
             props.push(format!("rider_username = ${}", props.len() + 1));
@@ -2627,6 +2744,16 @@ impl BimPlugin {
             remember_new_timestamp = nts.clone();
             props.push(format!("\"timestamp\" = ${}", props.len() + 1));
             values.push(&remember_new_timestamp);
+        }
+        if let Some(np) = new_price_opt {
+            remember_new_price = np.to_string();
+            props.push(format!("regular_price = TO_NUMERIC(${}, 'FMMI99999999999990.09999')", props.len() + 1));
+            values.push(&remember_new_price);
+        }
+        if let Some(nap) = new_actual_price_opt {
+            remember_new_actual_price = nap.to_string();
+            props.push(format!("actual_price = TO_NUMERIC(${}, 'FMMI99999999999990.09999')", props.len() + 1));
+            values.push(&remember_new_actual_price);
         }
 
         if props.len() > 0 {
@@ -4146,10 +4273,16 @@ impl RocketBotPlugin for BimPlugin {
                 .add_option("t", CommandValueType::String)
                 .add_option("backdate", CommandValueType::Integer)
                 .add_option("b", CommandValueType::Integer)
+                .add_option("price", CommandValueType::String)
+                .add_option("P", CommandValueType::String)
+                .add_option("actual-price", CommandValueType::String)
+                .add_option("A", CommandValueType::String)
                 .add_flag("u")
                 .add_flag("utc")
                 .add_flag("s")
                 .add_flag("sandbox")
+                .add_flag("D")
+                .add_flag("default-price")
                 .build()
         ).await;
         my_interface.register_channel_command(
@@ -4286,6 +4419,10 @@ impl RocketBotPlugin for BimPlugin {
                 .add_option("set-timestamp", CommandValueType::String)
                 .add_option("v", CommandValueType::String)
                 .add_option("vehicles", CommandValueType::String)
+                .add_option("P", CommandValueType::String)
+                .add_option("price", CommandValueType::String)
+                .add_option("A", CommandValueType::String)
+                .add_option("actual-price", CommandValueType::String)
                 .build()
         ).await;
         my_interface.register_channel_command(
@@ -4690,6 +4827,8 @@ pub async fn add_ride(
     rider_username: &str,
     timestamp: DateTime<Local>,
     line: Option<&str>,
+    regular_price: &BigDecimal,
+    actual_price: &BigDecimal,
     sandbox: bool,
     highlight_coupled_rides: bool,
 ) -> Result<(i64, Vec<RideTableVehicle>), tokio_postgres::Error> {
@@ -4998,18 +5137,21 @@ pub async fn add_ride(
         });
     }
 
+    let regular_price_string = regular_price.to_string();
+    let actual_price_string = actual_price.to_string();
+
     let ride_id: i64 = if sandbox {
         -1
     } else {
         let id_row = ride_conn.query_one(
             "
                 INSERT INTO bim.rides
-                    (id, company, rider_username, \"timestamp\", line)
+                    (id, company, rider_username, \"timestamp\", line, regular_price, actual_price)
                 VALUES
-                    (DEFAULT, $1, $2, $3, $4)
+                    (DEFAULT, $1, $2, $3, $4, TO_NUMERIC($5, 'FMMI99999999999990.09999'), TO_NUMERIC($6, 'FMMI99999999999990.09999'))
                 RETURNING id
             ",
-            &[&company, &rider_username, &timestamp, &line],
+            &[&company, &rider_username, &timestamp, &line, &regular_price_string, &actual_price_string],
         ).await?;
         let ride_id: i64 = id_row.get(0);
 
@@ -5194,6 +5336,8 @@ pub async fn increment_rides_by_spec(
     company_def: &CompanyDefinition,
     rider_username: &str,
     timestamp: DateTime<Local>,
+    regular_price: &BigDecimal,
+    actual_price: &BigDecimal,
     rides_spec: &str,
     allow_fixed_coupling_combos: bool,
     sandbox: bool,
@@ -5248,6 +5392,8 @@ pub async fn increment_rides_by_spec(
             rider_username,
             timestamp,
             line_str_opt,
+            regular_price,
+            actual_price,
             sandbox,
             highlight_coupled_rides,
         )

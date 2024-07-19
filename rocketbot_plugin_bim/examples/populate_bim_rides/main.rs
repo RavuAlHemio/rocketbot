@@ -3,6 +3,7 @@ use std::env;
 use std::ffi::OsString;
 use std::fs::File;
 
+use bigdecimal::{BigDecimal, Zero};
 use chrono::{Local, NaiveDateTime, TimeZone};
 use rocketbot_bim_common::{VehicleInfo, VehicleNumber};
 use rocketbot_plugin_bim::{CompanyDefinition, increment_rides_by_spec};
@@ -78,6 +79,8 @@ async fn main() {
             &placeholder_company,
             &message.username,
             timestamp,
+            &BigDecimal::zero(),
+            &BigDecimal::zero(),
             &message.message,
             true,
             false,

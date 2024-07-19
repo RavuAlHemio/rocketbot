@@ -2602,6 +2602,7 @@ name = "rocketbot_plugin_bim"
 version = "0.1.0"
 dependencies = [
  "async-trait",
+ "bigdecimal",
  "chrono",
  "ciborium",
  "clap",

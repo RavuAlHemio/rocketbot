@@ -20,6 +20,11 @@ A ride is modified using:
 * `{sopfx}t TIMESTAMP` or `{lopfx}set-timestamp TIMESTAMP`: The ride's timestamp is changed. This option can only be used by `bim` administrators.
 * `{sopfx}v VEHICLES` or `{lopfx}vehicles VEHICLES`: The vehicles of the ride are replaced by those in the given vehicle specification string (as well as any vehicles participating in a fixed coupling with the given vehicles).
 
+The following options concern long-term ticket amortization calculation (see also `{cpfx}bimcost`):
+
+* `{sopfx}P PRICE` or `{lopfx}price PRICE` modifies the value of how much a regular ticket for the given trip would cost.
+* `{sopfx}A PRICE` or `{lopfx}actual-price PRICE` modifies the actual price paid for the ticket, after applying all discounts provided through the long-term ticket.
+
 The following options can modify the command behavior further:
 
 * `{sopfx}u` or `{lopfx}utc`: Interprets timestamps as UTC. The default assumes local time. This option is useful if the local timestamp is ambiguous (e.g. during daylight saving time adjustments).
