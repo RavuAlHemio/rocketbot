@@ -48,6 +48,7 @@ use crate::table_draw::draw_ride_table;
 
 const INVISIBLE_JOINER: &str = "\u{2060}"; // WORD JOINER
 const TIMESTAMP_INPUT_FORMAT: &str = "YYYY-MM-DD hh:mm[:ss[.fff]]";
+const POSTGRES_MONEY_FORMAT: &str = "'FMMI99999999999990.09999'";
 static TIMESTAMP_RE: Lazy<Regex> = Lazy::new(|| Regex::new(concat!(
     "^",
     "(?P<year>[0-9]{4})",
@@ -2747,12 +2748,12 @@ impl BimPlugin {
         }
         if let Some(np) = new_price_opt {
             remember_new_price = np.to_string();
-            props.push(format!("regular_price = TO_NUMERIC(${}, 'FMMI99999999999990.09999')", props.len() + 1));
+            props.push(format!("regular_price = TO_NUMERIC(${}, {})", props.len() + 1, POSTGRES_MONEY_FORMAT));
             values.push(&remember_new_price);
         }
         if let Some(nap) = new_actual_price_opt {
             remember_new_actual_price = nap.to_string();
-            props.push(format!("actual_price = TO_NUMERIC(${}, 'FMMI99999999999990.09999')", props.len() + 1));
+            props.push(format!("actual_price = TO_NUMERIC(${}, {})", props.len() + 1, POSTGRES_MONEY_FORMAT));
             values.push(&remember_new_actual_price);
         }
 
@@ -3986,6 +3987,87 @@ impl BimPlugin {
         ).await;
     }
 
+    async fn channel_command_bimcost(&self, channel_message: &ChannelMessage, command: &CommandInstance) {
+        let interface = match self.interface.upgrade() {
+            None => return,
+            Some(i) => i,
+        };
+
+        let config_guard = self.config.read().await;
+        let lookback_range = match Self::lookback_range_from_command(command) {
+            Some(lr) => lr,
+            None => {
+                send_channel_message!(
+                    interface,
+                    &channel_message.channel.name,
+                    "Hey, no mixing options that mean different time ranges!",
+                ).await;
+                return;
+            },
+        };
+        let ride_conn = match connect_ride_db(&config_guard).await {
+            Ok(c) => c,
+            Err(_) => {
+                send_channel_message!(
+                    interface,
+                    &channel_message.channel.name,
+                    "Failed to open database connection. :disappointed:",
+                ).await;
+                return;
+            },
+        };
+
+        let query_template = format!(
+            "
+                SELECT TO_CHAR(COALESCE(SUM(r.regular_price - r.actual_price), 0), {}) sums
+                FROM bim.rides r
+                WHERE
+                    r.rider_username = $1
+                    {{LOOKBACK_TIMESTAMP}}
+            ",
+            POSTGRES_MONEY_FORMAT,
+        );
+
+        let rows_res = Self::timestamp_query(
+            &ride_conn,
+            &query_template,
+            "AND r.\"timestamp\" >= $2",
+            "",
+            lookback_range,
+            &[&channel_message.message.sender.username],
+        ).await;
+        let rows = match rows_res {
+            Ok(r) => r,
+            Err(e) => {
+                error!("failed to query bim cost: {}", e);
+                send_channel_message!(
+                    interface,
+                    &channel_message.channel.name,
+                    "Failed to execute cost query. :disappointed:",
+                ).await;
+                return;
+            },
+        };
+        if rows.len() > 0 {
+            let savings_string: String = rows[0].get(0);
+            let savings: BigDecimal = match savings_string.parse() {
+                Ok(s) => s,
+                Err(e) => {
+                    error!("failed to parse savings {:?}: {}", savings_string, e);
+                    return;
+                },
+            };
+
+            send_channel_message!(
+                interface,
+                &channel_message.channel.name,
+                &format!("@{} You have saved {}.", channel_message.message.sender.username, savings),
+            ).await;
+        } else {
+            error!("no rows?!");
+        }
+    }
+
     fn english_adverbial_number(num: i64) -> String {
         match num {
             1 => "once".to_owned(),
@@ -4526,6 +4608,16 @@ impl RocketBotPlugin for BimPlugin {
             .add_option("c", CommandValueType::String)
             .build()
         ).await;
+        my_interface.register_channel_command(
+            &CommandDefinitionBuilder::new(
+                "bimcost",
+                "bim",
+                "{cpfx}bimcost [{lopfx}LOOKBACK]",
+                "The sum of ticket money saved over the past slice of time.",
+            )
+            .add_lookback_flags()
+            .build()
+        ).await;
 
         // set up the achievement update loop
         let (achievement_update_sender, mut achievement_update_receiver) = mpsc::unbounded_channel();
@@ -4623,6 +4715,8 @@ impl RocketBotPlugin for BimPlugin {
             self.channel_command_bimdivscore(channel_message, command).await
         } else if command.name == "bimfixedmonopolies" {
             self.channel_command_bimfixedmonopolies(channel_message, command).await
+        } else if command.name == "bimcost" {
+            self.channel_command_bimcost(channel_message, command).await
         }
     }
 
@@ -4677,6 +4771,8 @@ impl RocketBotPlugin for BimPlugin {
             Some(include_str!("../help/bimdivscore.md").to_owned())
         } else if command_name == "bimfixedmonopolies" {
             Some(include_str!("../help/bimfixedmonopolies.md").to_owned())
+        } else if command_name == "bimcost" {
+            Some(include_str!("../help/bimcost.md").to_owned())
         } else {
             None
         }
@@ -5144,13 +5240,17 @@ pub async fn add_ride(
         -1
     } else {
         let id_row = ride_conn.query_one(
-            "
-                INSERT INTO bim.rides
-                    (id, company, rider_username, \"timestamp\", line, regular_price, actual_price)
-                VALUES
-                    (DEFAULT, $1, $2, $3, $4, TO_NUMERIC($5, 'FMMI99999999999990.09999'), TO_NUMERIC($6, 'FMMI99999999999990.09999'))
-                RETURNING id
-            ",
+            &format!(
+                "
+                    INSERT INTO bim.rides
+                        (id, company, rider_username, \"timestamp\", line, regular_price, actual_price)
+                    VALUES
+                        (DEFAULT, $1, $2, $3, $4, TO_NUMERIC($5, {}), TO_NUMERIC($6, {}))
+                    RETURNING id
+                ",
+                POSTGRES_MONEY_FORMAT,
+                POSTGRES_MONEY_FORMAT,
+            ),
             &[&company, &rider_username, &timestamp, &line, &regular_price_string, &actual_price_string],
         ).await?;
         let ride_id: i64 = id_row.get(0);
