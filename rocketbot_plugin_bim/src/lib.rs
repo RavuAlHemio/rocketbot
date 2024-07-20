@@ -220,7 +220,7 @@ pub struct CompanyDefinition {
     pub bim_database_path: Option<String>,
     #[serde(with = "serde_opt_regex")] pub vehicle_number_regex: Option<Regex>,
     #[serde(with = "serde_opt_regex")] pub line_number_regex: Option<Regex>,
-    #[serde(with = "crate::serde::serde_opt_big_decimal")] pub default_price: Option<BigDecimal>,
+    #[serde(default, with = "crate::serde::serde_opt_big_decimal")] pub default_price: Option<BigDecimal>,
     #[serde(skip)] vehicle_and_line_regex: OnceCell<Regex>,
 }
 impl CompanyDefinition {
