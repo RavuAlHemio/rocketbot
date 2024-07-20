@@ -2748,12 +2748,12 @@ impl BimPlugin {
         }
         if let Some(np) = new_price_opt {
             remember_new_price = np.to_string();
-            props.push(format!("regular_price = TO_NUMERIC(${}, {})", props.len() + 1, POSTGRES_MONEY_FORMAT));
+            props.push(format!("regular_price = TO_NUMBER(${}, {})", props.len() + 1, POSTGRES_MONEY_FORMAT));
             values.push(&remember_new_price);
         }
         if let Some(nap) = new_actual_price_opt {
             remember_new_actual_price = nap.to_string();
-            props.push(format!("actual_price = TO_NUMERIC(${}, {})", props.len() + 1, POSTGRES_MONEY_FORMAT));
+            props.push(format!("actual_price = TO_NUMBER(${}, {})", props.len() + 1, POSTGRES_MONEY_FORMAT));
             values.push(&remember_new_actual_price);
         }
 
@@ -5245,7 +5245,7 @@ pub async fn add_ride(
                     INSERT INTO bim.rides
                         (id, company, rider_username, \"timestamp\", line, regular_price, actual_price)
                     VALUES
-                        (DEFAULT, $1, $2, $3, $4, TO_NUMERIC($5, {}), TO_NUMERIC($6, {}))
+                        (DEFAULT, $1, $2, $3, $4, TO_NUMBER($5, {}), TO_NUMBER($6, {}))
                     RETURNING id
                 ",
                 POSTGRES_MONEY_FORMAT,
