@@ -1,3 +1,4 @@
+use std::collections::BTreeSet;
 use std::net::SocketAddr;
 use std::path::PathBuf;
 
@@ -11,6 +12,7 @@ pub struct WebConfig {
     pub bot_config_path: PathBuf,
     pub static_path: PathBuf,
     #[serde(default)] pub bim_odds_ends: Vec<BimOddEndConfig>,
+    #[serde(default)] pub quotes_table_prefixes: BTreeSet<String>,
 }
 
 #[derive(Clone, Debug, Deserialize, Eq, Hash, Ord, PartialEq, PartialOrd, Serialize)]

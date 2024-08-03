@@ -1,3 +1,5 @@
+use std::borrow::Cow;
+use std::collections::HashMap;
 use std::convert::Infallible;
 
 use askama::Template;
@@ -7,7 +9,7 @@ use hyper::body::{Bytes, Incoming};
 use serde::{Deserialize, Serialize};
 use tracing::error;
 
-use crate::{connect_to_db, get_query_pairs, render_response, return_405, return_500};
+use crate::{CONFIG, connect_to_db, get_query_pairs, render_response, return_405, return_500};
 
 
 #[derive(Clone, Debug, Deserialize, Eq, Hash, PartialEq, Serialize, Template)]
@@ -44,8 +46,32 @@ struct QuoteVotePart {
 }
 
 
+async fn get_table_prefix<'a>(query_pairs: &'a HashMap<Cow<'a, str>, Cow<'a, str>>) -> &'a str {
+    let table_prefix = match query_pairs.get("table-prefix") {
+        Some(tp) => tp,
+        None => return "",
+    };
+
+    {
+        let config_guard = CONFIG
+            .get().expect("CONFIG not set?!")
+            .read().await;
+        if config_guard.quotes_table_prefixes.len() == 0 {
+            // no prefixes configured => don't allow any prefixes
+            return "";
+        }
+        if config_guard.quotes_table_prefixes.contains(table_prefix.as_ref()) {
+            table_prefix.as_ref()
+        } else {
+            ""
+        }
+    }
+}
+
+
 pub(crate) async fn handle_top_quotes(request: &Request<Incoming>) -> Result<Response<Full<Bytes>>, Infallible> {
     let query_pairs = get_query_pairs(request);
+    let table_prefix = get_table_prefix(&query_pairs).await;
 
     if request.method() != Method::GET {
         return return_405(&query_pairs).await;
@@ -57,18 +83,25 @@ pub(crate) async fn handle_top_quotes(request: &Request<Incoming>) -> Result<Res
     };
 
     let mut quotes: Vec<TopQuotePart> = Vec::new();
-    let query_res = db_conn.query("
-        SELECT
-            q.quote_id, q.author, q.message_type, q.body, CAST(COALESCE(SUM(CAST(v.points AS bigint)), 0) AS bigint) vote_sum
-        FROM
-            quotes.quotes q
-            LEFT OUTER JOIN quotes.quote_votes v ON v.quote_id = q.quote_id
-        GROUP BY
-            q.quote_id, q.author, q.message_type, q.body
-        ORDER BY
-            -- on vote tie, prefer newer quotes
-            vote_sum DESC, quote_id DESC
-    ", &[]).await;
+    let query_res = db_conn.query(
+        &format!(
+            "
+                SELECT
+                    q.quote_id, q.author, q.message_type, q.body, CAST(COALESCE(SUM(CAST(v.points AS bigint)), 0) AS bigint) vote_sum
+                FROM
+                    quotes.{}quotes q
+                    LEFT OUTER JOIN quotes.{}quote_votes v ON v.quote_id = q.quote_id
+                GROUP BY
+                    q.quote_id, q.author, q.message_type, q.body
+                ORDER BY
+                    -- on vote tie, prefer newer quotes
+                    vote_sum DESC, quote_id DESC
+            ",
+            table_prefix,
+            table_prefix,
+        ),
+        &[],
+    ).await;
     let rows = match query_res {
         Ok(r) => r,
         Err(e) => {
@@ -119,6 +152,7 @@ pub(crate) async fn handle_top_quotes(request: &Request<Incoming>) -> Result<Res
 
 pub(crate) async fn handle_quotes_votes(request: &Request<Incoming>) -> Result<Response<Full<Bytes>>, Infallible> {
     let query_pairs = get_query_pairs(request);
+    let table_prefix = get_table_prefix(&query_pairs).await;
 
     if request.method() != Method::GET {
         return return_405(&query_pairs).await;
@@ -130,11 +164,17 @@ pub(crate) async fn handle_quotes_votes(request: &Request<Incoming>) -> Result<R
     };
 
     let mut quotes: Vec<QuoteVotesPart> = Vec::new();
-    let query_res = db_conn.query("
-        SELECT q.quote_id, q.author, q.message_type, q.body
-        FROM quotes.quotes q
-        ORDER BY q.quote_id DESC
-    ", &[]).await;
+    let query_res = db_conn.query(
+        &format!(
+            "
+                SELECT q.quote_id, q.author, q.message_type, q.body
+                FROM quotes.{}quotes q
+                ORDER BY q.quote_id DESC
+            ",
+            table_prefix,
+        ),
+        &[],
+    ).await;
     let rows = match query_res {
         Ok(r) => r,
         Err(e) => {
@@ -164,9 +204,20 @@ pub(crate) async fn handle_quotes_votes(request: &Request<Incoming>) -> Result<R
     }
 
     // add votes
-    let vote_statement_res = db_conn.prepare("
-        SELECT v.voter_lowercase, CAST(v.points AS bigint) FROM quotes.quote_votes v WHERE v.quote_id = $1 ORDER BY v.vote_id
-    ").await;
+    let vote_statement_res = db_conn.prepare(&format!(
+        "
+            SELECT
+                v.voter_lowercase,
+                CAST(v.points AS bigint)
+            FROM
+                quotes.{}quote_votes v
+            WHERE
+                v.quote_id = $1
+            ORDER BY
+                v.vote_id
+        ",
+        table_prefix,
+    )).await;
     let vote_statement = match vote_statement_res {
         Ok(s) => s,
         Err(e) => {
