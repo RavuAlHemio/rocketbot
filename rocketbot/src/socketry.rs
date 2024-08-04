@@ -2431,20 +2431,19 @@ async fn distribute_channel_message_commands(channel_message: &ChannelMessage, s
         return;
     }
 
-    let instance = if let Some(ci) = parse_command(&command, &command_config, &pieces, &raw_message) {
-        ci
-    } else {
-        // error already logged
-        return;
-    };
+    let instance_opt = parse_command(&command, &command_config, &pieces, &raw_message);
 
     // distribute among plugins
     {
         let plugins = shared_state.plugins
             .read().await;
-        debug!("asking plugins to execute channel command {:?}", instance.name);
+        debug!("asking plugins to execute channel command {:?}", command.name);
         for plugin in plugins.iter() {
-            plugin.plugin.channel_command(&channel_message, &instance).await;
+            if let Some(instance) = instance_opt.as_ref() {
+                plugin.plugin.channel_command(&channel_message, instance).await;
+            } else {
+                plugin.plugin.channel_command_wrong(&channel_message, command_name.as_ref()).await;
+            }
         }
     }
 }
@@ -2487,20 +2486,19 @@ async fn distribute_private_message_commands(private_message: &PrivateMessage, s
         return;
     }
 
-    let instance = if let Some(ci) = parse_command(&command, &command_config, &pieces, &raw_message) {
-        ci
-    } else {
-        // error already logged
-        return;
-    };
+    let instance_opt = parse_command(&command, &command_config, &pieces, &raw_message);
 
     // distribute among plugins
     {
         let plugins = shared_state.plugins
             .read().await;
-        debug!("asking plugins to execute private message command {:?}", instance.name);
+        debug!("asking plugins to execute private message command {:?}", command.name);
         for plugin in plugins.iter() {
-            plugin.plugin.private_command(&private_message, &instance).await;
+            if let Some(instance) = instance_opt.as_ref() {
+                plugin.plugin.private_command(&private_message, &instance).await;
+            } else {
+                plugin.plugin.private_command_wrong(&private_message, command_name.as_ref()).await;
+            }
         }
     }
 }

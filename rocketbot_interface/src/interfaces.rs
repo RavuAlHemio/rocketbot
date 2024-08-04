@@ -207,6 +207,9 @@ pub trait RocketBotPlugin: Send + Sync {
     /// Called if a command has been issued in a channel.
     async fn channel_command(&self, _channel_message: &ChannelMessage, _command: &CommandInstance) {}
 
+    /// Called if a command has been used incorrectly in a channel.
+    async fn channel_command_wrong(&self, _channel_message: &ChannelMessage, _command_name: &str) {}
+
     /// Called if a textual private message has been received whose author is not the bot.
     async fn private_message(&self, _private_message: &PrivateMessage) {}
 
@@ -227,6 +230,9 @@ pub trait RocketBotPlugin: Send + Sync {
 
     /// Called if a command has been issued in a private message.
     async fn private_command(&self, _private_message: &PrivateMessage, _command: &CommandInstance) {}
+
+    /// Called if a command has been used incorrectly in a private message.
+    async fn private_command_wrong(&self, _private_message: &PrivateMessage, _command_name: &str) {}
 
     /// Called if another plugin has requested to resolve a username-like value to an actual
     /// username on the server.
