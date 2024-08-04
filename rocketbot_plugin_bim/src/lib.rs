@@ -4722,9 +4722,10 @@ impl RocketBotPlugin for BimPlugin {
 
     async fn channel_command_wrong(&self, channel_message: &ChannelMessage, command_name: &str) {
         if command_name == "fixbimride" {
+            let Some(interface) = self.interface.upgrade() else { return };
             send_channel_message!(
                 interface,
-                &data.channel,
+                &channel_message.channel.name,
                 "Wanna try that again? :slight_smile:",
             ).await;
         }
