@@ -4720,6 +4720,16 @@ impl RocketBotPlugin for BimPlugin {
         }
     }
 
+    async fn channel_command_wrong(&self, channel_message: &ChannelMessage, command_name: &str) {
+        if command_name == "fixbimride" {
+            send_channel_message!(
+                interface,
+                &data.channel,
+                "Wanna try that again? :slight_smile:",
+            ).await;
+        }
+    }
+
     async fn plugin_name(&self) -> String {
         "bim".to_owned()
     }
