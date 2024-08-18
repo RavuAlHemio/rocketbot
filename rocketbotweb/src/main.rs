@@ -4,6 +4,7 @@ mod config;
 mod quotes;
 mod templating;
 mod thanks;
+mod util;
 
 
 use std::borrow::Cow;

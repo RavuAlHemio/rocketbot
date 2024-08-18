@@ -1,5 +1,5 @@
 use std::borrow::Cow;
-use std::collections::{BTreeMap, BTreeSet, HashMap, HashSet};
+use std::collections::{BTreeMap, HashMap, HashSet};
 use std::convert::Infallible;
 
 use askama::Template;
@@ -15,6 +15,7 @@ use tracing::error;
 use crate::{get_query_pairs, render_response, return_400, return_405, return_500};
 use crate::bim::{connect_to_db, obtain_company_to_bim_database, obtain_company_to_definition};
 use crate::templating::filters;
+use crate::util::sort_as_text;
 
 
 #[derive(Clone, Debug, Eq, Hash, PartialEq, Serialize)]
@@ -119,8 +120,8 @@ struct BimCoverageTemplate {
 #[derive(Clone, Debug, Eq, Hash, PartialEq, Serialize, Template)]
 #[template(path = "bimcoverage-pickrider.html")]
 struct BimCoveragePickRiderTemplate {
-    pub riders: BTreeSet<String>,
-    pub countries: BTreeSet<String>,
+    pub riders: Vec<String>,
+    pub countries: Vec<String>,
 }
 
 
@@ -548,14 +549,16 @@ pub(crate) async fn handle_bim_coverage(request: &Request<Incoming>) -> Result<R
             Some(ctd) => ctd,
             None => return return_500(),
         };
-        let mut countries = BTreeSet::new();
+        let mut countries_set = HashSet::new();
         for company_definition in company_to_definition.values() {
             let country = match company_definition["country"].as_str() {
                 Some(c) => c,
                 None => continue,
             };
-            countries.insert(country.to_owned());
+            countries_set.insert(country.to_owned());
         }
+        let mut countries: Vec<String> = countries_set.into_iter().collect();
+        sort_as_text(&mut countries);
 
         // list riders
         let riders_res = db_conn.query("SELECT DISTINCT rider_username FROM bim.rides", &[]).await;
@@ -566,11 +569,13 @@ pub(crate) async fn handle_bim_coverage(request: &Request<Incoming>) -> Result<R
                 return return_500();
             },
         };
-        let mut riders: BTreeSet<String> = BTreeSet::new();
+        let mut riders_set: HashSet<String> = HashSet::new();
         for rider_row in rider_rows {
             let rider: String = rider_row.get(0);
-            riders.insert(rider);
+            riders_set.insert(rider);
         }
+        let mut riders: Vec<String> = riders_set.into_iter().collect();
+        sort_as_text(&mut riders);
 
         let template = BimCoveragePickRiderTemplate {
             riders,

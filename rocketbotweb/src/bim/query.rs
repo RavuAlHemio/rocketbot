@@ -1,5 +1,5 @@
 use std::borrow::Cow;
-use std::collections::{BTreeMap, BTreeSet};
+use std::collections::{BTreeMap, HashSet};
 use std::convert::Infallible;
 
 use askama::Template;
@@ -8,7 +8,6 @@ use http_body_util::Full;
 use hyper::{Method, Request, Response};
 use hyper::body::{Bytes, Incoming};
 use rocketbot_bim_common::VehicleNumber;
-use rocketbot_string::NatSortedString;
 use serde::Serialize;
 use tokio_postgres::types::ToSql;
 use tracing::error;
@@ -19,6 +18,7 @@ use crate::bim::{
     obtain_company_to_definition,
 };
 use crate::templating::filters;
+use crate::util::sort_as_text;
 
 
 #[derive(Clone, Debug, Default, Eq, Hash, Ord, PartialEq, PartialOrd, Serialize)]
@@ -76,9 +76,9 @@ struct QueriedRideVehiclePart {
 #[template(path = "bimquery.html")]
 struct QueryTemplate {
     pub filters: QueryFiltersPart,
-    pub all_riders: BTreeSet<String>,
-    pub all_companies: BTreeSet<String>,
-    pub all_vehicle_types: BTreeSet<String>,
+    pub all_riders: Vec<String>,
+    pub all_companies: Vec<String>,
+    pub all_vehicle_types: Vec<String>,
     pub rides: Vec<QueriedRidePart>,
 
     pub prev_page: Option<i64>,
@@ -90,9 +90,9 @@ struct QueryTemplate {
 #[derive(Clone, Debug, Default, Eq, Hash, Ord, PartialEq, PartialOrd, Serialize, Template)]
 #[template(path = "bimvehiclestatus-setup.html")]
 struct VehicleStatusSetupTemplate {
-    pub companies: BTreeSet<String>,
+    pub companies: Vec<String>,
     pub default_company: Option<String>,
-    pub riders: BTreeSet<NatSortedString>,
+    pub riders: Vec<String>,
 }
 
 #[derive(Clone, Debug, Default, Eq, Hash, Ord, PartialEq, PartialOrd, Serialize, Template)]
@@ -335,11 +335,12 @@ pub(crate) async fn handle_bim_query(request: &Request<Incoming>) -> Result<Resp
             return return_500();
         },
     };
-    let mut all_riders = BTreeSet::new();
+    let mut all_riders = Vec::new();
     for rider_row in all_rider_rows {
         let rider_username: String = rider_row.get(0);
-        all_riders.insert(rider_username);
+        all_riders.push(rider_username);
     }
+    sort_as_text(&mut all_riders);
 
     let all_company_rows_res = db_conn.query(
         "SELECT DISTINCT company FROM bim.rides",
@@ -352,11 +353,12 @@ pub(crate) async fn handle_bim_query(request: &Request<Incoming>) -> Result<Resp
             return return_500();
         },
     };
-    let mut all_companies = BTreeSet::new();
+    let mut all_companies = Vec::new();
     for company_row in all_company_rows {
         let company: String = company_row.get(0);
-        all_companies.insert(company);
+        all_companies.push(company);
     }
+    sort_as_text(&mut all_companies);
 
     let all_type_rows_res = db_conn.query(
         "SELECT DISTINCT vehicle_type FROM bim.ride_vehicles WHERE vehicle_type IS NOT NULL",
@@ -369,11 +371,12 @@ pub(crate) async fn handle_bim_query(request: &Request<Incoming>) -> Result<Resp
             return return_500();
         },
     };
-    let mut all_vehicle_types = BTreeSet::new();
+    let mut all_vehicle_types = Vec::new();
     for type_row in all_type_rows {
         let vehicle_type: String = type_row.get(0);
-        all_vehicle_types.insert(vehicle_type);
+        all_vehicle_types.push(vehicle_type);
     }
+    sort_as_text(&mut all_vehicle_types);
 
     let prev_page = if page > 1 { Some(page - 1) } else { None };
     let next_page = if rides.len() > 0 { Some(page + 1) } else { None };
@@ -589,7 +592,7 @@ pub(crate) async fn handle_bim_vehicle_status(request: &Request<Incoming>) -> Re
                 },
             };
 
-            let mut riders = BTreeSet::new();
+            let mut riders_set = HashSet::new();
             let rows = match db_conn.query("SELECT DISTINCT rider_username FROM bim.rides", &[]).await {
                 Ok(r) => r,
                 Err(e) => {
@@ -599,12 +602,17 @@ pub(crate) async fn handle_bim_vehicle_status(request: &Request<Incoming>) -> Re
             };
             for row in rows {
                 let rider: String = row.get(0);
-                riders.insert(NatSortedString::from_string(rider));
+                riders_set.insert(rider);
             }
+            let mut riders: Vec<String> = riders_set.into_iter().collect();
+            sort_as_text(&mut riders);
 
-            let companies = company_to_definition.keys()
+            let companies_set: HashSet<String> = company_to_definition.keys()
                 .map(|k| k.clone())
                 .collect();
+            let mut companies: Vec<String> = companies_set.into_iter().collect();
+            sort_as_text(&mut companies);
+
             let template = VehicleStatusSetupTemplate {
                 companies,
                 default_company,
