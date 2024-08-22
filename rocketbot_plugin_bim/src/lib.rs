@@ -1429,6 +1429,7 @@ impl BimPlugin {
                 &channel_message.channel.name,
                 "We know of no companies in that country...",
             ).await;
+            return;
         }
 
         let mut response_str = format!("The following companies exist in :flag_{}: :", country);
