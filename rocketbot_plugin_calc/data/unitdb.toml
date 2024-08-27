@@ -176,6 +176,14 @@ letters = "obbl"
 parents = { gal = "1" }
 factor_of_parents = 42
 
+### DERIVED UNITS OF INVERSE LENGTH
+
+[[derived_units]]
+# dpt, diopter/dioptre, one per meter/metre
+letters = "dpt"
+parents = { m = "-1" }
+factor_of_parents = 1
+
 ### DERIVED UNITS OF MASS
 
 [[derived_units]]
