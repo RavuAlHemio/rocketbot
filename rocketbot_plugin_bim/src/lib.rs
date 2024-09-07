@@ -3059,11 +3059,15 @@ impl BimPlugin {
         }
     }
 
-    async fn channel_command_lastbims(&self, channel_message: &ChannelMessage, _command: &CommandInstance) {
+    async fn channel_command_lastbims(&self, channel_message: &ChannelMessage, command: &CommandInstance) {
         let interface = match self.interface.upgrade() {
             None => return,
             Some(i) => i,
         };
+
+        let company_opt = command.options.get("company")
+            .or_else(|| command.options.get("c"))
+            .map(|cv| cv.as_str().expect("-c/--company not a string"));
 
         let config_guard = self.config.read().await;
 
@@ -3079,7 +3083,7 @@ impl BimPlugin {
             },
         };
 
-        let ride_rows_res = ride_conn.query(
+        let query_string = format!(
             "
                 SELECT innerquery.rider_username, CAST(COUNT(*) AS bigint) vehicle_count
                 FROM (
@@ -3096,13 +3100,20 @@ impl BimPlugin {
                         AND rav2.\"timestamp\" > rav1.\"timestamp\"
                     )
                 ) innerquery
+                {}
                 GROUP BY innerquery.rider_username
                 ORDER BY
                     vehicle_count DESC,
                     rider_username
             ",
-            &[],
-        ).await;
+            if company_opt.is_some() { "WHERE innerquery.company = $1" } else { "" },
+        );
+        let mut query_params: Vec<&(dyn ToSql + Sync)> = Vec::with_capacity(1);
+        if company_opt.is_some() {
+            query_params.push(&company_opt);
+        }
+
+        let ride_rows_res = ride_conn.query(&query_string, &query_params).await;
         let ride_rows = match ride_rows_res {
             Ok(rr) => rr,
             Err(e) => {
@@ -4545,6 +4556,8 @@ impl RocketBotPlugin for BimPlugin {
                 "{cpfx}lastbims",
                 "How many vehicles has each rider been the last rider of?",
             )
+                .add_option("company", CommandValueType::String)
+                .add_option("c", CommandValueType::String)
                 .build()
         ).await;
         my_interface.register_channel_command(
