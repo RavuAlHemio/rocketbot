@@ -3867,6 +3867,23 @@ impl BimPlugin {
                 return;
             },
         };
+        if database.len() == 0 {
+            send_channel_message!(
+                interface,
+                &channel_message.channel.name,
+                "The vehicle database for this company is empty, so I don't know of any fixed couplings. :disappointed:",
+            ).await;
+            return;
+        }
+        if database.values().all(|v| v.fixed_coupling.len() == 0) {
+            send_channel_message!(
+                interface,
+                &channel_message.channel.name,
+                "I don't know of any fixed couplings for this company. :disappointed:",
+            ).await;
+            return;
+        }
+ 
         let ride_conn = match connect_ride_db(&config_guard).await {
             Ok(c) => c,
             Err(_) => {
