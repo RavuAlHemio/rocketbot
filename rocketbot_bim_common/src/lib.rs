@@ -14,7 +14,7 @@ use serde::{Deserialize, Serialize};
 pub type VehicleNumber = NatSortedString;
 
 
-#[derive(Clone, Copy, Debug, Deserialize, Eq, Hash, PartialEq, Serialize)]
+#[derive(Clone, Copy, Debug, Deserialize, Eq, Hash, Ord, PartialEq, PartialOrd, Serialize)]
 #[serde(rename_all = "kebab-case")]
 pub enum VehicleClass {
     Tram,
