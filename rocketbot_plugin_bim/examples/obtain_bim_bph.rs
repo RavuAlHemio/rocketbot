@@ -11,6 +11,7 @@ use indexmap::IndexSet;
 use regex::Regex;
 use reqwest::header::{HeaderMap, HeaderValue};
 use rocketbot_bim_common::{VehicleClass, VehicleInfo, VehicleNumber};
+use rocketbot_string::regex::EnjoyableRegex;
 use scraper::{Html, Selector};
 use serde::{Deserialize, Serialize};
 use url::Url;
@@ -19,7 +20,7 @@ use url::Url;
 static WHITESPACE_RE: LazyLock<Regex> = LazyLock::new(|| Regex::new("\\s+").expect("failed to compile whitespace regex"));
 
 
-#[derive(Clone, Debug, Default, Deserialize, Eq, Hash, Ord, PartialEq, PartialOrd, Serialize)]
+#[derive(Clone, Debug, Deserialize, Eq, Hash, Ord, PartialEq, PartialOrd, Serialize)]
 struct Config {
     pub output_path: PathBuf,
     pub table_css_selector: String,
@@ -40,13 +41,13 @@ struct VehicleTypeConfig {
     #[serde(default)] pub common_other_data: BTreeMap<String, String>,
 }
 
-#[derive(Clone, Debug, Default, Deserialize, Eq, Hash, Ord, PartialEq, PartialOrd, Serialize)]
+#[derive(Clone, Debug, Deserialize, Eq, Hash, Ord, PartialEq, PartialOrd, Serialize)]
 struct ColumnKeyConfig {
-    pub number_column: String,
-    pub type_column: String,
-    pub in_service_since_column: String,
-    pub out_of_service_since_column: Option<String>,
-    pub other_info_names_to_columns: BTreeMap<String, String>,
+    pub number_column: EnjoyableRegex,
+    pub type_column: EnjoyableRegex,
+    pub in_service_since_column: EnjoyableRegex,
+    pub out_of_service_since_column: Option<EnjoyableRegex>,
+    pub other_info_names_to_columns: BTreeMap<String, EnjoyableRegex>,
 }
 
 
@@ -144,22 +145,22 @@ async fn obtain_vehicles(
                 }
 
                 let this_header = &headers[i];
-                if this_header == &config.column_keys.number_column {
+                if config.column_keys.number_column.is_match(&this_header) {
                     vehicle_number = Some(VehicleNumber::from_string(cell_text.clone()));
                 }
-                if this_header == &config.column_keys.type_column {
+                if config.column_keys.type_column.is_match(&this_header) {
                     raw_type = Some(cell_text.clone());
                 }
-                if this_header == &config.column_keys.in_service_since_column {
+                if config.column_keys.in_service_since_column.is_match(&this_header) {
                     in_service_since = Some(cell_text.clone());
                 }
-                if Some(this_header) == config.column_keys.out_of_service_since_column.as_ref() {
+                if config.column_keys.out_of_service_since_column.as_ref().map(|re| re.is_match(&this_header)).unwrap_or(false) {
                     out_of_service_since = Some(cell_text.clone());
                 }
                 let interesting_keys = config.column_keys.other_info_names_to_columns
                     .iter()
-                    .filter(|(_key, oi_col_name)| this_header == *oi_col_name)
-                    .map(|(key, _oi_col_name)| key);
+                    .filter(|(_key, oi_col_re)| oi_col_re.is_match(&this_header))
+                    .map(|(key, _oi_col_re)| key);
                 for key in interesting_keys {
                     other_data.insert(key.clone(), cell_text.clone());
                 }
