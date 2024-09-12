@@ -4,7 +4,9 @@ version = "0.1.0"
 edition = "2021"
 
 [features]
+regex = ["dep:regex"]
 serde = ["dep:serde"]
 
 [dependencies]
 serde = { version = "1.0", features = ["derive"], optional = true }
+regex = { version = "1.9", optional = true }

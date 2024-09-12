@@ -1,3 +1,7 @@
+#[cfg(feature = "regex")]
+pub mod regex;
+
+
 use std::cmp::Ordering;
 use std::fmt;
 use std::ops::{Deref, DerefMut};
