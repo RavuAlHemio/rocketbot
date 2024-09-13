@@ -3324,6 +3324,7 @@ dependencies = [
 name = "rocketbot_string"
 version = "0.1.0"
 dependencies = [
+ "regex",
  "serde",
 ]
 
