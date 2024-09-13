@@ -23,6 +23,7 @@ static WHITESPACE_RE: LazyLock<Regex> = LazyLock::new(|| Regex::new("\\s+").expe
 #[derive(Clone, Debug, Deserialize, Eq, Hash, Ord, PartialEq, PartialOrd, Serialize)]
 struct Config {
     pub output_path: PathBuf,
+    pub user_agent: String,
     pub table_css_selector: String,
     pub next_page_link_selector: String,
     pub header_row_css_classes: BTreeSet<String>,
@@ -229,6 +230,7 @@ async fn main() {
     default_headers.insert("Cookie", HeaderValue::from_static("lang=en; divide=0; shorthh=0"));
     let http_client = reqwest::Client::builder()
         .default_headers(default_headers)
+        .user_agent(&config.user_agent)
         .build().expect("failed to build HTTP client");
 
     let mut number_to_vehicle = BTreeMap::new();
