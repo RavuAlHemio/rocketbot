@@ -21,6 +21,13 @@ struct Config {
     auto_fix_channels: HashSet<String>,
 }
 
+#[derive(Clone, Debug, Default, Eq, Hash, Ord, PartialEq, PartialOrd)]
+struct LastFix {
+    message_id: String,
+    fixed_body: String,
+}
+
+
 // don't escape '/', '%', '?', '&', '=', '+' or '#' by default as parts of the original URL may contain them
 const DEFAULT_URL_SAFE_CHARACTERS: &str = "0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz-_./%?&=+#";
 const DEFAULT_WRAPPER_PAIRS: &str = "(){}[]";
@@ -225,7 +232,7 @@ fn fix_urls(
 pub struct UrlPlugin {
     interface: Weak<dyn RocketBotInterface>,
     config: RwLock<Config>,
-    channel_id_to_last_fix: Mutex<HashMap<String, String>>,
+    channel_id_to_last_fix: Mutex<HashMap<String, LastFix>>,
 }
 impl UrlPlugin {
     fn try_get_config(config: serde_json::Value) -> Result<Config, &'static str> {
@@ -304,7 +311,7 @@ impl UrlPlugin {
                 send_channel_message!(
                     interface,
                     &channel_message.channel.name,
-                    &channel_last_fix,
+                    &channel_last_fix.fixed_body,
                 ).await;
             }
             return;
@@ -320,6 +327,40 @@ impl UrlPlugin {
             &channel_message.channel.name,
             &fixed,
         ).await;
+    }
+
+    async fn store_fixed_message(&self, channel_message: &ChannelMessage) -> Option<(String, HashSet<String>)> {
+        let message_body = match &channel_message.message.raw {
+            None => return None,
+            Some(mb) => mb,
+        };
+
+        let (url_safe_characters, wrapper_pairs, auto_fix_channels) = {
+            let config_guard = self.config.read().await;
+            (
+                config_guard.url_safe_characters.clone(),
+                config_guard.wrapper_pairs.clone(),
+                config_guard.auto_fix_channels.clone(),
+            )
+        };
+
+        let fixed = fix_urls(message_body, &url_safe_characters, &wrapper_pairs);
+        if &fixed == message_body {
+            return None;
+        }
+
+        {
+            let mut fix_guard = self.channel_id_to_last_fix.lock().await;
+            fix_guard.insert(
+                channel_message.channel.id.clone(),
+                LastFix {
+                    message_id: channel_message.message.id.clone(),
+                    fixed_body: fixed.clone(),
+                },
+            );
+        }
+
+        Some((fixed, auto_fix_channels))
     }
 }
 #[async_trait]
@@ -379,40 +420,33 @@ impl RocketBotPlugin for UrlPlugin {
             Some(i) => i,
         };
 
-        let message_body = match &channel_message.message.raw {
-            None => return,
-            Some(mb) => mb,
-        };
+        if let Some((fixed, auto_fix_channels)) = self.store_fixed_message(channel_message).await {
+            if auto_fix_channels.contains(&channel_message.channel.name) {
+                send_channel_message!(
+                    interface,
+                    &channel_message.channel.name,
+                    &fixed,
+                ).await;
+            }
+        }
+    }
 
-        let (url_safe_characters, wrapper_pairs, auto_fix_channels) = {
-            let config_guard = self.config.read().await;
-            (
-                config_guard.url_safe_characters.clone(),
-                config_guard.wrapper_pairs.clone(),
-                config_guard.auto_fix_channels.clone(),
-            )
+    async fn channel_message_edited(&self, channel_message: &ChannelMessage) {
+        // is this the most recent fixed message for this channel?
+        let last_fix_id = {
+            let citlf_guard = self.channel_id_to_last_fix.lock().await;
+            match citlf_guard.get(&channel_message.channel.id) {
+                Some(lf) => lf.message_id.clone(),
+                None => return,
+            }
         };
-
-        let fixed = fix_urls(message_body, &url_safe_characters, &wrapper_pairs);
-        if &fixed == message_body {
+        if last_fix_id != channel_message.message.id {
+            // no, there has been a different message in between
             return;
         }
 
-        {
-            let mut fix_guard = self.channel_id_to_last_fix.lock().await;
-            fix_guard.insert(
-                channel_message.channel.id.clone(),
-                fixed.clone(),
-            );
-        }
-
-        if auto_fix_channels.contains(&channel_message.channel.name) {
-            send_channel_message!(
-                interface,
-                &channel_message.channel.name,
-                &fixed,
-            ).await;
-        }
+        // yes; update it
+        self.store_fixed_message(channel_message).await;
     }
 
     async fn channel_command(&self, channel_message: &ChannelMessage, command: &CommandInstance) {
