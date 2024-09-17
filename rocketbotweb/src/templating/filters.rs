@@ -1,6 +1,7 @@
 use std::fmt::{self, Write};
 
 use askama;
+use serde_json;
 use unicode_normalization::char::{decompose_compatible, is_combining_mark};
 
 
@@ -173,6 +174,86 @@ pub(crate) fn encode_query_parameter(string: &str) -> askama::Result<String> {
             }
         }
     }
+    Ok(ret)
+}
+
+/// Serializes a value as JSON in a format that can be used within HTML elements without running
+/// into escaping issues.
+///
+/// Always follow this with the `safe` built-in filter, e.g. `{{ data|html_inline_json|safe }}`.
+pub(crate) fn html_inline_json<V: serde::Serialize>(value: &V) -> askama::Result<String> {
+    let json_value = serde_json::to_value(value).expect("failed to serialize as JSON");
+    let mut ret = String::new();
+
+    fn html_inline_json_string(output: &mut String, value: &str) {
+        output.push('"');
+        for c in value.chars() {
+            if c == '"' || c == '\\' {
+                output.push('\\');
+                output.push(c);
+            } else if c == '\u{08}' {
+                output.push_str("\\b");
+            } else if c == '\u{09}' {
+                output.push_str("\\t");
+            } else if c == '\u{0C}' {
+                output.push_str("\\f");
+            } else if c == '\u{0A}' {
+                output.push_str("\\n");
+            } else if c == '\u{0D}' {
+                output.push_str("\\r");
+            } else if c < '\u{20}' || c >= '\u{7E}' || c == '<' || c == '>' || c == '&' {
+                // <>& are special cases for inline HTML usage
+                let mut u16_buf = [0; 2];
+                for w in c.encode_utf16(&mut u16_buf) {
+                    write!(output, "\\u{:04X}", w).unwrap();
+                }
+            } else {
+                // spit it out verbatim
+                output.push(c);
+            }
+        }
+        output.push('"');
+    }
+
+    fn html_inline_json_recursive(output: &mut String, value: &serde_json::Value) {
+        match value {
+            serde_json::Value::Null => output.push_str("null"),
+            serde_json::Value::Bool(b) => output.push_str(if *b { "true" } else { "false" }),
+            serde_json::Value::Number(n) => output.push_str(&serde_json::to_string(n).unwrap()),
+            serde_json::Value::String(s) => html_inline_json_string(output, s),
+            serde_json::Value::Array(a) => {
+                let mut first_entry = true;
+                output.push('[');
+                for entry in a {
+                    if first_entry {
+                        first_entry = false;
+                    } else {
+                        output.push(',');
+                    }
+                    html_inline_json_recursive(output, entry);
+                }
+                output.push(']');
+            },
+            serde_json::Value::Object(o) => {
+                let mut first_entry = true;
+                output.push('{');
+                for (key, value) in o {
+                    if first_entry {
+                        first_entry = false;
+                    } else {
+                        output.push(',');
+                    }
+                    html_inline_json_string(output, key);
+                    output.push(':');
+                    html_inline_json_recursive(output, value);
+                }
+                output.push('}');
+            },
+        }
+    }
+
+    html_inline_json_recursive(&mut ret, &json_value);
+
     Ok(ret)
 }
 

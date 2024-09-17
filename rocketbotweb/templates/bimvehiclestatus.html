@@ -15,7 +15,12 @@
   div.ride span:first-child { margin-left: 0; }
 </style>
 <script type="text/javascript" src="static/rocketbotweb.js"></script>
-<script type="text/javascript">RocketBotWeb.Bim.VehicleStatus.setUp();</script>
+<script type="text/javascript">
+RocketBotWeb.Bim.VehicleStatus.setUp({
+  vehicles: {{ vehicles|html_inline_json|safe }},
+  timestamp: {{ timestamp|html_inline_json|safe }},
+});
+</script>
 {% endblock %}
 
 {% block content %}

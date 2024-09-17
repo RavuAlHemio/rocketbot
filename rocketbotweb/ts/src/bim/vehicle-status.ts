@@ -1,4 +1,4 @@
-export module VehicleStatus {
+export namespace VehicleStatus {
     let data: StatusData|null = null;
 
     interface StatusData {
@@ -169,19 +169,14 @@ export module VehicleStatus {
         appendLookedUpVehicle(vehicleNumberInput.value, vehiclesDiv, true);
     }
 
-    async function doSetUp() {
+    async function doSetUp(myData: StatusData) {
         const contentDiv = <HTMLDivElement|null>document.getElementById("content");
         if (contentDiv === null) {
             return;
         }
         contentDiv.textContent = "Loading data...";
 
-        // obtain vehicle database
-        let dataUrl = window.location.toString();
-        dataUrl += (dataUrl.indexOf("?") === -1) ? "?" : "&";
-        dataUrl += "action=data";
-        const dataResponse = await fetch(dataUrl);
-        const myData = await dataResponse.json();
+        // decode vehicle database
         if (myData === null || myData === undefined) {
             contentDiv.textContent = ":-(";
             return;
@@ -214,7 +209,7 @@ export module VehicleStatus {
         vehicleNumberInput.focus();
     }
 
-    export function setUp() {
-        document.addEventListener("DOMContentLoaded", doSetUp);
+    export function setUp(data: StatusData) {
+        document.addEventListener("DOMContentLoaded", () => doSetUp(data));
     }
 }

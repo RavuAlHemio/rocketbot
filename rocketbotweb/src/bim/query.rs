@@ -12,7 +12,7 @@ use serde::Serialize;
 use tokio_postgres::types::ToSql;
 use tracing::error;
 
-use crate::{get_query_pairs, render_json, render_response, return_400, return_405, return_500};
+use crate::{get_query_pairs, render_response, return_400, return_405, return_500};
 use crate::bim::{
     append_to_query, connect_to_db, obtain_bim_plugin_config, obtain_company_to_bim_database,
     obtain_company_to_definition,
@@ -97,7 +97,10 @@ struct VehicleStatusSetupTemplate {
 
 #[derive(Clone, Debug, Default, Eq, Hash, Ord, PartialEq, PartialOrd, Serialize, Template)]
 #[template(path = "bimvehiclestatus.html")]
-struct VehicleStatusTemplate;
+struct VehicleStatusTemplate {
+    pub vehicles: BTreeMap<VehicleNumber, VehicleStatusEntry>,
+    pub timestamp: DateTime<Utc>,
+}
 
 #[derive(Clone, Debug, Eq, Hash, Ord, PartialEq, PartialOrd, Serialize)]
 struct VehicleStatusEntry {
@@ -404,7 +407,6 @@ pub(crate) async fn handle_bim_vehicle_status(request: &Request<Incoming>) -> Re
 
     let company_opt = query_pairs.get("company");
     let rider_opt = query_pairs.get("rider");
-    let action_opt = query_pairs.get("action");
 
     let company_to_definition = match obtain_company_to_definition().await {
         Some(ctd) => ctd,
@@ -418,163 +420,155 @@ pub(crate) async fn handle_bim_vehicle_status(request: &Request<Incoming>) -> Re
 
     match (company_opt, rider_opt) {
         (Some(company), Some(rider)) => {
-            if action_opt.map(|ao| ao.as_ref()) == Some("data") {
-                let company_to_bim_database_opts = match obtain_company_to_bim_database(&company_to_definition) {
-                    Some(ctbdb) => ctbdb,
-                    None => return return_500(),
+            let company_to_bim_database_opts = match obtain_company_to_bim_database(&company_to_definition) {
+                Some(ctbdb) => ctbdb,
+                None => return return_500(),
+            };
+            let empty_database = BTreeMap::new();
+            let bim_database = match company_to_bim_database_opts.get(company.as_ref()) {
+                Some(Some(bd)) => bd,
+                _ => &empty_database,
+            };
+
+            let rows_res = db_conn.query(
+                "
+                    SELECT
+                        rav.vehicle_number, rav.\"timestamp\", rav.rider_username, rav.line
+                    FROM bim.rides_and_vehicles rav
+                    WHERE rav.company = $1
+                    AND rav.coupling_mode = 'R'
+                    AND rav.rider_username = $2
+                    AND NOT EXISTS (
+                        SELECT 1
+                        FROM bim.rides_and_vehicles rav2
+                        WHERE rav2.company = rav.company
+                        AND rav2.vehicle_number = rav.vehicle_number
+                        AND rav2.coupling_mode = rav.coupling_mode
+                        AND rav2.rider_username = $2
+                        AND rav2.\"timestamp\" > rav.\"timestamp\"
+                    )
+
+                    UNION ALL
+
+                    SELECT
+                        rav3.vehicle_number, rav3.\"timestamp\", rav3.rider_username, rav3.line
+                    FROM bim.rides_and_vehicles rav3
+                    WHERE rav3.company = $1
+                    AND rav3.coupling_mode = 'R'
+                    AND rav3.rider_username <> $2
+                    AND NOT EXISTS (
+                        SELECT 1
+                        FROM bim.rides_and_vehicles rav4
+                        WHERE rav4.company = rav3.company
+                        AND rav4.vehicle_number = rav3.vehicle_number
+                        AND rav4.coupling_mode = rav3.coupling_mode
+                        AND rav4.rider_username <> $2
+                        AND rav4.\"timestamp\" > rav3.\"timestamp\"
+                    )
+                ",
+                &[&company.as_ref(), &rider.as_ref()],
+            ).await;
+            let timestamp = Utc::now();
+            let rows = match rows_res {
+                Ok(r) => r,
+                Err(e) => {
+                    error!("failed to read rows: {}", e);
+                    return return_500();
+                },
+            };
+
+            let mut vehicle_to_last_rides: BTreeMap<VehicleNumber, Vec<RiderAndUtcTime>> = BTreeMap::new();
+            for row in rows {
+                let vehicle_number_raw: String = row.get(0);
+                let time: DateTime<Utc> = row.get(1);
+                let rider_username: String = row.get(2);
+                let line: Option<String> = row.get(3);
+
+                let vehicle_number = VehicleNumber::from_string(vehicle_number_raw);
+                let last = RiderAndUtcTime {
+                    rider: rider_username,
+                    time,
+                    line,
                 };
-                let empty_database = BTreeMap::new();
-                let bim_database = match company_to_bim_database_opts.get(company.as_ref()) {
-                    Some(Some(bd)) => bd,
-                    _ => &empty_database,
-                };
+                vehicle_to_last_rides
+                    .entry(vehicle_number)
+                    .or_insert_with(|| Vec::with_capacity(2))
+                    .push(last);
+            }
 
-                let rows_res = db_conn.query(
-                    "
-                        SELECT
-                            rav.vehicle_number, rav.\"timestamp\", rav.rider_username, rav.line
-                        FROM bim.rides_and_vehicles rav
-                        WHERE rav.company = $1
-                        AND rav.coupling_mode = 'R'
-                        AND rav.rider_username = $2
-                        AND NOT EXISTS (
-                            SELECT 1
-                            FROM bim.rides_and_vehicles rav2
-                            WHERE rav2.company = rav.company
-                            AND rav2.vehicle_number = rav.vehicle_number
-                            AND rav2.coupling_mode = rav.coupling_mode
-                            AND rav2.rider_username = $2
-                            AND rav2.\"timestamp\" > rav.\"timestamp\"
-                        )
+            let mut vehicles = BTreeMap::new();
+            for (vehicle_number, last_rides) in vehicle_to_last_rides {
+                let my_last_ride_opt = last_rides.iter()
+                    .filter(|r| &r.rider == rider)
+                    .nth(0)
+                    .map(|rat| rat.clone());
+                let other_last_ride_opt = last_rides.iter()
+                    .filter(|r| &r.rider != rider)
+                    .nth(0)
+                    .map(|rat| rat.clone());
 
-                        UNION ALL
-
-                        SELECT
-                            rav3.vehicle_number, rav3.\"timestamp\", rav3.rider_username, rav3.line
-                        FROM bim.rides_and_vehicles rav3
-                        WHERE rav3.company = $1
-                        AND rav3.coupling_mode = 'R'
-                        AND rav3.rider_username <> $2
-                        AND NOT EXISTS (
-                            SELECT 1
-                            FROM bim.rides_and_vehicles rav4
-                            WHERE rav4.company = rav3.company
-                            AND rav4.vehicle_number = rav3.vehicle_number
-                            AND rav4.coupling_mode = rav3.coupling_mode
-                            AND rav4.rider_username <> $2
-                            AND rav4.\"timestamp\" > rav3.\"timestamp\"
-                        )
-                    ",
-                    &[&company.as_ref(), &rider.as_ref()],
-                ).await;
-                let timestamp = Utc::now();
-                let rows = match rows_res {
-                    Ok(r) => r,
-                    Err(e) => {
-                        error!("failed to read rows: {}", e);
-                        return return_500();
+                let state = match (&my_last_ride_opt, &other_last_ride_opt) {
+                    (None, None) => LastRideState::Unridden,
+                    (Some(my_last_ride), None) => {
+                        if my_last_ride.time <= timestamp && my_last_ride.time - timestamp < Duration::hours(24) {
+                            LastRideState::YouOnlyRecently
+                        } else {
+                            LastRideState::YouOnly
+                        }
+                    },
+                    (None, Some(_other_last_ride)) => LastRideState::OtherOnly,
+                    (Some(my_last_ride), Some(other_last_ride)) => {
+                        if my_last_ride.time >= other_last_ride.time {
+                            if my_last_ride.time <= timestamp && my_last_ride.time - timestamp < Duration::hours(24) {
+                                LastRideState::YouLastRecently
+                            } else {
+                                LastRideState::YouLast
+                            }
+                        } else {
+                            LastRideState::OtherLast
+                        }
                     },
                 };
+                let fixed_coupling: Vec<VehicleNumber> = bim_database.get(&vehicle_number)
+                    .map(|fc| fc.fixed_coupling.iter().map(|v| v.clone()).collect())
+                    .unwrap_or_else(|| Vec::with_capacity(0));
 
-                let mut vehicle_to_last_rides: BTreeMap<VehicleNumber, Vec<RiderAndUtcTime>> = BTreeMap::new();
-                for row in rows {
-                    let vehicle_number_raw: String = row.get(0);
-                    let time: DateTime<Utc> = row.get(1);
-                    let rider_username: String = row.get(2);
-                    let line: Option<String> = row.get(3);
+                vehicles.insert(
+                    vehicle_number,
+                    VehicleStatusEntry {
+                        state,
+                        my_last_ride_opt,
+                        other_last_ride_opt,
+                        fixed_coupling,
+                    },
+                );
+            }
 
-                    let vehicle_number = VehicleNumber::from_string(vehicle_number_raw);
-                    let last = RiderAndUtcTime {
-                        rider: rider_username,
-                        time,
-                        line,
-                    };
-                    vehicle_to_last_rides
-                        .entry(vehicle_number)
-                        .or_insert_with(|| Vec::with_capacity(2))
-                        .push(last);
+            for (vehicle_number, vehicle_entry) in bim_database.iter() {
+                if vehicles.contains_key(vehicle_number) {
+                    continue;
                 }
+                let fixed_coupling: Vec<VehicleNumber> = vehicle_entry.fixed_coupling.iter()
+                    .map(|v| v.clone())
+                    .collect();
+                vehicles.insert(
+                    vehicle_number.clone(),
+                    VehicleStatusEntry {
+                        state: LastRideState::Unridden,
+                        my_last_ride_opt: None,
+                        other_last_ride_opt: None,
+                        fixed_coupling,
+                    },
+                );
+            }
 
-                let mut vehicles = BTreeMap::new();
-                for (vehicle_number, last_rides) in vehicle_to_last_rides {
-                    let my_last_ride_opt = last_rides.iter()
-                        .filter(|r| &r.rider == rider)
-                        .nth(0)
-                        .map(|rat| rat.clone());
-                    let other_last_ride_opt = last_rides.iter()
-                        .filter(|r| &r.rider != rider)
-                        .nth(0)
-                        .map(|rat| rat.clone());
-
-                    let state = match (&my_last_ride_opt, &other_last_ride_opt) {
-                        (None, None) => LastRideState::Unridden,
-                        (Some(my_last_ride), None) => {
-                            if my_last_ride.time <= timestamp && my_last_ride.time - timestamp < Duration::hours(24) {
-                                LastRideState::YouOnlyRecently
-                            } else {
-                                LastRideState::YouOnly
-                            }
-                        },
-                        (None, Some(_other_last_ride)) => LastRideState::OtherOnly,
-                        (Some(my_last_ride), Some(other_last_ride)) => {
-                            if my_last_ride.time >= other_last_ride.time {
-                                if my_last_ride.time <= timestamp && my_last_ride.time - timestamp < Duration::hours(24) {
-                                    LastRideState::YouLastRecently
-                                } else {
-                                    LastRideState::YouLast
-                                }
-                            } else {
-                                LastRideState::OtherLast
-                            }
-                        },
-                    };
-                    let fixed_coupling: Vec<VehicleNumber> = bim_database.get(&vehicle_number)
-                        .map(|fc| fc.fixed_coupling.iter().map(|v| v.clone()).collect())
-                        .unwrap_or_else(|| Vec::with_capacity(0));
-
-                    vehicles.insert(
-                        vehicle_number,
-                        VehicleStatusEntry {
-                            state,
-                            my_last_ride_opt,
-                            other_last_ride_opt,
-                            fixed_coupling,
-                        },
-                    );
-                }
-
-                for (vehicle_number, vehicle_entry) in bim_database.iter() {
-                    if vehicles.contains_key(vehicle_number) {
-                        continue;
-                    }
-                    let fixed_coupling: Vec<VehicleNumber> = vehicle_entry.fixed_coupling.iter()
-                        .map(|v| v.clone())
-                        .collect();
-                    vehicles.insert(
-                        vehicle_number.clone(),
-                        VehicleStatusEntry {
-                            state: LastRideState::Unridden,
-                            my_last_ride_opt: None,
-                            other_last_ride_opt: None,
-                            fixed_coupling,
-                        },
-                    );
-                }
-
-                let response_body = serde_json::json!({
-                    "timestamp": timestamp,
-                    "vehicles": vehicles,
-                });
-                match render_json(&response_body, 200, vec![]).await {
-                    Some(r) => Ok(r),
-                    None => return_500(),
-                }
-            } else {
-                let template = VehicleStatusTemplate;
-                match render_response(&template, &query_pairs, 200, vec![]).await {
-                    Some(r) => Ok(r),
-                    None => return_500(),
-                }
+            let template = VehicleStatusTemplate {
+                vehicles,
+                timestamp,
+            };
+            match render_response(&template, &query_pairs, 200, vec![]).await {
+                Some(r) => Ok(r),
+                None => return_500(),
             }
         },
         _ => {
