@@ -3265,15 +3265,30 @@ impl BimPlugin {
             &format!(
                 "
                     SELECT
-                        \"timestamp\", rider_username, line, vehicle_number,
-                        id, coupling_mode
+                        rarv1.\"timestamp\", rarv1.rider_username, rarv1.line, rarv1.vehicle_number,
+                        rarv1.id, rarv2.rider_username taken_from_rider
                     FROM
-                        bim.rides_and_vehicles
+                        bim.rides_and_ridden_vehicles rarv1
+                        LEFT OUTER JOIN bim.rides_and_ridden_vehicles rarv2
+                            ON rarv2.vehicle_number = rarv1.vehicle_number
+                            AND rarv2.company = rarv1.company
+                            AND rarv2.\"timestamp\" < rarv1.\"timestamp\"
+                            AND NOT EXISTS (
+                                -- rarv2 must be the directly preceding ride in this vehicle,
+                                -- i.e. there is no other ride rarv3 in between
+                                SELECT 1
+                                FROM bim.rides_and_ridden_vehicles rarv3
+                                WHERE rarv3.vehicle_number = rarv2.vehicle_number
+                                AND rarv3.company = rarv2.company
+                                AND rarv3.\"timestamp\" < rarv1.\"timestamp\"
+                                AND rarv3.\"timestamp\" > rarv2.\"timestamp\"
+                            )
                     WHERE
-                        \"timestamp\" >= CURRENT_TIMESTAMP - CAST('P1D' AS interval)
+                        rarv1.\"timestamp\" >= CURRENT_TIMESTAMP - CAST('P1D' AS interval)
                         {}
                     ORDER BY
-                        \"timestamp\", id, spec_position, fixed_coupling_position
+                        rarv1.\"timestamp\", rarv1.id, rarv1.spec_position,
+                        rarv1.fixed_coupling_position
                 ",
                 query_addendum,
             ),
@@ -3299,36 +3314,34 @@ impl BimPlugin {
             ).await;
             return;
         }
-        let mut id_to_ride: HashMap<i64, (DateTime<Local>, String, Option<String>, String)> = HashMap::with_capacity(ride_rows.len());
+        let mut id_to_ride: HashMap<i64, (DateTime<Local>, String, Option<String>, String, Option<String>)> = HashMap::with_capacity(ride_rows.len());
         for ride_row in ride_rows {
             let timestamp: DateTime<Local> = ride_row.get(0);
             let rider_username: String = ride_row.get(1);
             let line: Option<String> = ride_row.get(2);
             let vehicle_number: String = ride_row.get(3);
             let ride_id: i64 = ride_row.get(4);
-            let coupling_mode: String = ride_row.get(5);
+            let mut taken_from_rider: Option<String> = ride_row.get(5);
+
+            if taken_from_rider.as_ref().map(|tfr| tfr == &rider_username).unwrap_or(false) {
+                taken_from_rider = None;
+            }
 
             match id_to_ride.entry(ride_id) {
                 hash_map::Entry::Occupied(mut oe) => {
-                    if coupling_mode == "R" {
-                        let vehicle_numbers = &mut oe.get_mut().3;
-                        if vehicle_numbers.len() > 0 {
-                            vehicle_numbers.push('+');
-                        }
-                        vehicle_numbers.push_str(&vehicle_number);
+                    let vehicle_numbers = &mut oe.get_mut().3;
+                    if vehicle_numbers.len() > 0 {
+                        vehicle_numbers.push('+');
                     }
+                    vehicle_numbers.push_str(&vehicle_number);
                 },
                 hash_map::Entry::Vacant(ve) => {
-                    let vehicles = if coupling_mode == "R" {
-                        vehicle_number
-                    } else {
-                        String::new()
-                    };
                     ve.insert((
                         timestamp,
                         rider_username,
                         line,
-                        vehicles,
+                        vehicle_number,
+                        taken_from_rider,
                     ));
                 },
             }
@@ -3355,6 +3368,7 @@ impl BimPlugin {
                 v.1.as_str(),
                 v.2.as_ref().map(|r| r.as_str()),
                 v.3.as_str(),
+                v.4.as_ref().map(|tf| tf.as_str()),
             ))
             .collect();
         // sort by timestamp, then by ID
@@ -3363,7 +3377,7 @@ impl BimPlugin {
         // assemble ride lines
         let mut ride_lines = String::from("```");
         for ride in rides_sorted.iter() {
-            let (id, timestamp, rider, line, vehicles) = ride;
+            let (id, timestamp, rider, line, vehicles, taken_from) = ride;
             write!(ride_lines, "\n{}: ", timestamp.format("%H:%M")).unwrap();
 
             write!(ride_lines, "{}, ", rider).unwrap();
@@ -3403,6 +3417,10 @@ impl BimPlugin {
             }
 
             write!(ride_lines, "ride {}", id).unwrap();
+
+            if let Some(tf) = taken_from {
+                write!(ride_lines, " (\u{2190} {})", tf).unwrap();
+            }
         }
 
         ride_lines.push_str("\n```");
