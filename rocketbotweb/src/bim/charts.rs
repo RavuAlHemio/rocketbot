@@ -184,6 +184,21 @@ impl FirstRiderPieTemplate {
     }
 }
 
+#[derive(Clone, Debug, Default, Eq, Hash, Ord, PartialEq, PartialOrd, Serialize, Template)]
+#[template(path = "bimtypehistogram.html")]
+struct TypeHistogramTemplate {
+    pub company_to_vehicle_type_to_rider_to_count: BTreeMap<String, BTreeMap<String, BTreeMap<String, i64>>>,
+    pub company_to_vehicle_type_to_count: BTreeMap<String, BTreeMap<String, i64>>,
+}
+impl TypeHistogramTemplate {
+    pub fn json_data(&self) -> serde_json::Value {
+        serde_json::json!({
+            "companyToVehicleTypeToRiderToCount": self.company_to_vehicle_type_to_rider_to_count,
+            "companyToVehicleTypeToCount": self.company_to_vehicle_type_to_count,
+        })
+    }
+}
+
 
 pub(crate) async fn handle_bim_latest_rider_count_over_time_image(request: &Request<Incoming>) -> Result<Response<Full<Bytes>>, Infallible> {
     let query_pairs = get_query_pairs(request);
@@ -1120,6 +1135,70 @@ pub(crate) async fn handle_bim_first_rider_pie(request: &Request<Incoming>) -> R
     let template = FirstRiderPieTemplate {
         company_to_rider_to_first_rides,
         rider_to_total_first_rides,
+    };
+    match render_response(&template, &query_pairs, 200, vec![]).await {
+        Some(r) => Ok(r),
+        None => return_500(),
+    }
+}
+
+pub(crate) async fn handle_bim_type_histogram(request: &Request<Incoming>) -> Result<Response<Full<Bytes>>, Infallible> {
+    let query_pairs = get_query_pairs(request);
+    if request.method() != Method::GET {
+        return return_405(&query_pairs).await;
+    }
+
+    let db_conn = match connect_to_db().await {
+        Some(c) => c,
+        None => return return_500(),
+    };
+
+    let company_rows_res = db_conn.query(
+        "
+            SELECT
+                rrv.company,
+                rrv.vehicle_type,
+                rrv.rider_username,
+                COUNT(*) count
+            FROM
+                bim.rides_and_ridden_vehicles rrv
+            WHERE
+                rrv.vehicle_type IS NOT NULL
+            GROUP BY
+                rrv.company,
+                rrv.vehicle_type,
+                rrv.rider_username
+        ",
+        &[],
+    ).await;
+    let company_rows = match company_rows_res {
+        Ok(r) => r,
+        Err(e) => {
+            error!("failed to query rides: {}", e);
+            return return_500();
+        },
+    };
+    let mut company_to_vehicle_type_to_rider_to_count: BTreeMap<String, BTreeMap<String, BTreeMap<String, i64>>> = BTreeMap::new();
+    let mut company_to_vehicle_type_to_count: BTreeMap<String, BTreeMap<String, i64>> = BTreeMap::new();
+    for row in &company_rows {
+        let company: String = row.get(0);
+        let vehicle_type: String = row.get(1);
+        let rider_username: String = row.get(2);
+        let ride_count: i64 = row.get(3);
+
+        company_to_vehicle_type_to_rider_to_count
+            .entry(company.clone()).or_insert_with(|| BTreeMap::new())
+            .entry(vehicle_type.clone()).or_insert_with(|| BTreeMap::new())
+            .insert(rider_username, ride_count);
+        let type_rides = company_to_vehicle_type_to_count
+            .entry(company).or_insert_with(|| BTreeMap::new())
+            .entry(vehicle_type).or_insert(0);
+        *type_rides += ride_count;
+    }
+
+    let template = TypeHistogramTemplate {
+        company_to_vehicle_type_to_rider_to_count,
+        company_to_vehicle_type_to_count,
     };
     match render_response(&template, &query_pairs, 200, vec![]).await {
         Some(r) => Ok(r),

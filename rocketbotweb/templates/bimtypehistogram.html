@@ -1,0 +1,18 @@
+{% extends "base.html" %}
+
+{% block title %}Public Transport Ride Count by Rider and Type{% endblock %}
+
+{% block scripts %}
+<script src="static/rocketbotweb.js?{{ "{{VERSION}}" }}"></script>
+<script>RocketBotWeb.Bim.Charting.setUpByType();</script>
+{% endblock %}
+
+{% block content %}
+<div id="chart-outer">
+    <p id="histogram-controls"></p>
+    <div id="chart-container">
+        <canvas id="chart-canvas"></canvas>
+    </div>
+</div>
+<script type="application/json" id="chart-data">{{ self.json_data()|safe }}</script>
+{% endblock %}

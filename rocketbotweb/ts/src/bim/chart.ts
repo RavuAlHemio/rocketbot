@@ -14,6 +14,21 @@ interface ByRideCountGroupData {
     riderToGroupToCount: { [rider: string]: number[] };
 }
 
+interface ByTypeData {
+    companyToVehicleTypeToRiderToCount: {
+        [company: string]: {
+            [vehicleType: string]: {
+                [rider: string]: number;
+            };
+        };
+    };
+    companyToVehicleTypeToCount: {
+        [company: string]: {
+            [vehicleType: string]: number;
+        };
+    };
+}
+
 interface LatestRiderSankeyData {
     from: string;
     to: string;
@@ -59,7 +74,7 @@ interface GlobalStatsData {
     companyToTotalRides: { [company: string]: number };
 }
 
-export module Charting {
+export namespace Charting {
     function doSetUpByDayOfWeek() {
         const canvas = <HTMLCanvasElement|null>document.getElementById("chart-canvas");
         if (canvas === null) {
@@ -169,6 +184,170 @@ export module Charting {
                 chart.update();
             });
         }
+    }
+
+    function doSetUpByType() {
+        // set up controls
+        const controls = <HTMLParagraphElement|null>document.getElementById("histogram-controls");
+        if (controls === null) {
+            return;
+        }
+
+        const companyLabel = document.createElement("label");
+        companyLabel.appendChild(document.createTextNode("Company: "));
+        const companySelect = document.createElement("select");
+        companyLabel.appendChild(companySelect);
+        controls.appendChild(companyLabel);
+
+        controls.appendChild(document.createTextNode(" \u00B7 "));
+
+        const logPlotLabel = document.createElement("label");
+        const logPlotCheckbox = document.createElement("input");
+        logPlotCheckbox.type = "checkbox";
+        logPlotLabel.appendChild(logPlotCheckbox);
+        logPlotLabel.appendChild(document.createTextNode(" log plot"));
+        controls.appendChild(logPlotLabel);
+
+        // load data
+        const dataString = document.getElementById("chart-data")?.textContent;
+        if (dataString === null || dataString === undefined) {
+            return;
+        }
+        const data: ByTypeData = JSON.parse(dataString);
+
+        const allCompanies: string[] = [];
+        for (const company of Object.keys(data.companyToVehicleTypeToRiderToCount)) {
+            allCompanies.push(company);
+        }
+        allCompanies.sort();
+
+        // pre-populate options
+        for (let company of allCompanies) {
+            const companyOption = document.createElement("option");
+            companyOption.value = company;
+            companyOption.textContent = company;
+            companySelect.appendChild(companyOption);
+        }
+        companySelect.selectedIndex = 0;
+
+        // set up empty chart
+        const canvas = <HTMLCanvasElement|null>document.getElementById("chart-canvas");
+        if (canvas === null) {
+            return;
+        }
+        const chart = new Chart(canvas, {
+            type: "bar",
+            data: {
+                datasets: [],
+            },
+            options: {
+                maintainAspectRatio: false,
+                scales: {
+                    "yRegular": {
+                        position: "left",
+                        title: {
+                            display: true,
+                            text: "rides (single rider)",
+                        },
+                        ticks: {
+                            format: {
+                                minimumFractionDigits: 0,
+                            },
+                        },
+                    },
+                    "yAll": {
+                        position: "right",
+                        title: {
+                            display: true,
+                            text: "rides (all riders)",
+                        },
+                        ticks: {
+                            format: {
+                                minimumFractionDigits: 0,
+                            },
+                        },
+                    },
+                },
+            },
+        });
+
+        // define update function
+        function updateChart(
+            chart: Chart<"bar">, data: ByTypeData,
+            companySelect: HTMLSelectElement,
+        ) {
+            const vehicleTypeToRiderToCount = data.companyToVehicleTypeToRiderToCount[companySelect.value];
+            const vehicleTypeToCount = data.companyToVehicleTypeToCount[companySelect.value];
+
+            const allVehicleTypes: string[] = [];
+            const allRiders: string[] = [];
+            for (const vehicleType of Object.keys(vehicleTypeToRiderToCount)) {
+                allVehicleTypes.push(vehicleType);
+                const riderToCount = vehicleTypeToRiderToCount[vehicleType];
+                for (const rider of Object.keys(riderToCount)) {
+                    if (allRiders.indexOf(rider) === -1) {
+                        allRiders.push(rider);
+                    }
+                }
+            }
+            allVehicleTypes.sort();
+            allRiders.sort();
+
+            // collect the counts
+            const datasets: object[] = [];
+            for (const rider of allRiders) {
+                const numbers: number[] = [];
+                for (const vehicleType of allVehicleTypes) {
+                    let number = vehicleTypeToRiderToCount[vehicleType][rider];
+                    if (number === undefined) {
+                        number = 0;
+                    }
+                    numbers.push(number);
+                }
+
+                datasets.push({
+                    label: rider,
+                    data: numbers,
+                    yAxisID: "yRegular",
+                });
+            }
+
+            const totalNumbers: number[] = [];
+            for (const vehicleType of allVehicleTypes) {
+                let number = vehicleTypeToCount[vehicleType];
+                if (number === undefined) {
+                    number = 0;
+                }
+                totalNumbers.push(number);
+            }
+            datasets.push({
+                label: "(all)",
+                data: totalNumbers,
+                yAxisID: "yAll",
+            });
+
+            // give this data to the chart
+            chart.data = {
+                datasets: datasets,
+                labels: allVehicleTypes,
+            };
+            chart.update();
+        }
+
+        // link up events
+        companySelect.addEventListener("change", () => updateChart(
+            chart, data, companySelect,
+        ));
+        logPlotCheckbox.addEventListener("change", () => {
+            chart.options.scales!.yRegular!.type = logPlotCheckbox.checked ? "logarithmic" : "linear";
+            chart.options.scales!.yAll!.type = logPlotCheckbox.checked ? "logarithmic" : "linear";
+            chart.update();
+        });
+
+        // perform initial chart update
+        updateChart(
+            chart, data, companySelect,
+        );
     }
 
     function doSetUpLatestRiderCount() {
@@ -687,6 +866,10 @@ export module Charting {
 
     export function setUpByRideCountGroup() {
         document.addEventListener("DOMContentLoaded", doSetUpByRideCountGroup);
+    }
+
+    export function setUpByType() {
+        document.addEventListener("DOMContentLoaded", doSetUpByType);
     }
 
     export function setUpLatestRiderCount() {
