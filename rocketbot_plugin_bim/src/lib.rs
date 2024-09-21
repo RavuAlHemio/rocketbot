@@ -2077,6 +2077,10 @@ impl BimPlugin {
             command.flags.contains("n")
             || command.flags.contains("sort-by-number")
         ;
+        let list_all_lines =
+            command.flags.contains("a")
+            || command.flags.contains("all")
+        ;
         let lookback_range = match Self::lookback_range_from_command(command) {
             Some(lr) => lr,
             None => {
@@ -2163,7 +2167,7 @@ impl BimPlugin {
         if sort_by_number {
             line_and_count.sort_unstable_by_key(|(comp, ln, count)| (-*count, *comp, *ln));
         }
-        let lines_counts: Vec<String> = line_and_count.iter()
+        let mut lines_counts: Vec<String> = line_and_count.iter()
             .map(|(comp, tp, count)|
                 if *comp == config_guard.default_company.as_str() {
                     format!("{}{}: {}", tp, INVISIBLE_JOINER, count)
@@ -2172,11 +2176,27 @@ impl BimPlugin {
                 }
             )
             .collect();
+
+        let line_list_truncated = if list_all_lines {
+            false
+        } else {
+            if lines_counts.len() > 10 {
+                lines_counts.truncate(10);
+                true
+            } else {
+                false
+            }
+        };
         let response = if lines_counts.len() == 0 {
             format!("{} has not ridden any known lines!", rider_username)
         } else {
             let rider_lines_string = lines_counts.join("\n");
-            format!("{} has ridden these lines:\n{}", rider_username, rider_lines_string)
+            format!(
+                "{} has ridden these lines:\n{}{}",
+                rider_username,
+                rider_lines_string,
+                if line_list_truncated { "\nand more" } else { "" },
+            )
         };
 
         send_channel_message!(
@@ -4496,6 +4516,8 @@ impl RocketBotPlugin for BimPlugin {
             )
                 .add_flag("n")
                 .add_flag("sort-by-number")
+                .add_flag("a")
+                .add_flag("all")
                 .add_lookback_flags()
                 .build()
         ).await;
