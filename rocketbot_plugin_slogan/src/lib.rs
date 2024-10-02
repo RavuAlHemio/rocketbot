@@ -6,7 +6,7 @@ use std::sync::Weak;
 use async_trait::async_trait;
 use regex::Regex;
 use rocketbot_interface::{ResultExtensions, send_channel_message, send_private_message};
-use rocketbot_interface::commands::{CommandDefinitionBuilder, CommandInstance};
+use rocketbot_interface::commands::{CommandBehaviors, CommandDefinitionBuilder, CommandInstance};
 use rocketbot_interface::interfaces::{RocketBotInterface, RocketBotPlugin};
 use rocketbot_interface::model::{ChannelMessage, PrivateMessage};
 use rocketbot_interface::sync::RwLock;
@@ -190,6 +190,7 @@ impl RocketBotPlugin for SloganPlugin {
             "{cpfx}slogan [SUBJECT]",
             "Generates and outputs a generic marketing slogan about SUBJECT.",
         )
+            .behaviors(CommandBehaviors::NO_ARGUMENT_PARSING)
             .build();
         my_interface.register_channel_command(&slogan_command).await;
         my_interface.register_private_message_command(&slogan_command).await;
