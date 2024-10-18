@@ -1,7 +1,7 @@
 mod model;
 
 
-use std::collections::{HashMap, HashSet, VecDeque};
+use std::collections::{BTreeSet, HashMap, HashSet, VecDeque};
 use std::sync::Weak;
 
 use async_trait::async_trait;
@@ -9,10 +9,10 @@ use chrono::{DateTime, Utc};
 use rand::{Rng, SeedableRng};
 use rand::rngs::StdRng;
 use rand::seq::SliceRandom;
-use rocketbot_interface::{JsonValueExtensions, send_channel_message};
+use rocketbot_interface::{send_channel_message, send_private_message, JsonValueExtensions};
 use rocketbot_interface::commands::{CommandDefinitionBuilder, CommandInstance};
 use rocketbot_interface::interfaces::{RocketBotInterface, RocketBotPlugin};
-use rocketbot_interface::model::ChannelMessage;
+use rocketbot_interface::model::{ChannelMessage, PrivateMessage};
 use rocketbot_interface::sync::{Mutex, RwLock};
 use serde_json;
 use tokio_postgres::NoTls;
@@ -82,13 +82,14 @@ fn substring_to_like(substring: &str, escape_char: char) -> String {
 }
 
 
-#[derive(Debug)]
+#[derive(Clone, Debug, Eq, Hash, Ord, PartialEq, PartialOrd)]
 struct Config {
     db_conn_string: String,
     command_prefix: String,
     table_prefix: String,
     remember_posts_for_quotes: usize,
     vote_threshold: i64,
+    admin_usernames: BTreeSet<String>,
 }
 
 
@@ -741,6 +742,38 @@ ON CONFLICT (quote_id, voter_lowercase) DO UPDATE SET points = excluded.points
         }
     }
 
+    async fn handle_clear_quote_cache(&self, private_message: &PrivateMessage, _command: &CommandInstance) {
+        let interface = match self.interface.upgrade() {
+            None => return,
+            Some(i) => i,
+        };
+
+        {
+            let config_guard = self.config.read().await;
+            if !config_guard.admin_usernames.contains(&private_message.message.sender.username) {
+                send_private_message!(
+                    interface,
+                    &private_message.conversation.id,
+                    "You're not a quotes admin, sorry.",
+                ).await;
+                return;
+            }
+        }
+
+        {
+            let mut quotes_guard = self.quotes_state.lock().await;
+            quotes_guard.shuffled_any_quotes = None;
+            quotes_guard.shuffled_bad_quotes = None;
+            quotes_guard.shuffled_good_quotes = None;
+        }
+
+        send_private_message!(
+            interface,
+            &private_message.conversation.id,
+            "How happy is the blameless vestal's lot! The world forgetting, by the world forgot.",
+        ).await;
+    }
+
     fn try_get_config(config: serde_json::Value) -> Result<Config, &'static str> {
         let db_conn_string = config["db_conn_string"]
             .as_str().ok_or("db_conn_string missing or not a string")?
@@ -756,12 +789,21 @@ ON CONFLICT (quote_id, voter_lowercase) DO UPDATE SET points = excluded.points
             .as_str().unwrap_or("")
             .to_owned();
 
+        let mut admin_usernames = BTreeSet::new();
+        if let Some(admin_usernames_json) = config["admin_usernames"].as_array() {
+            for admin_username_json in admin_usernames_json {
+                let Some(admin_username) = admin_username_json.as_str() else { continue };
+                admin_usernames.insert(admin_username.to_owned());
+            }
+        }
+
         Ok(Config {
             db_conn_string,
             remember_posts_for_quotes,
             vote_threshold,
             command_prefix,
             table_prefix,
+            admin_usernames,
         })
     }
 }
@@ -865,6 +907,16 @@ impl RocketBotPlugin for QuotesPlugin {
         my_interface.register_channel_command(&downquote_command).await;
         my_interface.register_channel_command(&dq_command).await;
 
+        my_interface.register_private_message_command(
+            &CommandDefinitionBuilder::new(
+                format!("{}clearquotecache", config_object.command_prefix),
+                "quotes",
+                format!("{{cpfx}}{}clearquotecache", config_object.command_prefix),
+                "Clears any cached quotes.",
+            )
+                .build()
+        ).await;
+
         let config_lock = RwLock::new(
             "QuotesPlugin::config",
             config_object,
@@ -938,6 +990,13 @@ impl RocketBotPlugin for QuotesPlugin {
         }
     }
 
+    async fn private_command(&self, private_message: &PrivateMessage, command: &CommandInstance) {
+        let config_guard = self.config.read().await;
+        if command.name == format!("{}clearquotecache", config_guard.command_prefix) {
+            self.handle_clear_quote_cache(private_message, command).await
+        }
+    }
+
     async fn get_command_help(&self, command_name: &str) -> Option<String> {
         let config_guard = self.config.read().await;
         if command_name == format!("{}addquote", config_guard.command_prefix) {
@@ -958,6 +1017,8 @@ impl RocketBotPlugin for QuotesPlugin {
                 command_name == format!("{}downquote", config_guard.command_prefix)
                 || command_name == format!("{}dq", config_guard.command_prefix) {
             Some(include_str!("../help/downquote.md").to_owned())
+        } else if command_name == format!("{}clearquotecache", config_guard.command_prefix) {
+            Some(include_str!("../help/clearquotecache.md").to_owned())
         } else {
             None
         }
