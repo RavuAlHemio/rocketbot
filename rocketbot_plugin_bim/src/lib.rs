@@ -3341,11 +3341,7 @@ impl BimPlugin {
             let line: Option<String> = ride_row.get(2);
             let vehicle_number: String = ride_row.get(3);
             let ride_id: i64 = ride_row.get(4);
-            let mut taken_from_rider: Option<String> = ride_row.get(5);
-
-            if taken_from_rider.as_ref().map(|tfr| tfr == &rider_username).unwrap_or(false) {
-                taken_from_rider = None;
-            }
+            let taken_from_rider: Option<String> = ride_row.get(5);
 
             match id_to_ride.entry(ride_id) {
                 hash_map::Entry::Occupied(mut oe) => {
@@ -3439,7 +3435,13 @@ impl BimPlugin {
             write!(ride_lines, "ride {}", id).unwrap();
 
             if let Some(tf) = taken_from {
-                write!(ride_lines, " (\u{2190} {})", tf).unwrap();
+                if tf != rider {
+                    write!(ride_lines, " (\u{2190} {})", tf).unwrap();
+                }
+                // append nothing if the rider took the vehicle from themselves
+            } else {
+                // first ride
+                write!(ride_lines, " (*)").unwrap();
             }
         }
 
