@@ -1370,7 +1370,7 @@ async fn do_send_any_message_with_attachment(shared_state: &SharedConnectionStat
         .uri(full_uri.as_str())
         .header("Content-Type", format!("multipart/form-data; boundary={}", boundary_text))
         .header("X-User-Id", &user_id)
-        .header("X-Auth-Token", auth_token)
+        .header("X-Auth-Token", &auth_token)
         .body(Full::new(Bytes::from(body)))
         .expect("failed to construct request");
 
@@ -1434,18 +1434,17 @@ async fn do_send_any_message_with_attachment(shared_state: &SharedConnectionStat
         path_segments.push(&file_id);
     }
 
-    let mut confirm_json_data = serde_json::json!({
-        "msg": "",
-        "description": "",
-    });
+    let mut confirm_json_data = HashMap::new();
+    confirm_json_data.insert("msg".to_owned(), String::new());
+    confirm_json_data.insert("description".to_owned(), String::new());
     if let Some(b) = &message.body {
-        confirm_json_data["msg"] = b;
+        confirm_json_data.insert("msg".to_owned(), b.clone());
     }
     if let Some(d) = &message.attachment.description {
-        confirm_json_data["description"] = d;
+        confirm_json_data.insert("description".to_owned(), d.clone());
     }
     if let Some(t) = &message.reply_to_message_id {
-        confirm_json_data["tmid"] = t;
+        confirm_json_data.insert("tmid".to_owned(), t.clone());
     }
     let confirm_json_string = serde_json::to_string(&confirm_json_data)
         .expect("failed to serialize confirmation JSON");
@@ -1455,7 +1454,7 @@ async fn do_send_any_message_with_attachment(shared_state: &SharedConnectionStat
         .uri(confirm_full_uri.as_str())
         .header("Content-Type", "application/json")
         .header("X-User-Id", &user_id)
-        .header("X-Auth-Token", auth_token)
+        .header("X-Auth-Token", &auth_token)
         .body(Full::new(Bytes::from(confirm_json_string)))
         .expect("failed to construct confirmation request");
 
