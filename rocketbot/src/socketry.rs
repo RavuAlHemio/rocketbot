@@ -1386,7 +1386,7 @@ async fn do_send_any_message_with_attachment(shared_state: &SharedConnectionStat
         let mut path_segments = full_uri.path_segments_mut().unwrap();
         path_segments.push("api");
         path_segments.push("v1");
-        path_segments.push("rooms.upload");
+        path_segments.push("rooms.media");
         path_segments.push(target_id);
     }
 
