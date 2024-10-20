@@ -1322,30 +1322,6 @@ async fn do_send_any_message_with_attachment(shared_state: &SharedConnectionStat
     body.extend_from_slice(&message.attachment.data);
     write!(body, "\r\n").unwrap();
 
-    // -> message body
-    if let Some(b) = &message.body {
-        write!(body, "--{}\r\n", boundary_text).unwrap();
-        write!(body, "Content-Disposition: form-data; name=\"msg\"\r\n").unwrap();
-        write!(body, "\r\n").unwrap();
-        write!(body, "{}\r\n", b).unwrap();
-    }
-
-    // -> attachment description
-    if let Some(d) = &message.attachment.description {
-        write!(body, "--{}\r\n", boundary_text).unwrap();
-        write!(body, "Content-Disposition: form-data; name=\"description\"\r\n").unwrap();
-        write!(body, "\r\n").unwrap();
-        write!(body, "{}\r\n", d).unwrap();
-    }
-
-    // -> thread
-    if let Some(t) = &message.reply_to_message_id {
-        write!(body, "--{}\r\n", boundary_text).unwrap();
-        write!(body, "Content-Disposition: form-data; name=\"tmid\"\r\n").unwrap();
-        write!(body, "\r\n").unwrap();
-        write!(body, "{}\r\n", t).unwrap();
-    }
-
     // trailing boundary
     write!(body, "--{}--\r\n", boundary_text).unwrap();
 
@@ -1381,7 +1357,6 @@ async fn do_send_any_message_with_attachment(shared_state: &SharedConnectionStat
     };
 
     let mut full_uri = web_uri.clone();
-
     {
         let mut path_segments = full_uri.path_segments_mut().unwrap();
         path_segments.push("api");
@@ -1439,10 +1414,91 @@ async fn do_send_any_message_with_attachment(shared_state: &SharedConnectionStat
         return None;
     }
 
-    let message_id = match response_json["message"]["_id"].as_str() {
+    let file_id = match response_json["file"]["_id"].as_str() {
+        Some(fid) => fid.to_owned(),
+        None => {
+            warn!("send-message-with-attachment response does not contain message ID string $.file._id: {:?}", response_json);
+            return None;
+        },
+    };
+
+    // second step to attach all the other information
+
+    let mut confirm_full_uri = web_uri.clone();
+    {
+        let mut path_segments = confirm_full_uri.path_segments_mut().unwrap();
+        path_segments.push("api");
+        path_segments.push("v1");
+        path_segments.push("rooms.mediaConfirm");
+        path_segments.push(target_id);
+        path_segments.push(&file_id);
+    }
+
+    let mut confirm_json_data = serde_json::json!({
+        "msg": "",
+        "description": "",
+    });
+    if let Some(b) = &message.body {
+        confirm_json_data["msg"] = b;
+    }
+    if let Some(d) = &message.attachment.description {
+        confirm_json_data["description"] = d;
+    }
+    if let Some(t) = &message.reply_to_message_id {
+        confirm_json_data["tmid"] = t;
+    }
+    let confirm_json_string = serde_json::to_string(&confirm_json_data)
+        .expect("failed to serialize confirmation JSON");
+
+    let confirm_request = hyper::Request::builder()
+        .method("POST")
+        .uri(confirm_full_uri.as_str())
+        .header("Content-Type", "application/json")
+        .header("X-User-Id", &user_id)
+        .header("X-Auth-Token", auth_token)
+        .body(Full::new(Bytes::from(confirm_json_string)))
+        .expect("failed to construct confirmation request");
+
+    debug!("confirming message with attachment: {:?}", confirm_request);
+
+    let confirm_response_res = shared_state.http_client
+        .request(confirm_request).await;
+    let confirm_response = match confirm_response_res {
+        Ok(r) => r,
+        Err(e) => {
+            error!("cannot confirm message with attachment; failed to send request: {}", e);
+            return None;
+        },
+    };
+    let (confirm_response_header, confirm_response_body) = confirm_response.into_parts();
+    let confirm_response_bytes: Vec<u8> = match confirm_response_body.collect().await {
+        Ok(rb) => rb.to_bytes().to_vec(),
+        Err(e) => {
+            error!("cannot confirm message with attachment; failed to obtain response bytes: {}", e);
+            return None;
+        },
+    };
+    if confirm_response_header.status != StatusCode::OK {
+        error!("cannot confirm message with attachment; response code is not OK but {} (body is {:?})", confirm_response_header.status, confirm_response_bytes);
+        return None;
+    }
+
+    let confirm_response_json: serde_json::Value = match serde_json::from_slice(&confirm_response_bytes) {
+        Ok(rj) => rj,
+        Err(e) => {
+            error!("failed to parse confirm-message-with-attachment response: {} (response is {:?})", e, confirm_response_bytes);
+            return None;
+        },
+    };
+    if !confirm_response_json["success"].as_bool().unwrap_or(false) {
+        error!("confirm-message-with-attachment not successful: {:?}", confirm_response_json);
+        return None;
+    }
+
+    let message_id = match confirm_response_json["message"]["_id"].as_str() {
         Some(mid) => mid.to_owned(),
         None => {
-            warn!("send-message-with-attachment response does not contain message ID string $.message._id: {:?}", response_json);
+            warn!("send-message-with-attachment response does not contain message ID string $.message._id: {:?}", confirm_response_json);
             return None;
         },
     };
