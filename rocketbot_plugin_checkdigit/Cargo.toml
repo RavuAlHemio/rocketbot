@@ -1,0 +1,11 @@
+[package]
+name = "rocketbot_plugin_checkdigit"
+version = "0.1.0"
+edition = "2021"
+
+[dependencies]
+async-trait = { version = "0.1" }
+num-bigint = { version = "0.4" }
+rocketbot_interface = { path = "../rocketbot_interface" }
+serde_json = { version = "1.0" }
+tracing = { version = "0.1" }

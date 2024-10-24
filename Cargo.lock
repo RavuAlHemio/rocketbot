@@ -2411,6 +2411,7 @@ dependencies = [
  "rocketbot_plugin_bim_react",
  "rocketbot_plugin_calc",
  "rocketbot_plugin_catchword",
+ "rocketbot_plugin_checkdigit",
  "rocketbot_plugin_config_user_alias",
  "rocketbot_plugin_date",
  "rocketbot_plugin_degrees",
@@ -2679,6 +2680,17 @@ dependencies = [
  "regex",
  "rocketbot_interface",
  "rocketbot_regex_replace",
+ "serde_json",
+ "tracing",
+]
+
+[[package]]
+name = "rocketbot_plugin_checkdigit"
+version = "0.1.0"
+dependencies = [
+ "async-trait",
+ "num-bigint",
+ "rocketbot_interface",
  "serde_json",
  "tracing",
 ]

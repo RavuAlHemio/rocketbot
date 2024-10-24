@@ -16,6 +16,7 @@ members = [
     "rocketbot_plugin_bim_react",
     "rocketbot_plugin_calc",
     "rocketbot_plugin_catchword",
+    "rocketbot_plugin_checkdigit",
     "rocketbot_plugin_config_user_alias",
     "rocketbot_plugin_date",
     "rocketbot_plugin_degrees",
