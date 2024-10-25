@@ -1458,109 +1458,109 @@ AS $$
     -- NAME: Two by Two
     -- DESCR: Ride two unique vehicles (of any company) whose numbers consist of one digit repeated at least two times.
     -- ORDER: 10,4 repdigits
-    SELECT 94, bim.repdigit_unique_vehicle_ride(rider, 2, 2)
+    SELECT 95, bim.repdigit_unique_vehicle_ride(rider, 2, 2)
 
     UNION ALL
 
     -- NAME: Two by Three
     -- DESCR: Ride two unique vehicles (of any company) whose numbers consist of one digit repeated at least three times.
     -- ORDER: 10,5 repdigits
-    SELECT 95, bim.repdigit_unique_vehicle_ride(rider, 3, 2)
+    SELECT 96, bim.repdigit_unique_vehicle_ride(rider, 3, 2)
 
     UNION ALL
 
     -- NAME: Three by Two
     -- DESCR: Ride three unique vehicles (of any company) whose numbers consist of one digit repeated at least two times.
     -- ORDER: 10,6 repdigits
-    SELECT 96, bim.repdigit_unique_vehicle_ride(rider, 2, 3)
+    SELECT 97, bim.repdigit_unique_vehicle_ride(rider, 2, 3)
 
     UNION ALL
 
     -- NAME: Every Day Is Exactly the Same
     -- DESCR: Ride the same vehicle on the same line at the same minute two days in a row.
     -- ORDER: 4,11 same vehicle
-    SELECT 97, MIN(srtmia97."timestamp")
-    FROM bim.same_ride_to_minute_interval_ago(interval '1 day') srtmia97
-    WHERE srtmia97.rider_username = rider
+    SELECT 98, MIN(srtmia98."timestamp")
+    FROM bim.same_ride_to_minute_interval_ago(interval '1 day') srtmia98
+    WHERE srtmia98.rider_username = rider
 
     UNION ALL
 
     -- NAME: Every Week Is Exactly the Same
     -- DESCR: Ride the same vehicle on the same line at the same minute two weeks in a row.
     -- ORDER: 4,12 same vehicle
-    SELECT 98, MIN(srtmia98."timestamp")
-    FROM bim.same_ride_to_minute_interval_ago(interval '7 days') srtmia98
-    WHERE srtmia98.rider_username = rider
+    SELECT 99, MIN(srtmia99."timestamp")
+    FROM bim.same_ride_to_minute_interval_ago(interval '7 days') srtmia99
+    WHERE srtmia99.rider_username = rider
 
     UNION ALL
 
     -- NAME: Donald Duck's Car
     -- DESCR: Ride a vehicle (of any company) with the number 313.
     -- ORDER: 1,16 special vehicle numbers
-    SELECT 99, MIN(rav99."timestamp")
-    FROM bim.rides_and_ridden_numeric_vehicles rav99
-    WHERE rav99.rider_username = rider
-    AND rav99.vehicle_number = 313
+    SELECT 100, MIN(rav100."timestamp")
+    FROM bim.rides_and_ridden_numeric_vehicles rav100
+    WHERE rav100.rider_username = rider
+    AND rav100.vehicle_number = 313
 
     UNION ALL
 
     -- NAME: I Keep Going There
     -- DESCR: Ride on the same line one hundred times.
     -- ORDER: 11,1 same line
-    SELECT 100, MIN(rbrlt100."timestamp")
-    FROM bim.ride_by_rider_line_timestamp rbrlt100
-    WHERE rbrlt100.rider_username = rider
-    AND rbrlt100.nth = 100
+    SELECT 101, MIN(rbrlt101."timestamp")
+    FROM bim.ride_by_rider_line_timestamp rbrlt101
+    WHERE rbrlt101.rider_username = rider
+    AND rbrlt101.nth = 100
 
     UNION ALL
 
     -- NAME: I Can't Stay Away
     -- DESCR: Ride on the same line two hundred times.
     -- ORDER: 11,2 same line
-    SELECT 101, MIN(rbrlt101."timestamp")
-    FROM bim.ride_by_rider_line_timestamp rbrlt101
-    WHERE rbrlt101.rider_username = rider
-    AND rbrlt101.nth = 200
+    SELECT 102, MIN(rbrlt102."timestamp")
+    FROM bim.ride_by_rider_line_timestamp rbrlt102
+    WHERE rbrlt102.rider_username = rider
+    AND rbrlt102.nth = 200
 
     UNION ALL
 
     -- NAME: It Gives Me Comfort
     -- DESCR: Ride on the same line five hundred times.
     -- ORDER: 11,3 same line
-    SELECT 102, MIN(rbrlt102."timestamp")
-    FROM bim.ride_by_rider_line_timestamp rbrlt102
-    WHERE rbrlt102.rider_username = rider
-    AND rbrlt102.nth = 500
+    SELECT 103, MIN(rbrlt103."timestamp")
+    FROM bim.ride_by_rider_line_timestamp rbrlt103
+    WHERE rbrlt103.rider_username = rider
+    AND rbrlt103.nth = 500
 
     UNION ALL
 
     -- NAME: I Must
     -- DESCR: Ride on the same line one thousand times.
     -- ORDER: 11,4 same line
-    SELECT 103, MIN(rbrlt103."timestamp")
-    FROM bim.ride_by_rider_line_timestamp rbrlt103
-    WHERE rbrlt103.rider_username = rider
-    AND rbrlt103.nth = 1000
+    SELECT 104, MIN(rbrlt104."timestamp")
+    FROM bim.ride_by_rider_line_timestamp rbrlt104
+    WHERE rbrlt104.rider_username = rider
+    AND rbrlt104.nth = 1000
 
     UNION ALL
 
     -- NAME: Tyr? Thor? Tripe
     -- DESCR: Ride the same vehicle on the same line on a Tuesday and a Thursday of the same week.
     -- ORDER: 2,15 vehicle numbers in relation to line numbers
-    SELECT 104, MIN(rav104."timestamp")
-    FROM bim.rides_and_ridden_vehicles rav104
-    WHERE rav104.rider_username = rider
-    AND EXTRACT(DOW FROM rav104."timestamp") = 4
+    SELECT 105, MIN(rav105."timestamp")
+    FROM bim.rides_and_ridden_vehicles rav105
+    WHERE rav105.rider_username = rider
+    AND EXTRACT(DOW FROM rav105."timestamp") = 4
     AND EXISTS (
         SELECT 1
-        FROM bim.rides_and_ridden_vehicles rav104b
-        WHERE rav104b.rider_username = rav104.rider_username
-        AND rav104b.company = rav104.company
-        AND rav104b.vehicle_number = rav104.vehicle_number
-        AND rav104b.line = rav104.line
-        AND EXTRACT(YEAR FROM (rav104."timestamp" - INTERVAL 'P2D')) = EXTRACT(YEAR FROM rav104b."timestamp")
-        AND EXTRACT(MONTH FROM (rav104."timestamp" - INTERVAL 'P2D')) = EXTRACT(MONTH FROM rav104b."timestamp")
-        AND EXTRACT(DAY FROM (rav104."timestamp" - INTERVAL 'P2D')) = EXTRACT(DAY FROM rav104b."timestamp")
+        FROM bim.rides_and_ridden_vehicles rav105b
+        WHERE rav105b.rider_username = rav105.rider_username
+        AND rav105b.company = rav105.company
+        AND rav105b.vehicle_number = rav105.vehicle_number
+        AND rav105b.line = rav105.line
+        AND EXTRACT(YEAR FROM (rav105."timestamp" - INTERVAL 'P2D')) = EXTRACT(YEAR FROM rav105b."timestamp")
+        AND EXTRACT(MONTH FROM (rav105."timestamp" - INTERVAL 'P2D')) = EXTRACT(MONTH FROM rav105b."timestamp")
+        AND EXTRACT(DAY FROM (rav105."timestamp" - INTERVAL 'P2D')) = EXTRACT(DAY FROM rav105b."timestamp")
     )
 
     UNION ALL
@@ -1568,128 +1568,112 @@ AS $$
     -- NAME: It's Not Even Thursday
     -- DESCR: "????" —Steve
     -- ORDER: 99,1 troll achievements
-    SELECT 105, MIN(ntt105."timestamp")
-    FROM bim.not_thursday_timestamp ntt105
-    WHERE ntt105.rider_username = rider
+    SELECT 106, MIN(ntt106."timestamp")
+    FROM bim.not_thursday_timestamp ntt106
+    WHERE ntt106.rider_username = rider
 
     UNION ALL
 
     -- NAME: Capture the Flag
     -- DESCR: Be the last rider in at least 100 vehicles at the same time.
     -- ORDER: 12,1 last rider
-    SELECT 106, bim.current_last_rider_count_reached(rider, 100)
+    SELECT 107, bim.current_last_rider_count_reached(rider, 100)
 
     UNION ALL
 
     -- NAME: Always the Last One
     -- DESCR: Be the last rider in at least 500 vehicles at the same time.
     -- ORDER: 12,2 last rider
-    SELECT 107, bim.current_last_rider_count_reached(rider, 500)
+    SELECT 108, bim.current_last_rider_count_reached(rider, 500)
 
     UNION ALL
 
     -- NAME: World Domination
     -- DESCR: Be the last rider in at least 1000 vehicles at the same time.
     -- ORDER: 12,3 last rider
-    SELECT 108, bim.current_last_rider_count_reached(rider, 1000)
+    SELECT 109, bim.current_last_rider_count_reached(rider, 1000)
 
     UNION ALL
 
     -- NAME: Beverly Hills
     -- DESCR: Ride a vehicle (of any company) with the number 90210.
     -- ORDER: 1,17 special vehicle numbers
-    SELECT 109, MIN(rav109."timestamp")
-    FROM bim.rides_and_ridden_numeric_vehicles rav109
-    WHERE rav109.rider_username = rider
-    AND rav109.vehicle_number = 90210
+    SELECT 110, MIN(rav110."timestamp")
+    FROM bim.rides_and_ridden_numeric_vehicles rav110
+    WHERE rav110.rider_username = rider
+    AND rav110.vehicle_number = 90210
 
     UNION ALL
 
     -- NAME: Blaze It
     -- DESCR: Ride a vehicle (of any company) with the number 420.
     -- ORDER: 1,5 special vehicle numbers
-    SELECT 110, MIN(rav110."timestamp")
-    FROM bim.rides_and_ridden_numeric_vehicles rav110
-    WHERE rav110.rider_username = rider
-    AND rav110.vehicle_number = 420
+    SELECT 111, MIN(rav111."timestamp")
+    FROM bim.rides_and_ridden_numeric_vehicles rav111
+    WHERE rav111.rider_username = rider
+    AND rav111.vehicle_number = 420
 
     UNION ALL
 
     -- NAME: Mazda
     -- DESCR: Ride a vehicle (of any company) whose number has the pattern "x2x".
     -- ORDER: 1,9 special vehicle numbers
-    SELECT 111, MIN("timestamp")
-    FROM bim.rides_and_ridden_vehicles rav111
-    WHERE rav111.rider_username = rider
-    AND LENGTH(rav111.vehicle_number) = 3
-    AND SUBSTRING(rav111.vehicle_number FROM 1 FOR 1) = SUBSTRING(rav111.vehicle_number FROM 3 FOR 1)
-    AND SUBSTRING(rav111.vehicle_number FROM 2 FOR 1) = '2'
+    SELECT 112, MIN("timestamp")
+    FROM bim.rides_and_ridden_vehicles rav112
+    WHERE rav112.rider_username = rider
+    AND LENGTH(rav112.vehicle_number) = 3
+    AND SUBSTRING(rav112.vehicle_number FROM 1 FOR 1) = SUBSTRING(rav112.vehicle_number FROM 3 FOR 1)
+    AND SUBSTRING(rav112.vehicle_number FROM 2 FOR 1) = '2'
 
     UNION ALL
 
     -- NAME: Answered
     -- DESCR: Ride a vehicle (of any company) with the number 42.
     -- ORDER: 1,6 special vehicle numbers
-    SELECT 112, MIN(rav112."timestamp")
-    FROM bim.rides_and_ridden_numeric_vehicles rav112
-    WHERE rav112.rider_username = rider
-    AND rav112.vehicle_number = 42
+    SELECT 113, MIN(rav113."timestamp")
+    FROM bim.rides_and_ridden_numeric_vehicles rav113
+    WHERE rav113.rider_username = rider
+    AND rav113.vehicle_number = 42
 
     UNION ALL
 
     -- NAME: Illuminated
     -- DESCR: Ride a vehicle (of any company) with the number 23.
     -- ORDER: 1,7 special vehicle numbers
-    SELECT 113, MIN(rav113."timestamp")
-    FROM bim.rides_and_ridden_numeric_vehicles rav113
-    WHERE rav113.rider_username = rider
-    AND rav113.vehicle_number = 23
+    SELECT 114, MIN(rav114."timestamp")
+    FROM bim.rides_and_ridden_numeric_vehicles rav114
+    WHERE rav114.rider_username = rider
+    AND rav114.vehicle_number = 23
 
     UNION ALL
 
     -- NAME: Twentylindrome
     -- DESCR: Ride twenty unique vehicles (of any company) whose numbers are a palindrome while not being all the same digit.
     -- ORDER: 9,7 palindromes
-    SELECT 114, min_timestamp
-    FROM bim.rider_first_palindrome_vehicle_ride rfpvr114
-    WHERE rfpvr114.rider_username = rider
-    AND rfpvr114.nth = 20
+    SELECT 115, min_timestamp
+    FROM bim.rider_first_palindrome_vehicle_ride rfpvr115
+    WHERE rfpvr115.rider_username = rider
+    AND rfpvr115.nth = 20
 
     UNION ALL
 
     -- NAME: Four by Two
     -- DESCR: Ride four unique vehicles (of any company) whose numbers consist of one digit repeated at least two times.
     -- ORDER: 10,7 repdigits
-    SELECT 115, bim.repdigit_unique_vehicle_ride(rider, 2, 4)
+    SELECT 116, bim.repdigit_unique_vehicle_ride(rider, 2, 4)
 
     UNION ALL
 
     -- NAME: Five by Two
     -- DESCR: Ride five unique vehicles (of any company) whose numbers consist of one digit repeated at least two times.
     -- ORDER: 10,8 repdigits
-    SELECT 116, bim.repdigit_unique_vehicle_ride(rider, 2, 5)
+    SELECT 117, bim.repdigit_unique_vehicle_ride(rider, 2, 5)
 
     UNION ALL
 
     -- NAME: Indy Twenty
     -- DESCR: Register twenty rides (with any company) where the vehicle number is divisible by the line number (and the line number is not 1).
     -- ORDER: 2,16 vehicle numbers in relation to line numbers
-    SELECT 117, inner117."timestamp"
-    FROM (
-        SELECT rav117."timestamp", rank() OVER (ORDER BY rav117."timestamp" ASC) ride_rank
-        FROM bim.numeric_line_rides_and_ridden_numeric_vehicles rav117
-        WHERE rav117.rider_username = rider
-        AND rav117.vehicle_number > rav117.line
-        AND MOD(rav117.vehicle_number, rav117.line) = 0
-        AND rav117.line <> 1
-    ) inner117
-    WHERE inner117.ride_rank = 20
-
-    UNION ALL
-
-    -- NAME: Indy Fifty
-    -- DESCR: Register fifty rides (with any company) where the vehicle number is divisible by the line number (and the line number is not 1).
-    -- ORDER: 2,17 vehicle numbers in relation to line numbers
     SELECT 118, inner118."timestamp"
     FROM (
         SELECT rav118."timestamp", rank() OVER (ORDER BY rav118."timestamp" ASC) ride_rank
@@ -1699,13 +1683,13 @@ AS $$
         AND MOD(rav118.vehicle_number, rav118.line) = 0
         AND rav118.line <> 1
     ) inner118
-    WHERE inner118.ride_rank = 50
+    WHERE inner118.ride_rank = 20
 
     UNION ALL
 
-    -- NAME: Nice Indy
-    -- DESCR: Register sixty-nine rides (with any company) where the vehicle number is divisible by the line number (and the line number is not 1).
-    -- ORDER: 2,18 vehicle numbers in relation to line numbers
+    -- NAME: Indy Fifty
+    -- DESCR: Register fifty rides (with any company) where the vehicle number is divisible by the line number (and the line number is not 1).
+    -- ORDER: 2,17 vehicle numbers in relation to line numbers
     SELECT 119, inner119."timestamp"
     FROM (
         SELECT rav119."timestamp", rank() OVER (ORDER BY rav119."timestamp" ASC) ride_rank
@@ -1715,13 +1699,13 @@ AS $$
         AND MOD(rav119.vehicle_number, rav119.line) = 0
         AND rav119.line <> 1
     ) inner119
-    WHERE inner119.ride_rank = 69
+    WHERE inner119.ride_rank = 50
 
     UNION ALL
 
-    -- NAME: Indy 100
-    -- DESCR: Register one hundred rides (with any company) where the vehicle number is divisible by the line number (and the line number is not 1).
-    -- ORDER: 2,19 vehicle numbers in relation to line numbers
+    -- NAME: Nice Indy
+    -- DESCR: Register sixty-nine rides (with any company) where the vehicle number is divisible by the line number (and the line number is not 1).
+    -- ORDER: 2,18 vehicle numbers in relation to line numbers
     SELECT 120, inner120."timestamp"
     FROM (
         SELECT rav120."timestamp", rank() OVER (ORDER BY rav120."timestamp" ASC) ride_rank
@@ -1731,7 +1715,23 @@ AS $$
         AND MOD(rav120.vehicle_number, rav120.line) = 0
         AND rav120.line <> 1
     ) inner120
-    WHERE inner120.ride_rank = 100
+    WHERE inner120.ride_rank = 69
+
+    UNION ALL
+
+    -- NAME: Indy 100
+    -- DESCR: Register one hundred rides (with any company) where the vehicle number is divisible by the line number (and the line number is not 1).
+    -- ORDER: 2,19 vehicle numbers in relation to line numbers
+    SELECT 121, inner121."timestamp"
+    FROM (
+        SELECT rav121."timestamp", rank() OVER (ORDER BY rav121."timestamp" ASC) ride_rank
+        FROM bim.numeric_line_rides_and_ridden_numeric_vehicles rav121
+        WHERE rav121.rider_username = rider
+        AND rav121.vehicle_number > rav121.line
+        AND MOD(rav121.vehicle_number, rav121.line) = 0
+        AND rav121.line <> 1
+    ) inner121
+    WHERE inner121.ride_rank = 100
 $$;
 
 CREATE MATERIALIZED VIEW bim.rider_achievements AS
