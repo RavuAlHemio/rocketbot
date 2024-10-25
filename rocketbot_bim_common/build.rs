@@ -1,3 +1,4 @@
+use std::collections::HashSet;
 use std::io::{BufRead, BufReader, Write};
 use std::fs::File;
 
@@ -35,6 +36,8 @@ fn main() {
         let mut buf_reader = BufReader::new(f);
         let mut line = String::new();
 
+        let mut known_ids = HashSet::new();
+
         let mut cur_name = None;
         let mut cur_descr = None;
         let mut cur_order = None;
@@ -62,6 +65,10 @@ fn main() {
                 if let Some(name) = cur_name {
                     if let Some(description) = cur_descr {
                         if let Some((order_category, order_entry)) = cur_order {
+                            if known_ids.contains(&id) {
+                                panic!("duplicate achievement ID {}!", id);
+                            }
+
                             defs.push(AchievementDef {
                                 id,
                                 name,
@@ -69,6 +76,7 @@ fn main() {
                                 order_category,
                                 order_entry,
                             });
+                            known_ids.insert(id);
                         }
                     }
                 }
