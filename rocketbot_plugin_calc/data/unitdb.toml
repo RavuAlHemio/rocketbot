@@ -29,6 +29,10 @@ letters = "K"
 # cd, candela, base unit of luminous intensity
 letters = "cd"
 
+[[base_units]]
+# EUR, base unit of currency within the Eurozone
+letters = "EUR"
+
 ### DERIVED UNITS OF TIME
 
 [[derived_units]]
@@ -387,3 +391,127 @@ factor_of_parents = 1
 letters = "lx"
 parents = { cd = "1", m = "-2" }
 factor_of_parents = 1
+
+### CURRENCIES
+
+# (other currencies can be loaded dynamically)
+
+[[derived_units]]
+# ATS, Austrian schilling, pre-Euro currency
+letters = "ATS"
+parents = { EUR = "1" }
+factor_of_parents = 13.7603
+
+[[derived_units]]
+# BEF, Belgian franc, pre-Euro currency
+letters = "BEF"
+parents = { EUR = "1" }
+factor_of_parents = 40.3399
+
+[[derived_units]]
+# CYP, Cyprus pound, pre-Euro currency
+letters = "CYP"
+parents = { EUR = "1" }
+factor_of_parents = 0.585274
+
+[[derived_units]]
+# DEM, German mark, pre-Euro currency
+letters = "DEM"
+parents = { EUR = "1" }
+factor_of_parents = 1.95583
+
+[[derived_units]]
+# EEK, Estonian Kroon, pre-Euro currency
+letters = "EEK"
+parents = { EUR = "1" }
+factor_of_parents = 15.6466
+
+[[derived_units]]
+# ESP, Spanish peseta, pre-Euro currency
+letters = "ESP"
+parents = { EUR = "1" }
+factor_of_parents = 166.386
+
+[[derived_units]]
+# FIM, Finnish markka, pre-Euro currency
+letters = "FIM"
+parents = { EUR = "1" }
+factor_of_parents = 5.94573
+
+[[derived_units]]
+# FRF, French franc, pre-Euro currency
+letters = "FRF"
+parents = { EUR = "1" }
+factor_of_parents = 6.55957
+
+[[derived_units]]
+# GRD, Greek drachma, pre-Euro currency
+letters = "GRD"
+parents = { EUR = "1" }
+factor_of_parents = 340.750
+
+[[derived_units]]
+# HRK, Croatian Kuna, pre-Euro currency
+letters = "HRK"
+parents = { EUR = "1" }
+factor_of_parents = 7.53450
+
+[[derived_units]]
+# IEP, Irish pound, pre-Euro currency
+letters = "IEP"
+parents = { EUR = "1" }
+factor_of_parents = 0.787564
+
+[[derived_units]]
+# ITL, Italian lira, pre-Euro currency
+letters = "ITL"
+parents = { EUR = "1" }
+factor_of_parents = 1936.27
+
+[[derived_units]]
+# LTL, Lithuanian litas, pre-Euro currency
+letters = "LTL"
+parents = { EUR = "1" }
+factor_of_parents = 3.45280
+
+[[derived_units]]
+# LUF, Luxembourg franc, pre-Euro currency
+letters = "LUF"
+parents = { EUR = "1" }
+factor_of_parents = 40.3399
+
+[[derived_units]]
+# LVL, Latvian lats, pre-Euro currency
+letters = "LVL"
+parents = { EUR = "1" }
+factor_of_parents = 0.702804
+
+[[derived_units]]
+# MTL, Maltese lira, pre-Euro currency
+letters = "MTL"
+parents = { EUR = "1" }
+factor_of_parents = 0.429300
+
+[[derived_units]]
+# NLG, Dutch guilder, pre-Euro currency
+letters = "NLG"
+parents = { EUR = "1" }
+factor_of_parents = 2.20371
+
+[[derived_units]]
+# PTE, Portuguese escudo, pre-Euro currency
+letters = "PTE"
+parents = { EUR = "1" }
+factor_of_parents = 200.482
+
+[[derived_units]]
+# SIT, Slovenian tolar, pre-Euro currency
+letters = "SIT"
+parents = { EUR = "1" }
+factor_of_parents = 239.640
+
+[[derived_units]]
+# SKK, Slovak koruna, pre-Euro currency
+letters = "SKK"
+parents = { EUR = "1" }
+factor_of_parents = 30.1260
