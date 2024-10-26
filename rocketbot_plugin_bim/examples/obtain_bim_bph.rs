@@ -32,6 +32,7 @@ struct Config {
     pub column_keys: ColumnKeyConfig,
     pub urls: Vec<String>,
     pub values_to_ignore: BTreeSet<String>,
+    #[serde(default)] pub number_splitter: Option<String>,
 }
 
 #[derive(Clone, Debug, Deserialize, Eq, Hash, Ord, PartialEq, PartialOrd, Serialize)]
@@ -175,26 +176,42 @@ async fn obtain_vehicles(
                 eprintln!("skipping vehicle {:?} of unmapped type {:?}", vehicle_number, raw_type);
                 continue;
             };
-            if number_to_vehicle.contains_key(vehicle_number.as_ref().unwrap()) {
-                eprintln!("skipping duplicate vehicle {:?} of type {:?}", vehicle_number, raw_type);
-            }
 
             for (k, v) in &type_info.common_other_data {
                 // do not overwrite existing entries
                 other_data.entry(k.clone()).or_insert_with(|| v.clone());
             }
 
-            let vehicle = VehicleInfo {
-                number: vehicle_number.clone().unwrap(),
-                vehicle_class: type_info.vehicle_class,
-                type_code: type_info.vehicle_type.clone(),
-                in_service_since,
-                out_of_service_since,
-                manufacturer: type_info.manufacturer.clone(),
-                other_data,
-                fixed_coupling: IndexSet::new(),
+            let vehicle_numbers: IndexSet<VehicleNumber> = if let Some(splitter) = config.number_splitter.as_ref() {
+                vehicle_number
+                    .as_ref().unwrap()
+                    .split(splitter)
+                    .map(|vn| VehicleNumber::from_string(vn.to_owned()))
+                    .collect()
+            } else {
+                let mut vns = IndexSet::new();
+                vns.insert(vehicle_number.as_ref().unwrap().clone());
+                vns
             };
-            number_to_vehicle.insert(vehicle_number.unwrap(), vehicle);
+
+            for individual_vehicle_number in &vehicle_numbers {
+                if number_to_vehicle.contains_key(individual_vehicle_number) {
+                    eprintln!("skipping duplicate vehicle {:?} of type {:?}", individual_vehicle_number, raw_type);
+                    continue;
+                }
+
+                let vehicle = VehicleInfo {
+                    number: individual_vehicle_number.clone(),
+                    vehicle_class: type_info.vehicle_class,
+                    type_code: type_info.vehicle_type.clone(),
+                    in_service_since,
+                    out_of_service_since,
+                    manufacturer: type_info.manufacturer.clone(),
+                    other_data,
+                    fixed_coupling: if vehicle_numbers.len() > 1 { vehicle_numbers.clone() } else { IndexSet::new() },
+                };
+                number_to_vehicle.insert(individual_vehicle_number.unwrap(), vehicle);
+            }
         }
     }
 
