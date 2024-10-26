@@ -204,13 +204,13 @@ async fn obtain_vehicles(
                     number: individual_vehicle_number.clone(),
                     vehicle_class: type_info.vehicle_class,
                     type_code: type_info.vehicle_type.clone(),
-                    in_service_since,
-                    out_of_service_since,
+                    in_service_since: in_service_since.clone(),
+                    out_of_service_since: out_of_service_since.clone(),
                     manufacturer: type_info.manufacturer.clone(),
-                    other_data,
+                    other_data: other_data.clone(),
                     fixed_coupling: if vehicle_numbers.len() > 1 { vehicle_numbers.clone() } else { IndexSet::new() },
                 };
-                number_to_vehicle.insert(individual_vehicle_number.unwrap(), vehicle);
+                number_to_vehicle.insert(individual_vehicle_number.clone(), vehicle);
             }
         }
     }
