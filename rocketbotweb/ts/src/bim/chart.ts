@@ -74,6 +74,17 @@ interface GlobalStatsData {
     companyToTotalRides: { [company: string]: number };
 }
 
+interface FixedMonopoliesOverTimeData {
+    riderToTimestampToMonopolies: {
+        [rider: string]: {
+            [timestamp: string]: {
+                count: number;
+                points: number;
+            }
+        }
+    }
+}
+
 export namespace Charting {
     function doSetUpByDayOfWeek() {
         const canvas = <HTMLCanvasElement|null>document.getElementById("chart-canvas");
@@ -860,6 +871,78 @@ export namespace Charting {
         });
     }
 
+    function doSetUpFixedMonopoliesOverTime() {
+        // load data
+        const dataString = document.getElementById("chart-data")?.textContent;
+        if (dataString === null || dataString === undefined) {
+            return;
+        }
+        const data: FixedMonopoliesOverTimeData = JSON.parse(dataString);
+
+        const riders = Object.keys(data.riderToTimestampToMonopolies);
+        const timestamps = Object.keys(data.riderToTimestampToMonopolies[riders[0]]);
+        const labels: string[] = timestamps;
+        const countDatasets: object[] = [];
+        const pointDatasets: object[] = [];
+        for (let rider of riders) {
+            const timestampToMonopolies = data.riderToTimestampToMonopolies[rider];
+
+            const countSeries: number[] = [];
+            const pointSeries: number[] = [];
+            for (let timestamp of Object.keys(timestampToMonopolies)) {
+                countSeries.push(timestampToMonopolies[timestamp].count);
+                pointSeries.push(timestampToMonopolies[timestamp].points);
+            }
+
+            countDatasets.push({
+                label: rider,
+                data: countSeries,
+            });
+            pointDatasets.push({
+                label: rider,
+                data: pointSeries,
+            });
+        }
+
+        // set up empty chart
+        const canvas = <HTMLCanvasElement|null>document.getElementById("chart-canvas");
+        if (canvas === null) {
+            return;
+        }
+        const chart = new Chart(canvas, {
+            type: "line",
+            data: {
+                datasets: countDatasets,
+                labels: labels,
+            },
+            options: {
+                maintainAspectRatio: false,
+            },
+        });
+
+        // add controls
+        const controls = <HTMLParagraphElement|null>document.getElementById("chart-controls");
+        if (controls === null) {
+            return;
+        }
+
+        const pointsLabel = <HTMLLabelElement>document.createElement("label");
+        controls.appendChild(pointsLabel);
+
+        const pointsCheckbox = <HTMLInputElement>document.createElement("input");
+        pointsCheckbox.type = "checkbox";
+        pointsLabel.append(pointsCheckbox);
+        pointsLabel.append(document.createTextNode(" points"));
+
+        pointsCheckbox.addEventListener("change", () => {
+            chart.data.datasets = (pointsCheckbox.checked)
+                ? pointDatasets
+                : countDatasets
+            ;
+            chart.update();
+        });
+    }
+
     export function setUpByDayOfWeek() {
         document.addEventListener("DOMContentLoaded", doSetUpByDayOfWeek);
     }
@@ -890,5 +973,9 @@ export namespace Charting {
 
     export function setUpGlobalStats() {
         document.addEventListener("DOMContentLoaded", doSetUpGlobalStats);
+    }
+
+    export function setUpFixedMonopoliesOverTime() {
+        document.addEventListener("DOMContentLoaded", doSetUpFixedMonopoliesOverTime);
     }
 }

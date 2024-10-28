@@ -36,11 +36,11 @@ use tracing::{debug, error};
 use crate::aliases::{handle_nicks_aliases, handle_plaintext_aliases_for_nick};
 use crate::bim::achievements::handle_bim_achievements;
 use crate::bim::charts::{
-    handle_bim_first_rider_pie, handle_bim_global_stats, handle_bim_histogram_by_day_of_week,
-    handle_bim_histogram_by_line_ride_count_group, handle_bim_histogram_by_vehicle_ride_count_group,
-    handle_bim_histogram_fixed_coupling, handle_bim_latest_rider_count_over_time,
-    handle_bim_latest_rider_count_over_time_image, handle_bim_last_rider_pie,
-    handle_bim_type_histogram,
+    handle_bim_first_rider_pie, handle_bim_fixed_monopolies_over_time, handle_bim_global_stats,
+    handle_bim_histogram_by_day_of_week, handle_bim_histogram_by_line_ride_count_group,
+    handle_bim_histogram_by_vehicle_ride_count_group, handle_bim_histogram_fixed_coupling,
+    handle_bim_latest_rider_count_over_time, handle_bim_latest_rider_count_over_time_image,
+    handle_bim_last_rider_pie, handle_bim_type_histogram,
 };
 use crate::bim::coverage::{handle_bim_coverage, handle_bim_coverage_field};
 use crate::bim::details::{handle_bim_detail, handle_bim_line_detail, handle_bim_ride_by_id};
@@ -336,6 +336,7 @@ async fn handle_request(request: Request<Incoming>) -> Result<Response<Full<Byte
         "/bim-vehicle-status" => handle_bim_vehicle_status(&request).await,
         "/bim-first-rider-pie" => handle_bim_first_rider_pie(&request).await,
         "/bim-type-histogram" => handle_bim_type_histogram(&request).await,
+        "/bim-fixed-monopolies-over-time" => handle_bim_fixed_monopolies_over_time(&request).await,
         "/bim-odds-ends" => handle_bim_odds_ends(&request).await,
         _ => {
             if let Some(caps) = STATIC_FILE_REGEX.captures(request.uri().path()) {

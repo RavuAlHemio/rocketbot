@@ -3,11 +3,12 @@ use std::convert::Infallible;
 use std::fmt::Write;
 
 use askama::Template;
+use chrono::{DateTime, Local};
 use http_body_util::Full;
 use hyper::{Method, Request, Response};
 use hyper::body::{Bytes, Incoming};
 use png;
-use rocketbot_bim_common::VehicleNumber;
+use rocketbot_bim_common::{CouplingMode, VehicleNumber};
 use serde::Serialize;
 use tracing::error;
 
@@ -197,6 +198,59 @@ impl TypeHistogramTemplate {
             "companyToVehicleTypeToCount": self.company_to_vehicle_type_to_count,
         })
     }
+}
+
+#[derive(Clone, Debug, Default, Eq, Hash, Ord, PartialEq, PartialOrd, Serialize)]
+struct MonopolyRide {
+    pub id: i64,
+    pub company: String,
+    pub rider_username: String,
+    pub timestamp: DateTime<Local>,
+    pub vehicles: Vec<MonopolyVehicle>,
+}
+impl MonopolyRide {
+    pub fn monopoly_rider_username<'c>(&self, company_to_vehicle_number_to_last_rider: &'c BTreeMap<String, BTreeMap<String, String>>) -> Option<&'c str> {
+        if self.vehicles.len() < 2 {
+            return None;
+        }
+        let Some(vehicle_number_to_last_rider) = company_to_vehicle_number_to_last_rider.get(&self.company)
+            else { return None };
+        let Some(first_vehicle_last_rider) = vehicle_number_to_last_rider.get(&self.vehicles[0].vehicle_number)
+            else { return None };
+        for vehicle in self.vehicles.iter().skip(1) {
+            let Some(this_vehicle_last_rider) = vehicle_number_to_last_rider.get(&vehicle.vehicle_number)
+                else { return None };
+            if first_vehicle_last_rider != this_vehicle_last_rider {
+                return None;
+            }
+        }
+        Some(&first_vehicle_last_rider)
+    }
+}
+
+#[derive(Clone, Debug, Eq, Hash, Ord, PartialEq, PartialOrd, Serialize)]
+struct MonopolyVehicle {
+    pub vehicle_number: String,
+    pub coupling_mode: CouplingMode,
+}
+
+#[derive(Clone, Debug, Default, Eq, Hash, Ord, PartialEq, PartialOrd, Serialize, Template)]
+#[template(path = "bimfixedmonopoliesovertime.html")]
+struct FixedMonopoliesOverTime {
+    pub rider_to_timestamp_to_monopolies: BTreeMap<String, BTreeMap<String, MonopolyEntry>>,
+}
+impl FixedMonopoliesOverTime {
+    pub fn json_data(&self) -> serde_json::Value {
+        serde_json::json!({
+            "riderToTimestampToMonopolies": self.rider_to_timestamp_to_monopolies,
+        })
+    }
+}
+
+#[derive(Clone, Debug, Default, Eq, Hash, Ord, PartialEq, PartialOrd, Serialize)]
+struct MonopolyEntry {
+    pub count: usize,
+    pub points: usize,
 }
 
 
@@ -501,6 +555,177 @@ pub(crate) async fn handle_bim_latest_rider_count_over_time(request: &Request<In
     let template = BimLatestRiderCountTemplate {
         riders,
         from_to_count,
+    };
+    match render_response(&template, &query_pairs, 200, vec![]).await {
+        Some(r) => Ok(r),
+        None => return_500(),
+    }
+}
+
+
+pub(crate) async fn handle_bim_fixed_monopolies_over_time(request: &Request<Incoming>) -> Result<Response<Full<Bytes>>, Infallible> {
+    let query_pairs = get_query_pairs(request);
+    if request.method() != Method::GET {
+        return return_405(&query_pairs).await;
+    }
+
+    let db_conn = match connect_to_db().await {
+        Some(c) => c,
+        None => return return_500(),
+    };
+
+    // collect rides with vehicles in fixed couplings
+    let rides_res = db_conn.query(
+        "
+            SELECT
+                rav.id, rav.company, rav.rider_username, rav.\"timestamp\",
+                rav.vehicle_number, rav.coupling_mode
+            FROM
+                bim.rides_and_vehicles rav
+            WHERE
+                rav.coupling_mode IN ('R', 'F')
+                AND EXISTS (
+                    SELECT 1
+                    FROM bim.ride_vehicles rv
+                    WHERE rv.ride_id = rav.id
+                    AND rv.coupling_mode = 'F'
+                )
+            ORDER BY
+                rav.\"timestamp\",
+                rav.id,
+                rav.spec_position,
+                rav.fixed_coupling_position
+        ",
+        &[],
+    ).await;
+    let ride_rows = match rides_res {
+        Ok(r) => r,
+        Err(e) => {
+            error!("failed to query rides: {}", e);
+            return return_500();
+        },
+    };
+
+    let mut known_rides = Vec::new();
+    let mut current_ride: Option<MonopolyRide> = None;
+    for row in &ride_rows {
+        let ride_id: i64 = row.get(0);
+        let company: String = row.get(1);
+        let rider_username: String = row.get(2);
+        let timestamp: DateTime<Local> = row.get(3);
+        let vehicle_number: String = row.get(4);
+        let coupling_mode_str: String = row.get(5);
+
+        let coupling_mode = match CouplingMode::try_from_db_str(&coupling_mode_str) {
+            Some(ct) => ct,
+            None => {
+                error!("invalid coupling mode {:?}; skipping row", coupling_mode_str);
+                continue;
+            },
+        };
+
+        let same_ride = current_ride.as_ref().map(|r| r.id == ride_id).unwrap_or(false);
+        if !same_ride {
+            let new_ride = MonopolyRide {
+                id: ride_id,
+                company,
+                rider_username,
+                timestamp,
+                vehicles: Vec::new(),
+            };
+            let prev_current_ride = std::mem::replace(&mut current_ride, Some(new_ride));
+            if let Some(pcr) = prev_current_ride {
+                known_rides.push(pcr);
+            }
+        }
+
+        current_ride.as_mut().unwrap().vehicles.push(MonopolyVehicle {
+            vehicle_number,
+            coupling_mode,
+        });
+    }
+
+    if let Some(cr) = current_ride {
+        known_rides.push(cr);
+    }
+
+    // run through the rides
+    let mut company_to_vehicle_number_to_last_rider: BTreeMap<String, BTreeMap<String, String>> = BTreeMap::new();
+    let mut current_rider_to_monopolies = BTreeMap::new();
+    let mut chrono_timestamp_to_rider_to_monopolies = BTreeMap::new();
+    for ride in &known_rides {
+        let previous_monopolist = ride.monopoly_rider_username(&company_to_vehicle_number_to_last_rider)
+            .map(|m| m.to_owned());
+
+        let vehicle_number_to_last_rider = company_to_vehicle_number_to_last_rider
+            .entry(ride.company.clone())
+            .or_insert_with(|| BTreeMap::new());
+        for vehicle in &ride.vehicles {
+            if vehicle.coupling_mode == CouplingMode::Ridden {
+                vehicle_number_to_last_rider.insert(vehicle.vehicle_number.clone(), ride.rider_username.clone());
+            }
+        }
+
+        let current_monopolist = ride.monopoly_rider_username(&company_to_vehicle_number_to_last_rider)
+            .map(|m| m.to_owned());
+
+        if previous_monopolist != current_monopolist {
+            // monopoly change!
+            if let Some(pm) = previous_monopolist {
+                let prev_entry = current_rider_to_monopolies
+                    .entry(pm)
+                    .or_insert(MonopolyEntry {
+                        count: 0,
+                        points: 0,
+                    });
+                prev_entry.count -= 1;
+                prev_entry.points -= ride.vehicles.len();
+            }
+            if let Some(nm) = current_monopolist {
+                let new_entry = current_rider_to_monopolies
+                    .entry(nm)
+                    .or_insert(MonopolyEntry {
+                        count: 0,
+                        points: 0,
+                    });
+                new_entry.count += 1;
+                new_entry.points += ride.vehicles.len();
+            }
+
+            chrono_timestamp_to_rider_to_monopolies.insert(ride.timestamp.clone(), current_rider_to_monopolies.clone());
+        }
+    }
+
+    // collect all riders
+    let mut all_riders = HashSet::new();
+    for rider_to_monopolies in chrono_timestamp_to_rider_to_monopolies.values() {
+        for rider in rider_to_monopolies.keys() {
+            all_riders.insert(rider.clone());
+        }
+    }
+
+    // fill missing riders
+    for rider_to_monopolies in chrono_timestamp_to_rider_to_monopolies.values_mut() {
+        for rider in &all_riders {
+            rider_to_monopolies
+                .entry(rider.clone())
+                .or_insert(MonopolyEntry::default());
+        }
+    }
+
+    let mut rider_to_timestamp_to_monopolies = BTreeMap::new();
+    for (timestamp, rider_to_monopolies) in chrono_timestamp_to_rider_to_monopolies.into_iter() {
+        let timestamp_string = timestamp.format("%Y-%m-%d %H:%M").to_string();
+        for (rider, monopolies) in rider_to_monopolies.into_iter() {
+            rider_to_timestamp_to_monopolies
+                .entry(rider)
+                .or_insert_with(|| BTreeMap::new())
+                .insert(timestamp_string.clone(), monopolies);
+        }
+    }
+
+    let template = FixedMonopoliesOverTime {
+        rider_to_timestamp_to_monopolies,
     };
     match render_response(&template, &query_pairs, 200, vec![]).await {
         Some(r) => Ok(r),
