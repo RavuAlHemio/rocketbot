@@ -10,6 +10,9 @@ pub struct RideTableData {
     /// The number of the ride.
     pub ride_id: i64,
 
+    /// The company whose services have been employed.
+    pub company: String,
+
     /// The line on which the vehicles have been ridden.
     pub line: Option<String>,
 
