@@ -153,6 +153,7 @@ impl BimReactPlugin {
         channel_message: &ChannelMessage,
     ) {
         Self::react_with_emoji(interface, config, bimride, channel_message).await;
+        self.react_by_request(interface, config, bimride, channel_message).await;
     }
 
     async fn react_with_emoji(
