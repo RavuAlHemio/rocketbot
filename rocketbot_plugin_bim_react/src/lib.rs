@@ -1,18 +1,21 @@
 use std::io::Cursor;
 use std::sync::Weak;
+use std::time::Duration;
 
 use async_trait::async_trait;
 use chrono::TimeDelta;
 use http_body_util::BodyExt;
 use hyper::StatusCode;
 use regex::Regex;
+use reqwest;
 use rocketbot_bim_common::CouplingMode;
 use rocketbot_bim_common::ride_table::RideTableData;
 use rocketbot_interface::interfaces::{RocketBotInterface, RocketBotPlugin};
 use rocketbot_interface::model::ChannelMessage;
+use rocketbot_interface::send_channel_message;
 use rocketbot_interface::sync::RwLock;
 use serde::{Deserialize, Serialize};
-use tracing::error;
+use tracing::{error, instrument};
 
 
 #[derive(Clone, Debug, Deserialize, Serialize)]
@@ -40,6 +43,9 @@ struct Config {
 
     #[serde(default = "Config::default_vehicle_remains_recently_emoji")]
     pub vehicle_remains_recently_emoji: Option<String>,
+
+    #[serde(default)]
+    pub http_url: Option<String>,
 }
 impl Config {
     fn default_first_ride_emoji() -> Option<String> { Some("tada".to_owned()) }
@@ -54,30 +60,10 @@ impl Config {
 pub struct BimReactPlugin {
     interface: Weak<dyn RocketBotInterface>,
     config: RwLock<Config>,
+    http_client: reqwest::Client,
 }
-#[async_trait]
-impl RocketBotPlugin for BimReactPlugin {
-    async fn new(interface: Weak<dyn RocketBotInterface>, config_value: serde_json::Value) -> Self {
-        let config_object = match Self::load_config(config_value) {
-            Some(co) => co,
-            None => {
-                panic!("failed to load configuration");
-            },
-        };
-        let config = RwLock::new(
-            "BimReactPlugin::config",
-            config_object,
-        );
-
-        Self {
-            interface,
-            config,
-        }
-    }
-
-    async fn plugin_name(&self) -> String { "bim_react".to_owned() }
-
-    async fn channel_message(&self, channel_message: &ChannelMessage) {
+impl BimReactPlugin {
+    async fn channel_message_received(&self, channel_message: &ChannelMessage) {
         let interface = match self.interface.upgrade() {
             Some(i) => i,
             None => {
@@ -155,65 +141,176 @@ impl RocketBotPlugin for BimReactPlugin {
                 },
             };
 
-            // decide with which emoji to respond
-            let ridden_vehicles = bimride.vehicles.iter().filter(|v| v.coupling_mode == CouplingMode::Ridden);
-            let mut first_ever_vehicles = 0;
-            let mut my_taken_vehicles = 0;
-            let mut taken_from_me_vehicles = 0;
-            let mut other_taken_vehicles = 0;
-            let mut other_recently_same_vehicles = 0;
-            let mut other_same_vehicles = 0;
-            for vehicle in ridden_vehicles {
-                if vehicle.is_first_highlighted_ride_overall() {
-                    // first ride ever
-                    first_ever_vehicles += 1;
-                } else if vehicle.belongs_to_rider_highlighted() {
-                    // same rider rides again
-                    let is_recent = bimride.relative_time
-                        .map(|ride_time| ride_time - vehicle.my_highlighted_last().unwrap().timestamp())
-                        .map(|delta| delta < TimeDelta::hours(24))
-                        .unwrap_or(false);
-                    if is_recent {
-                        other_recently_same_vehicles += 1;
-                    } else {
-                        other_same_vehicles += 1;
-                    }
+            self.react_to_data(&*interface, &config, &bimride, channel_message).await;
+        }
+    }
+
+    async fn react_to_data(
+        &self,
+        interface: &dyn RocketBotInterface,
+        config: &Config,
+        bimride: &RideTableData,
+        channel_message: &ChannelMessage,
+    ) {
+        Self::react_with_emoji(interface, config, bimride, channel_message).await;
+    }
+
+    async fn react_with_emoji(
+        interface: &dyn RocketBotInterface,
+        config: &Config,
+        bimride: &RideTableData,
+        channel_message: &ChannelMessage,
+    ) {
+        // decide with which emoji to respond
+        let ridden_vehicles = bimride.vehicles.iter().filter(|v| v.coupling_mode == CouplingMode::Ridden);
+        let mut first_ever_vehicles = 0;
+        let mut my_taken_vehicles = 0;
+        let mut taken_from_me_vehicles = 0;
+        let mut other_taken_vehicles = 0;
+        let mut other_recently_same_vehicles = 0;
+        let mut other_same_vehicles = 0;
+        for vehicle in ridden_vehicles {
+            if vehicle.is_first_highlighted_ride_overall() {
+                // first ride ever
+                first_ever_vehicles += 1;
+            } else if vehicle.belongs_to_rider_highlighted() {
+                // same rider rides again
+                let is_recent = bimride.relative_time
+                    .map(|ride_time| ride_time - vehicle.my_highlighted_last().unwrap().timestamp())
+                    .map(|delta| delta < TimeDelta::hours(24))
+                    .unwrap_or(false);
+                if is_recent {
+                    other_recently_same_vehicles += 1;
                 } else {
-                    // vehicle changed hands
-                    if bimride.rider_username == config.my_username {
-                        // to me!
-                        my_taken_vehicles += 1;
-                    } else if vehicle.last_highlighted_rider().is_specific_somebody_else(&config.my_username) {
-                        taken_from_me_vehicles += 1;
-                    } else {
-                        other_taken_vehicles += 1;
-                    }
+                    other_same_vehicles += 1;
+                }
+            } else {
+                // vehicle changed hands
+                if bimride.rider_username == config.my_username {
+                    // to me!
+                    my_taken_vehicles += 1;
+                } else if vehicle.last_highlighted_rider().is_specific_somebody_else(&config.my_username) {
+                    taken_from_me_vehicles += 1;
+                } else {
+                    other_taken_vehicles += 1;
                 }
             }
-
-            // respond
-            let response_emoji_opt = if first_ever_vehicles > 0 {
-                config.first_ride_emoji.as_deref()
-            } else if my_taken_vehicles > 0 {
-                config.vehicle_taken_by_me_emoji.as_deref()
-            } else if taken_from_me_vehicles > 0 {
-                config.vehicle_taken_from_me_emoji.as_deref()
-            } else if other_taken_vehicles > 0 {
-                config.vehicle_taken_by_other_emoji.as_deref()
-            } else if other_recently_same_vehicles > 0 {
-                config.vehicle_remains_recently_emoji.as_deref()
-            } else if other_same_vehicles > 0 {
-                config.vehicle_remains_emoji.as_deref()
-            } else {
-                None
-            };
-            if let Some(emoji) = response_emoji_opt {
-                interface.add_reaction(
-                    &channel_message.message.id,
-                    emoji,
-                ).await;
-            }
         }
+
+        // respond
+        let response_emoji_opt = if first_ever_vehicles > 0 {
+            config.first_ride_emoji.as_deref()
+        } else if my_taken_vehicles > 0 {
+            config.vehicle_taken_by_me_emoji.as_deref()
+        } else if taken_from_me_vehicles > 0 {
+            config.vehicle_taken_from_me_emoji.as_deref()
+        } else if other_taken_vehicles > 0 {
+            config.vehicle_taken_by_other_emoji.as_deref()
+        } else if other_recently_same_vehicles > 0 {
+            config.vehicle_remains_recently_emoji.as_deref()
+        } else if other_same_vehicles > 0 {
+            config.vehicle_remains_emoji.as_deref()
+        } else {
+            None
+        };
+        if let Some(emoji) = response_emoji_opt {
+            interface.add_reaction(
+                &channel_message.message.id,
+                emoji,
+            ).await;
+        }
+    }
+
+    #[instrument(skip(self, interface, config))]
+    async fn react_by_request(
+        &self,
+        interface: &dyn RocketBotInterface,
+        config: &Config,
+        bimride: &RideTableData,
+        channel_message: &ChannelMessage,
+    ) {
+        let Some(url) = config.http_url.as_ref() else { return };
+        let bimride_json = serde_json::to_string(&bimride)
+            .expect("failed to serialize RideTableData");
+
+        let response_res = self.http_client
+            .post(url)
+            .header("Content-Type", "application/json")
+            .body(bimride_json)
+            .send().await;
+        let response = match response_res {
+            Ok(r) => r,
+            Err(e) => {
+                error!("HTTP request failed: {}", e);
+                return;
+            },
+        };
+        if response.status() != StatusCode::OK {
+            error!("HTTP response is not OK: {}", response.status());
+            return;
+        }
+        let response_bytes = match response.bytes().await {
+            Ok(rb) => rb,
+            Err(e) => {
+                error!("obtaining HTTP response bytes failed: {}", e);
+                return;
+            },
+        };
+        let response_string = match String::from_utf8(response_bytes.to_vec()) {
+            Ok(rs) => rs,
+            Err(_) => {
+                error!("HTTP response is not valid UTF-8");
+                return;
+            },
+        };
+        let response_json: serde_json::Value = match serde_json::from_str(&response_string) {
+            Ok(rj) => rj,
+            Err(e) => {
+                error!("failed to parse HTTP response as JSON: {}", e);
+                return;
+            },
+        };
+        let Some(response_text) = response_json["response_text"].as_str() else { return };
+        send_channel_message!(
+            interface,
+            &channel_message.channel.name,
+            response_text,
+        ).await;
+    }
+}
+#[async_trait]
+impl RocketBotPlugin for BimReactPlugin {
+    async fn new(interface: Weak<dyn RocketBotInterface>, config_value: serde_json::Value) -> Self {
+        let config_object = match Self::load_config(config_value) {
+            Some(co) => co,
+            None => {
+                panic!("failed to load configuration");
+            },
+        };
+        let config = RwLock::new(
+            "BimReactPlugin::config",
+            config_object,
+        );
+        let http_client = reqwest::Client::builder()
+            .timeout(Duration::from_secs(5))
+            .build()
+            .expect("failed to build HTTP client");
+
+        Self {
+            interface,
+            config,
+            http_client,
+        }
+    }
+
+    async fn plugin_name(&self) -> String { "bim_react".to_owned() }
+
+    async fn channel_message_delivered(&self, message: &ChannelMessage) {
+        self.channel_message_received(message).await
+    }
+
+    async fn channel_message(&self, message: &ChannelMessage) {
+        self.channel_message_received(message).await
     }
 }
 impl BimReactPlugin {

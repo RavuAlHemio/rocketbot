@@ -2642,6 +2642,7 @@ dependencies = [
  "hyper",
  "png",
  "regex",
+ "reqwest",
  "rocketbot_bim_common",
  "rocketbot_interface",
  "serde",
