@@ -281,6 +281,21 @@ struct MonopolyEntry {
     pub points: usize,
 }
 
+#[derive(Clone, Debug, Default, Eq, Hash, Ord, PartialEq, PartialOrd, Serialize, Template)]
+#[template(path = "bimlastriderhistfixedpos.html")]
+struct LastRiderHistogramByFixedPosTemplate {
+    pub leading_type_to_rider_to_counts: BTreeMap<String, BTreeMap<String, Vec<i64>>>,
+}
+impl LastRiderHistogramByFixedPosTemplate {
+    pub fn json_data(&self) -> String {
+        let value = serde_json::json!({
+            "leadingTypeToRiderToCounts": self.leading_type_to_rider_to_counts,
+        });
+        serde_json::to_string(&value)
+            .expect("failed to JSON-encode graph data")
+    }
+}
+
 
 pub(crate) async fn handle_bim_latest_rider_count_over_time_image(request: &Request<Incoming>) -> Result<Response<Full<Bytes>>, Infallible> {
     let query_pairs = get_query_pairs(request);
@@ -1452,6 +1467,105 @@ pub(crate) async fn handle_bim_type_histogram(request: &Request<Incoming>) -> Re
     let template = TypeHistogramTemplate {
         company_to_vehicle_type_to_rider_to_count,
         company_to_vehicle_type_to_count,
+    };
+    match render_response(&template, &query_pairs, 200, vec![]).await {
+        Some(r) => Ok(r),
+        None => return_500(),
+    }
+}
+
+
+pub(crate) async fn handle_bim_last_rider_histogram_by_fixed_pos(request: &Request<Incoming>) -> Result<Response<Full<Bytes>>, Infallible> {
+    let query_pairs = get_query_pairs(request);
+    if request.method() != Method::GET {
+        return return_405(&query_pairs).await;
+    }
+
+    let db_conn = match connect_to_db().await {
+        Some(c) => c,
+        None => return return_500(),
+    };
+
+    let company_rows_res = db_conn.query(
+        "
+            WITH company_typed_vehicles(ride_id, \"timestamp\", company, company_type, rider_username, vehicle_number, coupling_mode, fixed_coupling_position) AS (
+                SELECT
+                    rav.id,
+                    rav.\"timestamp\",
+                    rav.company,
+                    rav.company || '/' || rav.vehicle_type,
+                    rav.rider_username,
+                    rav.vehicle_number,
+                    rav.coupling_mode,
+                    rav.fixed_coupling_position
+                FROM
+                    bim.rides_and_vehicles rav
+            )
+            SELECT
+                lv.company_type,
+                ctv.rider_username,
+                ctv.fixed_coupling_position,
+                CAST(COUNT(*) AS bigint) last_rider_in_vehicle_count
+            FROM
+                company_typed_vehicles ctv
+                INNER JOIN company_typed_vehicles lv -- leading vehicle
+                    ON lv.ride_id = ctv.ride_id
+                    AND lv.fixed_coupling_position = 0
+            WHERE
+                ctv.coupling_mode = 'R'
+                AND EXISTS (
+                    -- this is a fixed coupling
+                    SELECT 1
+                    FROM company_typed_vehicles ctv2
+                    WHERE ctv2.ride_id = ctv.ride_id
+                    AND ctv2.fixed_coupling_position = 1
+                )
+                AND NOT EXISTS (
+                    -- this is the last ride in this vehicle
+                    SELECT 1
+                    FROM company_typed_vehicles ctv3
+                    WHERE ctv3.company = ctv.company
+                    AND ctv3.vehicle_number = ctv.vehicle_number
+                    AND ctv3.\"timestamp\" > ctv.\"timestamp\"
+                    AND ctv3.coupling_mode = 'R'
+                )
+            GROUP BY
+                lv.company_type,
+                ctv.rider_username,
+                ctv.fixed_coupling_position
+        ",
+        &[],
+    ).await;
+    let company_rows = match company_rows_res {
+        Ok(r) => r,
+        Err(e) => {
+            error!("failed to query rides: {}", e);
+            return return_500();
+        },
+    };
+    let mut leading_type_to_rider_to_counts: BTreeMap<String, BTreeMap<String, Vec<i64>>> = BTreeMap::new();
+    for row in &company_rows {
+        let leading_type: String = row.get(0);
+        let rider_username: String = row.get(1);
+        let coupling_position: i64 = row.get(2);
+        let ride_count: i64 = row.get(3);
+
+        let coupling_position_usize: usize = match coupling_position.try_into() {
+            Ok(cpu) => cpu,
+            Err(_) => continue,
+        };
+
+        let counts = leading_type_to_rider_to_counts
+            .entry(leading_type.clone()).or_insert_with(|| BTreeMap::new())
+            .entry(rider_username.clone()).or_insert_with(|| Vec::new());
+        while counts.len() <= coupling_position_usize {
+            counts.push(0);
+        }
+        counts[coupling_position_usize] = ride_count;
+    }
+
+    let template = LastRiderHistogramByFixedPosTemplate {
+        leading_type_to_rider_to_counts,
     };
     match render_response(&template, &query_pairs, 200, vec![]).await {
         Some(r) => Ok(r),

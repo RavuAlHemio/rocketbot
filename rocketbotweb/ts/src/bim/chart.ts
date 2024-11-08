@@ -85,6 +85,14 @@ interface FixedMonopoliesOverTimeData {
     }
 }
 
+interface LastRiderHistogramByFixedPosData {
+    leadingTypeToRiderToCounts: {
+        [leadingType: string]: {
+            [rider: string]: number[];
+        }
+    }
+}
+
 export namespace Charting {
     function doSetUpByDayOfWeek() {
         const canvas = <HTMLCanvasElement|null>document.getElementById("chart-canvas");
@@ -943,6 +951,94 @@ export namespace Charting {
         });
     }
 
+    function doSetUpLastRiderHistogramByFixedPos() {
+        // set up controls
+        const controls = <HTMLParagraphElement|null>document.getElementById("histogram-controls");
+        if (controls === null) {
+            return;
+        }
+
+        const typeLabel = document.createElement("label");
+        typeLabel.appendChild(document.createTextNode("Front type: "));
+        const typeSelect = document.createElement("select");
+        typeLabel.appendChild(typeSelect);
+        controls.appendChild(typeLabel);
+
+        // load data
+        const dataString = document.getElementById("chart-data")?.textContent;
+        if (dataString === null || dataString === undefined) {
+            return;
+        }
+        const data: LastRiderHistogramByFixedPosData = JSON.parse(dataString);
+
+        const allFrontVehicleTypes: string[] = Object.keys(data.leadingTypeToRiderToCounts);
+        allFrontVehicleTypes.sort();
+
+        // pre-populate options
+        for (let frontVehicleType of allFrontVehicleTypes) {
+            const typeOption = document.createElement("option");
+            typeOption.value = frontVehicleType;
+            typeOption.textContent = frontVehicleType;
+            typeSelect.appendChild(typeOption);
+        }
+        typeSelect.selectedIndex = 0;
+
+        // set up empty chart
+        const canvas = <HTMLCanvasElement|null>document.getElementById("chart-canvas");
+        if (canvas === null) {
+            return;
+        }
+        const chart = new Chart(canvas, {
+            type: "bar",
+            data: {
+                datasets: [],
+            },
+        });
+
+        // define update function
+        function updateChart(
+            chart: Chart<"bar">, data: LastRiderHistogramByFixedPosData,
+            typeSelect: HTMLSelectElement,
+        ) {
+            const riderToCounts = data.leadingTypeToRiderToCounts[typeSelect.value];
+            const typeRiders = Object.keys(riderToCounts);
+            typeRiders.sort();
+
+            // collect the counts
+            const datasets: object[] = [];
+            const labels: string[] = [];
+            for (let rider of typeRiders) {
+                const numbers = riderToCounts[rider];
+
+                while (labels.length < numbers.length) {
+                    labels.push(`vehicle ${labels.length + 1}`);
+                }
+
+                datasets.push({
+                    label: rider,
+                    data: numbers,
+                });
+            }
+
+            // give this data to the chart
+            chart.data = {
+                datasets: datasets,
+                labels: labels,
+            };
+            chart.update();
+        }
+
+        // link up events
+        typeSelect.addEventListener("change", () => updateChart(
+            chart, data, typeSelect,
+        ));
+
+        // perform initial chart update
+        updateChart(
+            chart, data, typeSelect,
+        );
+    }
+
     export function setUpByDayOfWeek() {
         document.addEventListener("DOMContentLoaded", doSetUpByDayOfWeek);
     }
@@ -977,5 +1073,9 @@ export namespace Charting {
 
     export function setUpFixedMonopoliesOverTime() {
         document.addEventListener("DOMContentLoaded", doSetUpFixedMonopoliesOverTime);
+    }
+
+    export function setUpLastRiderHistogramByFixedPos() {
+        document.addEventListener("DOMContentLoaded", doSetUpLastRiderHistogramByFixedPos);
     }
 }
