@@ -29,6 +29,7 @@ struct QueryFiltersPart {
     pub line: Option<String>,
     pub vehicle_number: Option<String>,
     pub vehicle_type: Option<String>,
+    pub vehicle_ridden_only: bool,
 }
 impl QueryFiltersPart {
     pub fn want_missing_vehicle_types(&self) -> bool {
@@ -166,6 +167,9 @@ pub(crate) async fn handle_bim_query(request: &Request<Incoming>) -> Result<Resp
         let line = cow_to_owned_or_empty_to_none(query_pairs.get("line"));
         let vehicle_number = cow_to_owned_or_empty_to_none(query_pairs.get("vehicle-number"));
         let vehicle_type = cow_to_owned_or_empty_to_none(query_pairs.get("vehicle-type"));
+        let vehicle_ridden_only = query_pairs.get("vehicle-ridden-only")
+            .map(|qp| qp == "1")
+            .unwrap_or(false);
 
         QueryFiltersPart {
             timestamp,
@@ -174,6 +178,7 @@ pub(crate) async fn handle_bim_query(request: &Request<Incoming>) -> Result<Resp
             line,
             vehicle_number,
             vehicle_type,
+            vehicle_ridden_only,
         }
     };
     let page: i64 = match query_pairs.get("page") {
@@ -221,7 +226,12 @@ pub(crate) async fn handle_bim_query(request: &Request<Incoming>) -> Result<Resp
     if let Some(vehicle_number) = &filters.vehicle_number {
         // filtering on vehicle_number directly would limit output to only the filtered vehicle number
         // instead, check if the ride generally contains the vehicle number
-        filter_pieces.push(format!("EXISTS (SELECT 1 FROM bim.rides_and_vehicles rav_veh WHERE rav_veh.id = rav.id AND rav_veh.vehicle_number = ${})", next_filter_index));
+        let mut num_piece = format!("EXISTS (SELECT 1 FROM bim.rides_and_vehicles rav_veh WHERE rav_veh.id = rav.id AND rav_veh.vehicle_number = ${}", next_filter_index);
+        if filters.vehicle_ridden_only {
+            num_piece.push_str(" AND rav_veh.coupling_mode = 'R'");
+        }
+        num_piece.push(')');
+        filter_pieces.push(num_piece);
         next_filter_index += 1;
         filter_values.push(vehicle_number);
         append_to_query(&mut filter_query_and, "vehicle-number", vehicle_number);

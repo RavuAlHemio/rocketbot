@@ -48,6 +48,10 @@
         {% endfor %}
       </select>
       <input type="text" name="vehicle-number"{% if let Some(vehicle_number) = filters.vehicle_number %} value="{{ vehicle_number }}"{% endif %} aria-label="vehicle number" />
+      <label>
+	      <input type="checkbox" name="vehicle-ridden-only" value="1"{% if filters.vehicle_ridden_only %} checked="checked"{% endif %} />
+        ridden only
+      </label>
     </td>
     <td class="button"><input type="submit" value="apply filter" /></td>
   </tr>
