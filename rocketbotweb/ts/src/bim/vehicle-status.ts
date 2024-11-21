@@ -109,64 +109,69 @@ export namespace VehicleStatus {
         }
     }
 
-    function appendLookedUpVehicle(vehicleNumber: string, vehiclesDiv: HTMLDivElement, recurseToFixed: boolean) {
+    function appendLookedUpVehicles(vehicleNumbers: string[], vehiclesDiv: HTMLDivElement, recurseToFixed: boolean) {
         if (data === null) {
             return;
         }
 
-        const vehicle = data.vehicles[vehicleNumber];
-        if (vehicle === undefined) {
-            return;
-        }
+        let addSpace = false;
+        for (const vehicleNumber of vehicleNumbers) {
+            const vehicle = data.vehicles[vehicleNumber];
+            if (vehicle === undefined) {
+                continue;
+            }
 
-        const vehicleDiv = createDivChild(vehiclesDiv);
-        vehicleDiv.classList.add("vehicle");
-        vehicleDiv.classList.add(vehicle.state);
+            if (addSpace) {
+                addSpace = false;
 
-        const numberSpan = createSpanChild(vehicleDiv);
-        numberSpan.classList.add("number");
-        numberSpan.textContent = vehicleNumber;
+                const spaceDiv = createDivChild(vehiclesDiv);
+                spaceDiv.classList.add("spacing");
+            }
 
-        if (vehicle.my_last_ride_opt !== null) {
-            const myTime = parseRustChronoUtcTimestamp(vehicle.my_last_ride_opt.time);
-            if (vehicle.other_last_ride_opt !== null) {
-                const otherTime = parseRustChronoUtcTimestamp(vehicle.other_last_ride_opt.time);
-                if (myTime >= otherTime) {
-                    appendRide(vehicleDiv, vehicle.my_last_ride_opt, myTime, true);
-                    appendRide(vehicleDiv, vehicle.other_last_ride_opt, otherTime, false);
+            const vehicleDiv = createDivChild(vehiclesDiv);
+            vehicleDiv.classList.add("vehicle");
+            vehicleDiv.classList.add(vehicle.state);
+
+            const numberSpan = createSpanChild(vehicleDiv);
+            numberSpan.classList.add("number");
+            numberSpan.textContent = vehicleNumber;
+
+            if (vehicle.my_last_ride_opt !== null) {
+                const myTime = parseRustChronoUtcTimestamp(vehicle.my_last_ride_opt.time);
+                if (vehicle.other_last_ride_opt !== null) {
+                    const otherTime = parseRustChronoUtcTimestamp(vehicle.other_last_ride_opt.time);
+                    if (myTime >= otherTime) {
+                        appendRide(vehicleDiv, vehicle.my_last_ride_opt, myTime, true);
+                        appendRide(vehicleDiv, vehicle.other_last_ride_opt, otherTime, false);
+                    } else {
+                        appendRide(vehicleDiv, vehicle.other_last_ride_opt, otherTime, false);
+                        appendRide(vehicleDiv, vehicle.my_last_ride_opt, myTime, true);
+                    }
                 } else {
-                    appendRide(vehicleDiv, vehicle.other_last_ride_opt, otherTime, false);
                     appendRide(vehicleDiv, vehicle.my_last_ride_opt, myTime, true);
                 }
-            } else {
-                appendRide(vehicleDiv, vehicle.my_last_ride_opt, myTime, true);
+            } else if (vehicle.other_last_ride_opt !== null) {
+                const otherTime = parseRustChronoUtcTimestamp(vehicle.other_last_ride_opt.time);
+                appendRide(vehicleDiv, vehicle.other_last_ride_opt, otherTime, false);
             }
-        } else if (vehicle.other_last_ride_opt !== null) {
-            const otherTime = parseRustChronoUtcTimestamp(vehicle.other_last_ride_opt.time);
-            appendRide(vehicleDiv, vehicle.other_last_ride_opt, otherTime, false);
-        }
 
-        if (!recurseToFixed) {
-            return;
-        }
+            if (recurseToFixed && vehicle.fixed_coupling.length > 0) {
+                const coupledHeaderDiv = createDivChild(vehiclesDiv);
+                coupledHeaderDiv.classList.add("coupled-header");
+                coupledHeaderDiv.textContent = "coupled:";
 
-        if (vehicle.fixed_coupling.length > 0) {
-            const coupledHeaderDiv = createDivChild(vehiclesDiv);
-            coupledHeaderDiv.classList.add("coupled-header");
-            coupledHeaderDiv.textContent = "coupled:";
-
-            for (let i = 0; i < vehicle.fixed_coupling.length; i++) {
-                const coupledVehicle = vehicle.fixed_coupling[i];
-                appendLookedUpVehicle(coupledVehicle, vehiclesDiv, false);
+                appendLookedUpVehicles(vehicle.fixed_coupling, vehiclesDiv, false);
+                addSpace = true;
             }
         }
     }
 
-    function lookUpVehicle(vehicleNumberInput: HTMLInputElement, vehiclesDiv: HTMLDivElement) {
+    function lookUpVehicles(vehicleNumberInput: HTMLInputElement, vehiclesDiv: HTMLDivElement) {
         while (vehiclesDiv.firstChild !== null) {
             vehiclesDiv.removeChild(vehiclesDiv.firstChild);
         }
-        appendLookedUpVehicle(vehicleNumberInput.value, vehiclesDiv, true);
+        const vehicleNumbers = vehicleNumberInput.value.split("+");
+        appendLookedUpVehicles(vehicleNumbers, vehiclesDiv, true);
     }
 
     async function doSetUp(myData: StatusData) {
@@ -199,13 +204,13 @@ export namespace VehicleStatus {
         form.classList.add("form");
 
         const vehicleNumberLabel = createLabelChild(form);
-        createTextChild(vehicleNumberLabel, "Vehicle number: ");
+        createTextChild(vehicleNumberLabel, "Vehicle number(s): ");
         const vehicleNumberInput = createInputChild(vehicleNumberLabel);
 
         const vehiclesDiv = createDivChild(contentDiv);
         vehiclesDiv.classList.add("vehicles");
 
-        vehicleNumberInput.addEventListener("input", () => lookUpVehicle(vehicleNumberInput, vehiclesDiv));
+        vehicleNumberInput.addEventListener("input", () => lookUpVehicles(vehicleNumberInput, vehiclesDiv));
         vehicleNumberInput.focus();
     }
 
