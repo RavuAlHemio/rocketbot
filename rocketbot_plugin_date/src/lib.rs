@@ -48,6 +48,25 @@ impl Holiday {
 }
 
 
+fn julian_month(month: i32) -> julian::Month {
+    match month {
+        1 => julian::Month::January,
+        2 => julian::Month::February,
+        3 => julian::Month::March,
+        4 => julian::Month::April,
+        5 => julian::Month::May,
+        6 => julian::Month::June,
+        7 => julian::Month::July,
+        8 => julian::Month::August,
+        9 => julian::Month::September,
+        10 => julian::Month::October,
+        11 => julian::Month::November,
+        12 => julian::Month::December,
+        _ => panic!("unexpected month {}", month),
+    }
+}
+
+
 /// Calculates the Gregorian date of Easter Sunday for the given year.
 ///
 /// The result is returned as a month and day-of-month according to the Gregorian calendar.
@@ -68,21 +87,7 @@ fn gregorian_computus(year: i32) -> julian::Date {
     let n = (h + l - 7*m + 114) / 31;
     let o = (h + l - 7*m + 114) % 31;
 
-    let month = match n {
-        1 => julian::Month::January,
-        2 => julian::Month::February,
-        3 => julian::Month::March,
-        4 => julian::Month::April,
-        5 => julian::Month::May,
-        6 => julian::Month::June,
-        7 => julian::Month::July,
-        8 => julian::Month::August,
-        9 => julian::Month::September,
-        10 => julian::Month::October,
-        11 => julian::Month::November,
-        12 => julian::Month::December,
-        _ => panic!("unexpected month {}", n),
-    };
+    let month = julian_month(n);
     let day = o + 1;
     julian::Calendar::GREGORIAN.at_ymd(
         year,
@@ -106,21 +111,7 @@ fn julian_computus(year: i32) -> julian::Date {
     let f = d + e + 114;
     let g = f / 31;
 
-    let month = match g {
-        1 => julian::Month::January,
-        2 => julian::Month::February,
-        3 => julian::Month::March,
-        4 => julian::Month::April,
-        5 => julian::Month::May,
-        6 => julian::Month::June,
-        7 => julian::Month::July,
-        8 => julian::Month::August,
-        9 => julian::Month::September,
-        10 => julian::Month::October,
-        11 => julian::Month::November,
-        12 => julian::Month::December,
-        _ => panic!("unexpected month {}", g),
-    };
+    let month = julian_month(g);
     let day = (f % 31) + 1;
     julian::Calendar::JULIAN.at_ymd(
         year,
@@ -135,7 +126,7 @@ pub struct DatePlugin {
     config: RwLock<Config>,
 }
 impl DatePlugin {
-    fn parse_date(date_str: &str) -> Option<NaiveDate> {
+    fn parse_date_raw(date_str: &str) -> Option<(i32, u32, u32)> {
         let caps = DATE_REGEX.captures(date_str)?;
 
         let (year_match, month_match, day_match) = if let Some(year_match) = caps.name("ymdy") {
@@ -157,7 +148,18 @@ impl DatePlugin {
         let year: i32 = year_match.as_str().parse().expect("failed to parse year");
         let month: u32 = month_match.as_str().parse().expect("failed to parse month");
         let day: u32 = day_match.as_str().parse().expect("failed to parse day");
+        Some((year, month, day))
+    }
+
+    fn parse_date_chrono(date_str: &str) -> Option<NaiveDate> {
+        let (year, month, day) = Self::parse_date_raw(date_str)?;
         Some(NaiveDate::from_ymd_opt(year, month, day).unwrap())
+    }
+
+    fn parse_date_julian(date_str: &str, calendar: julian::Calendar) -> Option<julian::Date> {
+        let (year, month, day) = Self::parse_date_raw(date_str)?;
+        let j_month = julian_month(month.try_into().unwrap());
+        calendar.at_ymd(year, j_month, day).ok()
     }
 
     async fn handle_days(&self, channel_message: &ChannelMessage, command: &CommandInstance) {
@@ -166,7 +168,7 @@ impl DatePlugin {
             Some(i) => i,
         };
 
-        let date = match Self::parse_date(command.rest.trim()) {
+        let date = match Self::parse_date_chrono(command.rest.trim()) {
             Some(d) => d,
             None => return,
         };
@@ -196,7 +198,7 @@ impl DatePlugin {
             Some(i) => i,
         };
 
-        let date = match Self::parse_date(command.rest.trim()) {
+        let date = match Self::parse_date_chrono(command.rest.trim()) {
             Some(d) => d,
             None => return,
         };
@@ -329,6 +331,62 @@ impl DatePlugin {
             &output,
         ).await;
     }
+
+    async fn handle_julian(&self, channel_message: &ChannelMessage, command: &CommandInstance) {
+        let interface = match self.interface.upgrade() {
+            None => return,
+            Some(i) => i,
+        };
+
+        let date_str = command.rest.trim();
+        let Some(date_gregorian) = Self::parse_date_julian(date_str, julian::Calendar::GREGORIAN) else { return };
+        let date_julian = date_gregorian.convert_to(julian::Calendar::JULIAN);
+        let latin_genitive_month = match date_julian.month() {
+            julian::Month::January => "I\u{101}nu\u{101}ri\u{12B}",
+            julian::Month::February => "Febru\u{101}ri\u{12B}",
+            julian::Month::March => "M\u{101}rti\u{12B}",
+            julian::Month::April => "Apr\u{12B}lis",
+            julian::Month::May => "Mai\u{12B}",
+            julian::Month::June => "I\u{16B}ni\u{12B}",
+            julian::Month::July => "I\u{16B}li\u{12B}",
+            julian::Month::August => "August\u{12B}",
+            julian::Month::September => "Septembris",
+            julian::Month::October => "Oct\u{14D}bris",
+            julian::Month::November => "Novembris",
+            julian::Month::December => "Decembris",
+        };
+
+        let response = format!("{} {} ann\u{14D} Domin\u{12B} {}", date_julian.day(), latin_genitive_month, date_julian.year());
+        send_channel_message!(
+            interface,
+            &channel_message.channel.name,
+            &response,
+        ).await;
+    }
+
+    async fn handle_dejulian(&self, channel_message: &ChannelMessage, command: &CommandInstance) {
+        let interface = match self.interface.upgrade() {
+            None => return,
+            Some(i) => i,
+        };
+
+        let date_str = command.rest.trim();
+        let Some(date_gregorian) = Self::parse_date_julian(date_str, julian::Calendar::JULIAN) else { return };
+        let date_julian = date_gregorian.convert_to(julian::Calendar::GREGORIAN);
+
+        let suffix = match date_julian.day() {
+            1|21|31 => "st",
+            2|22 => "nd",
+            3|23 => "rd",
+            _ => "th",
+        };
+        let response = format!("{}{} {} {}", date_julian.day(), suffix, date_julian.month().name(), date_julian.year());
+        send_channel_message!(
+            interface,
+            &channel_message.channel.name,
+            &response,
+        ).await;
+    }
 }
 #[async_trait]
 impl RocketBotPlugin for DatePlugin {
@@ -379,6 +437,25 @@ impl RocketBotPlugin for DatePlugin {
                 .build()
         ).await;
 
+        my_interface.register_channel_command(
+            &CommandDefinitionBuilder::new(
+                "julian",
+                "date",
+                "{cpfx}julian DATE",
+                "Converts the given date from a real calendar to the Julian calendar.",
+            )
+                .build()
+        ).await;
+        my_interface.register_channel_command(
+            &CommandDefinitionBuilder::new(
+                "dejulian",
+                "date",
+                "{cpfx}dejulian DATE",
+                "Converts the given date from the Julian calendar to a real calendar.",
+            )
+                .build()
+        ).await;
+
         Self {
             interface,
             config: config_lock,
@@ -396,6 +473,10 @@ impl RocketBotPlugin for DatePlugin {
             self.handle_weekday(channel_message, command).await;
         } else if command.name == "easter" {
             self.handle_easter(channel_message, command).await;
+        } else if command.name == "julian" {
+            self.handle_julian(channel_message, command).await;
+        } else if command.name == "dejulian" {
+            self.handle_dejulian(channel_message, command).await;
         }
     }
 
@@ -406,6 +487,10 @@ impl RocketBotPlugin for DatePlugin {
             Some(include_str!("../help/weekday.md").to_owned())
         } else if command_name == "easter" {
             Some(include_str!("../help/easter.md").to_owned())
+        } else if command_name == "julian" {
+            Some(include_str!("../help/julian.md").to_owned())
+        } else if command_name == "dejulian" {
+            Some(include_str!("../help/dejulian.md").to_owned())
         } else {
             None
         }
