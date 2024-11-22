@@ -40,6 +40,11 @@ struct Config {
 struct Holiday {
     pub easter_sunday_offset_days: i64,
     pub name: String,
+    #[serde(default = "Holiday::return_true")] pub gregorian: bool,
+    #[serde(default = "Holiday::return_true")] pub julian: bool,
+}
+impl Holiday {
+    fn return_true() -> bool { true }
 }
 
 
@@ -280,7 +285,8 @@ impl DatePlugin {
             return;
         }
 
-        let (gregorian_date, mut output) = if command.flags.contains("j") || command.flags.contains("julian") {
+        let julian_mode = command.flags.contains("j") || command.flags.contains("julian");
+        let (gregorian_date, mut output) = if julian_mode {
             let julian_date = julian_computus(year);
             let gregorian_date = julian_date.convert_to(julian::Calendar::GREGORIAN);
             let output = format!(
@@ -306,6 +312,12 @@ impl DatePlugin {
             if config_guard.additional_holidays.len() > 0 {
                 write!(output, "\n\nGregorian dates of additional holidays:").unwrap();
                 for additional_holiday in &config_guard.additional_holidays {
+                    if julian_mode && !additional_holiday.julian {
+                        continue;
+                    }
+                    if !julian_mode && !additional_holiday.gregorian {
+                        continue;
+                    }
                     Self::append_additional_holiday(&gregorian_date, additional_holiday, &mut output);
                 }
             }
