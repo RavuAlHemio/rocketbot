@@ -26,13 +26,14 @@ use regex::{Captures, Regex};
 use rocketbot_bim_common::{CouplingMode, LastRider, VehicleInfo, VehicleNumber};
 use rocketbot_bim_common::achievements::ACHIEVEMENT_DEFINITIONS;
 use rocketbot_bim_common::ride_table::{Ride, RideTableData, RideTableVehicle, UserRide};
-use rocketbot_interface::{JsonValueExtensions, phrase_join, ResultExtensions, send_channel_message};
+use rocketbot_interface::{phrase_join, send_channel_message};
 use rocketbot_interface::commands::{CommandDefinitionBuilder, CommandInstance, CommandValueType};
 use rocketbot_interface::interfaces::{RocketBotInterface, RocketBotPlugin};
 use rocketbot_interface::model::{Attachment, ChannelMessage, OutgoingMessageWithAttachmentBuilder};
 use rocketbot_interface::serde::serde_opt_regex;
 use rocketbot_interface::sync::RwLock;
 use rocketbot_render_text::map_to_png;
+use rocketbot_string::regex::EnjoyableRegex;
 use ::serde::{Deserialize, Serialize};
 use serde_json;
 use tokio::sync::mpsc;
@@ -315,22 +316,22 @@ pub struct LineOperatorInfo {
 }
 
 
-#[derive(Clone, Debug)]
+#[derive(Clone, Debug, Deserialize, Serialize)]
 struct Config {
     company_to_definition: HashMap<String, CompanyDefinition>,
     default_company: String,
-    manufacturer_mapping: HashMap<String, String>,
+    #[serde(default)] manufacturer_mapping: HashMap<String, String>,
     ride_db_conn_string: String,
-    allow_fixed_coupling_combos: bool,
-    admin_usernames: HashSet<String>,
-    max_edit_s: i64,
-    max_backdate_min: i64,
-    achievements_active: bool,
-    operator_databases: HashSet<String>,
-    default_operator_region: String,
-    highlight_coupled_rides: bool,
-    emoji_reactions: HashMap<EmojiReaction, String>,
-    vehicle_emoji_reactions: Vec<VehicleEmojiReaction>,
+    #[serde(default)] allow_fixed_coupling_combos: bool,
+    #[serde(default)] admin_usernames: HashSet<String>,
+    #[serde(default)] max_edit_s: i64,
+    #[serde(default)] max_backdate_min: i64,
+    #[serde(default)] achievements_active: bool,
+    #[serde(default)] operator_databases: HashSet<String>,
+    #[serde(default)] default_operator_region: String,
+    #[serde(default)] highlight_coupled_rides: bool,
+    #[serde(default)] emoji_reactions: HashMap<EmojiReaction, String>,
+    #[serde(default)] vehicle_emoji_reactions: Vec<VehicleEmojiReaction>,
 }
 
 
@@ -341,7 +342,8 @@ struct UpdateAchievementsData {
 }
 
 
-#[derive(Clone, Copy, Debug, Eq, Hash, Ord, PartialEq, PartialOrd)]
+#[derive(Clone, Copy, Debug, Deserialize, Eq, Hash, Ord, PartialEq, PartialOrd, Serialize)]
+#[serde(rename_all = "kebab-case")]
 enum EmojiReaction {
     DoNotRespond,
     SamePerson,
@@ -350,26 +352,14 @@ enum EmojiReaction {
     FirstRideInVehicle,
     Divisible,
 }
-impl EmojiReaction {
-    pub fn from_str(s: &str) -> Option<EmojiReaction> {
-        match s {
-            "same-person" => Some(EmojiReaction::SamePerson),
-            "same-person-recently" => Some(EmojiReaction::SamePersonRecently),
-            "vehicle-changed-hands" => Some(EmojiReaction::VehicleChangedHands),
-            "first-ride-in-vehicle" => Some(EmojiReaction::FirstRideInVehicle),
-            "divisible" => Some(EmojiReaction::Divisible),
-            _ => None,
-        }
-    }
-}
 
 
-#[derive(Clone, Debug)]
+#[derive(Clone, Debug, Deserialize, Eq, Hash, Ord, PartialEq, PartialOrd, Serialize)]
 struct VehicleEmojiReaction {
-    pub company_matcher: Regex,
-    pub vehicle_number_matcher: Regex,
+    pub company_matcher: EnjoyableRegex,
+    pub vehicle_number_matcher: EnjoyableRegex,
     pub emoji: String,
-    pub only_ridden_vehicles: bool,
+    #[serde(default)] pub only_ridden_vehicles: bool,
 }
 
 #[derive(Clone, Copy, Debug, Default, Eq, Hash, Ord, PartialEq, PartialOrd)]
@@ -4146,199 +4136,14 @@ impl BimPlugin {
         }
     }
 
-    fn try_get_config(config: serde_json::Value) -> Result<Config, Cow<'static, str>> {
-        let company_to_definition: HashMap<String, CompanyDefinition> = serde_json::from_value(config["company_to_definition"].clone())
-            .or_msg("failed to decode company definitions")?;
-        let default_company = config["default_company"]
-            .as_str().ok_or("default_company not a string")?
-            .to_owned();
-
-        let manufacturer_mapping = if config["manufacturer_mapping"].is_null() {
-            HashMap::new()
-        } else {
-            let mut mapping = HashMap::new();
-            let mapping_entries = config["manufacturer_mapping"]
-                .entries().ok_or("manufacturer_mapping not an object")?;
-            for (k, v) in mapping_entries {
-                let v_str = v.as_str()
-                    .ok_or("manufacturer_mapping value not a string")?;
-                mapping.insert(k.to_owned(), v_str.to_owned());
-            }
-            mapping
-        };
-
-        let ride_db_conn_string = config["ride_db_conn_string"]
-            .as_str().ok_or("ride_db_conn_string is not a string")?
-            .to_owned();
-
-        let allow_fixed_coupling_combos = if config["allow_fixed_coupling_combos"].is_null() {
-            false
-        } else {
-            config["allow_fixed_coupling_combos"]
-                .as_bool().ok_or("allow_fixed_coupling_combos not a boolean")?
-        };
-
-        let admin_usernames = if config["admin_usernames"].is_null() {
-            HashSet::new()
-        } else {
-            let admin_username_values = config["admin_usernames"]
-                .as_array().ok_or("admin_usernames not a list")?;
-            let mut admin_usernames = HashSet::new();
-            for admin_username_value in admin_username_values {
-                let username = admin_username_value
-                    .as_str().ok_or("admin_usernames entry not a string")?
-                    .to_owned();
-                admin_usernames.insert(username);
-            }
-            admin_usernames
-        };
-
-        let max_edit_s = if config["max_edit_s"].is_null() {
-            0
-        } else {
-            config["max_edit_s"]
-                .as_i64().ok_or("max_edit_s not an i64")?
-        };
-
-        let max_backdate_min = if config["max_backdate_min"].is_null() {
-            0
-        } else {
-            config["max_backdate_min"]
-                .as_i64().ok_or("max_backdate_min not an i64")?
-        };
-        if max_backdate_min < 0 {
-            return Err(Cow::Borrowed("max_backdate_min must be at least 0"));
+    fn try_get_config(config: serde_json::Value) -> Option<Config> {
+        match serde_json::from_value(config) {
+            Ok(c) => Some(c),
+            Err(e) => {
+                error!("error processing config: {}", e);
+                None
+            },
         }
-
-        let achievements_active = if config["achievements_active"].is_null() {
-            false
-        } else {
-            config["achievements_active"]
-                .as_bool().ok_or("achievements_active not a bool")?
-        };
-
-        let operator_databases = if config["operator_databases"].is_null() {
-            HashSet::new()
-        } else {
-            let operator_database_values = config["operator_databases"]
-                .as_array().ok_or("operator_databases not a list")?;
-            let mut operator_databases = HashSet::new();
-            for operator_database_value in operator_database_values {
-                let database = operator_database_value
-                    .as_str().ok_or("operator_databases entry not a string")?
-                    .to_owned();
-                operator_databases.insert(database);
-            }
-            operator_databases
-        };
-
-        let default_operator_region = if config["default_operator_region"].is_null() {
-            String::new()
-        } else {
-            config["default_operator_region"]
-                .as_str().ok_or("default_operator_region not a string")?
-                .to_owned()
-        };
-
-        let highlight_coupled_rides = if config["highlight_coupled_rides"].is_null() {
-            false
-        } else {
-            config["highlight_coupled_rides"]
-                .as_bool().ok_or("highlight_coupled_rides not a bool")?
-        };
-
-        let mut emoji_reactions = HashMap::new();
-        if let Some(emoji_reactions_obj) = config["emoji_reactions"].as_object() {
-            for (key, value) in emoji_reactions_obj {
-                let emoji_reaction = match EmojiReaction::from_str(key) {
-                    Some(er) => er,
-                    None => return Err(Cow::Owned(format!("invalid emoji_reactions key {:?}", key))),
-                };
-                if value.is_null() {
-                    continue;
-                }
-                let value_str = match value.as_str() {
-                    Some(s) => s,
-                    None => return Err(Cow::Owned(format!("emoji_reactions value for key {:?} is not a string", key))),
-                };
-                emoji_reactions.insert(emoji_reaction, value_str.to_owned());
-            }
-        } else if !config["emoji_reactions"].is_null() {
-            return Err(Cow::Borrowed("emoji_reactions not an object"));
-        };
-
-        let mut vehicle_emoji_reactions = Vec::new();
-        if let Some(vehicle_emoji_reactions_array) = config["vehicle_emoji_reactions"].as_array() {
-            for (i, vehicle_emoji_reaction_value) in vehicle_emoji_reactions_array.iter().enumerate() {
-                if let Some(vehicle_emoji_reaction_object) = vehicle_emoji_reaction_value.as_object() {
-                    let Some(company_matcher_value) = vehicle_emoji_reaction_object.get("company_matcher") else {
-                        return Err(Cow::Owned(format!("vehicle_emoji_reactions child at index {} does not have company_matcher", i)));
-                    };
-                    let Some(company_matcher_str) = company_matcher_value.as_str() else {
-                        return Err(Cow::Owned(format!("vehicle_emoji_reactions child at index {} company_matcher not a string", i)));
-                    };
-                    let company_matcher = match Regex::new(company_matcher_str) {
-                        Ok(re) => re,
-                        Err(e) => return Err(Cow::Owned(format!("vehicle_emoji_reactions child at index {} company_matcher failed to compile: {}", i, e))),
-                    };
-
-                    let Some(vehicle_number_matcher_value) = vehicle_emoji_reaction_object.get("vehicle_number_matcher") else {
-                        return Err(Cow::Owned(format!("vehicle_emoji_reactions child at index {} does not have vehicle_number_matcher", i)));
-                    };
-                    let Some(vehicle_number_matcher_str) = vehicle_number_matcher_value.as_str() else {
-                        return Err(Cow::Owned(format!("vehicle_emoji_reactions child at index {} vehicle_number_matcher not a string", i)));
-                    };
-                    let vehicle_number_matcher = match Regex::new(vehicle_number_matcher_str) {
-                        Ok(re) => re,
-                        Err(e) => return Err(Cow::Owned(format!("vehicle_emoji_reactions child at index {} vehicle_number_matcher failed to compile: {}", i, e))),
-                    };
-
-                    let Some(emoji_value) = vehicle_emoji_reaction_object.get("emoji") else {
-                        return Err(Cow::Owned(format!("vehicle_emoji_reactions child at index {} does not have emoji", i)));
-                    };
-                    let Some(emoji_str) = emoji_value.as_str() else {
-                        return Err(Cow::Owned(format!("vehicle_emoji_reactions child at index {} emoji not a string", i)));
-                    };
-
-                    let only_ridden_vehicles = if let Some(only_ridden_vehicles_value) = vehicle_emoji_reaction_object.get("only_ridden_vehicles") {
-                        let Some(orv) = only_ridden_vehicles_value.as_bool() else {
-                            return Err(Cow::Owned(format!("vehicle_emoji_reactions child at index {} only_ridden_vehicles not a bool", i)));
-                        };
-                        orv
-                    } else {
-                        false
-                    };
-
-                    vehicle_emoji_reactions.push(VehicleEmojiReaction {
-                        company_matcher,
-                        vehicle_number_matcher,
-                        emoji: emoji_str.to_owned(),
-                        only_ridden_vehicles,
-                    });
-                } else {
-                    return Err(Cow::Owned(format!("vehicle_emoji_reactions child at index {} not an array", i)));
-                }
-            }
-        } else if !config["vehicle_emoji_reactions"].is_null() {
-            return Err(Cow::Borrowed("vehicle_emoji_reactions not an array"));
-        };
-
-        Ok(Config {
-            company_to_definition,
-            default_company,
-            manufacturer_mapping,
-            ride_db_conn_string,
-            allow_fixed_coupling_combos,
-            admin_usernames,
-            max_edit_s,
-            max_backdate_min,
-            achievements_active,
-            operator_databases,
-            default_operator_region,
-            highlight_coupled_rides,
-            emoji_reactions,
-            vehicle_emoji_reactions,
-        })
     }
 
     async fn parse_user_timestamp(&self, timestamp_str: &str, utc_time: bool, channel_name: &str) -> Option<DateTime<Local>> {
@@ -4864,13 +4669,13 @@ impl RocketBotPlugin for BimPlugin {
 
     async fn configuration_updated(&self, new_config: serde_json::Value) -> bool {
         match Self::try_get_config(new_config) {
-            Ok(c) => {
+            Some(c) => {
                 let mut config_guard = self.config.write().await;
                 *config_guard = c;
                 true
             },
-            Err(e) => {
-                error!("failed to reload configuration: {}", e);
+            None => {
+                // error message already output
                 false
             },
         }
