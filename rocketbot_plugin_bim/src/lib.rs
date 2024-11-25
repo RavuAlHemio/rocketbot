@@ -32,6 +32,7 @@ use rocketbot_interface::interfaces::{RocketBotInterface, RocketBotPlugin};
 use rocketbot_interface::model::{Attachment, ChannelMessage, OutgoingMessageWithAttachmentBuilder};
 use rocketbot_interface::serde::serde_opt_regex;
 use rocketbot_interface::sync::RwLock;
+use rocketbot_primes::is_number_prime;
 use rocketbot_render_text::map_to_png;
 use rocketbot_string::regex::EnjoyableRegex;
 use ::serde::{Deserialize, Serialize};
@@ -351,6 +352,7 @@ enum EmojiReaction {
     VehicleChangedHands,
     FirstRideInVehicle,
     Divisible,
+    Prime,
 }
 
 
@@ -956,6 +958,12 @@ impl BimPlugin {
                         ride_table.line.as_ref(),
                     ) {
                         vehicle_reaction_emoji.push(divisible_emoji.clone());
+                    }
+                }
+
+                if let Some(prime_emoji) = config_guard.emoji_reactions.get(&EmojiReaction::Prime) {
+                    if is_digits_number_prime(&vehicle.vehicle_number) {
+                        vehicle_reaction_emoji.push(prime_emoji.clone());
                     }
                 }
             }
@@ -5493,6 +5501,20 @@ fn do_vehicle_number_digits_divide_line_digits(
     }
 
     vehicle_number % line_number == 0
+}
+
+/// Returns whether the sole digit block in the given number is prime.
+///
+/// Returns `false` if there are zero or multiple digit blocks in the vehicle number.
+fn is_digits_number_prime(number_with_digits: &str) -> bool {
+    let digit_blocks: Vec<regex::Match> = DIGITS_RE.find_iter(number_with_digits)
+        .collect();
+    if digit_blocks.len() != 1 {
+        return false;
+    }
+
+    let Ok(number) = u128::from_str_radix(digit_blocks[0].as_str(), 10) else { return false };
+    is_number_prime(number)
 }
 
 /// Fold whitespace as in XML: leading whitespace is completely trimmed and any other whitespace is
