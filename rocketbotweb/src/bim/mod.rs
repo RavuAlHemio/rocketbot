@@ -2,6 +2,7 @@ pub(crate) mod achievements;
 pub(crate) mod charts;
 pub(crate) mod coverage;
 pub(crate) mod details;
+pub(crate) mod drilldown;
 pub(crate) mod query;
 pub(crate) mod tables;
 pub(crate) mod top;

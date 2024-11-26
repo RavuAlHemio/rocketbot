@@ -45,6 +45,7 @@ use crate::bim::charts::{
 };
 use crate::bim::coverage::{handle_bim_coverage, handle_bim_coverage_field};
 use crate::bim::details::{handle_bim_detail, handle_bim_line_detail, handle_bim_ride_by_id};
+use crate::bim::drilldown::handle_bim_drilldown;
 use crate::bim::query::{handle_bim_query, handle_bim_vehicle_status};
 use crate::bim::tables::{
     handle_bim_odds_ends, handle_bim_rides, handle_bim_types, handle_bim_vehicles,
@@ -81,11 +82,28 @@ struct IndexTemplate;
 
 
 fn get_query_pairs<T>(request: &Request<T>) -> HashMap<Cow<str>, Cow<str>> {
+    get_query_pairs_vec(request)
+        .into_iter()
+        .collect()
+}
+
+fn get_query_pairs_multiset<T>(request: &Request<T>) -> HashMap<Cow<str>, Vec<Cow<str>>> {
+    let mut ret = HashMap::new();
+    for (key, value) in get_query_pairs_vec(request) {
+        ret
+            .entry(key)
+            .or_insert_with(|| Vec::with_capacity(1))
+            .push(value)
+    }
+    ret
+}
+
+fn get_query_pairs_vec<T>(request: &Request<T>) -> Vec<(Cow<str>, Cow<str>)> {
     if let Some(q) = request.uri().query() {
         form_urlencoded::parse(q.as_bytes())
             .collect()
     } else {
-        HashMap::new()
+        Vec::with_capacity(0)
     }
 }
 
@@ -340,6 +358,7 @@ async fn handle_request(request: Request<Incoming>) -> Result<Response<Full<Byte
         "/bim-fixed-monopolies-over-time" => handle_bim_fixed_monopolies_over_time(&request).await,
         "/bim-last-rider-by-pos" => handle_bim_last_rider_histogram_by_fixed_pos(&request).await,
         "/bim-odds-ends" => handle_bim_odds_ends(&request).await,
+        "/bim-drilldown" => handle_bim_drilldown(&request).await,
         _ => {
             if let Some(caps) = STATIC_FILE_REGEX.captures(request.uri().path()) {
                 debug!(
