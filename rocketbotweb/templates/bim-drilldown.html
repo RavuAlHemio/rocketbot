@@ -10,6 +10,9 @@
     {%- for known_column_name in known_column_names %}
     * {{ known_column_name|escape }}
     {%- endfor %}
+
+    pass as "group" GET parameter, possibly multiple times:
+    .../bim-drilldown?group={{ known_column_names[0] }}&group={{ known_column_names[1] }}
 -->
 
 <h1>Public Transport Drilldown</h1>
