@@ -36,6 +36,7 @@ impl KnownColumn {
 #[derive(Clone, Debug, Eq, Hash, PartialEq, Serialize, Template)]
 #[template(path = "bim-drilldown.html")]
 struct BimDrilldownTemplate {
+    pub known_column_names: Vec<&'static str>,
     pub column_headings: Vec<&'static str>,
     pub rows: Vec<Vec<String>>,
 }
@@ -145,12 +146,19 @@ pub(crate) async fn handle_bim_drilldown(request: &Request<Incoming>) -> Result<
         rows.push(row);
     }
 
+    let mut known_column_names: Vec<&str> = KNOWN_GROUP_TO_COLUMN_INFO
+        .keys()
+        .map(|kc| *kc)
+        .collect();
+    known_column_names.sort_unstable();
+
     let mut column_headings: Vec<&str> = known_columns.iter()
         .map(|kc| kc.column_heading)
         .collect();
     column_headings.push("count");
 
     let template = BimDrilldownTemplate {
+        known_column_names,
         column_headings,
         rows,
     };

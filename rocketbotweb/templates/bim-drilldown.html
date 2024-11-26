@@ -5,6 +5,13 @@
 {% block content %}
 <main class="bim-drilldown">
 
+<!--
+    known column names:
+    {%- for known_column_name in known_column_names %}
+    * {{ known_column_name|escape }}
+    {%- endfor %}
+-->
+
 <h1>Public Transport Drilldown</h1>
 
 <table class="bim-drilldown booktable">
