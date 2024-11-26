@@ -13,6 +13,7 @@ use crate::{
     connect_to_db, get_query_pairs, get_query_pairs_multiset, render_response, return_400,
     return_405, return_500,
 };
+use crate::templating::filters;
 
 
 #[derive(Clone, Copy, Debug, Eq, Hash, Ord, PartialEq, PartialOrd)]

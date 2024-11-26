@@ -2,6 +2,11 @@
 
 {% block title %}Public Transport Drilldown{% endblock %}
 
+{% block scripts %}
+<script type="text/javascript" src="static/rocketbotweb.js?{{ "{{VERSION}}" }}"></script>
+<script type="text/javascript">RocketBotWeb.Bim.Drilldown.setUp({{ known_column_names|html_inline_json|safe }});</script>
+{% endblock %}
+
 {% block content %}
 <main class="bim-drilldown">
 
@@ -16,6 +21,8 @@
 -->
 
 <h1>Public Transport Drilldown</h1>
+
+<div id="bim-drilldown-controls"></div>
 
 <table class="bim-drilldown booktable">
 
