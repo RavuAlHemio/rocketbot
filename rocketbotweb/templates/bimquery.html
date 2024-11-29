@@ -84,6 +84,11 @@
 
 </form>
 
+<p class="ride-count">
+  <span class="ride-count">{{ total_ride_count }}</span>
+  rides
+</p>
+
 <p class="table-nav">
   {% if let Some(pp) = prev_page %}
     <a class="prev" href="?{{ filter_query_and }}page={{ pp }}">&lt; Prev page</a>

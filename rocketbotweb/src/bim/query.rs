@@ -85,6 +85,7 @@ struct QueryTemplate {
     pub prev_page: Option<i64>,
     pub next_page: Option<i64>,
     pub filter_query_and: String,
+    pub total_ride_count: i64,
 }
 
 
@@ -254,6 +255,32 @@ pub(crate) async fn handle_bim_query(request: &Request<Incoming>) -> Result<Resp
         filter_query_and.push('&');
     }
 
+    let db_conn = match connect_to_db().await {
+        Some(c) => c,
+        None => return return_500(),
+    };
+
+    let count_query = format!(
+        "
+            SELECT
+                CAST(COUNT(*) AS bigint)
+            FROM
+                bim.rides rav
+            {} {}
+        ",
+        if filter_string.len() > 0 { "WHERE" } else { "" },
+        filter_string,
+    );
+    let count_res = db_conn.query_one(&count_query, &filter_values).await;
+    let count_row = match count_res {
+        Ok(r) => r,
+        Err(e) => {
+            error!("failed to query rides for count: {}", e);
+            return return_500();
+        },
+    };
+    let total_ride_count: i64 = count_row.get(0);
+
     const COUNT_PER_PAGE: i64 = 20;
     let offset = (page - 1) * COUNT_PER_PAGE;
     filter_values.push(&COUNT_PER_PAGE);
@@ -282,12 +309,6 @@ pub(crate) async fn handle_bim_query(request: &Request<Incoming>) -> Result<Resp
         next_filter_index,
         next_filter_index + 1,
     );
-
-    let db_conn = match connect_to_db().await {
-        Some(c) => c,
-        None => return return_500(),
-    };
-
     let riders_res = db_conn.query(&query, &filter_values).await;
     let rider_rows = match riders_res {
         Ok(r) => r,
@@ -402,6 +423,7 @@ pub(crate) async fn handle_bim_query(request: &Request<Incoming>) -> Result<Resp
         prev_page,
         next_page,
         filter_query_and,
+        total_ride_count,
     };
     match render_response(&template, &query_pairs, 200, vec![]).await {
         Some(r) => Ok(r),
