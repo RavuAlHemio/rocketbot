@@ -12,12 +12,14 @@ export namespace Drilldown {
         return removeButton;
     }
 
-    function addGroupRow(groupingDivElement: HTMLElement, addParagraphElement: HTMLElement, options: string[], selectedOption: string|null) {
+    function addSelectRow(fieldName: string, groupingDivElement: HTMLElement, addParagraphElement: HTMLElement, options: string[], selectedOption: string|null) {
         const paragraphElement = document.createElement("p");
         groupingDivElement.insertBefore(paragraphElement, addParagraphElement);
 
+        paragraphElement.appendChild(document.createTextNode(`${fieldName}: `));
+
         const selectElement = document.createElement("select");
-        selectElement.name = "group";
+        selectElement.name = fieldName;
         paragraphElement.appendChild(selectElement);
 
         for (const option of options) {
@@ -36,6 +38,8 @@ export namespace Drilldown {
         const paragraphElement = document.createElement("p");
         paragraphElement.classList.add("filter-row");
         filteringDivElement.insertBefore(paragraphElement, addParagraphElement);
+
+        paragraphElement.appendChild(document.createTextNode("filter: "));
 
         const selectElement = document.createElement("select");
         selectElement.classList.add("filter-key");
@@ -126,9 +130,13 @@ export namespace Drilldown {
             return;
         }
 
+        const optionsWithCount = [...options];
+        optionsWithCount.push("count");
+
         const searchString = window.location.search;
         const groupByColumns: string[] = [];
         const filterColumns: [string, string][] = [];
+        const sortByColumns: string[] = [];
         if (searchString.startsWith("?")) {
             const searchPairs = new URLSearchParams(searchString.substring(1));
             for (const [searchKey, searchValue] of searchPairs) {
@@ -142,6 +150,8 @@ export namespace Drilldown {
                     const filterKey = searchValue.substring(0, equalsIndex);
                     const filterValue = searchValue.substring(equalsIndex + 1);
                     filterColumns.push([filterKey, filterValue]);
+                } else if (searchKey === "sort") {
+                    sortByColumns.push(searchValue);
                 }
             }
         }
@@ -157,13 +167,19 @@ export namespace Drilldown {
         addFilterButton.addEventListener("click", () => addFilterRow(filteringDivElement, addFilterParagraphElement, options, null));
 
         const [addGroupParagraphElement, addGroupButton] = makeAddButton(groupingDivElement, "+group");
-        addGroupButton.addEventListener("click", () => addGroupRow(groupingDivElement, addGroupParagraphElement, options, null));
+        addGroupButton.addEventListener("click", () => addSelectRow("group", groupingDivElement, addGroupParagraphElement, options, null));
+
+        const [addSortParagraphElement, addSortButton] = makeAddButton(groupingDivElement, "+sort");
+        addSortButton.addEventListener("click", () => addSelectRow("sort", groupingDivElement, addSortParagraphElement, optionsWithCount, null));
 
         for (const [filterKey, filterValue] of filterColumns) {
             addFilterRow(filteringDivElement, addFilterParagraphElement, options, [filterKey, filterValue]);
         }
         for (const groupByColumn of groupByColumns) {
-            addGroupRow(groupingDivElement, addGroupParagraphElement, options, groupByColumn);
+            addSelectRow("group", groupingDivElement, addGroupParagraphElement, options, groupByColumn);
+        }
+        for (const sortByColumn of sortByColumns) {
+            addSelectRow("sort", groupingDivElement, addSortParagraphElement, optionsWithCount, sortByColumn);
         }
 
         const submitParagraphElement = document.createElement("p");

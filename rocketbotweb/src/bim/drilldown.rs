@@ -17,34 +17,20 @@ use crate::templating::filters;
 
 
 #[derive(Clone, Copy, Debug, Eq, Hash, Ord, PartialEq, PartialOrd)]
-struct GroupColumn {
+struct KnownColumn {
     pub field_name: &'static str,
     pub column_heading: &'static str,
+    pub field_type: FilterFieldType,
 }
-impl GroupColumn {
+impl KnownColumn {
     pub const fn new(
         field_name: &'static str,
         column_heading: &'static str,
-    ) -> Self {
-        Self {
-            field_name,
-            column_heading,
-        }
-    }
-}
-
-#[derive(Clone, Copy, Debug, Eq, Hash, Ord, PartialEq, PartialOrd)]
-struct FilterColumn {
-    pub field_name: &'static str,
-    pub field_type: FilterFieldType,
-}
-impl FilterColumn {
-    pub const fn new(
-        field_name: &'static str,
         field_type: FilterFieldType,
     ) -> Self {
         Self {
             field_name,
+            column_heading,
             field_type,
         }
     }
@@ -92,40 +78,29 @@ struct BimDrilldownTemplate {
 }
 
 
-static KNOWN_GROUP_TO_COLUMN_INFO: LazyLock<HashMap<&'static str, GroupColumn>> = LazyLock::new(|| {
+static KNOWN_COLUMN_INFO: LazyLock<HashMap<&'static str, KnownColumn>> = LazyLock::new(|| {
+    use FilterFieldType as F;
     let mut ret = HashMap::new();
-    ret.insert("company", GroupColumn::new("tbl.company", "company"));
-    ret.insert("rider", GroupColumn::new("tbl.rider_username", "rider"));
-    ret.insert("timestamp.year", GroupColumn::new("EXTRACT(YEAR FROM tbl.\"timestamp\")", "year"));
-    ret.insert("timestamp.month", GroupColumn::new("EXTRACT(MONTH FROM tbl.\"timestamp\")", "month"));
-    ret.insert("timestamp.day", GroupColumn::new("EXTRACT(DAY FROM tbl.\"timestamp\")", "day"));
-    ret.insert("timestamp.weekday", GroupColumn::new("EXTRACT(DOW FROM tbl.\"timestamp\")", "weekday"));
-    ret.insert("timestamp.hour", GroupColumn::new("EXTRACT(HOUR FROM tbl.\"timestamp\")", "hour"));
-    ret.insert("timestamp.minute", GroupColumn::new("EXTRACT(MINUTE FROM tbl.\"timestamp\")", "minute"));
-    ret.insert("timestamp.second", GroupColumn::new("EXTRACT(SECOND FROM tbl.\"timestamp\")", "second"));
-    ret.insert("line", GroupColumn::new("tbl.line", "line"));
-    ret.insert("vehicle-type", GroupColumn::new("tbl.vehicle_type", "vehicle type"));
-    ret.insert("vehicle-number", GroupColumn::new("tbl.vehicle_number", "vehicle"));
+    ret.insert("company", KnownColumn::new("tbl.company", "company", F::String));
+    ret.insert("rider", KnownColumn::new("tbl.rider_username", "rider", F::String));
+    ret.insert("timestamp.year", KnownColumn::new("EXTRACT(YEAR FROM tbl.\"timestamp\")", "year", F::U128));
+    ret.insert("timestamp.month", KnownColumn::new("EXTRACT(MONTH FROM tbl.\"timestamp\")", "month", F::U128));
+    ret.insert("timestamp.day", KnownColumn::new("EXTRACT(DAY FROM tbl.\"timestamp\")", "day", F::U128));
+    ret.insert("timestamp.weekday", KnownColumn::new("EXTRACT(DOW FROM tbl.\"timestamp\")", "weekday", F::U128));
+    ret.insert("timestamp.hour", KnownColumn::new("EXTRACT(HOUR FROM tbl.\"timestamp\")", "hour", F::U128));
+    ret.insert("timestamp.minute", KnownColumn::new("EXTRACT(MINUTE FROM tbl.\"timestamp\")", "minute", F::U128));
+    ret.insert("timestamp.second", KnownColumn::new("EXTRACT(SECOND FROM tbl.\"timestamp\")", "second", F::U128));
+    ret.insert("line", KnownColumn::new("tbl.line", "line", F::String));
+    ret.insert("vehicle-type", KnownColumn::new("tbl.vehicle_type", "vehicle type", F::String));
+    ret.insert("vehicle-number", KnownColumn::new("tbl.vehicle_number", "vehicle", F::String));
     ret
 });
 
-static KNOWN_FILTER_TO_COLUMN_INFO: LazyLock<HashMap<&'static str, FilterColumn>> = LazyLock::new(|| {
-    use FilterFieldType as F;
-    let mut ret = HashMap::new();
-    ret.insert("company", FilterColumn::new("tbl.company", F::String));
-    ret.insert("rider", FilterColumn::new("tbl.rider_username", F::String));
-    ret.insert("timestamp.year", FilterColumn::new("EXTRACT(YEAR FROM tbl.\"timestamp\")", F::U128));
-    ret.insert("timestamp.month", FilterColumn::new("EXTRACT(MONTH FROM tbl.\"timestamp\")", F::U128));
-    ret.insert("timestamp.day", FilterColumn::new("EXTRACT(DAY FROM tbl.\"timestamp\")", F::U128));
-    ret.insert("timestamp.weekday", FilterColumn::new("EXTRACT(DOW FROM tbl.\"timestamp\")", F::U128));
-    ret.insert("timestamp.hour", FilterColumn::new("EXTRACT(HOUR FROM tbl.\"timestamp\")", F::U128));
-    ret.insert("timestamp.minute", FilterColumn::new("EXTRACT(MINUTE FROM tbl.\"timestamp\")", F::U128));
-    ret.insert("timestamp.second", FilterColumn::new("EXTRACT(SECOND FROM tbl.\"timestamp\")", F::U128));
-    ret.insert("line", FilterColumn::new("tbl.line", F::String));
-    ret.insert("vehicle-type", FilterColumn::new("tbl.vehicle_type", F::String));
-    ret.insert("vehicle-number", FilterColumn::new("tbl.vehicle_number", F::String));
-    ret
-});
+const KNOWN_COUNT_COLUMN: KnownColumn = KnownColumn::new(
+    "COUNT(*)",
+    "count",
+    FilterFieldType::U128,
+);
 
 
 pub(crate) async fn handle_bim_drilldown(request: &Request<Incoming>) -> Result<Response<Full<Bytes>>, Infallible> {
@@ -142,16 +117,18 @@ pub(crate) async fn handle_bim_drilldown(request: &Request<Incoming>) -> Result<
         .unwrap_or(&empty);
     let filter_strings = query_pairs_multi.get("filter")
         .unwrap_or(&empty);
+    let sorts = query_pairs_multi.get("sort")
+        .unwrap_or(&empty);
 
-    let mut known_columns = Vec::with_capacity(groups.len());
+    let mut group_columns = Vec::with_capacity(groups.len());
+    let mut seen_groups = HashSet::new();
     {
-        let mut seen_groups = HashSet::new();
         for group in groups {
-            let known_column = match KNOWN_GROUP_TO_COLUMN_INFO.get(&**group) {
+            let known_column = match KNOWN_COLUMN_INFO.get(&**group) {
                 Some(kc) => *kc,
                 None => return return_400(&format!("unknown grouping field {:?}", &*group), &query_pairs).await,
             };
-            known_columns.push(known_column);
+            group_columns.push(known_column);
 
             let is_fresh = seen_groups.insert(group);
             if !is_fresh {
@@ -169,7 +146,7 @@ pub(crate) async fn handle_bim_drilldown(request: &Request<Incoming>) -> Result<
                 None => return return_400(&format!("filter string {:?} does not contain an equals sign", &*filter_string), &query_pairs).await,
             };
 
-            let known_column = match KNOWN_FILTER_TO_COLUMN_INFO.get(key) {
+            let known_column = match KNOWN_COLUMN_INFO.get(key) {
                 Some(kc) => *kc,
                 None => return return_400(&format!("unknown filter field {:?}", key), &query_pairs).await,
             };
@@ -192,6 +169,32 @@ pub(crate) async fn handle_bim_drilldown(request: &Request<Incoming>) -> Result<
         }
     }
 
+    let mut order_columns = Vec::with_capacity(sorts.len());
+    {
+        let mut seen_sorts = HashSet::new();
+        for sort in sorts {
+            let known_column = if sort == "count" {
+                KNOWN_COUNT_COLUMN
+            } else {
+                if !seen_groups.contains(sort) {
+                    return return_400(&format!("must group by field {:?} to sort by field {:?}", &*sort, &*sort), &query_pairs).await;
+                }
+
+                match KNOWN_COLUMN_INFO.get(&**sort) {
+                    Some(kc) => *kc,
+                    None => return return_400(&format!("unknown sort field {:?}", &*sort), &query_pairs).await,
+                }
+            };
+
+            order_columns.push(known_column);
+
+            let is_fresh = seen_sorts.insert(sort);
+            if !is_fresh {
+                return return_400(&format!("duplicate sort field {:?}", &*sort), &query_pairs).await;
+            }
+        }
+    }
+
     let db_conn = match connect_to_db().await {
         Some(c) => c,
         None => return return_500(),
@@ -199,7 +202,7 @@ pub(crate) async fn handle_bim_drilldown(request: &Request<Incoming>) -> Result<
 
     let mut select_sql_columns_string = String::new();
     let mut sql_columns_string = String::new();
-    for known_column in &known_columns {
+    for known_column in &group_columns {
         if sql_columns_string.len() > 0 {
             select_sql_columns_string.push_str(", ");
             sql_columns_string.push_str(", ");
@@ -229,6 +232,21 @@ pub(crate) async fn handle_bim_drilldown(request: &Request<Incoming>) -> Result<
         where_string.push_str(&value.to_sql_string());
     }
 
+    let sort_block = if order_columns.len() > 0 {
+        let mut column_selection = String::new();
+        for order_column in order_columns {
+            if column_selection.len() > 0 {
+                column_selection.push_str(", ");
+            }
+            column_selection.push_str(&order_column.field_name);
+        }
+        format!("ORDER BY {}", column_selection)
+    } else if sql_columns_string.len() > 0 {
+        format!("ORDER BY {}", sql_columns_string)
+    } else {
+        String::with_capacity(0)
+    };
+
     let query = format!(
         "
             SELECT
@@ -237,12 +255,12 @@ pub(crate) async fn handle_bim_drilldown(request: &Request<Incoming>) -> Result<
                 bim.rides_and_ridden_vehicles tbl
             {}
             {} {}
-            {} {}
+            {}
         ",
         select_sql_columns_string,
         where_string,
         if sql_columns_string.len() > 0 { "GROUP BY" } else { "" }, sql_columns_string,
-        if sql_columns_string.len() > 0 { "ORDER BY" } else { "" }, sql_columns_string,
+        sort_block,
     );
 
     let db_rows = match db_conn.query(&query, &[]).await {
@@ -263,13 +281,13 @@ pub(crate) async fn handle_bim_drilldown(request: &Request<Incoming>) -> Result<
         rows.push(row);
     }
 
-    let mut known_column_names: Vec<&str> = KNOWN_GROUP_TO_COLUMN_INFO
+    let mut known_column_names: Vec<&str> = KNOWN_COLUMN_INFO
         .keys()
         .map(|kc| *kc)
         .collect();
     known_column_names.sort_unstable();
 
-    let mut column_headings: Vec<&str> = known_columns.iter()
+    let mut column_headings: Vec<&str> = group_columns.iter()
         .map(|kc| kc.column_heading)
         .collect();
     column_headings.push("count");
