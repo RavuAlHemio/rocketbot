@@ -13,7 +13,7 @@
 <h1>Public Transport Latest Rider Vehicle Count over Time</h1>
 
 <p>
-    <img id="bim-latest-rider-count-over-time-image" src="bim-latest-rider-count-over-time/image" />
+    <img id="bim-latest-rider-count-over-time-image" src="bim-latest-rider-count-over-time/image{% if let Some(comp) = company %}?company={{ comp|encode_query_parameter|escape }}{% endif %}" />
 </p>
 
 <p>

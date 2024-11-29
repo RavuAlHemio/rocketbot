@@ -10,10 +10,12 @@ use hyper::body::{Bytes, Incoming};
 use png;
 use rocketbot_bim_common::{CouplingMode, VehicleNumber};
 use serde::Serialize;
+use tokio_postgres::types::ToSql;
 use tracing::error;
 
 use crate::{get_query_pairs, render_response, return_400, return_405, return_500};
 use crate::bim::{connect_to_db, obtain_vehicle_extract};
+use crate::templating::filters;
 
 
 const CHART_COLORS: [[u8; 3]; 30] = [
@@ -92,6 +94,7 @@ impl GraphRiderPart {
 #[derive(Clone, Debug, Default, Eq, Hash, Ord, PartialEq, PartialOrd, Serialize, Template)]
 #[template(path = "bimlatestridercount.html")]
 struct BimLatestRiderCountTemplate {
+    pub company: Option<String>,
     pub riders: Vec<GraphRiderPart>,
     pub from_to_count: BTreeMap<(String, String), u64>,
 }
@@ -310,18 +313,30 @@ pub(crate) async fn handle_bim_latest_rider_count_over_time_image(request: &Requ
         }
     }
 
+    let company = query_pairs
+        .get("company");
+
     let db_conn = match connect_to_db().await {
         Some(c) => c,
         None => return return_500(),
     };
-    let ride_res = db_conn.query(
+
+    let query = format!(
         "
             SELECT rvto.id, rvto.old_rider, rvto.new_rider
             FROM bim.ridden_vehicles_between_riders(FALSE) rvto
+            {}
             ORDER BY rvto.\"timestamp\", rvto.id
         ",
-        &[],
-    ).await;
+        if company.is_some() { "WHERE rvto.company = $1" } else { "" },
+    );
+
+    let mut params: Vec<&(dyn ToSql + Sync)> = Vec::with_capacity(1);
+    if company.is_some() {
+        params.push(&company);
+    }
+
+    let ride_res = db_conn.query(&query, &params).await;
     let ride_rows = match ride_res {
         Ok(r) => r,
         Err(e) => {
@@ -531,14 +546,25 @@ pub(crate) async fn handle_bim_latest_rider_count_over_time(request: &Request<In
         return return_405(&query_pairs).await;
     }
 
+    let company = query_pairs
+        .get("company")
+        .map(|c| c.clone().into_owned());
+
     let db_conn = match connect_to_db().await {
         Some(c) => c,
         None => return return_500(),
     };
-    let riders_res = db_conn.query(
-        "SELECT DISTINCT rider_username FROM bim.rides",
-        &[],
-    ).await;
+
+    let riders_query = format!(
+        "SELECT DISTINCT rider_username FROM bim.rides{}",
+        if company.is_some() { " WHERE company = $1" } else { "" },
+    );
+    let mut riders_params: Vec<&(dyn ToSql + Sync)> = Vec::with_capacity(1);
+    if company.is_some() {
+        riders_params.push(&company);
+    }
+
+    let riders_res = db_conn.query(&riders_query, &riders_params).await;
     let rider_rows = match riders_res {
         Ok(r) => r,
         Err(e) => {
@@ -567,15 +593,22 @@ pub(crate) async fn handle_bim_latest_rider_count_over_time(request: &Request<In
         });
     }
 
-    let rides_res = db_conn.query(
+    let query = format!(
         "
             SELECT rvto.old_rider, rvto.new_rider, CAST(COUNT(*) AS bigint) pair_count
             FROM bim.ridden_vehicles_between_riders(FALSE) rvto
-            WHERE rvto.old_rider IS NOT NULL
+            WHERE rvto.old_rider IS NOT NULL {}
             GROUP BY rvto.old_rider, rvto.new_rider
         ",
-        &[],
-    ).await;
+        if company.is_some() { "AND rvto.company = $1" } else { "" },
+    );
+
+    let mut params: Vec<&(dyn ToSql + Sync)> = Vec::with_capacity(1);
+    if company.is_some() {
+        params.push(&company);
+    }
+
+    let rides_res = db_conn.query(&query, &params).await;
     let ride_rows = match rides_res {
         Ok(r) => r,
         Err(e) => {
@@ -596,6 +629,7 @@ pub(crate) async fn handle_bim_latest_rider_count_over_time(request: &Request<In
     }
 
     let template = BimLatestRiderCountTemplate {
+        company,
         riders,
         from_to_count,
     };
