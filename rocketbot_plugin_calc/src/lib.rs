@@ -97,15 +97,18 @@ impl CalcPlugin {
             }
         }
 
-        let config_guard = self.config.read().await;
+        let config_copy = {
+            let config_guard = self.config.read().await;
+            (*config_guard).clone()
+        };
 
         let simplified_res = {
             let mut state = SimplificationState {
                 constants: get_canonical_constants(),
                 functions: get_canonical_functions(),
-                units: config_guard.unit_database.clone(),
+                units: config_copy.unit_database.clone(),
                 start_time: Instant::now(),
-                timeout: Duration::from_secs_f64(config_guard.timeout_seconds),
+                timeout: Duration::from_secs_f64(config_copy.timeout_seconds),
             };
             ast_root.root_node.simplify(&mut state)
         };
@@ -156,7 +159,7 @@ impl CalcPlugin {
                     },
                 };
 
-                if result_string.len() > config_guard.max_result_string_length {
+                if result_string.len() > config_copy.max_result_string_length {
                     send_channel_message!(
                         interface,
                         channel_name,
@@ -236,7 +239,10 @@ impl CalcPlugin {
             Some(i) => i,
         };
 
-        let config_guard = self.config.read().await;
+        let timeout = {
+            let config_guard = self.config.read().await;
+            Duration::from_secs_f64(config_guard.timeout_seconds)
+        };
 
         let number: BigUint = match command.rest.trim().parse() {
             Ok(n) => n,
@@ -256,7 +262,7 @@ impl CalcPlugin {
         } else {
             let prime_cache_mutex = Arc::clone(&self.prime_cache);
             let factors_tr = run_stoppable_task_timeout(
-                Duration::from_secs_f64(config_guard.timeout_seconds),
+                timeout,
                 move |stopper| {
                     let mut prime_cache_guard = prime_cache_mutex.blocking_lock();
                     prime_cache_guard.factor_caching(&number, &stopper)
