@@ -8,7 +8,7 @@ use rocketbot_interface::add_thousands_separators;
 #[derive(Clone, Debug, Eq, Hash, PartialEq)]
 pub(crate) enum FactorResult {
     Factored(PrimeFactors),
-    Stuck(BigUint),
+    Stuck(PrimeFactors),
     Halted,
 }
 impl FactorResult {
@@ -21,9 +21,9 @@ impl FactorResult {
     }
 
     #[allow(unused)]
-    pub fn as_stuck(&self) -> Option<&BigUint> {
+    pub fn as_stuck(&self) -> Option<&PrimeFactors> {
         match self {
-            Self::Stuck(s) => Some(s),
+            Self::Stuck(pf) => Some(pf),
             _ => None,
         }
     }
@@ -38,17 +38,21 @@ impl FactorResult {
 #[derive(Clone, Debug, Default, Eq, Hash, PartialEq)]
 pub(crate) struct PrimeFactors {
     factor_to_power: BTreeMap<BigUint, BigUint>,
+    remainder: BigUint,
 }
 impl PrimeFactors {
     #[allow(unused)] pub fn factor_to_power(&self) -> &BTreeMap<BigUint, BigUint> { &self.factor_to_power }
+    #[allow(unused)] pub fn remainder(&self) -> &BigUint { &self.remainder }
 
     pub fn pathological(value: &BigUint) -> Option<PrimeFactors> {
+        let one = BigUint::from(1u8);
         let two = BigUint::from(2u8);
         if value < &two {
             let mut factor_to_power = BTreeMap::new();
-            factor_to_power.insert(value.clone(), BigUint::from(1u8));
+            factor_to_power.insert(value.clone(), one.clone());
             Some(Self {
                 factor_to_power,
+                remainder: one,
             })
         } else {
             None
@@ -86,6 +90,10 @@ impl PrimeFactors {
         power_thousands_separator: &str,
         power_operator: &str,
         multiply_operator: &str,
+        start_remainder: &str,
+        end_remainder: &str,
+        start_remainder_multidigit: &str,
+        end_remainder_multidigit: &str,
     ) -> String {
         let one = BigUint::from(1u8);
         let power_strings: Vec<String> = self.factor_to_power
@@ -111,7 +119,21 @@ impl PrimeFactors {
             })
             .collect();
         let all_powers_string = power_strings.join(multiply_operator);
-        format!("{}{}{}", start_wrapper, all_powers_string, end_wrapper)
+        if self.remainder == one {
+            format!("{}{}{}", start_wrapper, all_powers_string, end_wrapper)
+        } else {
+            let remainder_wrapped = Self::format_wrap_biguint(
+                &self.remainder,
+                start_remainder, end_remainder,
+                start_remainder_multidigit, end_remainder_multidigit,
+                base_thousands_separator,
+            );
+            if self.factor_to_power.len() == 0 {
+                format!("{}{}{}", start_wrapper, remainder_wrapped, end_wrapper)
+            } else {
+                format!("{}{}{}{}{}", start_wrapper, all_powers_string, multiply_operator, remainder_wrapped, end_wrapper)
+            }
+        }
     }
 
     pub fn to_tex_string(&self) -> String {
@@ -123,6 +145,7 @@ impl PrimeFactors {
             "\\,",
             "^",
             "\\cdot ",
+            "(", ")", "(", ")",
         )
     }
 
@@ -135,6 +158,7 @@ impl PrimeFactors {
             "",
             "**",
             " * ",
+            "(", ")", "(", ")",
         )
     }
 }
@@ -226,8 +250,8 @@ impl PrimeCache {
         }
         if self.is_prime(number).unwrap_or(false) {
             let mut quick_ret = BTreeMap::new();
-            quick_ret.insert(number.clone(), one);
-            return FactorResult::Factored(PrimeFactors { factor_to_power: quick_ret });
+            quick_ret.insert(number.clone(), one.clone());
+            return FactorResult::Factored(PrimeFactors { factor_to_power: quick_ret, remainder: one });
         }
 
         let mut ret = BTreeMap::new();
@@ -252,20 +276,24 @@ impl PrimeCache {
         // possibly prime
         if cur_number > self.maximum {
             // one of those unknowables
-            FactorResult::Stuck(cur_number)
+            FactorResult::Stuck(PrimeFactors { factor_to_power: ret, remainder: cur_number })
         } else {
             // provably prime!
-            FactorResult::Factored(PrimeFactors { factor_to_power: ret })
+            FactorResult::Factored(PrimeFactors { factor_to_power: ret, remainder: one })
         }
     }
 
     pub fn factor_caching(&mut self, number: &BigUint, stopper: &AtomicBool) -> Option<PrimeFactors> {
+        let mut last_factors = None;
         loop {
             // try the standard factoring
             let stuck_number = match self.try_factor(number, stopper) {
                 FactorResult::Factored(factors) => return Some(factors),
-                FactorResult::Stuck(s) => s,
-                FactorResult::Halted => return None,
+                FactorResult::Stuck(factors) => {
+                    last_factors = Some(factors.clone());
+                    factors.remainder
+                },
+                FactorResult::Halted => return last_factors,
             };
 
             // extend primeness knowledge to the number we are stuck at
@@ -333,7 +361,12 @@ mod tests {
 
         let too_large_factors_u16: u16 = 2 * 3 * 109;
         let too_large_factors = BigUint::from(too_large_factors_u16);
-        assert_eq!(cache.try_factor(&too_large_factors, &stopper), FactorResult::Stuck(BigUint::from(109u8)));
+        let result = cache.try_factor(&too_large_factors, &stopper);
+        let stuck_factors = result.as_stuck().unwrap();
+        assert_eq!(stuck_factors.factor_to_power().len(), 2);
+        assert_eq!(stuck_factors.factor_to_power().get(&BigUint::from(2u8)), Some(&BigUint::from(1u8)));
+        assert_eq!(stuck_factors.factor_to_power().get(&BigUint::from(3u8)), Some(&BigUint::from(1u8)));
+        assert_eq!(stuck_factors.remainder(), &BigUint::from(109u8));
 
         assert_eq!(cache.primes().len(), 25);
     }
