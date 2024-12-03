@@ -3,6 +3,7 @@ mod ast;
 mod currency;
 mod factor;
 mod grimoire;
+mod known_primes;
 mod numbers;
 mod parsing;
 mod units;
