@@ -415,7 +415,7 @@ impl RocketBotPlugin for CalcPlugin {
 
         let prime_cache = Arc::new(Mutex::new(
             "CalcPlugin::prime_cache",
-            PrimeCache::new(),
+            PrimeCache::new_until_100k_th(),
         ));
 
         my_interface.register_channel_command(
