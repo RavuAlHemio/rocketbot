@@ -213,6 +213,10 @@ impl PrimeCache {
     }
 
     pub fn try_factor(&self, number: &BigUint, stopper: &AtomicBool) -> FactorResult {
+        if stopper.load(Ordering::Relaxed) {
+            return FactorResult::Halted;
+        }
+
         let zero = BigUint::from(0u8);
         let one = BigUint::from(1u8);
 
