@@ -201,6 +201,11 @@ fn parse_paragraph_fragment(paragraph: &serde_json::Value) -> Result<MessageFrag
             }
             Ok(MessageFragment::Heading(level, fragments))
         },
+        "KATEX" => {
+            let value = paragraph["value"].as_str()
+                .ok_or(MessageParsingError::KatexValueNotString)?;
+            Ok(MessageFragment::Katex(value.to_owned()))
+        },
         "LINE_BREAK" => Ok(MessageFragment::LineBreak),
         other => {
             Err(MessageParsingError::UnexpectedFragment(other.into(), "message fragment".into()))

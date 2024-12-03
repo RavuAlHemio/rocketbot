@@ -107,6 +107,7 @@ pub enum MessageFragment {
     Paragraph(Vec<InlineFragment>),
     Code(String, Vec<InlineFragment>),
     Heading(u32, Vec<InlineFragment>),
+    Katex(String),
     LineBreak,
 }
 impl fmt::Display for MessageFragment {
@@ -153,6 +154,9 @@ impl fmt::Display for MessageFragment {
                 write!(f, " ")?;
                 write_concatenated(f, pieces)?;
                 write!(f, "\n")
+            },
+            MessageFragment::Katex(value) => {
+                write!(f, "\\[{}\\]", value)
             },
             MessageFragment::LineBreak => write!(f, "\n"),
         }
@@ -245,6 +249,7 @@ pub fn collect_urls<'a, I: Iterator<Item = &'a MessageFragment>>(fragments: I) -
                     urls.append(&mut inline_urls);
                 }
             },
+            MessageFragment::Katex(_value) => {},
             MessageFragment::LineBreak => {},
         }
     }
