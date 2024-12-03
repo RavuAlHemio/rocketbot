@@ -172,7 +172,7 @@ pub(crate) struct PrimeCache {
     maximum: BigUint,
 }
 impl PrimeCache {
-    pub fn new() -> Self { Self::default() }
+    #[allow(unused)] pub fn new() -> Self { Self::default() }
 
     #[allow(unused)] pub fn primes(&self) -> &BTreeSet<BigUint> { &self.primes }
     #[allow(unused)] pub fn maximum(&self) -> &BigUint { &self.maximum }
@@ -238,7 +238,7 @@ impl PrimeCache {
         });
     }
 
-    pub fn try_factor(&self, number: &BigUint, stopper: &AtomicBool) -> FactorResult {
+    pub fn try_factor(&mut self, number: &BigUint, stopper: &AtomicBool) -> FactorResult {
         if stopper.load(Ordering::Relaxed) {
             return FactorResult::Halted;
         }
@@ -257,10 +257,17 @@ impl PrimeCache {
         }
 
         let mut ret = BTreeMap::new();
+        let number_sqrt = &number.sqrt() + &one;
         let mut cur_number = number.clone();
 
         // try to factor it with what we have
+        let mut greater_than_sqrt = false;
         for prime in &self.primes {
+            if prime > &number_sqrt {
+                greater_than_sqrt = true;
+                break;
+            }
+
             while &cur_number % prime == zero {
                 if stopper.load(Ordering::Relaxed) {
                     return FactorResult::Halted;
@@ -275,6 +282,15 @@ impl PrimeCache {
             }
         }
 
+        if greater_than_sqrt {
+            // it's prime!
+            self.primes.insert(cur_number.clone());
+            let cur_count = ret.entry(cur_number.clone())
+                .or_insert_with(|| zero.clone());
+            *cur_count += &one;
+            return FactorResult::Factored(PrimeFactors { factor_to_power: ret, remainder: one });
+        }
+
         // possibly prime
         if cur_number > self.maximum {
             // one of those unknowables
@@ -287,6 +303,7 @@ impl PrimeCache {
 
     pub fn factor_caching(&mut self, number: &BigUint, stopper: &AtomicBool) -> Option<PrimeFactors> {
         let mut last_factors = None;
+        let one = BigUint::from(1u8);
         loop {
             // try the standard factoring
             let stuck_number = match self.try_factor(number, stopper) {
@@ -297,9 +314,11 @@ impl PrimeCache {
                 },
                 FactorResult::Halted => return last_factors,
             };
+            let stuck_sqrt = &stuck_number.sqrt() + &one;
 
-            // extend primeness knowledge to the number we are stuck at
-            self.extend_until_divisible(&stuck_number, stopper);
+            // extend primeness knowledge to the square root of the number we are stuck at
+            // (if n is composite, one of its prime factors must be <= sqrt(n))
+            self.extend_until_divisible(&stuck_sqrt, stopper);
 
             // try again
         }
