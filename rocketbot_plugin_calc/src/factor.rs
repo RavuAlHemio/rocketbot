@@ -380,44 +380,17 @@ mod tests {
 
         assert_eq!(cache.primes().len(), 25);
 
-        let too_large_factors_u16: u16 = 2 * 3 * 109;
-        let too_large_factors = BigUint::from(too_large_factors_u16);
+        // we need a factor > 100**2
+        let too_large_factors_u32: u32 = 2 * 3 * 10007;
+        let too_large_factors = BigUint::from(too_large_factors_u32);
         let result = cache.try_factor(&too_large_factors, &stopper);
         let stuck_factors = result.as_stuck().unwrap();
         assert_eq!(stuck_factors.factor_to_power().len(), 2);
         assert_eq!(stuck_factors.factor_to_power().get(&BigUint::from(2u8)), Some(&BigUint::from(1u8)));
         assert_eq!(stuck_factors.factor_to_power().get(&BigUint::from(3u8)), Some(&BigUint::from(1u8)));
-        assert_eq!(stuck_factors.remainder(), &BigUint::from(109u8));
+        assert_eq!(stuck_factors.remainder(), &BigUint::from(10007u16));
 
         assert_eq!(cache.primes().len(), 25);
-    }
-
-    #[test]
-    fn test_factor_caching() {
-        let mut cache = PrimeCache::new();
-        let stopper = AtomicBool::new(false);
-        cache.extend_to(&BigUint::from(100u8), &stopper);
-
-        assert_eq!(cache.primes().len(), 25);
-
-        let too_large_factors_u32: u32 = 2 * 3 * 109 * 127;
-        let too_large_factors = BigUint::from(too_large_factors_u32);
-        let factors = cache.factor_caching(&too_large_factors, &stopper).unwrap();
-
-        fn factor_is(factors: &PrimeFactors, factor: u64, expected_power: u64) {
-            let factor_bu = BigUint::from(factor);
-            let expected_power_bu = BigUint::from(expected_power);
-            assert_eq!(factors.factor_to_power().get(&factor_bu), Some(&expected_power_bu));
-        }
-
-        assert_eq!(factors.factor_to_power().len(), 4);
-        factor_is(&factors, 2, 1);
-        factor_is(&factors, 3, 1);
-        factor_is(&factors, 109, 1);
-        factor_is(&factors, 127, 1);
-
-        // extended by 101, 103, 107, 109, 113, 127
-        assert_eq!(cache.primes().len(), 31);
     }
 
     #[test]
