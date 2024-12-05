@@ -143,14 +143,6 @@ impl TextCommandsPlugin {
             mad_libs_commands,
         })
     }
-
-    async fn obtain_bot_ids(interface: &dyn RocketBotInterface) -> HashSet<String> {
-        interface.obtain_users_with_server_role("bot").await
-            .unwrap_or_else(|| HashSet::new())
-            .into_iter()
-            .map(|bot| bot.id)
-            .collect()
-    }
 }
 #[async_trait]
 impl RocketBotPlugin for TextCommandsPlugin {
@@ -236,12 +228,12 @@ impl RocketBotPlugin for TextCommandsPlugin {
 
             if command.flags.contains("B") || command.flags.contains("only-bots") {
                 // find bots and only allow them
-                let bot_ids = Self::obtain_bot_ids(&*interface).await;
+                let bot_ids = interface.obtain_bot_user_ids().await;
                 debug!("bot IDs: {:?}", bot_ids);
                 channel_members.retain(|member| bot_ids.contains(&member.id));
             } else if !command.flags.contains("b") && !command.flags.contains("also-bots") {
                 // find bots and remove them
-                let bot_ids = Self::obtain_bot_ids(&*interface).await;
+                let bot_ids = interface.obtain_bot_user_ids().await;
                 debug!("bot IDs: {:?}", bot_ids);
                 channel_members.retain(|member| !bot_ids.contains(&member.id));
             }

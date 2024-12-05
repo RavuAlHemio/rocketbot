@@ -209,6 +209,7 @@ struct SharedConnectionState {
     channel_id_to_texts: RwLock<HashMap<(String, ChannelTextType), String>>,
     emoji: RwLock<Vec<Emoji>>,
     active_behavior_flags: RwLock<serde_json::Map<String, serde_json::Value>>,
+    bot_user_ids: RwLock<HashSet<String>>,
 }
 impl SharedConnectionState {
     fn new(
@@ -231,6 +232,7 @@ impl SharedConnectionState {
         channel_id_to_texts: RwLock<HashMap<(String, ChannelTextType), String>>,
         emoji: RwLock<Vec<Emoji>>,
         active_behavior_flags: RwLock<serde_json::Map<String, serde_json::Value>>,
+        bot_user_ids: RwLock<HashSet<String>>,
     ) -> Self {
         Self {
             outgoing_sender,
@@ -252,6 +254,7 @@ impl SharedConnectionState {
             channel_id_to_texts,
             emoji,
             active_behavior_flags,
+            bot_user_ids,
         }
     }
 }
@@ -748,6 +751,12 @@ impl RocketBotInterface for ServerConnection {
         }
     }
 
+    async fn obtain_bot_user_ids(&self) -> HashSet<String> {
+        let bots_guard = self.shared_state.bot_user_ids
+            .read().await;
+        (*bots_guard).clone()
+    }
+
     async fn get_plugin_names(&self) -> Vec<String> {
         let plugins = self.shared_state.plugins
             .read().await;
@@ -1059,6 +1068,10 @@ pub(crate) async fn connect() -> Arc<ServerConnection> {
         "SharedConnectionState::active_behavior_flags",
         serde_json::Map::new(),
     );
+    let bot_user_ids = RwLock::new(
+        "SharedConnectionState::bot_user_ids",
+        HashSet::new(),
+    );
 
     let shared_state = Arc::new(SharedConnectionState::new(
         outgoing_sender,
@@ -1080,6 +1093,7 @@ pub(crate) async fn connect() -> Arc<ServerConnection> {
         channel_id_to_texts,
         emoji,
         active_behavior_flags,
+        bot_user_ids,
     ));
 
     // start the message handler
@@ -1289,9 +1303,6 @@ async fn do_send_any_message(shared_state: &SharedConnectionState, target_id: &s
                 "_id": message_id,
                 "rid": target_id,
                 "msg": message.body,
-                "bot": {
-                    "i": "RavuAlHemio/rocketbot",
-                },
             },
         ],
     });
@@ -1881,7 +1892,12 @@ async fn handle_received(body: &serde_json::Value, mut state: &mut ConnectionSta
             }
         }
 
+        // get the list of users known to be bots
+        debug!("populating bot list");
+        update_bot_list(&state.shared_state).await;
+
         // set our status (via the REST API, since this is apparently broken with the realtime API)
+        debug!("setting status");
         let no_query_options: [(&str, Option<&str>); 0] = [];
         post_api_json(
             &state.shared_state,
@@ -2023,6 +2039,15 @@ async fn handle_received(body: &serde_json::Value, mut state: &mut ConnectionSta
                     continue;
                 },
             };
+
+            let is_by_bot = if let Some(sender_user_id) = message_json["u"]["_id"].as_str() {
+                let bots_guard = state.shared_state.bot_user_ids.read().await;
+                bots_guard.contains(sender_user_id)
+            } else {
+                // assume human
+                false
+            };
+
             let (channel_opt, convo_opt) = {
                 let chandb_read = state.shared_state.subscribed_channels
                     .read().await;
@@ -2053,7 +2078,7 @@ async fn handle_received(body: &serde_json::Value, mut state: &mut ConnectionSta
                     continue;
                 }
 
-                let message = match message_from_json(message_json) {
+                let message = match message_from_json(message_json, is_by_bot) {
                     Some(m) => m,
                     None => {
                         // error already output
@@ -2078,7 +2103,7 @@ async fn handle_received(body: &serde_json::Value, mut state: &mut ConnectionSta
                 })
                     .expect("failed to enqueue channel message");
             } else if let Some(convo) = convo_opt {
-                let message = match message_from_json(message_json) {
+                let message = match message_from_json(message_json, is_by_bot) {
                     Some(m) => m,
                     None => {
                         // error already output
@@ -2301,7 +2326,7 @@ async fn deliver_timer(info: &serde_json::Value, state: &ConnectionState) {
     }
 }
 
-fn message_from_json(message_json: &serde_json::Value) -> Option<Message> {
+fn message_from_json(message_json: &serde_json::Value, sender_is_bot: bool) -> Option<Message> {
     let message_id = match message_json["_id"].as_str() {
         Some(v) => v,
         None => {
@@ -2441,7 +2466,7 @@ fn message_from_json(message_json: &serde_json::Value) -> Option<Message> {
         ),
         raw_message.map(|s| s.to_owned()),
         parsed_message,
-        message_json["bot"].is_object(),
+        sender_is_bot,
         edit_info,
         attachments,
         reply_to_message_id,
@@ -3013,4 +3038,53 @@ async fn do_config_reload(state: &mut ConnectionState) {
         }
     }
     info!("plugin configuration reloaded");
+
+    // update list of bots
+    update_bot_list(&state.shared_state).await;
+}
+
+async fn update_bot_list(shared_state: &SharedConnectionState) {
+    const BOT_ROLE: &str = "bot";
+    let users_res = get_api_json(
+        shared_state,
+        "api/v1/roles.getUsersInRole",
+        [("role", Some(BOT_ROLE))],
+    ).await;
+    let users = match users_res {
+        Ok(u) => u,
+        Err(e) => {
+            error!("HTTP error obtaining users in role {:?}: {}", BOT_ROLE, e);
+            return;
+        },
+    };
+    if !users["success"].as_bool().unwrap_or(false) {
+        error!("response error obtaining users in role {:?}: {}", BOT_ROLE, users);
+        return;
+    }
+
+    let mut bot_user_ids = HashSet::new();
+    let user_iter = match users["users"].members() {
+        Some(ui) => ui,
+        None => {
+            error!("server roles users \"users\" member is not a list: {}", users);
+            return;
+        },
+    };
+    for user_json in user_iter {
+        let user_id = match user_json["_id"].as_str() {
+            Some(s) => s,
+            None => {
+                warn!("server role user does not have ID, skipping: {:?}", user_json);
+                continue;
+            }
+        };
+        bot_user_ids.insert(user_id.to_owned());
+    }
+
+    // store it
+    {
+        let mut write_guard = shared_state.bot_user_ids.write().await;
+        *write_guard = bot_user_ids;
+    }
+    info!("obtained current bot status")
 }

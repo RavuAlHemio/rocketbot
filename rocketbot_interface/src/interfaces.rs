@@ -126,6 +126,9 @@ pub trait RocketBotInterface : Send + Sync {
     /// Returns whether the given user ID is the bot's user ID.
     async fn is_my_user_id(&self, user_id: &str) -> bool;
 
+    /// Obtains a set of user IDs that are known to belong to bots.
+    async fn obtain_bot_user_ids(&self) -> HashSet<String>;
+
     /// Returns the names of the currently active plugins.
     async fn get_plugin_names(&self) -> Vec<String>;
 
