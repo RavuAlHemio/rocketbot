@@ -106,7 +106,7 @@ pub(crate) fn parse_command(
                     },
                 }
             }
-        } else if pos_args.len() < command.arg_count {
+        } else if pos_args.len() < command.arg_count || command.behaviors.contains(CommandBehaviors::REST_AS_ARGS) {
             // positional argument
             pos_args.push(pieces[i].value.to_owned());
         } else {
