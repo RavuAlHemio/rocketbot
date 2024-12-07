@@ -263,6 +263,10 @@ impl PrimeCache {
         // try to factor it with what we have
         let mut greater_than_sqrt = false;
         for prime in &self.primes {
+            if cur_number == one {
+                break;
+            }
+
             if prime > &number_sqrt {
                 greater_than_sqrt = true;
                 break;
@@ -282,8 +286,13 @@ impl PrimeCache {
             }
         }
 
+        if cur_number == one {
+            // stuck the landing!
+            return FactorResult::Factored(PrimeFactors { factor_to_power: ret, remainder: one });
+        }
+
         if greater_than_sqrt {
-            // it's prime!
+            // what's left is prime!
             self.primes.insert(cur_number.clone());
             let cur_count = ret.entry(cur_number.clone())
                 .or_insert_with(|| zero.clone());
@@ -413,5 +422,21 @@ mod tests {
 
         assert_eq!(number_factors.to_tex_string(), "\\[2^{11}\\cdot 3\\cdot 11^2\\cdot 13\\]");
         assert_eq!(number_factors.to_code_string(), "`2**11 * 3 * 11**2 * 13`");
+    }
+
+    #[test]
+    fn test_wayward_one() {
+        let mut cache = PrimeCache::new_until_100k_th();
+        let stopper = AtomicBool::new(false);
+
+        let number = BigUint::from(15_000u32);
+        let number_factoring_result = cache.try_factor(&number, &stopper);
+        let number_factors = number_factoring_result
+            .as_factored().unwrap();
+        assert_eq!(number_factors.remainder(), &BigUint::from(1u8));
+        assert_eq!(number_factors.factor_to_power().len(), 3);
+        assert_eq!(number_factors.factor_to_power().get(&BigUint::from(2u8)).unwrap(), &BigUint::from(3u8));
+        assert_eq!(number_factors.factor_to_power().get(&BigUint::from(3u8)).unwrap(), &BigUint::from(1u8));
+        assert_eq!(number_factors.factor_to_power().get(&BigUint::from(5u8)).unwrap(), &BigUint::from(4u8));
     }
 }
