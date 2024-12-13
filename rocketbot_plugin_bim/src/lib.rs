@@ -34,6 +34,7 @@ use rocketbot_interface::serde::serde_opt_regex;
 use rocketbot_interface::sync::RwLock;
 use rocketbot_primes::is_number_prime;
 use rocketbot_render_text::map_to_png;
+use rocketbot_string::NatSortedString;
 use rocketbot_string::regex::EnjoyableRegex;
 use ::serde::{Deserialize, Serialize};
 use serde_json;
@@ -4135,6 +4136,121 @@ impl BimPlugin {
         }
     }
 
+    async fn channel_command_missingbimlines(&self, channel_message: &ChannelMessage, command: &CommandInstance) {
+        let interface = match self.interface.upgrade() {
+            None => return,
+            Some(i) => i,
+        };
+
+        let config_guard = self.config.read().await;
+
+        let mut region = command.rest.trim();
+        if region.len() == 0 {
+            region = config_guard.default_operator_region.as_str();
+        }
+
+        let Some(region_to_line_to_operator) = self.load_operator_databases(&config_guard) else {
+            send_channel_message!(
+                interface,
+                &channel_message.channel.name,
+                "Failed to load the operators database. :disappointed:",
+            ).await;
+            return;
+        };
+        let Some(line_to_operator) = region_to_line_to_operator.get(region) else {
+            send_channel_message!(
+                interface,
+                &channel_message.channel.name,
+                "Unknown region. :disappointed:",
+            ).await;
+            return;
+        };
+
+        let mut regional_operators = HashSet::new();
+        for operator_info in line_to_operator.values() {
+            if let Some(abbrev) = operator_info.operator_abbrev.as_ref() {
+                regional_operators.insert(abbrev.clone());
+            }
+        }
+
+        let Ok(ride_conn) = connect_ride_db(&config_guard).await else {
+            send_channel_message!(
+                interface,
+                &channel_message.channel.name,
+                "Failed to open database connection. :disappointed:",
+            ).await;
+            return;
+        };
+
+        let mut companies_query = format!(
+            "SELECT DISTINCT line, company FROM bim.rides WHERE line IN ("
+        );
+        let mut companies_parameters: Vec<&(dyn ToSql + Sync)> = Vec::with_capacity(line_to_operator.len());
+        let mut unridden_lines = BTreeSet::new();
+        let mut first_operator = true;
+        for current_operator_info in line_to_operator.values() {
+            companies_parameters.push(&current_operator_info.canonical_line);
+            unridden_lines.insert(NatSortedString::from_string(current_operator_info.canonical_line.clone()));
+
+            if first_operator {
+                first_operator = false;
+            } else {
+                companies_query.push_str(", ");
+            }
+            // parameters are 1-based so we push first
+            write!(companies_query, "${}", companies_parameters.len()).unwrap();
+        }
+        companies_query.push(')');
+
+        let company_rows = match ride_conn.query(&companies_query, companies_parameters.as_slice()).await {
+            Ok(rs) => rs,
+            Err(e) => {
+                error!("failed to select companies: {}", e);
+                send_channel_message!(
+                    interface,
+                    &channel_message.channel.name,
+                    "A database error occurred. :disappointed:",
+                ).await;
+                return;
+            },
+        };
+
+        for row in company_rows {
+            let line_string: String = row.get(0);
+            let company: String = row.get(1);
+
+            let line = NatSortedString::from_string(line_string);
+
+            if regional_operators.contains(&company) {
+                unridden_lines.remove(&line);
+            }
+        }
+
+        let response_text = if unridden_lines.len() == 0 {
+            "All lines have been ridden!".to_owned()
+        } else if unridden_lines.len() == 1 {
+            format!("Unridden line: {}", unridden_lines.first().unwrap())
+        } else {
+            let mut resp = format!("Unridden lines: ");
+            let mut first_line = true;
+            for line in unridden_lines {
+                if first_line {
+                    first_line = false;
+                } else {
+                    resp.push_str(", ");
+                }
+                resp.push_str(line.as_str());
+            }
+            resp
+        };
+
+        send_channel_message!(
+            interface,
+            &channel_message.channel.name,
+            &response_text,
+        ).await;
+    }
+
     fn english_adverbial_number(num: i64) -> String {
         match num {
             1 => "once".to_owned(),
@@ -4504,6 +4620,15 @@ impl RocketBotPlugin for BimPlugin {
             .add_lookback_flags()
             .build()
         ).await;
+        my_interface.register_channel_command(
+            &CommandDefinitionBuilder::new(
+                "missingbimlines",
+                "bim",
+                "{cpfx}missingbimlines [REGION]",
+                "Obtains the names of the lines that have not yet been ridden.",
+            )
+                .build()
+        ).await;
 
         // set up the achievement update loop
         let (achievement_update_sender, mut achievement_update_receiver) = mpsc::unbounded_channel();
@@ -4603,6 +4728,8 @@ impl RocketBotPlugin for BimPlugin {
             self.channel_command_bimfixedmonopolies(channel_message, command).await
         } else if command.name == "bimcost" {
             self.channel_command_bimcost(channel_message, command).await
+        } else if command.name == "missingbimlines" {
+            self.channel_command_missingbimlines(channel_message, command).await
         }
     }
 
@@ -4670,6 +4797,8 @@ impl RocketBotPlugin for BimPlugin {
             Some(include_str!("../help/bimfixedmonopolies.md").to_owned())
         } else if command_name == "bimcost" {
             Some(include_str!("../help/bimcost.md").to_owned())
+        } else if command_name == "missingbimlines" {
+            Some(include_str!("../help/missingbimlines.md").to_owned())
         } else {
             None
         }
