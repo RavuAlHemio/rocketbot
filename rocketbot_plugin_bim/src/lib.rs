@@ -4233,7 +4233,7 @@ impl BimPlugin {
         } else {
             let mut resp = format!("Unridden lines: ");
             let mut first_line = true;
-            for line in unridden_lines {
+            for line in &unridden_lines {
                 if first_line {
                     first_line = false;
                 } else {
@@ -4241,6 +4241,7 @@ impl BimPlugin {
                 }
                 resp.push_str(line.as_str());
             }
+            write!(resp, " [{} lines]", unridden_lines.len()).unwrap();
             resp
         };
 
