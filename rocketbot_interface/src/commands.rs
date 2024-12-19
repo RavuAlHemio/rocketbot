@@ -19,6 +19,7 @@ pub enum CommandValueType {
     String,
     Integer,
     Float,
+    MultiString,
 }
 
 
@@ -149,6 +150,7 @@ pub enum CommandValue {
     String(String),
     Integer(i64),
     Float(f64),
+    MultiString(Vec<String>),
 }
 impl CommandValue {
     pub fn as_str(&self) -> Option<&str> {
@@ -170,6 +172,22 @@ impl CommandValue {
     pub fn as_f64(&self) -> Option<f64> {
         if let CommandValue::Float(f) = self {
             Some(*f)
+        } else {
+            None
+        }
+    }
+
+    pub fn as_multi_string(&self) -> Option<&Vec<String>> {
+        if let CommandValue::MultiString(ms) = self {
+            Some(ms)
+        } else {
+            None
+        }
+    }
+
+    pub fn as_multi_string_mut(&mut self) -> Option<&mut Vec<String>> {
+        if let CommandValue::MultiString(ms) = self {
+            Some(ms)
         } else {
             None
         }

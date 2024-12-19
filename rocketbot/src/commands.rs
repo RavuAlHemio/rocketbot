@@ -168,7 +168,7 @@ fn handle_option(
     } else {
         // is it an option?
         let option_type = match command.options.get(option_name) {
-            Some(ot) => ot,
+            Some(ot) => *ot,
             None => {
                 if command.flags.is_none() {
                     // command allows custom flags; it's one of those
@@ -197,33 +197,41 @@ fn handle_option(
         }
         let option_value_str = &pieces[*i + 1].value;
 
-        let option_value = match option_type {
-            CommandValueType::String => CommandValue::String(option_value_str.to_owned()),
-            CommandValueType::Float => {
-                let float_val: f64 = match option_value_str.parse() {
-                    Ok(v) => v,
-                    Err(e) => {
-                        warn!("failed to parse argument {:?} for option {:?} of {} as a floating-point value: {}", option_value_str, option_name, command_name, e);
-                        debug!("command line is {:?}", raw_message);
-                        return OptionHandlingResult::Failure;
-                    },
-                };
-                CommandValue::Float(float_val)
-            },
-            CommandValueType::Integer => {
-                let int_val: i64 = match option_value_str.parse() {
-                    Ok(v) => v,
-                    Err(e) => {
-                        warn!("failed to parse argument {:?} for option {:?} of {} as an integer: {}", option_value_str, option_name, command_name, e);
-                        debug!("command line is {:?}", raw_message);
-                        return OptionHandlingResult::Failure;
-                    },
-                };
-                CommandValue::Integer(int_val)
-            },
-        };
+        if option_type == CommandValueType::MultiString {
+            let current_values = option_values.entry(option_name.to_owned())
+                .or_insert_with(|| CommandValue::MultiString(Vec::new()))
+                .as_multi_string_mut().unwrap();
+            current_values.push(option_value_str.to_owned());
+        } else {
+            let option_value = match option_type {
+                CommandValueType::String => CommandValue::String(option_value_str.to_owned()),
+                CommandValueType::Float => {
+                    let float_val: f64 = match option_value_str.parse() {
+                        Ok(v) => v,
+                        Err(e) => {
+                            warn!("failed to parse argument {:?} for option {:?} of {} as a floating-point value: {}", option_value_str, option_name, command_name, e);
+                            debug!("command line is {:?}", raw_message);
+                            return OptionHandlingResult::Failure;
+                        },
+                    };
+                    CommandValue::Float(float_val)
+                },
+                CommandValueType::Integer => {
+                    let int_val: i64 = match option_value_str.parse() {
+                        Ok(v) => v,
+                        Err(e) => {
+                            warn!("failed to parse argument {:?} for option {:?} of {} as an integer: {}", option_value_str, option_name, command_name, e);
+                            debug!("command line is {:?}", raw_message);
+                            return OptionHandlingResult::Failure;
+                        },
+                    };
+                    CommandValue::Integer(int_val)
+                },
+                CommandValueType::MultiString => unreachable!(),
+            };
 
-        option_values.insert(option_name.to_owned(), option_value);
+            option_values.insert(option_name.to_owned(), option_value);
+        }
 
         // skip over one more argument (the value to this option)
         *i += 1;
@@ -343,5 +351,34 @@ mod tests {
         assert_eq!("one   two  ", cmd_inst.args[0]);
         assert_eq!("three", cmd_inst.args[1]);
         assert_eq!("", cmd_inst.rest);
+    }
+
+    #[test]
+    fn test_multi_arg() {
+        let command = CommandDefinitionBuilder::new(
+            "bloop",
+            "bloop",
+            "{cpfx}bloop [{sopfx}o OPTION...]",
+            "Bloops.",
+        )
+            .add_option("c", CommandValueType::MultiString)
+            .build();
+        let cmd_inst = perform_test(
+            &command,
+            "!bloop -c one -c another roesti",
+        ).unwrap();
+
+        assert_eq!("bloop", cmd_inst.name);
+        assert_eq!(0, cmd_inst.flags.len());
+        assert_eq!(1, cmd_inst.options.len());
+        let option_c = cmd_inst.options.get("c")
+            .expect("option -c value missing");
+        let c_values = option_c.as_multi_string()
+            .expect("option -c not a multistring");
+        assert_eq!(c_values.len(), 2);
+        assert_eq!(c_values[0], "one");
+        assert_eq!(c_values[1], "another");
+        assert_eq!(0, cmd_inst.args.len());
+        assert_eq!("roesti", cmd_inst.rest);
     }
 }
