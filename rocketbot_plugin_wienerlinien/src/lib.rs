@@ -201,7 +201,7 @@ impl WienerLinienPlugin {
         database_guard.stations = stations;
     }
 
-    async fn get_departures(&self, config: &Config, station_id: u32, line_number: Option<&str>) -> Option<Vec<Vec<DepartureLine>>> {
+    async fn get_departures(&self, config: &Config, station_id: u32, line_numbers: &BTreeSet<&str>) -> Option<Vec<Vec<DepartureLine>>> {
         let url = config.monitor_url_format
             .replace("{stopId}", &station_id.to_string());
 
@@ -238,8 +238,8 @@ impl WienerLinienPlugin {
                 .or_insert_with(|| BTreeMap::new());
 
             for line in &monitor.lines {
-                if let Some(ln) = line_number {
-                    if line.name != ln {
+                if line_numbers.len() > 0 {
+                    if !line_numbers.contains(line.name.as_str()) {
                         continue;
                     }
                 }
@@ -308,9 +308,17 @@ impl WienerLinienPlugin {
 
         self.ensure_station_database_current(&config_guard).await;
 
-        let line = command.options.get("line")
-            .or_else(|| command.options.get("l"))
-            .map(|v| v.as_str().expect("line not a string").to_owned());
+        let mut line_names = BTreeSet::new();
+        for key in ["l", "line"] {
+            if let Some(val) = command.options.get(key) {
+                let lines = val
+                    .as_multi_string().expect("not a multistring")
+                    .into_iter();
+                for line in lines {
+                    line_names.insert(line.as_str());
+                }
+            }
+        }
         let station_name_lower = command.rest.trim().to_lowercase();
         let force_search = command.flags.contains("s") || command.flags.contains("search");
 
@@ -334,7 +342,7 @@ impl WienerLinienPlugin {
         let departures_opt = self.get_departures(
             &config_guard,
             station.stop_id,
-            line.as_deref(),
+            &line_names,
         ).await;
         let departures = match departures_opt {
             Some(d) => d,
@@ -510,13 +518,13 @@ impl RocketBotPlugin for WienerLinienPlugin {
             &CommandDefinitionBuilder::new(
                 "dep",
                 "wienerlinien",
-                "{cpfx}dep [-l LINE] STATION",
+                "{cpfx}dep [-l LINE]... STATION",
                 "Shows public transport departures from a given station.",
             )
                 .add_flag("s")
                 .add_flag("search")
-                .add_option("l", CommandValueType::String)
-                .add_option("line", CommandValueType::String)
+                .add_option("l", CommandValueType::MultiString)
+                .add_option("line", CommandValueType::MultiString)
                 .build()
         ).await;
         my_interface.register_channel_command(

@@ -1,6 +1,6 @@
-*Usage:* `{cpfx}dep [{sopfx}l|{lopfx}line LINE] [{sopfx}s|{lopfx}search] STATION`
+*Usage:* `{cpfx}dep [{sopfx}l|{lopfx}line LINE]... [{sopfx}s|{lopfx}search] STATION`
 
-Outputs public transport departures from the given `STATION`. If `{sopfx}l LINE` or `{lopfx}line LINE` is given, only departures for that line are shown.
+Outputs public transport departures from the given `STATION`. If `{sopfx}l LINE` or `{lopfx}line LINE` is given (which can be done multiple times, e.g. `{sopfx}l 99A {sopfx}l 99B`), only departures for those lines are shown.
 
 By default, stations are searched using the following criteria by decreasing priority:
 1. station number (if `STATION` is a number)
