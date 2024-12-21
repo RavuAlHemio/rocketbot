@@ -344,7 +344,7 @@ impl WienerLinienPlugin {
             station.stop_id,
             &line_names,
         ).await;
-        let departures = match departures_opt {
+        let mut departures = match departures_opt {
             Some(d) => d,
             None => {
                 send_channel_message!(
@@ -355,6 +355,7 @@ impl WienerLinienPlugin {
                 return;
             },
         };
+        departures.retain(|plat_lines| plat_lines.len() > 0);
 
         let departures_string = if departures.len() == 0 {
             format!("No departures at *{}*", station.name)
