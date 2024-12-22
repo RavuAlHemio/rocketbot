@@ -90,6 +90,7 @@ struct VehicleInfoBuilder {
     in_service_since: Option<String>,
     out_of_service_since: Option<String>,
     manufacturer: Option<String>,
+    depot: Option<String>,
     other_data: BTreeMap<String, String>,
     fixed_coupling: IndexSet<VehicleNumber>,
 }
@@ -102,6 +103,7 @@ impl VehicleInfoBuilder {
             in_service_since: None,
             out_of_service_since: None,
             manufacturer: None,
+            depot: None,
             other_data: BTreeMap::new(),
             fixed_coupling: IndexSet::new(),
         }
@@ -134,6 +136,11 @@ impl VehicleInfoBuilder {
 
     pub fn manufacturer<M: Into<String>>(&mut self, manuf: M) -> &mut Self {
         self.manufacturer = Some(manuf.into());
+        self
+    }
+
+    pub fn depot<D: Into<String>>(&mut self, depot: D) -> &mut Self {
+        self.depot = Some(depot.into());
         self
     }
 
@@ -182,6 +189,7 @@ impl VehicleInfoBuilder {
             in_service_since: self.in_service_since,
             out_of_service_since: self.out_of_service_since,
             manufacturer: self.manufacturer,
+            depot: self.depot,
             other_data: self.other_data,
             fixed_coupling: self.fixed_coupling,
         })
@@ -440,7 +448,7 @@ async fn main() {
                             let depot_b = td.select(&b_sel).nth(0);
                             if let Some(db) = depot_b {
                                 let db_text: String = db.text().collect();
-                                current_vehicle.other_data("Remise", db_text);
+                                current_vehicle.depot(db_text);
                             }
                         }
                     }

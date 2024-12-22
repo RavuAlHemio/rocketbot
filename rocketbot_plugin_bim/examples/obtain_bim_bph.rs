@@ -49,6 +49,7 @@ struct ColumnKeyConfig {
     pub type_column: EnjoyableRegex,
     pub in_service_since_column: EnjoyableRegex,
     pub out_of_service_since_column: Option<EnjoyableRegex>,
+    pub depot_column: Option<EnjoyableRegex>,
     pub other_info_names_to_columns: BTreeMap<String, EnjoyableRegex>,
 }
 
@@ -131,6 +132,7 @@ async fn obtain_vehicles(
             let mut raw_type = None;
             let mut in_service_since = None;
             let mut out_of_service_since = None;
+            let mut depot = None;
             let mut other_data = BTreeMap::new();
             for (i, cell) in row_cells {
                 if i >= headers.len() {
@@ -158,6 +160,9 @@ async fn obtain_vehicles(
                 }
                 if config.column_keys.out_of_service_since_column.as_ref().map(|re| re.is_match(&this_header)).unwrap_or(false) {
                     out_of_service_since = Some(cell_text.clone());
+                }
+                if config.column_keys.depot_column.as_ref().map(|re| re.is_match(&this_header)).unwrap_or(false) {
+                    depot = Some(cell_text.clone());
                 }
                 let interesting_keys = config.column_keys.other_info_names_to_columns
                     .iter()
@@ -207,6 +212,7 @@ async fn obtain_vehicles(
                     in_service_since: in_service_since.clone(),
                     out_of_service_since: out_of_service_since.clone(),
                     manufacturer: type_info.manufacturer.clone(),
+                    depot: depot.clone(),
                     other_data: other_data.clone(),
                     fixed_coupling: if vehicle_numbers.len() > 1 { vehicle_numbers.clone() } else { IndexSet::new() },
                 };

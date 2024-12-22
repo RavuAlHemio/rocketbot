@@ -510,6 +510,7 @@ fn process_sheet<F: Read + Seek>(
         let mut header_row = false;
         let mut out_of_order = false;
         let mut type_code_opt = None;
+        let mut depot_opt = None;
         let mut priority_to_vehicle_codes: BTreeMap<i64, Vec<String>> = BTreeMap::new();
         let mut other_fields = BTreeMap::new();
 
@@ -562,6 +563,8 @@ fn process_sheet<F: Read + Seek>(
                     .push(cell.text.clone());
             } else if grouped_vehicles && config.grouped_type_column.matches_cell(x, column_name) {
                 type_code_opt = Some(cell.text.clone());
+            } else if !grouped_vehicles && config.depot_column.matches_cell(x, column_name) {
+                depot_opt = Some(cell.text.clone());
             } else if config.ignore_column_names.iter().any(|icn| icn.is_match(column_name)) {
                 // skip this column
                 continue;
@@ -666,6 +669,7 @@ fn process_sheet<F: Read + Seek>(
                             in_service_since: Some("?".to_owned()),
                             out_of_service_since: if out_of_order { Some("?".to_owned()) } else { None },
                             manufacturer: None,
+                            depot: depot_opt.clone(),
                             other_data: my_other_fields.clone(),
                             fixed_coupling: fixed_coupling.clone(),
                         };

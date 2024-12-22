@@ -159,6 +159,7 @@ struct Config {
 
     pub state_color_column: ColumnSpec,
     pub type_column: ColumnSpec,
+    pub depot_column: ColumnSpec,
     pub code_columns: Vec<PriorityColumnSpec>,
     pub grouped_type_column: ColumnSpec,
     pub grouped_code_column: ColumnSpec,

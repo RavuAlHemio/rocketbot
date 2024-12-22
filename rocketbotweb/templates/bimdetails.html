@@ -34,6 +34,12 @@
       <td>{{ manufacturer|escape }}</td>
     </tr>
   {% endif %}
+  {% if let Some(depot) = veh.depot %}
+    <tr class="depot">
+      <th>Depot</th>
+      <td>{{ depot|escape }}</td>
+    </tr>
+  {% endif %}
   {% if veh.in_service_since.is_some() || veh.out_of_service_since.is_some() %}
     <tr class="dates-active">
       <th>Dates active</th>

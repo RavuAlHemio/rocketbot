@@ -165,6 +165,15 @@ pub(crate) fn row_data_to_trams(page_config: &PageConfig, row_data: Vec<(String,
         }
 
         if !is_matched {
+            if let Some(dm) = &page_config.depot_matcher {
+                if let Some(d) = value_match(&dm, &key, &val) {
+                    is_matched = true;
+                    vehicle.depot = Some(d);
+                }
+            }
+        }
+
+        if !is_matched {
             vehicle.other_data.insert((*key).clone(), (*val).clone());
         }
     }

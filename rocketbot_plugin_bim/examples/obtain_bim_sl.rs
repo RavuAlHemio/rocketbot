@@ -46,6 +46,7 @@ struct VehicleInfoBuilder {
     in_service_since: Option<String>,
     out_of_service_since: Option<String>,
     manufacturer: Option<String>,
+    depot: Option<String>,
     other_data: BTreeMap<String, String>,
     fixed_coupling: IndexSet<VehicleNumber>,
 }
@@ -58,6 +59,7 @@ impl VehicleInfoBuilder {
             in_service_since: None,
             out_of_service_since: None,
             manufacturer: None,
+            depot: None,
             other_data: BTreeMap::new(),
             fixed_coupling: IndexSet::new(),
         }
@@ -93,6 +95,11 @@ impl VehicleInfoBuilder {
         self
     }
 
+    pub fn depot<D: Into<String>>(&mut self, depot: D) -> &mut Self {
+        self.depot = Some(depot.into());
+        self
+    }
+
     pub fn other_data<K: Into<String>, V: Into<String>>(&mut self, key: K, value: V) -> &mut Self {
         self.other_data.insert(key.into(), value.into());
         self
@@ -123,6 +130,7 @@ impl VehicleInfoBuilder {
             in_service_since: self.in_service_since,
             out_of_service_since: self.out_of_service_since,
             manufacturer: self.manufacturer,
+            depot: self.depot,
             other_data: self.other_data,
             fixed_coupling: self.fixed_coupling,
         })
@@ -251,6 +259,9 @@ async fn main() {
                     continue;
                 }
 
+                let depot_opt = loco.attribute_value("Depot")
+                    .and_then(|d| if d.len() == 0 { None } else { Some(d) });
+
                 // additional attributes
                 let mut my_other_data = BTreeMap::new();
                 for attrib in loco.attributes() {
@@ -265,6 +276,10 @@ async fn main() {
                     }
                     if name == "Status" {
                         // status is processed above
+                        continue;
+                    }
+                    if name == "Depot" {
+                        // depot is processed above
                         continue;
                     }
                     if name == "Updated" {
@@ -287,6 +302,9 @@ async fn main() {
                         .vehicle_class(class_def.vehicle_class);
                     if let Some(b) = builder_opt {
                         vib.manufacturer(b);
+                    }
+                    if let Some(d) = depot_opt {
+                        vib.depot(d);
                     }
                     if let Some(i) = introduced {
                         vib.in_service_since(i);
