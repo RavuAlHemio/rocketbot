@@ -539,7 +539,11 @@ impl BimPlugin {
 
                         if let Some(manuf) = &vehicle.manufacturer {
                             let full_manuf = config_guard.manufacturer_mapping.get(manuf).unwrap_or(manuf);
-                            write_expect!(db_response, "\n*hergestellt von* {}", full_manuf);
+                            write_expect!(db_response, "\n*manufacturer*: {}", full_manuf);
+                        }
+
+                        if let Some(depot) = &vehicle.depot {
+                            write_expect!(db_response, "\n*depot*: {}", depot);
                         }
 
                         let mut other_props: Vec<(&str, &str)> = vehicle.other_data.iter()
