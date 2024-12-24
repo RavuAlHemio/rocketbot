@@ -93,6 +93,16 @@ interface LastRiderHistogramByFixedPosData {
     }
 }
 
+interface DepotLastRiderPieData {
+    companyToDepotToRiderToLastRides: {
+        [company: string]: {
+            [depot: string]: {
+                [rider: string]: number;
+            }
+        }
+    }
+}
+
 export namespace Charting {
     function doSetUpByDayOfWeek() {
         const canvas = <HTMLCanvasElement|null>document.getElementById("chart-canvas");
@@ -1039,6 +1049,135 @@ export namespace Charting {
         );
     }
 
+    function doSetUpDepotLastRiderPie() {
+        const NO_DEPOT_VALUE: string = "\u0018";
+
+        // set up controls
+        const controls = <HTMLParagraphElement|null>document.getElementById("pie-controls");
+        if (controls === null) {
+            return;
+        }
+
+        const companyLabel = document.createElement("label");
+        companyLabel.appendChild(document.createTextNode("Company: "));
+        const companySelect = document.createElement("select");
+        companyLabel.appendChild(companySelect);
+        controls.appendChild(companyLabel);
+
+        controls.appendChild(document.createTextNode(" \u00B7 "));
+
+        const depotLabel = document.createElement("label");
+        depotLabel.appendChild(document.createTextNode("Depot: "));
+        const depotSelect = document.createElement("select");
+        depotLabel.appendChild(depotSelect);
+        controls.appendChild(depotLabel);
+
+        // load data
+        const dataString = document.getElementById("chart-data")?.textContent;
+        if (dataString === null || dataString === undefined) {
+            return;
+        }
+        const data: DepotLastRiderPieData = JSON.parse(dataString);
+
+        const allCompanies: string[] = Object.keys(data.companyToDepotToRiderToLastRides);
+        allCompanies.sort();
+
+        // pre-populate options
+        for (let company of allCompanies) {
+            const companyOption = document.createElement("option");
+            companyOption.value = company;
+            companyOption.textContent = company;
+            companySelect.appendChild(companyOption);
+        }
+        companySelect.selectedIndex = 0;
+
+        const firstCompanyDepots = Object.keys(data.companyToDepotToRiderToLastRides[allCompanies[0]]);
+        for (let depot of firstCompanyDepots) {
+            const depotOption = document.createElement("option");
+            depotOption.value = depot;
+            depotOption.textContent = (depot !== NO_DEPOT_VALUE) ? depot : "(none)";
+            depotSelect.appendChild(depotOption);
+        }
+        depotSelect.selectedIndex = 0;
+
+        // set up empty chart
+        const canvas = <HTMLCanvasElement|null>document.getElementById("chart-canvas");
+        if (canvas === null) {
+            return;
+        }
+        const chart = new Chart(canvas, {
+            type: "pie",
+            data: {
+                datasets: [],
+            },
+            options: {
+                maintainAspectRatio: false,
+            },
+        });
+
+        // define update function
+        function updateChart(
+            chart: Chart<"pie">, data: DepotLastRiderPieData,
+            companySelect: HTMLSelectElement, depotSelect: HTMLSelectElement,
+        ) {
+            const selectedCompany = companySelect.value;
+            const initialSelectedDepot = depotSelect.value;
+
+            // reduce depots to those of the given company
+            while (depotSelect.lastChild !== null) {
+                depotSelect.removeChild(depotSelect.lastChild);
+            }
+            const companyDepots: string[] = Object.keys(data.companyToDepotToRiderToLastRides[selectedCompany]);
+            for (let depot of companyDepots) {
+                const depotOption = document.createElement("option");
+                depotOption.value = depot;
+                depotOption.textContent = (depot !== NO_DEPOT_VALUE) ? depot : "(none)";
+                depotSelect.appendChild(depotOption);
+            }
+
+            const depotIndex = companyDepots.indexOf(initialSelectedDepot);
+            if (depotIndex !== -1) {
+                depotSelect.selectedIndex = depotIndex;
+            } else {
+                depotSelect.selectedIndex = 0;
+            }
+            const selectedDepot = depotSelect.value;
+
+            // collect the counts
+            const riderToLastVehicleCount = data.companyToDepotToRiderToLastRides[selectedCompany][selectedDepot];
+
+            // give this data to the chart
+            const dataRiders: string[] = Object.keys(riderToLastVehicleCount);
+            dataRiders.sort();
+            const dataValues: number[] = dataRiders.map(r => riderToLastVehicleCount[r]);
+            chart.data = {
+                datasets: [
+                    {
+                        data: dataValues,
+                    },
+                ],
+                labels: dataRiders,
+            };
+            chart.update();
+        }
+
+        // link up events
+        companySelect.addEventListener("change", () => updateChart(
+            chart, data,
+            companySelect, depotSelect,
+        ));
+        depotSelect.addEventListener("change", () => updateChart(
+            chart, data,
+            companySelect, depotSelect,
+        ));
+
+        // perform initial chart update
+        updateChart(
+            chart, data,
+            companySelect, depotSelect,
+        );
+    }
+
     export function setUpByDayOfWeek() {
         document.addEventListener("DOMContentLoaded", doSetUpByDayOfWeek);
     }
@@ -1077,5 +1216,9 @@ export namespace Charting {
 
     export function setUpLastRiderHistogramByFixedPos() {
         document.addEventListener("DOMContentLoaded", doSetUpLastRiderHistogramByFixedPos);
+    }
+
+    export function setUpDepotLastRiderPie() {
+        document.addEventListener("DOMContentLoaded", doSetUpDepotLastRiderPie);
     }
 }

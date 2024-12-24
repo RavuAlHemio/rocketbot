@@ -14,8 +14,10 @@ use tokio_postgres::types::ToSql;
 use tracing::error;
 
 use crate::{get_query_pairs, render_response, return_400, return_405, return_500};
-use crate::bim::{connect_to_db, obtain_vehicle_extract};
+use crate::bim::{connect_to_db, obtain_company_to_bim_database, obtain_vehicle_extract};
 use crate::templating::filters;
+
+use super::obtain_company_to_definition;
 
 
 const CHART_COLORS: [[u8; 3]; 30] = [
@@ -293,6 +295,21 @@ impl LastRiderHistogramByFixedPosTemplate {
     pub fn json_data(&self) -> String {
         let value = serde_json::json!({
             "leadingTypeToRiderToCounts": self.leading_type_to_rider_to_counts,
+        });
+        serde_json::to_string(&value)
+            .expect("failed to JSON-encode graph data")
+    }
+}
+
+#[derive(Clone, Debug, Default, Eq, Hash, Ord, PartialEq, PartialOrd, Serialize, Template)]
+#[template(path = "bim-depot-lastrider-pie.html")]
+struct BimDepotLastRiderPieTemplate {
+    pub company_to_depot_to_rider_to_last_rides: BTreeMap<String, BTreeMap<String, BTreeMap<String, i64>>>,
+}
+impl BimDepotLastRiderPieTemplate {
+    pub fn json_data(&self) -> String {
+        let value = serde_json::json!({
+            "companyToDepotToRiderToLastRides": self.company_to_depot_to_rider_to_last_rides,
         });
         serde_json::to_string(&value)
             .expect("failed to JSON-encode graph data")
@@ -1600,6 +1617,95 @@ pub(crate) async fn handle_bim_last_rider_histogram_by_fixed_pos(request: &Reque
 
     let template = LastRiderHistogramByFixedPosTemplate {
         leading_type_to_rider_to_counts,
+    };
+    match render_response(&template, &query_pairs, 200, vec![]).await {
+        Some(r) => Ok(r),
+        None => return_500(),
+    }
+}
+
+pub(crate) async fn handle_bim_depot_last_rider_pie(request: &Request<Incoming>) -> Result<Response<Full<Bytes>>, Infallible> {
+    const NO_DEPOT_KEY: &str = "\u{18}";
+
+    let query_pairs = get_query_pairs(request);
+    if request.method() != Method::GET {
+        return return_405(&query_pairs).await;
+    }
+
+    let Some(db_conn) = connect_to_db().await else {
+        return return_500()
+    };
+    let Some(mut company_to_definition) = obtain_company_to_definition().await else {
+        return return_500()
+    };
+    company_to_definition.retain(|_company, definition| !definition["bim_database_path"].is_null());
+    let Some(company_to_opt_database) = obtain_company_to_bim_database(&company_to_definition) else {
+        return return_500()
+    };
+    let company_to_database: BTreeMap<_, _> = company_to_opt_database.into_iter()
+        .filter_map(|(company, database)| database.map(|d| (company, d)))
+        .collect();
+
+    let last_rider_stmt_res = db_conn.prepare(
+        "
+            SELECT
+                rrv.vehicle_number,
+                rrv.rider_username
+            FROM
+                bim.rides_and_ridden_vehicles rrv
+            WHERE
+                rrv.company = $1
+                AND NOT EXISTS (
+                    SELECT 1
+                    FROM bim.rides_and_ridden_vehicles rrv2
+                    WHERE rrv2.company = rrv.company
+                    AND rrv2.vehicle_number = rrv.vehicle_number
+                    AND rrv2.\"timestamp\" < rrv.\"timestamp\"
+                )
+        ",
+    ).await;
+    let last_rider_stmt = match last_rider_stmt_res {
+        Ok(lrs) => lrs,
+        Err(e) => {
+            error!("failed to prepare query statement: {}", e);
+            return return_500();
+        },
+    };
+
+    let mut company_to_depot_to_rider_to_last_rides: BTreeMap<String, BTreeMap<String, BTreeMap<String, i64>>> = BTreeMap::new();
+    for (company, vehicle_database) in &company_to_database {
+        let last_rider_rows_res = db_conn.query(&last_rider_stmt, &[company]).await;
+        let last_rider_rows = match last_rider_rows_res {
+            Ok(r) => r,
+            Err(e) => {
+                error!("failed to query rides: {}", e);
+                return return_500();
+            },
+        };
+        for row in &last_rider_rows {
+            let vehicle_number_raw: String = row.get(0);
+            let rider_username: String = row.get(1);
+
+            let vehicle_number = VehicleNumber::from_string(vehicle_number_raw);
+
+            let Some(vehicle_entry) = vehicle_database.get(&vehicle_number) else {
+                continue
+            };
+            let depot = vehicle_entry.depot.clone().unwrap_or_else(|| NO_DEPOT_KEY.to_owned());
+
+            let last_vehicle_count = company_to_depot_to_rider_to_last_rides
+                .entry(company.clone())
+                .or_insert_with(|| BTreeMap::new())
+                .entry(depot)
+                .or_insert_with(|| BTreeMap::new())
+                .entry(rider_username)
+                .or_insert(0);
+            *last_vehicle_count += 1;
+        }
+    }
+
+    let template = BimDepotLastRiderPieTemplate {
+        company_to_depot_to_rider_to_last_rides,
     };
     match render_response(&template, &query_pairs, 200, vec![]).await {
         Some(r) => Ok(r),
