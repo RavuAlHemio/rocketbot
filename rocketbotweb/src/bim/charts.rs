@@ -1692,6 +1692,10 @@ pub(crate) async fn handle_bim_depot_last_rider_pie(request: &Request<Incoming>)
                 continue
             };
             let depot = vehicle_entry.depot.clone().unwrap_or_else(|| NO_DEPOT_KEY.to_owned());
+            let is_active = vehicle_entry.in_service_since.is_some() && vehicle_entry.out_of_service_since.is_none();
+            if !is_active {
+                continue;
+            }
 
             let last_vehicle_count = company_to_depot_to_rider_to_last_rides
                 .entry(company.clone())
