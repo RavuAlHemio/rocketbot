@@ -1543,8 +1543,11 @@ pub(crate) async fn handle_bim_depot_last_rider_pie(request: &Request<Incoming>)
     let Some(company_to_opt_database) = obtain_company_to_bim_database(&company_to_definition) else {
         return return_500()
     };
+
+    // only take companies that have a vehicle database where at least one depot is known
     let company_to_database: BTreeMap<_, _> = company_to_opt_database.into_iter()
         .filter_map(|(company, database)| database.map(|d| (company, d)))
+        .filter(|(_company, database)| database.values().any(|v| v.depot.is_some()))
         .collect();
 
     let last_rider_stmt_res = db_conn.prepare(
