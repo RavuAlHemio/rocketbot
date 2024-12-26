@@ -1,3 +1,5 @@
+CREATE EXTENSION IF NOT EXISTS plpython3u;
+
 CREATE SCHEMA bim;
 
 CREATE SEQUENCE bim.rides__id AS bigint;
@@ -275,48 +277,34 @@ CREATE OR REPLACE FUNCTION bim.ridden_vehicles_between_riders
 , old_rider character varying(256)
 , new_rider character varying(256)
 )
-LANGUAGE plpgsql
+LANGUAGE plpython3u
 STABLE STRICT
 AS $$
-DECLARE
-    rv record;
-    company_to_vehicle_to_last_rider jsonb;
-    vehicle_to_last_rider jsonb;
-BEGIN
-    IF same_rider_also IS NULL
-    THEN
-        RETURN;
-    END IF;
+if same_rider_also is None:
+    return None
 
-    company_to_vehicle_to_last_rider := JSONB_BUILD_OBJECT();
-    FOR rv IN SELECT rav.id, rav.company, rav.vehicle_number, rav."timestamp", rav.rider_username FROM bim.rides_and_vehicles rav WHERE rav.coupling_mode = 'R' ORDER BY rav."timestamp", rav.id
-    LOOP
-        id := rv.id;
-        company := rv.company;
-        vehicle_number := rv.vehicle_number;
-        timestamp := rv."timestamp";
+company_to_vehicle_to_last_rider = {}
+for row in plpy.cursor('SELECT rav.id, rav.company, rav.vehicle_number, rav."timestamp", rav.rider_username FROM bim.rides_and_vehicles rav WHERE rav.coupling_mode = \'R\' ORDER BY rav."timestamp", rav.id'):
+    company = row["company"]
+    vehicle_number = row["vehicle_number"]
 
-        vehicle_to_last_rider := company_to_vehicle_to_last_rider -> company;
-        IF vehicle_to_last_rider IS NULL
-        THEN
-            vehicle_to_last_rider := JSONB_BUILD_OBJECT();
-        END IF;
-        old_rider := vehicle_to_last_rider ->> vehicle_number;
-        new_rider := rv.rider_username;
+    try:
+        vehicle_to_last_rider = company_to_vehicle_to_last_rider[company]
+    except KeyError:
+        vehicle_to_last_rider = {}
+        company_to_vehicle_to_last_rider[company] = vehicle_to_last_rider
 
-        IF NOT same_rider_also AND old_rider = new_rider
-        THEN
-            CONTINUE;
-        END IF;
+    old_rider = vehicle_to_last_rider.get(vehicle_number)
+    new_rider = row["rider_username"]
 
-        vehicle_to_last_rider := vehicle_to_last_rider || JSONB_BUILD_OBJECT(vehicle_number, new_rider);
-        company_to_vehicle_to_last_rider := company_to_vehicle_to_last_rider || JSONB_BUILD_OBJECT(company, vehicle_to_last_rider);
-        RETURN NEXT;
-    END LOOP;
-END;
+    if not same_rider_also and old_rider == new_rider:
+        continue
+
+    vehicle_to_last_rider[vehicle_number] = new_rider
+    yield (row["id"], company, vehicle_number, row["timestamp"], old_rider, new_rider)
 $$;
 
 CREATE TABLE bim.schema_revision
 ( sch_rev bigint NOT NULL
 );
-INSERT INTO bim.schema_revision (sch_rev) VALUES (15);
+INSERT INTO bim.schema_revision (sch_rev) VALUES (16);
