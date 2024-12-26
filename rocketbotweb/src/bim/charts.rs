@@ -3,11 +3,10 @@ use std::convert::Infallible;
 use std::fmt::Write;
 
 use askama::Template;
-use chrono::{DateTime, Local};
+use chrono::{DateTime, Datelike, Local};
 use http_body_util::Full;
 use hyper::{Method, Request, Response};
 use hyper::body::{Bytes, Incoming};
-use png;
 use rocketbot_bim_common::{CouplingMode, VehicleNumber};
 use serde::Serialize;
 use tokio_postgres::types::ToSql;
@@ -15,71 +14,11 @@ use tracing::error;
 
 use crate::{get_query_pairs, render_response, return_400, return_405, return_500};
 use crate::bim::{connect_to_db, obtain_company_to_bim_database, obtain_vehicle_extract};
+use crate::line_graph_drawing::{LineGraph, GRAPH_COLORS};
 use crate::templating::filters;
 
 use super::obtain_company_to_definition;
 
-
-const CHART_COLORS: [[u8; 3]; 30] = [
-    // DawnBringer DB32 palette without black and white
-    [0x63, 0x9b, 0xff], // #639bff
-    [0xac, 0x32, 0x32], // #ac3232
-    [0xdf, 0x71, 0x26], // #df7126
-    [0xfb, 0xf2, 0x36], // #fbf236
-    [0x99, 0xe5, 0x50], // #99e550
-    [0x76, 0x42, 0x8a], // #76428a
-
-    [0x5b, 0x6e, 0xe1], // #5b6ee1
-    [0xd9, 0x57, 0x63], // #d95763
-    [0xd9, 0xa0, 0x66], // #d9a066
-    [0x8f, 0x97, 0x4a], // #8f974a
-    [0x6a, 0xbe, 0x30], // #6abe30
-    [0x3f, 0x3f, 0x74], // #3f3f74
-
-    [0x30, 0x60, 0x82], // #306082
-    [0x8f, 0x56, 0x3b], // #8f563b
-    [0xee, 0xc3, 0x9a], // #eec39a
-    [0x8a, 0x6f, 0x30], // #8a6f30
-    [0x37, 0x94, 0x6e], // #37946e
-    [0xd7, 0x7b, 0xba], // #d77bba
-
-    [0x5f, 0xcd, 0xe4], // #5fcde4
-    [0x66, 0x39, 0x31], // #663931
-    [0x52, 0x4b, 0x24], // #524b24
-    [0xcb, 0xdb, 0xfc], // #cbdbfc
-    [0x4b, 0x69, 0x2f], // #4b692f
-    [0x45, 0x28, 0x3c], // #45283c
-
-    [0x22, 0x20, 0x34], // #222034
-    [0x59, 0x56, 0x52], // #595652
-    [0x84, 0x7e, 0x87], // #847e87
-    [0x9b, 0xad, 0xb7], // #9badb7
-    [0x32, 0x3c, 0x39], // #323c39
-    [0x69, 0x6a, 0x6a], // #696a6a
-];
-const CHART_BORDER_COLOR: [u8; 3] = [0, 0, 0];
-const CHART_BACKGROUND_COLOR: [u8; 3] = [255, 255, 255];
-const CHART_TICK_COLOR: [u8; 3] = [221, 221, 221];
-
-
-#[derive(Clone, Copy, Debug, Eq, Hash, Ord, PartialEq, PartialOrd)]
-enum ChartColor {
-    Background,
-    Border,
-    Tick,
-    Data(u8),
-}
-impl ChartColor {
-    #[inline]
-    pub fn palette_index(&self) -> u8 {
-        match self {
-            Self::Background => 0,
-            Self::Border => 1,
-            Self::Tick => 2,
-            Self::Data(d) => d.checked_add(3).unwrap(),
-        }
-    }
-}
 
 #[derive(Clone, Debug, Default, Eq, Hash, Ord, PartialEq, PartialOrd, Serialize)]
 struct GraphRiderPart {
@@ -340,7 +279,7 @@ pub(crate) async fn handle_bim_latest_rider_count_over_time_image(request: &Requ
 
     let query = format!(
         "
-            SELECT rvto.id, rvto.old_rider, rvto.new_rider
+            SELECT rvto.id, rvto.old_rider, rvto.new_rider, rvto.\"timestamp\"
             FROM bim.ridden_vehicles_between_riders(FALSE) rvto
             {}
             ORDER BY rvto.\"timestamp\", rvto.id
@@ -364,10 +303,13 @@ pub(crate) async fn handle_bim_latest_rider_count_over_time_image(request: &Requ
 
     let mut all_riders = HashSet::new();
     let mut ride_id_and_rider_to_latest_vehicle_count: Vec<(i64, HashMap<String, usize>)> = Vec::new();
+    let mut prev_year = None;
+    let mut graph_x_to_new_year = BTreeMap::new();
     for row in &ride_rows {
         let ride_id: i64 = row.get(0);
         let old_rider: Option<String> = row.get(1);
         let new_rider: String = row.get(2);
+        let timestamp: DateTime<Local> = row.get(3);
 
         if let Some(or) = old_rider.as_ref() {
             all_riders.insert(or.clone());
@@ -398,6 +340,15 @@ pub(crate) async fn handle_bim_latest_rider_count_over_time_image(request: &Requ
             .entry(new_rider.clone())
             .or_insert(0);
         *new_rider_count += 1;
+
+        let cur_year = timestamp.year();
+        if let Some(py) = prev_year {
+            if py != cur_year {
+                // year changed!
+                graph_x_to_new_year.insert(ride_id_and_rider_to_latest_vehicle_count.len(), cur_year);
+            }
+        }
+        prev_year = Some(cur_year);
     }
 
     let mut rider_names: Vec<String> = all_riders
@@ -449,6 +400,7 @@ pub(crate) async fn handle_bim_latest_rider_count_over_time_image(request: &Requ
         }
     }
 
+    // prepare the graph
     let ride_count = ride_id_and_rider_to_latest_vehicle_count.len();
     let max_count = ride_id_and_rider_to_latest_vehicle_count
         .iter()
@@ -456,93 +408,42 @@ pub(crate) async fn handle_bim_latest_rider_count_over_time_image(request: &Requ
         .map(|val| *val)
         .max()
         .unwrap_or(0);
-    let max_count_with_headroom = if max_count % 100 > 75 {
-        // 80 -> 200
-        ((max_count / 100) + 2) * 100
-    } else {
-        // 50 -> 100
-        ((max_count / 100) + 1) * 100
-    };
+    let mut graph = LineGraph::new_for_ranges(ride_count, max_count, thicken);
 
-    // calculate image size
-    // 2 = frame width on both edges
-    let width = 2 + ride_count;
-    let height = 2 + max_count_with_headroom;
-    let width_u32: u32 = width.try_into().expect("width too large");
-    let height_u32: u32 = height.try_into().expect("height too large");
+    // draw the "start of new year" bars
+    const YEAR_NUMBER_LEVELS: usize = 3;
+    const YEAR_NUMBER_LEVEL_OFFSET: usize = 8;
+    const YEAR_NUMBER_X_OFFSET: usize = 4;
+    const YEAR_NUMBER_Y_OFFSET: usize = 4;
+    let mut current_year_number_level = 0;
+    for (graph_x, new_year) in &graph_x_to_new_year {
+        // line
+        graph.draw_time_subdivision(*graph_x);
 
-    let mut pixels = vec![ChartColor::Background; usize::try_from(width * height).unwrap()];
-
-    // draw ticks
-    const HORIZONTAL_TICK_STEP: usize = 100;
-    const VERTICAL_TICK_STEP: usize = 100;
-    for graph_y in (0..max_count_with_headroom).step_by(VERTICAL_TICK_STEP) {
-        let y = height - (1 + graph_y);
-        for x in 1..(width-1) {
-            pixels[y * width + x] = ChartColor::Tick;
-        }
-    }
-    for graph_x in (0..ride_count).step_by(HORIZONTAL_TICK_STEP) {
-        let x = 1 + graph_x;
-        for y in 1..(height-1) {
-            pixels[y * width + x] = ChartColor::Tick;
-        }
+        // year number text
+        let new_year_string = new_year.to_string();
+        graph.draw_string(
+            *graph_x + YEAR_NUMBER_X_OFFSET,
+            YEAR_NUMBER_Y_OFFSET + YEAR_NUMBER_LEVEL_OFFSET * current_year_number_level,
+            &new_year_string,
+        );
+        current_year_number_level = (current_year_number_level + 1) % YEAR_NUMBER_LEVELS;
     }
 
-    // draw frame
-    for y in 0..height {
-        pixels[y * width + 0] = ChartColor::Border;
-        pixels[y * width + (width - 1)] = ChartColor::Border;
-    }
-    for x in 0..width {
-        pixels[0 * width + x] = ChartColor::Border;
-        pixels[(height - 1) * width + x] = ChartColor::Border;
-    }
-
-    // now draw the data
+    // draw the data
     for (graph_x, (_ride_id, rider_to_latest_vehicle_count)) in ride_id_and_rider_to_latest_vehicle_count.iter().enumerate() {
-        let x = 1 + graph_x;
         for (i, rider) in rider_names.iter().enumerate() {
             let vehicle_count = rider_to_latest_vehicle_count
                 .get(rider)
                 .map(|vc| *vc)
                 .unwrap_or(0);
 
-            let y = height - (1 + vehicle_count);
-            let pixel_value = ChartColor::Data((i % CHART_COLORS.len()).try_into().unwrap());
-            pixels[y * width + x] = pixel_value;
-
-            for graph_thicker_y in 0..thicken {
-                let thicker_y_down = y + 1 + graph_thicker_y;
-                if thicker_y_down < height {
-                    pixels[thicker_y_down * width + x] = pixel_value;
-                }
-
-                if let Some(thicker_y_up) = y.checked_sub(1 + graph_thicker_y) {
-                    pixels[thicker_y_up * width + x] = pixel_value;
-                }
-            }
+            graph.draw_data_point(graph_x, vehicle_count, (i % GRAPH_COLORS.len()).try_into().unwrap());
         }
     }
 
-    // PNGify
-    let palette: Vec<u8> = CHART_BACKGROUND_COLOR.into_iter()
-        .chain(CHART_BORDER_COLOR.into_iter())
-        .chain(CHART_TICK_COLOR.into_iter())
-        .chain(CHART_COLORS.into_iter().flat_map(|cs| cs))
-        .collect();
-    let mut png_bytes: Vec<u8> = Vec::new();
-
-    {
-        let mut png_encoder = png::Encoder::new(&mut png_bytes, width_u32, height_u32);
-        png_encoder.set_color(png::ColorType::Indexed);
-        png_encoder.set_depth(png::BitDepth::Eight);
-        png_encoder.set_palette(palette);
-        let mut png_writer = png_encoder.write_header().expect("failed to write PNG header");
-        let mut png_data = Vec::with_capacity(pixels.len());
-        png_data.extend(pixels.iter().map(|p| p.palette_index()));
-        png_writer.write_image_data(&png_data).expect("failed to write image data");
-    }
+    // gimme PNG
+    let png_bytes = graph.to_png();
 
     let response_res = Response::builder()
         .header("Content-Type", "image/png")
@@ -606,7 +507,7 @@ pub(crate) async fn handle_bim_latest_rider_count_over_time(request: &Request<In
     for (i, rider_name) in rider_names.iter().enumerate() {
         riders.push(GraphRiderPart {
             name: rider_name.clone(),
-            color: CHART_COLORS[i % CHART_COLORS.len()],
+            color: GRAPH_COLORS[i % GRAPH_COLORS.len()],
         });
     }
 
