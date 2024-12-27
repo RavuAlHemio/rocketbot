@@ -462,7 +462,7 @@ for ride_row in plpy.cursor(ride_query, []):
         vehicle_lastrider[ride_row["vehicle_number"]] = ride_row["rider_username"]
         last_rider_to_count[ride_row["rider_username"]] += 1
 
-    if last_rider_to_count[ride_row["rider_username"]] >= last_rider_count:
+    if last_rider_to_count[rider] >= last_rider_count:
         return ride_row["timestamp"]
 
 return None
