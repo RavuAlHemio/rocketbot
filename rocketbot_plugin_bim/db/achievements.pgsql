@@ -32,27 +32,20 @@ $$;
 CREATE OR REPLACE FUNCTION bim.smallest_factor
 ( val bigint
 ) RETURNS bigint
-LANGUAGE plpgsql
+LANGUAGE plpython3u
 IMMUTABLE LEAKPROOF STRICT
 PARALLEL SAFE
 AS $$
-    DECLARE
-        test_num bigint NOT NULL := 2;
-    BEGIN
-        IF val IS NULL THEN
-            RETURN NULL;
-        END IF;
-        IF val < 2 THEN
-            RETURN val;
-        END IF;
-        WHILE val > test_num LOOP
-            IF MOD(val, test_num) = 0 THEN
-                RETURN test_num;
-            END IF;
-            test_num := test_num + 1;
-        END LOOP;
-        RETURN val;
-    END;
+if val is None:
+    return None
+if val < 2:
+    return val
+test_num = 2
+while val > test_num:
+    if val % test_num == 0:
+        return test_num
+    test_num += 1
+return val
 $$;
 
 CREATE OR REPLACE FUNCTION bim.is_prime
@@ -432,70 +425,47 @@ CREATE OR REPLACE FUNCTION bim.current_last_rider_count_reached
 ( rider character varying
 , last_rider_count bigint
 ) RETURNS timestamp with time zone
-LANGUAGE plpgsql
+LANGUAGE plpython3u
 STABLE STRICT
 AS $$
-    DECLARE
-        comp_veh_lstrdr jsonb;
-        last_rider_to_count jsonb;
-        r_company character varying;
-        r_vehicle_number character varying;
-        r_rider character varying;
-        r_timestamp timestamp with time zone;
-        prev_last_rider character varying;
-    BEGIN
-        IF rider IS NULL THEN RETURN NULL; END IF;
-        IF last_rider_count IS NULL THEN RETURN NULL; END IF;
+if rider is None or last_rider_count is None:
+    return None
 
-        comp_veh_lstrdr := JSONB_BUILD_OBJECT();
-        last_rider_to_count := JSONB_BUILD_OBJECT(rider, 0);
+from collections import defaultdict
 
-        FOR r_company, r_vehicle_number, r_rider, r_timestamp IN
-            SELECT DISTINCT company, vehicle_number, rider_username, "timestamp"
-            FROM bim.rides_and_ridden_vehicles
-            ORDER BY "timestamp"
-        LOOP
-            IF NOT last_rider_to_count ? r_rider THEN
-                last_rider_to_count := JSONB_SET(last_rider_to_count, ARRAY[r_rider], TO_JSONB(0));
-            END IF;
+company_vehicle_lastrider = {}
+last_rider_to_count = defaultdict(lambda: 0)
 
-            IF NOT comp_veh_lstrdr ? r_company THEN
-                comp_veh_lstrdr := JSONB_SET(comp_veh_lstrdr, ARRAY[r_company], JSONB_BUILD_OBJECT());
-            END IF;
+ride_query = plpy.prepare(
+    """
+        SELECT DISTINCT company, vehicle_number, rider_username, "timestamp"
+        FROM bim.rides_and_ridden_vehicles
+        ORDER BY "timestamp"
+    """,
+    [],
+)
+for ride_row in plpy.cursor(ride_query, []):
+    try:
+        vehicle_lastrider = company_vehicle_lastrider[ride_row["company"]]
+    except KeyError:
+        vehicle_lastrider = {}
+        company_vehicle_lastrider[ride_row["company"]] = vehicle_lastrider
 
-            IF (comp_veh_lstrdr #> ARRAY[r_company]) ? r_vehicle_number THEN
-                -- we already have a last rider for this vehicle
-                prev_last_rider := (comp_veh_lstrdr #> ARRAY[r_company]) ->> r_vehicle_number;
-                IF prev_last_rider <> r_rider THEN
-                    -- prev_last_rider is no longer the last rider of this vehicle
-                    -- reduce their count
-                    last_rider_to_count := JSONB_SET(last_rider_to_count, ARRAY[prev_last_rider], TO_JSONB(CAST((last_rider_to_count #> ARRAY[prev_last_rider]) AS bigint) - 1));
+    if ride_row["vehicle_number"] in vehicle_lastrider:
+        prev_last_rider = vehicle_lastrider[ride_row["vehicle_number"]]
+        if prev_last_rider != ride_row["rider_username"]:
+            last_rider_to_count[prev_last_rider] -= 1
+            last_rider_to_count[ride_row["rider_username"]] += 1
+            vehicle_lastrider[ride_row["vehicle_number"]] = ride_row["rider_username"]
+    else:
+        # first rider in the vehicle
+        vehicle_lastrider[ride_row["vehicle_number"]] = ride_row["rider_username"]
+        last_rider_to_count[ride_row["rider_username"]] += 1
 
-                    -- r_rider is now the last rider of this vehicle
-                    -- increase their count
-                    last_rider_to_count := JSONB_SET(last_rider_to_count, ARRAY[r_rider], TO_JSONB(CAST((last_rider_to_count #> ARRAY[r_rider]) AS bigint) + 1));
-                    -- remember them
-                    comp_veh_lstrdr := JSONB_SET(comp_veh_lstrdr, ARRAY[r_company, r_vehicle_number], TO_JSONB(r_rider));
-                END IF;
-                -- (if prev_last_rider = r_rider, it's a zero-sum game, so don't bother)
-            ELSE
-                -- this is the first rider in the vehicle
-                -- remember them
-                comp_veh_lstrdr := JSONB_SET(comp_veh_lstrdr, ARRAY[r_company, r_vehicle_number], TO_JSONB(r_rider));
+    if last_rider_to_count[ride_row["rider_username"]] >= last_rider_count:
+        return ride_row["timestamp"]
 
-                -- directly increase their last-rider count
-                last_rider_to_count := JSONB_SET(last_rider_to_count, ARRAY[r_rider], TO_JSONB(CAST((last_rider_to_count #> ARRAY[r_rider]) AS bigint) + 1));
-            END IF;
-
-            -- check for exit condition
-            IF CAST((last_rider_to_count #> ARRAY[rider]) AS bigint) >= last_rider_count THEN
-                RETURN r_timestamp;
-            END IF;
-        END LOOP;
-
-        -- guess it never happened
-        RETURN NULL;
-    END;
+return None
 $$;
 
 CREATE OR REPLACE FUNCTION bim.euclid_gcd
