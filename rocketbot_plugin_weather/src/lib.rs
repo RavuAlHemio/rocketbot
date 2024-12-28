@@ -175,6 +175,8 @@ impl WeatherPlugin {
 
             let provider: Box<dyn WeatherProvider> = if name == "owm" {
                 Box::new(crate::providers::owm::OpenWeatherMapProvider::new(provider_config).await)
+            } else if name == "always_snowing" {
+                Box::new(crate::providers::always_snowing::AlwaysSnowingProvider::new(provider_config).await)
             } else {
                 error!("unknown weather provider {:?}", name);
                 return Err("unknown weather provider");
