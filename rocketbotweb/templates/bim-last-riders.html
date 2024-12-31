@@ -1,0 +1,27 @@
+{% extends "base.html" %}
+
+{% block title %}Latest Riders of Public Transport Vehicles{% endblock %}
+
+{% block content %}
+<main class="bim-last-riders">
+
+<h1>Latest Riders of Public Transport Vehicles</h1>
+
+{% for rider_vehicles in riders %}
+<section class="rider">
+
+<h2 class="rider-name">{{ rider_vehicles.rider }}</h2>
+
+<p>
+    {%- for vehicle in rider_vehicles.vehicles -%}
+        {%- if !loop.first %}, {% endif -%}
+        <a href="bim-detail?company={{ vehicle.company|urlencode|escape }}&amp;vehicle={{ vehicle.number|urlencode|escape }}"><span class="company">{{ vehicle.company|escape }}</span>/<span class="number">{{ vehicle.number|escape }}</span></a>
+    {%- endfor -%}
+</p>
+
+</section> {#- end of rider #}
+{% endfor %}
+
+</main>
+
+{% endblock %}

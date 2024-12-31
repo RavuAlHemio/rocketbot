@@ -103,6 +103,18 @@ struct TopDaysTemplate {
     pub counts_and_days: Vec<(i64, BTreeSet<DayCountPart>)>,
 }
 
+#[derive(Clone, Debug, Eq, Hash, PartialEq, Serialize, Template)]
+#[template(path = "bim-last-riders.html")]
+struct LastRidersTemplate {
+    pub riders: Vec<RiderVehiclesPart>,
+}
+
+#[derive(Clone, Debug, Eq, Hash, PartialEq, Serialize)]
+struct RiderVehiclesPart {
+    pub rider: String,
+    pub vehicles: BTreeSet<VehiclePart>,
+}
+
 
 pub(crate) async fn handle_top_bims(request: &Request<Incoming>) -> Result<Response<Full<Bytes>>, Infallible> {
     let query_pairs = get_query_pairs(request);
@@ -627,6 +639,74 @@ pub(crate) async fn handle_top_bim_days(request: &Request<Incoming>) -> Result<R
 
     let template = TopDaysTemplate {
         counts_and_days,
+    };
+    match render_response(&template, &query_pairs, 200, vec![]).await {
+        Some(r) => Ok(r),
+        None => return_500(),
+    }
+}
+
+pub(crate) async fn handle_bim_last_riders(request: &Request<Incoming>) -> Result<Response<Full<Bytes>>, Infallible> {
+    let query_pairs = get_query_pairs(request);
+
+    if request.method() != Method::GET {
+        return return_405(&query_pairs).await;
+    }
+
+    let db_conn = match connect_to_db().await {
+        Some(c) => c,
+        None => return return_500(),
+    };
+
+    // query rides
+    let ride_rows_res = db_conn.query(
+        "
+            SELECT rarv.rider_username, rarv.company, rarv.vehicle_number
+            FROM bim.rides_and_ridden_vehicles rarv
+            WHERE NOT EXISTS (
+                SELECT 1
+                FROM bim.rides_and_ridden_vehicles rarv2
+                WHERE rarv2.company = rarv.company
+                AND rarv2.vehicle_number = rarv.vehicle_number
+                AND rarv2.\"timestamp\" > rarv.\"timestamp\"
+            )
+        ",
+        &[],
+    ).await;
+    let ride_rows = match ride_rows_res {
+        Ok(rs) => rs,
+        Err(e) => {
+            error!("error querying vehicle rides: {}", e);
+            return return_500();
+        },
+    };
+
+    let mut rider_to_last_vehicles: BTreeMap<String, BTreeSet<VehiclePart>> = BTreeMap::new();
+    for ride_row in ride_rows {
+        let rider_username: String = ride_row.get(0);
+        let company: String = ride_row.get(1);
+        let vehicle_number = VehicleNumber::from_string(ride_row.get(2));
+
+        rider_to_last_vehicles
+            .entry(rider_username)
+            .or_insert_with(|| BTreeSet::new())
+            .insert(VehiclePart {
+                company,
+                number: vehicle_number,
+            });
+    }
+
+    let riders: Vec<RiderVehiclesPart> = rider_to_last_vehicles.into_iter()
+        .map(|(rider, vehicles)| {
+            RiderVehiclesPart {
+                rider,
+                vehicles,
+            }
+        })
+        .collect();
+
+    let template = LastRidersTemplate {
+        riders,
     };
     match render_response(&template, &query_pairs, 200, vec![]).await {
         Some(r) => Ok(r),

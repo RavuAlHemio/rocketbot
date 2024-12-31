@@ -53,8 +53,8 @@ use crate::bim::tables::{
     handle_bim_odds_ends, handle_bim_rides, handle_bim_types, handle_bim_vehicles,
 };
 use crate::bim::top::{
-    handle_explorer_bims, handle_top_bim_days, handle_top_bim_lines, handle_top_bims,
-    handle_wide_bims,
+    handle_bim_last_riders, handle_explorer_bims, handle_top_bim_days, handle_top_bim_lines,
+    handle_top_bims, handle_wide_bims,
 };
 use crate::config::WebConfig;
 use crate::quotes::{handle_quotes_votes, handle_top_quotes};
@@ -362,6 +362,7 @@ async fn handle_request(request: Request<Incoming>) -> Result<Response<Full<Byte
         "/bim-odds-ends" => handle_bim_odds_ends(&request).await,
         "/bim-drilldown" => handle_bim_drilldown(&request).await,
         "/bim-depot-last-rider-pie" => handle_bim_depot_last_rider_pie(&request).await,
+        "/bim-last-riders" => handle_bim_last_riders(&request).await,
         _ => {
             if let Some(caps) = STATIC_FILE_REGEX.captures(request.uri().path()) {
                 debug!(
