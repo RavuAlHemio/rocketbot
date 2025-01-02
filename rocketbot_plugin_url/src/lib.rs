@@ -17,6 +17,7 @@ use tracing::error;
 #[derive(Clone, Debug, Eq, PartialEq)]
 struct Config {
     url_safe_characters: HashSet<char>,
+    url_safe_characters_before_question_mark: HashSet<char>,
     wrapper_pairs: HashMap<char, char>,
     auto_fix_channels: HashSet<String>,
 }
@@ -30,6 +31,7 @@ struct LastFix {
 
 // don't escape '/', '%', '?', '&', '=', '+' or '#' by default as parts of the original URL may contain them
 const DEFAULT_URL_SAFE_CHARACTERS: &str = "0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz-_./%?&=+#";
+const DEFAULT_URL_SAFE_CHARACTERS_BEFORE_QUESTION_MARK: &str = "~";
 const DEFAULT_WRAPPER_PAIRS: &str = "(){}[]";
 
 static URL_RE: Lazy<Regex> = Lazy::new(|| Regex::new(concat!(
@@ -115,6 +117,7 @@ fn find_wrapper_balance(
 fn fix_urls(
     escape_me: &str,
     url_safe_characters: &HashSet<char>,
+    url_safe_characters_before_question_mark: &HashSet<char>,
     wrapper_pairs: &HashMap<char, char>,
 ) -> String {
     // choose what to do depending on what appears earlier:
@@ -152,8 +155,15 @@ fn fix_urls(
         // * colon-double-slash raw
         ret.push_str(url_caps.name("cds").unwrap().as_str());
         // * rest escaped
+        let mut question_mark_seen = false;
         for c in url_caps.name("rest").unwrap().as_str().chars() {
+            if c == '?' {
+                question_mark_seen = true;
+            }
+
             if url_safe_characters.contains(&c) {
+                ret.push(c);
+            } else if !question_mark_seen && url_safe_characters_before_question_mark.contains(&c) {
                 ret.push(c);
             } else {
                 ret.push_str(&char_to_escaped(c));
@@ -164,6 +174,7 @@ fn fix_urls(
         let rest = fix_urls(
             &escape_me[url_full_match.end()..],
             url_safe_characters,
+            url_safe_characters_before_question_mark,
             wrapper_pairs,
         );
         ret.push_str(&rest);
@@ -190,7 +201,12 @@ fn fix_urls(
 
                 // take everything within the wrappers, escaped using the same algorithm
                 let within_slice = &escape_me[opening_wrapper_index+opening_wrapper_char.len_utf8()..closing_wrapper_index];
-                let within = fix_urls(within_slice, url_safe_characters, wrapper_pairs);
+                let within = fix_urls(
+                    within_slice,
+                    url_safe_characters,
+                    url_safe_characters_before_question_mark,
+                    wrapper_pairs,
+                );
                 ret.push_str(&within);
 
                 // take the closing wrapper
@@ -198,7 +214,12 @@ fn fix_urls(
 
                 // take the rest behind the closing wrapper, escaped using the same algorithm
                 let rest_slice = &escape_me[closing_wrapper_index+closing_wrapper_char.len_utf8()..];
-                let rest = fix_urls(rest_slice, url_safe_characters, wrapper_pairs);
+                let rest = fix_urls(
+                    rest_slice,
+                    url_safe_characters,
+                    url_safe_characters_before_question_mark,
+                    wrapper_pairs,
+                );
                 ret.push_str(&rest);
 
                 return ret;
@@ -216,7 +237,12 @@ fn fix_urls(
 
                 // take the rest behind the opening wrapper, escaped using the same algorithm
                 let rest_slice = &escape_me[opening_wrapper_index+opening_wrapper_char.len_utf8()..];
-                let rest = fix_urls(rest_slice, url_safe_characters, wrapper_pairs);
+                let rest = fix_urls(
+                    rest_slice,
+                    url_safe_characters,
+                    url_safe_characters_before_question_mark,
+                    wrapper_pairs,
+                );
                 ret.push_str(&rest);
 
                 return ret;
@@ -244,6 +270,16 @@ impl UrlPlugin {
                 .as_str().ok_or("url_safe_characters neither null nor a string")?
         };
         let url_safe_characters: HashSet<char> = url_safe_characters_str.chars()
+            .collect();
+
+        let url_safe_characters_before_question_mark_val = &config["url_safe_characters_before_question_mark"];
+        let url_safe_characters_before_question_mark_str = if url_safe_characters_before_question_mark_val.is_null() {
+            DEFAULT_URL_SAFE_CHARACTERS_BEFORE_QUESTION_MARK
+        } else {
+            url_safe_characters_before_question_mark_val
+                .as_str().ok_or("url_safe_characters neither null nor a string")?
+        };
+        let url_safe_characters_before_question_mark: HashSet<char> = url_safe_characters_before_question_mark_str.chars()
             .collect();
 
         let wrapper_pairs_val = &config["wrapper_pairs"];
@@ -284,6 +320,7 @@ impl UrlPlugin {
 
         Ok(Config {
             url_safe_characters,
+            url_safe_characters_before_question_mark,
             wrapper_pairs,
             auto_fix_channels,
         })
@@ -295,10 +332,15 @@ impl UrlPlugin {
             Some(i) => i,
         };
 
-        let (url_safe_characters, wrapper_pairs) = {
+        let (
+            url_safe_characters,
+            url_safe_characters_before_question_mark,
+            wrapper_pairs,
+        ) = {
             let config_guard = self.config.read().await;
             (
                 config_guard.url_safe_characters.clone(),
+                config_guard.url_safe_characters_before_question_mark.clone(),
                 config_guard.wrapper_pairs.clone(),
             )
         };
@@ -317,7 +359,12 @@ impl UrlPlugin {
             return;
         }
 
-        let fixed = fix_urls(&command.rest, &url_safe_characters, &wrapper_pairs);
+        let fixed = fix_urls(
+            &command.rest,
+            &url_safe_characters,
+            &url_safe_characters_before_question_mark,
+            &wrapper_pairs,
+        );
         if fixed == command.rest {
             return;
         }
@@ -335,16 +382,27 @@ impl UrlPlugin {
             Some(mb) => mb,
         };
 
-        let (url_safe_characters, wrapper_pairs, auto_fix_channels) = {
+        let (
+            url_safe_characters,
+            url_safe_characters_before_question_mark,
+            wrapper_pairs,
+            auto_fix_channels,
+        ) = {
             let config_guard = self.config.read().await;
             (
                 config_guard.url_safe_characters.clone(),
+                config_guard.url_safe_characters_before_question_mark.clone(),
                 config_guard.wrapper_pairs.clone(),
                 config_guard.auto_fix_channels.clone(),
             )
         };
 
-        let fixed = fix_urls(message_body, &url_safe_characters, &wrapper_pairs);
+        let fixed = fix_urls(
+            message_body,
+            &url_safe_characters,
+            &url_safe_characters_before_question_mark,
+            &wrapper_pairs,
+        );
         if &fixed == message_body {
             return None;
         }
@@ -482,10 +540,14 @@ impl RocketBotPlugin for UrlPlugin {
 #[cfg(test)]
 mod tests {
     use std::collections::HashMap;
-    use super::{DEFAULT_URL_SAFE_CHARACTERS, DEFAULT_WRAPPER_PAIRS, fix_urls};
+    use super::{
+        DEFAULT_URL_SAFE_CHARACTERS, DEFAULT_URL_SAFE_CHARACTERS_BEFORE_QUESTION_MARK,
+        DEFAULT_WRAPPER_PAIRS, fix_urls,
+    };
 
     fn run_fix_urls_test(unescaped: &str, escaped: &str) {
         let url_safe_characters = DEFAULT_URL_SAFE_CHARACTERS.chars().collect();
+        let url_safe_characters_before_question_mark = DEFAULT_URL_SAFE_CHARACTERS_BEFORE_QUESTION_MARK.chars().collect();
 
         let mut wrapper_pairs = HashMap::new();
         let wpc: Vec<char> = DEFAULT_WRAPPER_PAIRS.chars().collect();
@@ -496,7 +558,7 @@ mod tests {
         }
 
         assert_eq!(
-            fix_urls(unescaped, &url_safe_characters, &wrapper_pairs).as_str(),
+            fix_urls(unescaped, &url_safe_characters, &url_safe_characters_before_question_mark, &wrapper_pairs).as_str(),
             escaped,
         );
     }
@@ -540,5 +602,10 @@ mod tests {
     #[test]
     fn test_fix_urls_outer_wrapper() {
         run_fix_urls_test("(borrowed from [The Grauniad](https://www.theguardian.com/))", "(borrowed from [The Grauniad](https://www.theguardian.com/))");
+    }
+
+    #[test]
+    fn test_tilde() {
+        run_fix_urls_test("https://example.com/~wavy/page?arg=~wavy~", "https://example.com/~wavy/page?arg=%7Ewavy%7E");
     }
 }
