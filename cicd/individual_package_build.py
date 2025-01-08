@@ -22,7 +22,7 @@ def main():
         print(f"these packages' builds failed: {failures!r}")
         sys.exit(1)
     else:
-        print("all packages built successfully")s
+        print("all packages built successfully")
         sys.exit(0)
 
 
