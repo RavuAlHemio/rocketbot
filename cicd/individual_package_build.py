@@ -9,6 +9,7 @@ def main():
 
     workspace_members = cargo.get("workspace", {}).get("members", [])
     for member in workspace_members:
+        print(f"### Building {member}")
         subprocess.run(
             ["cargo", "build", "--package", member, "--all-targets"],
             check=True,
