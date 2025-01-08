@@ -1,6 +1,5 @@
 use std::collections::HashMap;
 
-use png::text_metadata::ITXtChunk;
 use swash::FontRef;
 use swash::scale::{Render, ScaleContext, Source, StrikeWith};
 use swash::shape::ShapeContext;
@@ -146,6 +145,7 @@ pub fn map_to_png<W: std::io::Write>(
     right_margin: u32,
     itxt_blocks: &[(&str, &str)],
 ) -> Result<(), png::EncodingError> {
+    use png::text_metadata::ITXtChunk;
     let (mut width, mut height) = map_to_dimensions(&map);
     width += left_margin + right_margin;
     height += top_margin + bottom_margin;
