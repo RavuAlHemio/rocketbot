@@ -9,12 +9,21 @@ def main():
         cargo = toml.load(f)
 
     workspace_members = cargo.get("workspace", {}).get("members", [])
+    failures = []
     for member in workspace_members:
         print(f"Building {member}", file=sys.stderr, flush=True)
-        subprocess.run(
+        result = subprocess.run(
             ["cargo", "build", "--package", member, "--all-targets"],
-            check=True,
         )
+        if result.returncode != 0:
+            failures.append(member)
+
+    if failures:
+        print(f"these packages' builds failed: {failures!r}")
+        sys.exit(1)
+    else:
+        print("all packages built successfully")s
+        sys.exit(0)
 
 
 if __name__ == "__main__":
