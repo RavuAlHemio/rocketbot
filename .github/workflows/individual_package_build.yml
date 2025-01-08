@@ -1,0 +1,21 @@
+name: rocketbot individual package build
+on: [push]
+jobs:
+  build-arch-debug-individual-packages:
+    runs-on: ubuntu-latest
+    container: archlinux:base-devel
+    env:
+      RUST_BACKTRACE: 1
+    steps:
+      - name: update packages
+        run: pacman -Syu --noconfirm
+      - name: install packages
+        run: pacman -S --needed --noconfirm cargo cmake git nasm python-toml typescript
+      - name: trust repo directory
+        run: git config --global --add safe.directory /__w/rocketbot/rocketbot
+      - name: check out repository code
+        uses: actions/checkout@v4
+      - name: fetch dependencies
+        run: sh ./cicd/cargo_fetch.sh
+      - name: run individual package build
+        run: 'python3 cicd/individual_package_build.py'
