@@ -3835,7 +3835,7 @@ impl BimPlugin {
                     )
                 SELECT
                     nnrn.rider_username,
-                    CAST(SUM(nnrn.line_number) AS bigint) div_score
+                    CAST(SUM(nnrn.line_number ^ 2) AS bigint) div_score
                 FROM not_null_ride_numbers nnrn
                 WHERE MOD(nnrn.vehicle_number, nnrn.line_number) = 0
                 {}
