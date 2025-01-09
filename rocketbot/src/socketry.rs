@@ -22,6 +22,7 @@ use hyper_util::rt::TokioExecutor;
 use rand::{Rng, SeedableRng};
 use rand::distributions::{Distribution, Uniform};
 use rand::rngs::StdRng;
+use regex::Regex;
 use rocketbot_interface::{JsonValueExtensions, rocketchat_timestamp_to_datetime};
 use rocketbot_interface::commands::{CommandBehaviors, CommandConfiguration, CommandDefinition};
 use rocketbot_interface::errors::HttpError;
@@ -33,6 +34,7 @@ use rocketbot_interface::model::{
     PrivateMessage, User,
 };
 use rocketbot_interface::sync::{Mutex, RwLock};
+use rocketbot_string::regex::EnjoyableRegex;
 use serde_json;
 use sha2::{Digest, Sha256};
 use tokio;
@@ -188,6 +190,22 @@ impl ChannelDatabase {
     }
 }
 
+#[derive(Clone, Debug, Eq, Hash, Ord, PartialEq, PartialOrd)]
+struct ServerSettings {
+    pub max_message_length: Option<usize>,
+    pub username_regex: EnjoyableRegex,
+}
+impl Default for ServerSettings {
+    fn default() -> Self {
+        Self {
+            max_message_length: None,
+            username_regex: EnjoyableRegex::from_regex(Regex::new(
+                "[0-9a-zA-Z-_.]+"
+            ).expect("failed to compile default username regex")),
+        }
+    }
+}
+
 
 struct SharedConnectionState {
     outgoing_sender: mpsc::UnboundedSender<serde_json::Value>,
@@ -201,7 +219,7 @@ struct SharedConnectionState {
     http_client: HttpClient<HttpsConnector<HttpConnector>, Full<Bytes>>,
     my_user_id: RwLock<Option<String>>,
     my_auth_token: RwLock<Option<String>>,
-    max_message_length: RwLock<Option<usize>>,
+    server_settings: RwLock<ServerSettings>,
     username_to_initial_private_message: Mutex<HashMap<String, OutgoingMessage>>,
     username_to_initial_private_message_with_attachment: Mutex<HashMap<String, OutgoingMessageWithAttachment>>,
     new_timer_sender: mpsc::UnboundedSender<(DateTime<Utc>, serde_json::Value)>,
@@ -224,7 +242,7 @@ impl SharedConnectionState {
         http_client: HttpClient<HttpsConnector<HttpConnector>, Full<Bytes>>,
         my_user_id: RwLock<Option<String>>,
         my_auth_token: RwLock<Option<String>>,
-        max_message_length: RwLock<Option<usize>>,
+        server_settings: RwLock<ServerSettings>,
         username_to_initial_private_message: Mutex<HashMap<String, OutgoingMessage>>,
         username_to_initial_private_message_with_attachment: Mutex<HashMap<String, OutgoingMessageWithAttachment>>,
         new_timer_sender: mpsc::UnboundedSender<(DateTime<Utc>, serde_json::Value)>,
@@ -246,7 +264,7 @@ impl SharedConnectionState {
             http_client,
             my_user_id,
             my_auth_token,
-            max_message_length,
+            server_settings,
             username_to_initial_private_message,
             username_to_initial_private_message_with_attachment,
             new_timer_sender,
@@ -770,9 +788,15 @@ impl RocketBotInterface for ServerConnection {
     }
 
     async fn get_maximum_message_length(&self) -> Option<usize> {
-        let mml_guard = self.shared_state.max_message_length
+        let settings_guard = self.shared_state.server_settings
             .read().await;
-        *mml_guard
+        settings_guard.max_message_length
+    }
+
+    async fn get_username_regex_string(&self) -> String {
+        let settings_guard = self.shared_state.server_settings
+            .read().await;
+        settings_guard.username_regex.as_str().to_owned()
     }
 
     async fn register_timer(&self, timestamp: DateTime<Utc>, custom_data: serde_json::Value) {
@@ -1042,9 +1066,9 @@ pub(crate) async fn connect() -> Arc<ServerConnection> {
         "SharedConnectionState::my_auth_token",
         None,
     );
-    let max_message_length: RwLock<Option<usize>> = RwLock::new(
-        "SharedConnectionState::max_message_length",
-        None,
+    let server_settings: RwLock<ServerSettings> = RwLock::new(
+        "SharedConnectionState::server_settings",
+        ServerSettings::default(),
     );
     let username_to_initial_private_message = Mutex::new(
         "SharedConnectionState::username_to_initial_private_message",
@@ -1085,7 +1109,7 @@ pub(crate) async fn connect() -> Arc<ServerConnection> {
         http_client,
         my_user_id,
         my_auth_token,
-        max_message_length,
+        server_settings,
         username_to_initial_private_message,
         username_to_initial_private_message_with_attachment,
         new_timer_sender,
@@ -1914,9 +1938,35 @@ async fn handle_received(body: &serde_json::Value, mut state: &mut ConnectionSta
         for entry in settings.members_or_empty() {
             if entry["_id"] == "Message_MaxAllowedSize" {
                 if let Some(mas) = entry["value"].as_usize() {
-                    let mut mml_guard = state.shared_state.max_message_length
+                    let mut settings_guard = state.shared_state.server_settings
                         .write().await;
-                    *mml_guard = Some(mas);
+                    settings_guard.max_message_length = Some(mas);
+                }
+            } else if entry["_id"] == "UTF8_User_Names_Validation" {
+                if let Some(username_regex_str) = entry["value"].as_str() {
+                    // trim anchors
+                    let mut unanchored_regex_str = username_regex_str;
+                    while unanchored_regex_str.starts_with("^") {
+                        unanchored_regex_str = &unanchored_regex_str[1..];
+                    }
+                    while unanchored_regex_str.ends_with("$") && !unanchored_regex_str.ends_with("\\$") {
+                        unanchored_regex_str = &unanchored_regex_str[..unanchored_regex_str.len()-1];
+                    }
+                    match Regex::new(unanchored_regex_str) {
+                        Ok(r) => {
+                            let mut settings_guard = state.shared_state.server_settings
+                                .write().await;
+                            settings_guard.username_regex = EnjoyableRegex::from_regex(r);
+                        },
+                        Err(e) => {
+                            error!(
+                                "ignoring username regex string {:?} (original {:?}) after error: {}",
+                                unanchored_regex_str,
+                                username_regex_str,
+                                e,
+                            );
+                        },
+                    }
                 }
             }
         }

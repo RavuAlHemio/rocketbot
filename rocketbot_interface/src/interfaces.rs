@@ -135,6 +135,9 @@ pub trait RocketBotInterface : Send + Sync {
     /// Returns the maximum message length on the current server, or `None` if it is not known.
     async fn get_maximum_message_length(&self) -> Option<usize>;
 
+    /// Returns the string representation of the regular expression used to validate usernames.
+    async fn get_username_regex_string(&self) -> String;
+
     /// Registers a timer with the bot. Once the given timestamp is reached, a call to
     /// `RocketBotPlugin::timer_elapsed` with the contents of `custom_data` is made.
     async fn register_timer(&self, timestamp: DateTime<Utc>, custom_data: serde_json::Value);
