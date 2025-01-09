@@ -29,33 +29,96 @@ AS $$
     END;
 $$;
 
-CREATE OR REPLACE FUNCTION bim.smallest_factor
-( val bigint
-) RETURNS bigint
-LANGUAGE plpython3u
-IMMUTABLE LEAKPROOF STRICT
-PARALLEL SAFE
-AS $$
-if val is None:
-    return None
-if val < 2:
-    return val
-test_num = 2
-while val > test_num:
-    if val % test_num == 0:
-        return test_num
-    test_num += 1
-return val
-$$;
-
 CREATE OR REPLACE FUNCTION bim.is_prime
 ( val bigint
 ) RETURNS boolean
-LANGUAGE sql
+LANGUAGE plpgsql
 IMMUTABLE LEAKPROOF STRICT
 PARALLEL SAFE
 AS $$
-    SELECT val > 1 AND bim.smallest_factor(val) = val
+    DECLARE
+        max_known_prime bigint;
+        known_prime bigint;
+        found_as_prime boolean;
+        squirt bigint;
+    BEGIN
+        IF val IS NULL THEN
+            RETURN NULL;
+        END IF;
+        IF val < 2 THEN
+            RETURN FALSE;
+        END IF;
+
+        SELECT MAX(prime) INTO max_known_prime FROM bim.known_primes;
+        IF max_known_prime IS NULL THEN
+            max_known_prime := 0;
+        END IF;
+
+        IF val <= max_known_prime THEN
+            -- fast path with lookup
+            found_as_prime := FALSE;
+            FOR known_prime IN SELECT prime FROM bim.known_primes WHERE prime = val LOOP
+                found_as_prime := TRUE;
+            END LOOP;
+            RETURN found_as_prime;
+        END IF;
+
+        found_as_prime := TRUE;
+        squirt := ceil(sqrt(val));
+        FOR known_prime IN SELECT prime FROM bim.known_primes WHERE prime <= squirt LOOP
+            IF mod(val, known_prime) = 0 THEN
+                found_as_prime := FALSE;
+                EXIT;
+            END IF;
+        END LOOP;
+
+        IF NOT found_as_prime THEN
+            RETURN FALSE;
+        END IF;
+
+        -- keep trying
+        known_prime := max_known_prime + 1;
+        WHILE known_prime <= squirt LOOP
+            IF mod(val, known_prime) = 0 THEN
+                found_as_prime := FALSE;
+                EXIT;
+            END IF;
+            known_prime := known_prime + 1;
+        END LOOP;
+
+        RETURN found_as_prime;
+    END;
+$$;
+
+CREATE TABLE IF NOT EXISTS bim.known_primes
+( prime bigint NOT NULL
+, CONSTRAINT pkey_known_primes PRIMARY KEY (prime)
+);
+
+CREATE OR REPLACE PROCEDURE bim.populate_primes
+( max_prime bigint
+)
+LANGUAGE plpython3u
+AS $$
+import math
+if max_prime is None:
+    return
+known_primes = []
+inserter = plpy.prepare("INSERT INTO bim.known_primes (prime) VALUES ($1)", ["bigint"])
+i = 2
+while i <= max_prime:
+    squirt = math.ceil(math.sqrt(i))
+    is_composite = False
+    for known_prime in known_primes:
+        if known_prime > squirt:
+            break
+        if i % known_prime == 0:
+            is_composite = True
+            break
+    if not is_composite:
+        known_primes.append(i)
+        plpy.execute(inserter, [i])
+    i += 1
 $$;
 
 CREATE OR REPLACE FUNCTION bim.is_in_sequence
