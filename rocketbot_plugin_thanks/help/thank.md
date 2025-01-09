@@ -1,3 +1,5 @@
-*Usage:* `{cpfx}thank USERNAME [REASON]` or `{cpfx}thanks USERNAME [REASON]` or `{cpfx}thx USERNAME [REASON]`
+*Usage:* `{cpfx}thank USERNAME [REASON]` or `{cpfx}thank @USERNAME @USERNAME... [REASON]`
 
-Registers the sender's thanks to the given user.
+`{cpfx}thanks` and `{cpfx}thx` are aliases for this command.
+
+Registers the sender's thanks to the given user(s).

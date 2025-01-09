@@ -1,7 +1,10 @@
+use std::collections::{BTreeMap, BTreeSet};
+use std::fmt::Write;
 use std::sync::Weak;
 
 use async_trait::async_trait;
 use chrono::Utc;
+use regex::Regex;
 use rocketbot_interface::{JsonValueExtensions, send_channel_message};
 use rocketbot_interface::commands::{CommandDefinitionBuilder, CommandInstance};
 use rocketbot_interface::interfaces::{RocketBotInterface, RocketBotPlugin};
@@ -18,6 +21,107 @@ struct Config {
     most_grateful_count: usize,
 }
 
+
+macro_rules! something_broke {
+    ($interface:expr, $channel_message:expr) => {
+        send_channel_message!(
+            $interface,
+            &$channel_message.channel.name,
+            &format!(
+                "@{}: something broke, sorry!",
+                $channel_message.message.sender.username,
+            ),
+        ).await
+    };
+}
+
+fn construct_thanks_response(sender_username: &str, thankee_to_count: &BTreeMap<String, Option<i64>>) -> String {
+    assert!(thankee_to_count.len() > 0);
+
+    let mut response = format!("@{} Alright! ", sender_username);
+    if thankee_to_count.iter().all(|(_, count_opt)| count_opt.is_none()) {
+        // issues querying the database all around
+        if thankee_to_count.len() == 1 {
+            let thankee = thankee_to_count.first_key_value().unwrap().0;
+            write!(response, "{} has been thanked.", thankee).unwrap();
+        } else {
+            for (i, thankee) in thankee_to_count.keys().enumerate() {
+                if i == thankee_to_count.len() - 1 {
+                    write!(response, " and {}", thankee).unwrap();
+                } else if i > 0 {
+                    write!(response, ", {}", thankee).unwrap();
+                } else {
+                    write!(response, "{}", thankee).unwrap();
+                }
+            }
+            write!(response, " have been thanked.").unwrap();
+        }
+    } else {
+        // at least one user's thank count is known
+        write!(response, "By the way, ").unwrap();
+        if thankee_to_count.len() == 1 {
+            let (thankee, count_opt) = thankee_to_count.first_key_value().unwrap();
+            let count = count_opt.unwrap();
+            write!(response, "{} has been thanked ", thankee).unwrap();
+            if count == 1 {
+                write!(response, "once").unwrap();
+            } else {
+                write!(response, "{} times", count).unwrap();
+            }
+            write!(response, " until now.").unwrap();
+        } else {
+            let thankees_with_counts: Vec<(usize, &String, i64)> = thankee_to_count
+                .iter()
+                .filter_map(|(thankee, count_opt)| count_opt.map(|count| (thankee, count)))
+                .enumerate()
+                .map(|(i, (thankee, count))| (i, thankee, count))
+                .collect();
+            for (i, thankee, count) in &thankees_with_counts {
+                if *i == thankees_with_counts.len() - 1 {
+                    write!(response, " and {} ", thankee).unwrap();
+                } else if *i > 0 {
+                    write!(response, ", {} ", thankee).unwrap();
+                } else {
+                    write!(response, "{} has been thanked ", thankee).unwrap();
+                }
+
+                if *count == 1 {
+                    write!(response, "once").unwrap();
+                } else {
+                    write!(response, "{} times", count).unwrap();
+                }
+            }
+            write!(response, " until now").unwrap();
+
+            let thankees_without_counts: Vec<(usize, &String)> = thankee_to_count
+                .iter()
+                .filter(|(_thankee, count_opt)| count_opt.is_none())
+                .map(|(thankee, _count_opt)| thankee)
+                .enumerate()
+                .collect();
+            if thankees_without_counts.len() > 0 {
+                write!(response, ", and ").unwrap();
+                if thankees_without_counts.len() == 1 {
+                    write!(response, "{} has been thanked too", thankees_without_counts[0].1).unwrap();
+                } else {
+                    for (i, thankee) in &thankees_without_counts {
+                        if *i == thankees_without_counts.len() - 1 {
+                            write!(response, " and {}", thankee).unwrap();
+                        } else if *i > 0 {
+                            write!(response, ", {}", thankee).unwrap();
+                        } else {
+                            write!(response, "{}", thankee).unwrap();
+                        }
+                    }
+                    write!(response, " have been thanked too").unwrap();
+                }
+            }
+            write!(response, ".").unwrap();
+        }
+    }
+
+    response
+}
 
 pub struct ThanksPlugin {
     interface: Weak<dyn RocketBotInterface>,
@@ -44,27 +148,50 @@ impl ThanksPlugin {
             Some(i) => i,
         };
         let config_guard = self.config.read().await;
-        let db_client = match self.connect_db(&config_guard).await {
+        let mut db_client = match self.connect_db(&config_guard).await {
             Ok(c) => c,
             Err(_e) => return,
         };
 
-        let mut raw_target = command.args[0].as_str();
-        if raw_target.starts_with("@") {
-            raw_target = &raw_target[1..];
+        let mut thankees = Vec::with_capacity(1);
+
+        // users are addressed using `@` and their username; try to find matches of this sort
+        let mut addressing_regex_string = interface.get_username_regex_string().await;
+        addressing_regex_string.insert(0, '@');
+        match Regex::new(&addressing_regex_string) {
+            Ok(addressing_regex) => {
+                for addressed in addressing_regex.find_iter(&command.rest) {
+                    assert!(addressed.as_str().starts_with('@'));
+                    thankees.push(addressed.as_str()[1..].to_owned());
+                }
+            },
+            Err(e) => {
+                error!("error compiling addressing regex {:?}: {}", addressing_regex_string, e);
+            },
         }
-        let target = match interface.resolve_username(&raw_target).await {
-            Some(u) => u,
-            None => raw_target.to_owned(),
-        };
+
+        if thankees.len() == 0 {
+            // classic matching
+            let mut raw_target = command.rest.as_str();
+            if raw_target.starts_with("@") {
+                raw_target = &raw_target[1..];
+            }
+            let target = match interface.resolve_username(&raw_target).await {
+                Some(u) => u,
+                None => raw_target.to_owned(),
+            };
+            thankees.push(target);
+        }
 
         let now = Utc::now();
         let thanker_lower = channel_message.message.sender.username.to_lowercase();
-        let thankee_lower = target.to_lowercase();
         let channel = channel_message.channel.name.clone();
         let reason = command.rest.clone();
 
-        if thanker_lower == thankee_lower {
+        let thankees_lower: BTreeSet<String> = thankees.iter()
+            .map(|thankee| thankee.to_lowercase())
+            .collect();
+        if thankees_lower.iter().any(|thankee_lower| thankee_lower == &thanker_lower) {
             send_channel_message!(
                 interface,
                 &channel_message.channel.name,
@@ -76,61 +203,95 @@ impl ThanksPlugin {
             return;
         }
 
-        let exec_res = db_client.execute(
-            r#"
-                INSERT INTO thanks.thanks (thanks_id, "timestamp", thanker_lowercase, thankee_lowercase, channel, reason, deleted)
-                VALUES (DEFAULT, $1, $2, $3, $4, $5, FALSE)
-            "#,
-            &[&now, &thanker_lower, &thankee_lower, &channel, &reason],
-        ).await;
-        if let Err(e) = exec_res {
-            error!("error inserting thanks: {}", e);
-            send_channel_message!(
-                interface,
-                &channel_message.channel.name,
-                &format!(
-                    "@{}: something broke, sorry!",
-                    channel_message.message.sender.username,
-                ),
-            ).await;
-            return;
-        }
-
-        info!("{} thanks {} in {}: {}", thanker_lower, thankee_lower, channel, reason);
-
-        let count_row_res = db_client.query_one(
-            r#"
-                SELECT COUNT(*) count FROM thanks.thanks WHERE thankee_lowercase = $1 AND deleted = FALSE
-            "#,
-            &[&thankee_lower],
-        ).await;
-        let count_row = match count_row_res {
-            Ok(cr) => cr,
+        let transaction = match db_client.transaction().await {
+            Ok(t) => t,
             Err(e) => {
-                error!("error querying thanks count: {}", e);
+                error!("failed to start transaction: {}", e);
                 send_channel_message!(
                     interface,
                     &channel_message.channel.name,
                     &format!(
-                        "@{} Alright! {} has been thanked.",
+                        "@{}: something broke, sorry!",
                         channel_message.message.sender.username,
-                        target,
                     ),
                 ).await;
                 return;
             },
         };
-        let count: i64 = count_row.get(0);
 
+        let insert_stmt_res = transaction.prepare(
+            "
+                INSERT INTO thanks.thanks (thanks_id, \"timestamp\", thanker_lowercase, thankee_lowercase, channel, reason, deleted)
+                VALUES (DEFAULT, $1, $2, $3, $4, $5, FALSE)
+            "
+        ).await;
+        let insert_stmt = match insert_stmt_res {
+            Ok(stmt) => stmt,
+            Err(e) => {
+                error!("error preparing insertion statement: {}", e);
+                something_broke!(interface, channel_message);
+                return;
+            },
+        };
+
+        let count_stmt_res = transaction.prepare(
+            "
+                SELECT COUNT(*) count FROM thanks.thanks WHERE thankee_lowercase = $1 AND deleted = FALSE
+            "
+        ).await;
+        let count_stmt = match count_stmt_res {
+            Ok(stmt) => stmt,
+            Err(e) => {
+                error!("error preparing count statement: {}", e);
+                something_broke!(interface, channel_message);
+                return;
+            },
+        };
+
+        let mut thankee_to_count: BTreeMap<String, Option<i64>> = BTreeMap::new();
+        for thankee_lower in &thankees_lower {
+            let exec_res = transaction.execute(
+                &insert_stmt,
+                &[&now, &thanker_lower, &thankee_lower, &channel, &reason],
+            ).await;
+            if let Err(e) = exec_res {
+                error!("error inserting thanks for {:?}: {}", thankee_lower, e);
+                something_broke!(interface, channel_message);
+                return;
+            }
+
+            info!("{} thanks {} in {}: {}", thanker_lower, thankee_lower, channel, reason);
+
+            let count_row_res = transaction.query_one(
+                &count_stmt,
+                &[&thankee_lower],
+            ).await;
+            match count_row_res {
+                Ok(count_row) => {
+                    let count: i64 = count_row.get(0);
+                    thankee_to_count.insert(thankee_lower.to_owned(), Some(count));
+                },
+                Err(e) => {
+                    error!("error querying thanks count for {:?}: {}", thankee_lower, e);
+                    thankee_to_count.insert(thankee_lower.to_owned(), None);
+                },
+            };
+        }
+
+        if let Err(e) = transaction.commit().await {
+            error!("error committing thanks transaction: {}", e);
+            something_broke!(interface, channel_message);
+            return;
+        }
+
+        let response = construct_thanks_response(
+            &channel_message.message.sender.username,
+            &thankee_to_count,
+        );
         send_channel_message!(
             interface,
             &channel_message.channel.name,
-            &format!(
-                "@{} Alright! By the way, {} has been thanked {} until now.",
-                channel_message.message.sender.username,
-                target,
-                if count == 1 { "once".into() } else { format!("{} times", count) },
-            ),
+            &response,
         ).await;
     }
 
@@ -459,7 +620,6 @@ impl RocketBotPlugin for ThanksPlugin {
             "{cpfx}{cmd} USERNAME [REASON]",
             "Thanks a user.",
         )
-            .arg_count(1)
             .build();
         let thank_command = thanks_command.copy_named("thank");
         let thx_command = thanks_command.copy_named("thx");
