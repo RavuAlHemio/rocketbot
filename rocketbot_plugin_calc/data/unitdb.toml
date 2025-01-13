@@ -104,6 +104,12 @@ letters = "gon"
 parents = {}
 factor_of_parents = 0.015707963267948967
 
+[[derived_units]]
+# RU, rack unit, 44.45 millimeters
+letters = "RU"
+parents = { "m" = "1" }
+factor_of_parents = 0.04445
+
 ### DERIVED UNITS OF SQUARED LENGTH (AREA)
 
 [[derived_units]]
