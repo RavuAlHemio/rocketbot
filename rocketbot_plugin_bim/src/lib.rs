@@ -714,7 +714,7 @@ impl BimPlugin {
                 send_channel_message!(
                     interface,
                     &channel_message.channel.name,
-                    &format!("Rides can only be backdated by up to {} minutes (unless you are a `bim` administrator)!", backdate_min),
+                    &format!("Rides can only be backdated by up to {} minutes (unless you are a `bim` administrator)!", config_guard.max_backdate_min),
                 ).await;
                 return;
             }
