@@ -1276,7 +1276,7 @@ async fn run_connection(mut state: &mut ConnectionState) -> Result<(), WebSocket
 
                 let content_text = content.to_string();
                 debug!("sending message: {:?}", content_text);
-                let msg = WebSocketMessage::Text(content_text);
+                let msg = WebSocketMessage::Text(content_text.into());
                 if let Err(e) = stream.send(msg).await {
                     return Err(WebSocketError::SendingMessage(e));
                 }

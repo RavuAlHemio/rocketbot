@@ -5,7 +5,7 @@ edition = "2021"
 
 [dependencies]
 png = { version = "0.17", optional = true }
-swash = { version = "0.1" }
+swash = { version = "0.2" }
 
 [dev-dependencies]
 png = { version = "0.17" }

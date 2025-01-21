@@ -10,7 +10,7 @@ currency = ["minidom", "reqwest"]
 [dependencies]
 async-trait = { version = "0.1" }
 chrono = { version = "0.4" }
-minidom = { version = "0.15", optional = true }
+minidom = { version = "0.16", optional = true }
 num-bigint = { version = "0.4", features = ["rand", "serde"] }
 num-traits = { version = "0.2" }
 once_cell = { version = "1.18" }
