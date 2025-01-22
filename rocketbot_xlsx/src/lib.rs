@@ -1,4 +1,5 @@
 mod coordinate;
+pub mod style;
 mod xml;
 
 
