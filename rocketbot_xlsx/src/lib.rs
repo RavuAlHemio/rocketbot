@@ -64,6 +64,8 @@ pub enum Error {
     MissingWorkbookRelationship,
     MissingWorksheetRelationship { name: String, relationship_id: String },
     MissingSharedStringsRelationship,
+    MissingCoordinate { path: String },
+    InvalidCoordinate { path: String, coordinate_string: String, coordinate_error: CoordinateError },
 }
 impl fmt::Display for Error {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
@@ -86,6 +88,10 @@ impl fmt::Display for Error {
                 => write!(f, "failed to find relationship to worksheet {:?} (workbook relationship ID {:?})", name, relationship_id),
             Self::MissingSharedStringsRelationship
                 => write!(f, "no relationship to shared strings found"),
+            Self::MissingCoordinate { path }
+                => write!(f, "file {:?} has a cell with a missing coordinate string", path),
+            Self::InvalidCoordinate { path, coordinate_string, coordinate_error }
+                => write!(f, "file {:?} has invalid coordinate string {:?}: {}", path, coordinate_string, coordinate_error),
         }
     }
 }
@@ -101,6 +107,8 @@ impl std::error::Error for Error {
             Self::MissingWorkbookRelationship => None,
             Self::MissingWorksheetRelationship { .. } => None,
             Self::MissingSharedStringsRelationship => None,
+            Self::MissingCoordinate { .. } => None,
+            Self::InvalidCoordinate { coordinate_error, .. } => Some(coordinate_error),
         }
     }
 }
@@ -110,6 +118,14 @@ impl std::error::Error for Error {
 pub struct Worksheet {
     pub name: String,
     pub xlsx_path: String,
+}
+
+
+#[derive(Clone, Debug, Eq, Hash, Ord, PartialEq, PartialOrd)]
+pub struct Cell {
+    pub coordinate: ExcelCoordinate,
+    pub style_index: Option<usize>,
+    pub value_index: Option<usize>,
 }
 
 
@@ -189,6 +205,48 @@ impl<R: Read + Seek> XlsxFile<R> {
         for (i, shared_string_elem) in shared_string_elems.into_iter().enumerate() {
             let text = shared_string_elem.collect_text();
             map.insert(i, text);
+        }
+        Ok(map)
+    }
+
+    pub fn get_worksheet_contents(&mut self, worksheet_path: &str) -> Result<HashMap<ExcelCoordinate, Cell>, Error> {
+        let worksheet = Self::read_xml(&mut self.zip_archive, worksheet_path)?;
+        let worksheet_root = worksheet.as_document()
+            .root_element().ok_or_else(|| Error::MissingRootElement { path: worksheet_path.to_owned() })?
+            .ensure_name_ns_for_path("worksheet", NS_SPRSH, worksheet_path)?;
+        let cells = worksheet_root
+            .child_elements_named_ns("sheetData", NS_SPRSH)
+            .into_iter()
+            .flat_map(|sheets| sheets.child_elements_named_ns("row", NS_SPRSH))
+            .flat_map(|sheets| sheets.child_elements_named_ns("c", NS_SPRSH));
+        let mut map = HashMap::new();
+        for cell in cells {
+            let coordinate_str = cell.attribute_value("r")
+                .ok_or_else(|| Error::MissingCoordinate { path: worksheet_path.to_owned() })?;
+            let coordinate: ExcelCoordinate = coordinate_str
+                .parse()
+                .map_err(|coordinate_error| Error::InvalidCoordinate {
+                    path: worksheet_path.to_owned(),
+                    coordinate_string: coordinate_str.to_owned(),
+                    coordinate_error,
+                })?;
+            let style_index: Option<usize> = cell.attribute_value("s")
+                .map(|style_index_str| style_index_str.parse().ok())
+                .flatten();
+            let value_index: Option<usize> = cell
+                .child_elements_named_ns("v", NS_SPRSH)
+                .into_iter()
+                .nth(0)
+                .map(|v_cell| v_cell.collect_text().parse().ok())
+                .flatten();
+            map.insert(
+                coordinate,
+                Cell {
+                    coordinate,
+                    style_index,
+                    value_index,
+                }
+            );
         }
         Ok(map)
     }
