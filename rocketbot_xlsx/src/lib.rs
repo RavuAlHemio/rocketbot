@@ -3,6 +3,7 @@ pub mod style;
 mod xml;
 
 
+use std::borrow::Cow;
 use std::collections::HashMap;
 use std::fmt;
 use std::io::{self, Read, Seek};
@@ -67,6 +68,10 @@ pub enum Error {
     MissingSharedStringsRelationship,
     MissingCoordinate { path: String },
     InvalidCoordinate { path: String, coordinate_string: String, coordinate_error: CoordinateError },
+    MissingRequiredAttribute { path: String, element_name: QualifiedName, attribute_name: QualifiedName },
+    RequiredAttributeWrongFormat { path: String, element_name: QualifiedName, attribute_name: QualifiedName, value: String, format_hint: Cow<'static, str> },
+    MultiChoiceChildElements { path: String, parent_name: QualifiedName, one_child_name: QualifiedName, other_child_name: QualifiedName },
+    MissingChildElement { path: String, childless_parent_name: QualifiedName },
 }
 impl fmt::Display for Error {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
@@ -93,6 +98,14 @@ impl fmt::Display for Error {
                 => write!(f, "file {:?} has a cell with a missing coordinate string", path),
             Self::InvalidCoordinate { path, coordinate_string, coordinate_error }
                 => write!(f, "file {:?} has invalid coordinate string {:?}: {}", path, coordinate_string, coordinate_error),
+            Self::MissingRequiredAttribute { path, element_name, attribute_name }
+                => write!(f, "file {:?} element {} is missing a required attribute named {}", path, element_name, attribute_name),
+            Self::RequiredAttributeWrongFormat { path, element_name, attribute_name, value, format_hint }
+                => write!(f, "file {path:?} element {element_name} required attribute {attribute_name} has value {value:?} which doesn't abide by the expected format {format_hint:?}"),
+            Self::MultiChoiceChildElements { path, parent_name, one_child_name, other_child_name  }
+                => write!(f, "file {path:?} element {parent_name} contains both a {one_child_name} and a {other_child_name} child but may only contain one of them"),
+            Self::MissingChildElement { path, childless_parent_name }
+                => write!(f, "file {path:?} element {childless_parent_name} lacks children"),
         }
     }
 }
@@ -110,6 +123,10 @@ impl std::error::Error for Error {
             Self::MissingSharedStringsRelationship => None,
             Self::MissingCoordinate { .. } => None,
             Self::InvalidCoordinate { coordinate_error, .. } => Some(coordinate_error),
+            Self::MissingRequiredAttribute { .. } => None,
+            Self::RequiredAttributeWrongFormat { .. } => None,
+            Self::MultiChoiceChildElements { .. } => None,
+            Self::MissingChildElement { .. } => None,
         }
     }
 }

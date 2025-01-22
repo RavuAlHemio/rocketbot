@@ -1,3 +1,4 @@
+use strict_num::FiniteF64;
 use sxd_document::QName;
 use sxd_document::dom::{ChildOfElement, Document, Element};
 
@@ -51,6 +52,13 @@ pub(crate) trait ElemExt<'d> {
             .flat_map(|child| child.child_elements_named_ns(grandchild_name, grandchild_namespace))
             .collect()
     }
+
+    fn first_child_element_named_ns(&self, name: &str, namespace: &str) -> Option<Element<'d>> {
+        self
+            .child_elements_named_ns(name, namespace)
+            .into_iter()
+            .nth(0)
+    }
 }
 impl<'d> ElemExt<'d> for Element<'d> {
     fn ensure_name_ns_for_path(self, name: &str, namespace: &str, path: &str) -> Result<Self, Error> {
@@ -96,5 +104,43 @@ impl<'d> ElemExt<'d> for Element<'d> {
                 ChildOfElement::ProcessingInstruction(_) => {},
             }
         }
+    }
+}
+
+pub(crate) trait StrExt {
+    fn as_xsd_boolean(&self) -> Option<bool>;
+    fn as_usize(&self) -> Option<usize>;
+    fn as_finite_f64(&self) -> Option<FiniteF64>;
+}
+impl StrExt for str {
+    fn as_xsd_boolean(&self) -> Option<bool> {
+        // https://www.w3.org/TR/xmlschema-2/ § 3.2.2 boolean
+        match self {
+            "0"|"false" => Some(false),
+            "1"|"true" => Some(true),
+            _ => None,
+        }
+    }
+
+    fn as_usize(&self) -> Option<usize> {
+        self.parse().ok()
+    }
+
+    fn as_finite_f64(&self) -> Option<FiniteF64> {
+        let value: f64 = self.parse().ok()?;
+        FiniteF64::new(value)
+    }
+}
+impl StrExt for Option<&str> {
+    fn as_xsd_boolean(&self) -> Option<bool> {
+        self.map(|s| s.as_xsd_boolean()).flatten()
+    }
+
+    fn as_usize(&self) -> Option<usize> {
+        self.map(|s| s.as_usize()).flatten()
+    }
+
+    fn as_finite_f64(&self) -> Option<FiniteF64> {
+        self.map(|s| s.as_finite_f64()).flatten()
     }
 }

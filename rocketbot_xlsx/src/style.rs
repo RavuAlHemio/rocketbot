@@ -1,11 +1,12 @@
+use std::borrow::Cow;
 use std::str::FromStr;
 
 use from_to_repr::from_to_other;
 use strict_num::FiniteF64;
 use sxd_document::dom::Element;
 
-use crate::Error;
-use crate::xml::{ElemExt, NS_SPRSH};
+use crate::{Error, QualifiedName};
+use crate::xml::{ElemExt, NS_SPRSH, StrExt};
 
 
 #[derive(Clone, Copy, Debug, Default, Eq, Hash, Ord, PartialEq, PartialOrd)]
@@ -26,6 +27,23 @@ impl Rgba {
         let g = ((argb >>  8) & 0xFF) as u8;
         let b = ((argb >>  0) & 0xFF) as u8;
         Self::new(r, g, b, a)
+    }
+
+    pub fn try_from_elem<'d>(elem: Element<'d>, path: &str) -> Result<Self, Error> {
+        let color_str = elem.attribute_value("rgb")
+            .ok_or_else(|| Error::MissingRequiredAttribute {
+                path: path.to_owned(),
+                element_name: elem.name().into(),
+                attribute_name: QualifiedName::new_bare("rgb".to_owned()),
+            })?;
+        color_str.parse()
+            .map_err(|_| Error::RequiredAttributeWrongFormat {
+                path: path.to_owned(),
+                element_name: elem.name().into(),
+                attribute_name: QualifiedName::new_bare("rgb".to_owned()),
+                value: color_str.to_owned(),
+                format_hint: Cow::Borrowed("\"AARRGGBB\" as hex"),
+            })
     }
 }
 impl FromStr for Rgba {
@@ -50,6 +68,28 @@ pub struct Color {
     pub theme: Option<usize>,
     pub tint: Option<FiniteF64>,
 }
+impl Color {
+    pub fn from_elem<'d>(elem: Element<'d>) -> Self {
+        let auto = elem.attribute_value("auto")
+            .as_xsd_boolean();
+        let indexed = elem.attribute_value("indexed")
+            .as_usize();
+        let rgb = elem.attribute_value("rgb")
+            .map(|hex_str| hex_str.parse().ok())
+            .flatten();
+        let theme = elem.attribute_value("theme")
+            .as_usize();
+        let tint = elem.attribute_value("tint")
+            .as_finite_f64();
+        Self {
+            auto,
+            indexed,
+            rgb,
+            theme,
+            tint,
+        }
+    }
+}
 
 #[derive(Clone, Debug, Eq, Hash, Ord, PartialEq, PartialOrd)]
 pub enum Fill {
@@ -58,7 +98,30 @@ pub enum Fill {
 }
 impl Fill {
     pub fn try_from_elem<'d>(elem: Element<'d>, path: &str) -> Result<Self, Error> {
-        todo!();
+        let pattern_fill_child_opt = elem
+            .first_child_element_named_ns("patternFill", NS_SPRSH);
+        let gradient_fill_child_opt = elem
+            .first_child_element_named_ns("gradientFill", NS_SPRSH);
+        if let Some(pattern_fill_child) = pattern_fill_child_opt {
+            if let Some(gradient_fill_child) = gradient_fill_child_opt {
+                return Err(Error::MultiChoiceChildElements {
+                    path: path.to_owned(),
+                    parent_name: elem.name().into(),
+                    one_child_name: pattern_fill_child.name().into(),
+                    other_child_name: gradient_fill_child.name().into(),
+                });
+            }
+            let pattern_fill = PatternFill::from_elem(elem);
+            Ok(Self::Pattern(pattern_fill))
+        } else if let Some(gradient_fill_child) = gradient_fill_child_opt {
+            let gradient_fill = GradientFill::from_elem(gradient_fill_child);
+            Ok(Self::Gradient(gradient_fill))
+        } else {
+            Err(Error::MissingChildElement {
+                path: path.to_owned(),
+                childless_parent_name: elem.name().into(),
+            })
+        }
     }
 }
 
@@ -67,6 +130,25 @@ pub struct PatternFill {
     pub foreground_color: Option<Color>,
     pub background_color: Option<Color>,
     pub pattern_type: Option<PatternType>,
+}
+impl PatternFill {
+    pub fn from_elem<'d>(elem: Element<'d>) -> Self {
+        let foreground_color = elem
+            .first_child_element_named_ns("fgColor", NS_SPRSH)
+            .map(|fc| Color::from_elem(fc));
+        let background_color = elem
+            .first_child_element_named_ns("bgColor", NS_SPRSH)
+            .map(|fc| Color::from_elem(fc));
+        let pattern_type = elem
+            .attribute_value("patternType")
+            .map(|pt| PatternType::try_from_str(pt))
+            .flatten();
+        Self {
+            foreground_color,
+            background_color,
+            pattern_type,
+        }
+    }
 }
 
 #[derive(Clone, Copy, Debug, Eq, Hash, Ord, PartialEq, PartialOrd)]
@@ -134,6 +216,49 @@ pub struct GradientFill {
     pub right: Option<FiniteF64>,
     pub top: Option<FiniteF64>,
     pub bottom: Option<FiniteF64>,
+}
+impl GradientFill {
+    pub fn from_elem<'d>(elem: Element<'d>) -> Self {
+        let gradient_type = elem.attribute_value("type")
+            .map(|gt_str| GradientType::try_from_str(gt_str))
+            .flatten();
+        let degree = elem.attribute_value("degree")
+            .as_finite_f64();
+        let left = elem.attribute_value("left")
+            .as_finite_f64();
+        let right = elem.attribute_value("right")
+            .as_finite_f64();
+        let top = elem.attribute_value("top")
+            .as_finite_f64();
+        let bottom = elem.attribute_value("bottom")
+            .as_finite_f64();
+
+        let mut stops = Vec::new();
+        let stop_elems = elem
+            .child_elements_named_ns("stop", NS_SPRSH);
+        for stop_elem in stop_elems {
+            let Some(position) = stop_elem.attribute_value("position")
+                .as_finite_f64()
+                else { continue };
+            let Some(color_elem) = stop_elem
+                .first_child_element_named_ns("color", NS_SPRSH)
+                else { continue };
+            let color = Color::from_elem(color_elem);
+            stops.push(GradientStop {
+                position,
+                color,
+            });
+        }
+        Self {
+            stops,
+            gradient_type,
+            degree,
+            left,
+            right,
+            top,
+            bottom,
+        }
+    }
 }
 
 #[derive(Clone, Copy, Debug, Default, Eq, Hash, Ord, PartialEq, PartialOrd)]
@@ -572,15 +697,55 @@ impl Stylesheet {
             differential_formatting_records.push(dfr);
         }
 
+        let mut default_table_style = None;
+        let mut default_pivot_style = None;
         let mut table_styles = Vec::new();
-        let table_style_elems = elem
-            .grandchild_elements_named_ns(
-                "tableStyles", NS_SPRSH,
-                "tableStyle", NS_SPRSH,
-            );
-        for table_style_elem in table_style_elems {
-            let table_style = TableStyle::try_from_elem(table_style_elem, path)?;
-            table_styles.push(table_style);
+        let table_styles_elem_opt = elem
+            .first_child_element_named_ns("tableStyles", NS_SPRSH);
+        if let Some(table_styles_elem) = table_styles_elem_opt {
+            default_table_style = table_styles_elem.attribute_value("defaultTableStyle")
+                .map(|ts| ts.to_owned());
+            default_pivot_style = table_styles_elem.attribute_value("defaultPivotStyle")
+                .map(|ps| ps.to_owned());
+            let table_style_elems = table_styles_elem
+                .child_elements_named_ns(
+                    "tableStyle", NS_SPRSH,
+                );
+            for table_style_elem in table_style_elems {
+                let table_style = TableStyle::try_from_elem(table_style_elem, path)?;
+                table_styles.push(table_style);
+            }
+        }
+
+        let mut indexed_colors = None;
+        let mut mru_colors = None;
+        let color_elem_opt = elem
+            .first_child_element_named_ns("colors", NS_SPRSH);
+        if let Some(color_elem) = color_elem_opt {
+            let indexed_colors_elem_opt = color_elem
+                .first_child_element_named_ns("indexedColors", NS_SPRSH);
+            if let Some(indexed_colors_elem) = indexed_colors_elem_opt {
+                let mut indexed_colors_vec = Vec::new();
+                let indexed_color_elems = indexed_colors_elem
+                    .child_elements_named_ns("rgbColor", NS_SPRSH);
+                for indexed_color_elem in indexed_color_elems {
+                    let rgb_color = Rgba::try_from_elem(indexed_color_elem, path)?;
+                    indexed_colors_vec.push(rgb_color);
+                }
+                indexed_colors = Some(indexed_colors_vec);
+            }
+            let mru_colors_elem_opt = color_elem
+                .first_child_element_named_ns("mruColors", NS_SPRSH);
+            if let Some(mru_colors_elem) = mru_colors_elem_opt {
+                let mut mru_colors_vec = Vec::new();
+                let mru_color_elems = mru_colors_elem
+                    .child_elements_named_ns("color", NS_SPRSH);
+                for mru_color_elem in mru_color_elems {
+                    let color = Color::from_elem(mru_color_elem);
+                    mru_colors_vec.push(color);
+                }
+                mru_colors = Some(mru_colors_vec);
+            }
         }
 
         Ok(Self {
@@ -592,11 +757,11 @@ impl Stylesheet {
             cell_formatting_records,
             cell_styles,
             differential_formatting_records,
-            default_table_style: todo!(),
-            default_pivot_style: todo!(),
+            default_table_style,
+            default_pivot_style,
             table_styles,
-            indexed_colors: todo!(),
-            mru_colors: todo!(),
+            indexed_colors,
+            mru_colors,
         })
     }
 }
