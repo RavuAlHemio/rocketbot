@@ -43,6 +43,14 @@ pub(crate) trait ElemExt<'d> {
         self.collect_text_into(&mut buf);
         buf
     }
+
+    fn grandchild_elements_named_ns(&self, child_name: &str, child_namespace: &str, grandchild_name: &str, grandchild_namespace: &str) -> Vec<Element<'d>> {
+        self
+            .child_elements_named_ns(child_name, child_namespace)
+            .into_iter()
+            .flat_map(|child| child.child_elements_named_ns(grandchild_name, grandchild_namespace))
+            .collect()
+    }
 }
 impl<'d> ElemExt<'d> for Element<'d> {
     fn ensure_name_ns_for_path(self, name: &str, namespace: &str, path: &str) -> Result<Self, Error> {
@@ -51,7 +59,7 @@ impl<'d> ElemExt<'d> for Element<'d> {
         if my_name == expected_name {
             Ok(self)
         } else {
-            Err(Error::UnexpectedRootElement {
+            Err(Error::UnexpectedElement {
                 path: path.to_owned(),
                 expected: expected_name.into(),
                 obtained: my_name.into(),

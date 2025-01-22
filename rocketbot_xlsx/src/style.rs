@@ -2,6 +2,10 @@ use std::str::FromStr;
 
 use from_to_repr::from_to_other;
 use strict_num::FiniteF64;
+use sxd_document::dom::Element;
+
+use crate::Error;
+use crate::xml::{ElemExt, NS_SPRSH};
 
 
 #[derive(Clone, Copy, Debug, Default, Eq, Hash, Ord, PartialEq, PartialOrd)]
@@ -51,6 +55,11 @@ pub struct Color {
 pub enum Fill {
     Pattern(PatternFill),
     Gradient(GradientFill),
+}
+impl Fill {
+    pub fn try_from_elem<'d>(elem: Element<'d>, path: &str) -> Result<Self, Error> {
+        todo!();
+    }
 }
 
 #[derive(Clone, Copy, Debug, Default, Eq, Hash, Ord, PartialEq, PartialOrd)]
@@ -263,6 +272,11 @@ pub struct Font {
     pub vertical_align: Option<VerticalAlignRun>,
     pub scheme: Option<FontScheme>,
 }
+impl Font {
+    pub fn try_from_elem<'d>(elem: Element<'d>, path: &str) -> Result<Self, Error> {
+        todo!();
+    }
+}
 
 #[derive(Clone, Copy, Debug, Default, Eq, Hash, Ord, PartialEq, PartialOrd)]
 pub struct Border {
@@ -276,6 +290,11 @@ pub struct Border {
     pub diagonal_up: Option<bool>,
     pub diagonal_down: Option<bool>,
     pub outline: Option<bool>,
+}
+impl Border {
+    pub fn try_from_elem<'d>(elem: Element<'d>, path: &str) -> Result<Self, Error> {
+        todo!();
+    }
 }
 
 #[derive(Clone, Copy, Debug, Default, Eq, Hash, Ord, PartialEq, PartialOrd)]
@@ -347,6 +366,11 @@ pub struct FormattingRecord {
     pub apply_border: Option<bool>,
     pub apply_alignment: Option<bool>,
     pub apply_protection: Option<bool>,
+}
+impl FormattingRecord {
+    pub fn try_from_elem<'d>(elem: Element<'d>, path: &str) -> Result<Self, Error> {
+        todo!();
+    }
 }
 
 #[derive(Clone, Copy, Debug, Default, Eq, Hash, Ord, PartialEq, PartialOrd)]
@@ -449,14 +473,143 @@ pub struct Stylesheet {
     pub cell_formatting_records: Vec<FormattingRecord>,
     pub cell_styles: Vec<CellStyle>,
     pub differential_formatting_records: Vec<DifferentialFormattingRecord>,
+    pub default_table_style: Option<String>,
+    pub default_pivot_style: Option<String>,
     pub table_styles: Vec<TableStyle>,
-    pub colors: Vec<Color>,
+    pub indexed_colors: Option<Vec<Rgba>>,
+    pub mru_colors: Option<Vec<Color>>,
+}
+impl Stylesheet {
+    pub fn try_from_elem<'d>(elem: Element<'d>, path: &str) -> Result<Self, Error> {
+        let elem = elem
+            .ensure_name_ns_for_path("styleSheet", NS_SPRSH, path)?;
+
+        let mut number_formats = Vec::new();
+        let num_fmt_elems = elem
+            .grandchild_elements_named_ns(
+                "numFmts", NS_SPRSH,
+                "numFmt", NS_SPRSH,
+            );
+        for num_fmt_elem in num_fmt_elems {
+            let number_format = NumberFormat::try_from_elem(num_fmt_elem, path)?;
+            number_formats.push(number_format);
+        }
+
+        let mut fonts = Vec::new();
+        let font_elems = elem
+            .grandchild_elements_named_ns(
+                "fonts", NS_SPRSH,
+                "font", NS_SPRSH,
+            );
+        for font_elem in font_elems {
+            let font = Font::try_from_elem(font_elem, path)?;
+            fonts.push(font);
+        }
+
+        let mut fills = Vec::new();
+        let fill_elems = elem
+            .grandchild_elements_named_ns(
+                "fills", NS_SPRSH,
+                "fill", NS_SPRSH,
+            );
+        for fill_elem in fill_elems {
+            let fill = Fill::try_from_elem(fill_elem, path)?;
+            fills.push(fill);
+        }
+
+        let mut borders = Vec::new();
+        let border_elems = elem
+            .grandchild_elements_named_ns(
+                "borders", NS_SPRSH,
+                "border", NS_SPRSH,
+            );
+        for border_elem in border_elems {
+            let border = Border::try_from_elem(border_elem, path)?;
+            borders.push(border);
+        }
+
+        let mut cell_style_formatting_records = Vec::new();
+        let csfr_elems = elem
+            .grandchild_elements_named_ns(
+                "cellStyleXfs", NS_SPRSH,
+                "xf", NS_SPRSH,
+            );
+        for csfr_elem in csfr_elems {
+            let formatting_record = FormattingRecord::try_from_elem(csfr_elem, path)?;
+            cell_style_formatting_records.push(formatting_record);
+        }
+
+        let mut cell_formatting_records = Vec::new();
+        let cfr_elems = elem
+            .grandchild_elements_named_ns(
+                "cellXfs", NS_SPRSH,
+                "xf", NS_SPRSH,
+            );
+        for cfr_elem in cfr_elems {
+            let formatting_record = FormattingRecord::try_from_elem(cfr_elem, path)?;
+            cell_formatting_records.push(formatting_record);
+        }
+
+        let mut cell_styles = Vec::new();
+        let cell_style_elems = elem
+            .grandchild_elements_named_ns(
+                "cellStyles", NS_SPRSH,
+                "cellStyle", NS_SPRSH,
+            );
+        for cell_style_elem in cell_style_elems {
+            let cell_style = CellStyle::try_from_elem(cell_style_elem, path)?;
+            cell_styles.push(cell_style);
+        }
+
+        let mut differential_formatting_records = Vec::new();
+        let dfr_elems = elem
+            .grandchild_elements_named_ns(
+                "dxfs", NS_SPRSH,
+                "dxf", NS_SPRSH,
+            );
+        for dfr_elem in dfr_elems {
+            let dfr = DifferentialFormattingRecord::try_from_elem(dfr_elem, path)?;
+            differential_formatting_records.push(dfr);
+        }
+
+        let mut table_styles = Vec::new();
+        let table_style_elems = elem
+            .grandchild_elements_named_ns(
+                "tableStyles", NS_SPRSH,
+                "tableStyle", NS_SPRSH,
+            );
+        for table_style_elem in table_style_elems {
+            let table_style = TableStyle::try_from_elem(table_style_elem, path)?;
+            table_styles.push(table_style);
+        }
+
+        Ok(Self {
+            number_formats,
+            fonts,
+            fills,
+            borders,
+            cell_style_formatting_records,
+            cell_formatting_records,
+            cell_styles,
+            differential_formatting_records,
+            default_table_style: todo!(),
+            default_pivot_style: todo!(),
+            table_styles,
+            indexed_colors: todo!(),
+            mru_colors: todo!(),
+        })
+    }
 }
 
 #[derive(Clone, Debug, Default, Eq, Hash, Ord, PartialEq, PartialOrd)]
 pub struct NumberFormat {
     pub format_id: usize,
     pub format_code: String,
+}
+impl NumberFormat {
+    pub fn try_from_elem<'d>(elem: Element<'d>, path: &str) -> Result<Self, Error> {
+        todo!();
+    }
 }
 
 #[derive(Clone, Debug, Default, Eq, Hash, Ord, PartialEq, PartialOrd)]
@@ -468,6 +621,11 @@ pub struct CellStyle {
     pub hidden: Option<bool>,
     pub custom_builtin: Option<bool>,
 }
+impl CellStyle {
+    pub fn try_from_elem<'d>(elem: Element<'d>, path: &str) -> Result<Self, Error> {
+        todo!();
+    }
+}
 
 #[derive(Clone, Debug, Default, Eq, Hash, Ord, PartialEq, PartialOrd)]
 pub struct DifferentialFormattingRecord {
@@ -478,6 +636,11 @@ pub struct DifferentialFormattingRecord {
     pub border: Option<Border>,
     pub protection: Option<CellProtection>,
 }
+impl DifferentialFormattingRecord {
+    pub fn try_from_elem<'d>(elem: Element<'d>, path: &str) -> Result<Self, Error> {
+        todo!();
+    }
+}
 
 #[derive(Clone, Debug, Default, Eq, Hash, Ord, PartialEq, PartialOrd)]
 pub struct TableStyle {
@@ -485,6 +648,11 @@ pub struct TableStyle {
     pub pivot: Option<bool>,
     pub table: Option<bool>,
     pub elements: Vec<TableStyleElement>,
+}
+impl TableStyle {
+    pub fn try_from_elem<'d>(elem: Element<'d>, path: &str) -> Result<Self, Error> {
+        todo!();
+    }
 }
 
 #[derive(Clone, Copy, Debug, Eq, Hash, Ord, PartialEq, PartialOrd)]

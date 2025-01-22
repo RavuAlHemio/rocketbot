@@ -61,7 +61,7 @@ pub enum Error {
     ReadingFileWithinXlsx { path: String, io_error: io::Error },
     XmlParsingFailed { path: String, parse_error: sxd_document::parser::Error },
     MissingRootElement { path: String },
-    UnexpectedRootElement { path: String, expected: QualifiedName, obtained: QualifiedName },
+    UnexpectedElement { path: String, expected: QualifiedName, obtained: QualifiedName },
     MissingWorkbookRelationship,
     MissingWorksheetRelationship { name: String, relationship_id: String },
     MissingSharedStringsRelationship,
@@ -81,8 +81,8 @@ impl fmt::Display for Error {
                 => write!(f, "failed to parse file {:?} as XML: {}", path, parse_error),
             Self::MissingRootElement { path }
                 => write!(f, "XML file {:?} is missing a root element", path),
-            Self::UnexpectedRootElement { path, expected, obtained }
-                => write!(f, "XML file {:?} has unexpected root element {}; expected {}", path, obtained, expected),
+            Self::UnexpectedElement { path, expected, obtained }
+                => write!(f, "XML file {:?} has unexpected element {}; expected {}", path, obtained, expected),
             Self::MissingWorkbookRelationship
                 => write!(f, "no top-level workbook relationship found"),
             Self::MissingWorksheetRelationship { name, relationship_id }
@@ -104,7 +104,7 @@ impl std::error::Error for Error {
             Self::ReadingFileWithinXlsx { io_error, .. } => Some(io_error),
             Self::XmlParsingFailed { parse_error, .. } => Some(parse_error),
             Self::MissingRootElement { .. } => None,
-            Self::UnexpectedRootElement { .. } => None,
+            Self::UnexpectedElement { .. } => None,
             Self::MissingWorkbookRelationship => None,
             Self::MissingWorksheetRelationship { .. } => None,
             Self::MissingSharedStringsRelationship => None,
