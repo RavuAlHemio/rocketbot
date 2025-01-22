@@ -3447,6 +3447,14 @@ dependencies = [
 ]
 
 [[package]]
+name = "rocketbot_xlsx"
+version = "0.1.0"
+dependencies = [
+ "sxd-document",
+ "zip",
+]
+
+[[package]]
 name = "rocketbotweb"
 version = "0.1.0"
 dependencies = [

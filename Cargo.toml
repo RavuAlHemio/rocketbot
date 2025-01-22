@@ -67,5 +67,6 @@ members = [
     "rocketbot_render_text",
     "rocketbot_spelling",
     "rocketbot_string",
+    "rocketbot_xlsx",
     "rocketbotweb",
 ]
