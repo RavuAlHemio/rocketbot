@@ -3,6 +3,10 @@ name = "rocketbot_xlsx"
 version = "0.1.0"
 edition = "2021"
 
+[features]
+default = []
+theme = []
+
 [dependencies]
 from-to-repr = { version = "0.2", features = ["from_to_other"] }
 strict-num = { version = "0.2" }

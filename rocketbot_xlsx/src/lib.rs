@@ -1,5 +1,6 @@
 mod coordinate;
 pub mod style;
+pub mod theme;
 mod xml;
 
 
