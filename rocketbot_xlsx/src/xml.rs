@@ -133,14 +133,14 @@ impl StrExt for str {
 }
 impl StrExt for Option<&str> {
     fn as_xsd_boolean(&self) -> Option<bool> {
-        self.map(|s| s.as_xsd_boolean()).flatten()
+        self.and_then(|s| s.as_xsd_boolean())
     }
 
     fn as_usize(&self) -> Option<usize> {
-        self.map(|s| s.as_usize()).flatten()
+        self.and_then(|s| s.as_usize())
     }
 
     fn as_finite_f64(&self) -> Option<FiniteF64> {
-        self.map(|s| s.as_finite_f64()).flatten()
+        self.and_then(|s| s.as_finite_f64())
     }
 }

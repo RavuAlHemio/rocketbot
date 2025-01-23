@@ -249,14 +249,12 @@ impl<R: Read + Seek> XlsxFile<R> {
                     coordinate_error,
                 })?;
             let style_index: Option<usize> = cell.attribute_value("s")
-                .map(|style_index_str| style_index_str.parse().ok())
-                .flatten();
+                .and_then(|style_index_str| style_index_str.parse().ok());
             let value_index: Option<usize> = cell
                 .child_elements_named_ns("v", NS_SPRSH)
                 .into_iter()
                 .nth(0)
-                .map(|v_cell| v_cell.collect_text().parse().ok())
-                .flatten();
+                .and_then(|v_cell| v_cell.collect_text().parse().ok());
             map.insert(
                 coordinate,
                 Cell {

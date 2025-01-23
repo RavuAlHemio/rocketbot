@@ -75,8 +75,7 @@ impl Color {
         let indexed = elem.attribute_value("indexed")
             .as_usize();
         let rgb = elem.attribute_value("rgb")
-            .map(|hex_str| hex_str.parse().ok())
-            .flatten();
+            .and_then(|hex_str| hex_str.parse().ok());
         let theme = elem.attribute_value("theme")
             .as_usize();
         let tint = elem.attribute_value("tint")
@@ -141,8 +140,7 @@ impl PatternFill {
             .map(|fc| Color::from_elem(fc));
         let pattern_type = elem
             .attribute_value("patternType")
-            .map(|pt| PatternType::try_from_str(pt))
-            .flatten();
+            .and_then(|pt| PatternType::try_from_str(pt));
         Self {
             foreground_color,
             background_color,
@@ -220,8 +218,7 @@ pub struct GradientFill {
 impl GradientFill {
     pub fn from_elem<'d>(elem: Element<'d>) -> Self {
         let gradient_type = elem.attribute_value("type")
-            .map(|gt_str| GradientType::try_from_str(gt_str))
-            .flatten();
+            .and_then(|gt_str| GradientType::try_from_str(gt_str));
         let degree = elem.attribute_value("degree")
             .as_finite_f64();
         let left = elem.attribute_value("left")
