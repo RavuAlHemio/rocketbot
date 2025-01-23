@@ -1,4 +1,3 @@
-use std::borrow::Cow;
 use std::str::FromStr;
 
 use from_to_repr::from_to_other;
@@ -30,20 +29,12 @@ impl Rgba {
     }
 
     pub fn try_from_elem<'d>(elem: Element<'d>, path: &str) -> Result<Self, Error> {
-        let color_str = elem.attribute_value("rgb")
-            .ok_or_else(|| Error::MissingRequiredAttribute {
-                path: path.to_owned(),
-                element_name: elem.name().into(),
-                attribute_name: QualifiedName::new_bare("rgb".to_owned()),
-            })?;
-        color_str.parse()
-            .map_err(|_| Error::RequiredAttributeWrongFormat {
-                path: path.to_owned(),
-                element_name: elem.name().into(),
-                attribute_name: QualifiedName::new_bare("rgb".to_owned()),
-                value: color_str.to_owned(),
-                format_hint: Cow::Borrowed("\"AARRGGBB\" as hex"),
-            })
+        elem.required_attribute_value_in_format(
+            "rgb",
+            path,
+            |s| s.parse().ok(),
+            "\"AARRGGBB\" as hex",
+        )
     }
 }
 impl FromStr for Rgba {
@@ -328,12 +319,12 @@ impl FromStr for Underline {
 }
 
 #[derive(Clone, Copy, Debug, Default, Eq, Hash, Ord, PartialEq, PartialOrd)]
-pub enum VerticalAlignRun {
+pub enum FontVerticalAlign {
     #[default] Baseline,
     Subscript,
     Superscript,
 }
-impl VerticalAlignRun {
+impl FontVerticalAlign {
     pub fn try_from_str(vertical_align_str: &str) -> Option<Self> {
         match vertical_align_str {
             "baseline" => Some(Self::Baseline),
@@ -343,7 +334,7 @@ impl VerticalAlignRun {
         }
     }
 }
-impl FromStr for VerticalAlignRun {
+impl FromStr for FontVerticalAlign {
     type Err = ();
     fn from_str(s: &str) -> Result<Self, Self::Err> {
         Self::try_from_str(s)
@@ -391,12 +382,65 @@ pub struct Font {
     pub color: Option<Color>,
     pub size: Option<FiniteF64>,
     pub underline: Option<Underline>,
-    pub vertical_align: Option<VerticalAlignRun>,
+    pub vertical_align: Option<FontVerticalAlign>,
     pub scheme: Option<FontScheme>,
 }
 impl Font {
-    pub fn try_from_elem<'d>(elem: Element<'d>, path: &str) -> Result<Self, Error> {
-        todo!();
+    pub fn from_elem<'d>(elem: Element<'d>) -> Self {
+        let name = elem.first_child_element_named_ns("name", NS_SPRSH)
+            .and_then(|e| e.attribute_value("val"))
+            .map(|n| n.to_owned());
+        let charset: Option<u8> = elem.first_child_element_named_ns("charset", NS_SPRSH)
+            .and_then(|e| e.attribute_value("val"))
+            .and_then(|s| s.parse().ok());
+        let family = elem.first_child_element_named_ns("family", NS_SPRSH)
+            .and_then(|e| e.attribute_value("val"))
+            .and_then(|s| u8::from_str(s).ok())
+            .map(|v| FontFamily::from_base_type(v));
+        // boolean elements: if the element exists but does not have a (valid) "val" attribute, assume true
+        let bold = elem.first_child_element_ns_boolean_property_assuming("b", NS_SPRSH, true);
+        let italic = elem.first_child_element_ns_boolean_property_assuming("i", NS_SPRSH, true);
+        let strikethrough = elem.first_child_element_ns_boolean_property_assuming("strike", NS_SPRSH, true);
+        let outline = elem.first_child_element_ns_boolean_property_assuming("outline", NS_SPRSH, true);
+        let shadow = elem.first_child_element_ns_boolean_property_assuming("shadow", NS_SPRSH, true);
+        let condense = elem.first_child_element_ns_boolean_property_assuming("condense", NS_SPRSH, true);
+        let extend = elem.first_child_element_ns_boolean_property_assuming("extend", NS_SPRSH, true);
+        let color = elem.first_child_element_named_ns("color", NS_SPRSH)
+            .map(|e| Color::from_elem(e));
+        let size = elem.first_child_element_named_ns("sz", NS_SPRSH)
+            .and_then(|e| e.attribute_value("val"))
+            .and_then(|s| f64::from_str(s).ok())
+            .and_then(|f| FiniteF64::new(f));
+        // similar to boolean elements
+        let underline = elem.first_child_element_named_ns("u", NS_SPRSH)
+            .map(|underline_elem| underline_elem
+                .attribute_value("val")
+                .and_then(|v| Underline::try_from_str(v))
+                .unwrap_or(Underline::Single)
+            );
+        let vertical_align = elem.first_child_element_named_ns("vertAlign", NS_SPRSH)
+            .and_then(|e| e.attribute_value("val"))
+            .and_then(|s| FontVerticalAlign::try_from_str(s));
+        let scheme = elem.first_child_element_named_ns("scheme", NS_SPRSH)
+            .map(|e| e.collect_text())
+            .and_then(|s| FontScheme::try_from_str(&s));
+        Self {
+            name,
+            charset,
+            family,
+            bold,
+            italic,
+            strikethrough,
+            outline,
+            shadow,
+            condense,
+            extend,
+            color,
+            size,
+            underline,
+            vertical_align,
+            scheme,
+        }
     }
 }
 
@@ -414,15 +458,58 @@ pub struct Border {
     pub outline: Option<bool>,
 }
 impl Border {
-    pub fn try_from_elem<'d>(elem: Element<'d>, path: &str) -> Result<Self, Error> {
-        todo!();
+    pub fn from_elem<'d>(elem: Element<'d>) -> Self {
+        let diagonal_up = elem.attribute_value("diagonalUp")
+            .and_then(|s| s.as_xsd_boolean());
+        let diagonal_down = elem.attribute_value("diagonalDown")
+            .and_then(|s| s.as_xsd_boolean());
+        let outline = elem.attribute_value("outline")
+            .and_then(|s| s.as_xsd_boolean());
+        let start = elem.first_child_element_named_ns("start", NS_SPRSH)
+            .map(|e| BorderProperties::from_elem(e));
+        let end = elem.first_child_element_named_ns("end", NS_SPRSH)
+            .map(|e| BorderProperties::from_elem(e));
+        let top = elem.first_child_element_named_ns("top", NS_SPRSH)
+            .map(|e| BorderProperties::from_elem(e));
+        let bottom = elem.first_child_element_named_ns("bottom", NS_SPRSH)
+            .map(|e| BorderProperties::from_elem(e));
+        let diagonal = elem.first_child_element_named_ns("diagonal", NS_SPRSH)
+            .map(|e| BorderProperties::from_elem(e));
+        let vertical = elem.first_child_element_named_ns("vertical", NS_SPRSH)
+            .map(|e| BorderProperties::from_elem(e));
+        let horizontal = elem.first_child_element_named_ns("horizontal", NS_SPRSH)
+            .map(|e| BorderProperties::from_elem(e));
+        Self {
+            start,
+            end,
+            top,
+            bottom,
+            diagonal,
+            vertical,
+            horizontal,
+            diagonal_up,
+            diagonal_down,
+            outline,
+        }
     }
 }
 
 #[derive(Clone, Copy, Debug, Default, Eq, Hash, Ord, PartialEq, PartialOrd)]
 pub struct BorderProperties {
     pub color: Option<Color>,
-    pub border_style: Option<BorderStyle>,
+    pub style: Option<BorderStyle>,
+}
+impl BorderProperties {
+    pub fn from_elem<'d>(elem: Element<'d>) -> Self {
+        let color = elem.first_child_element_named_ns("color", NS_SPRSH)
+            .map(|e| Color::from_elem(e));
+        let style = elem.attribute_value("style")
+            .and_then(|s| BorderStyle::try_from_str(s));
+        Self {
+            color,
+            style,
+        }
+    }
 }
 
 #[derive(Clone, Copy, Debug, Eq, Hash, Ord, PartialEq, PartialOrd)]
@@ -490,8 +577,56 @@ pub struct FormattingRecord {
     pub apply_protection: Option<bool>,
 }
 impl FormattingRecord {
-    pub fn try_from_elem<'d>(elem: Element<'d>, path: &str) -> Result<Self, Error> {
-        todo!();
+    pub fn from_elem<'d>(elem: Element<'d>) -> Self {
+        let number_format_id = elem.attribute_value("numFmtId")
+            .and_then(|s| usize::from_str(s).ok());
+        let font_id = elem.attribute_value("fontId")
+            .and_then(|s| usize::from_str(s).ok());
+        let fill_id = elem.attribute_value("fillId")
+            .and_then(|s| usize::from_str(s).ok());
+        let border_id = elem.attribute_value("borderId")
+            .and_then(|s| usize::from_str(s).ok());
+        let cell_formatting_record_id = elem.attribute_value("xfId")
+            .and_then(|s| usize::from_str(s).ok());
+        let quote_prefix = elem.attribute_value("quotePrefix")
+            .and_then(|s| s.as_xsd_boolean());
+        let pivot_button = elem.attribute_value("pivotButton")
+            .and_then(|s| s.as_xsd_boolean());
+        let apply_number_format = elem.attribute_value("applyNumberFormat")
+            .and_then(|s| s.as_xsd_boolean());
+        let apply_font = elem.attribute_value("applyFont")
+            .and_then(|s| s.as_xsd_boolean());
+        let apply_fill = elem.attribute_value("applyFill")
+            .and_then(|s| s.as_xsd_boolean());
+        let apply_border = elem.attribute_value("applyBorder")
+            .and_then(|s| s.as_xsd_boolean());
+        let apply_alignment = elem.attribute_value("applyAlignment")
+            .and_then(|s| s.as_xsd_boolean());
+        let apply_protection = elem.attribute_value("applyProtection")
+            .and_then(|s| s.as_xsd_boolean());
+
+        let alignment = elem.first_child_element_named_ns("alignment", NS_SPRSH)
+            .map(|e| CellAlignment::from_elem(e));
+        let protection = elem.first_child_element_named_ns("protection", NS_SPRSH)
+            .map(|e| CellProtection::from_elem(e));
+
+        Self {
+            alignment,
+            protection,
+            number_format_id,
+            font_id,
+            fill_id,
+            border_id,
+            cell_formatting_record_id,
+            quote_prefix,
+            pivot_button,
+            apply_number_format,
+            apply_font,
+            apply_fill,
+            apply_border,
+            apply_alignment,
+            apply_protection,
+        }
     }
 }
 
@@ -506,6 +641,41 @@ pub struct CellAlignment {
     pub justify_last_line: Option<bool>,
     pub shrink_to_fit: Option<bool>,
     pub reading_order: Option<ReadingOrder>,
+}
+impl CellAlignment {
+    pub fn from_elem<'d>(elem: Element<'d>) -> Self {
+        let horizontal = elem.attribute_value("horizontal")
+            .and_then(|s| HorizontalAlignment::try_from_str(s));
+        let vertical = elem.attribute_value("vertical")
+            .and_then(|s| VerticalAlignment::try_from_str(s));
+        let text_rotation = elem.attribute_value("textRotation")
+            .and_then(|s| u8::from_str(s).ok());
+        let wrap_text = elem.attribute_value("wrapText")
+            .and_then(|s| s.as_xsd_boolean());
+        let indent = elem.attribute_value("indent")
+            .and_then(|s| u64::from_str(s).ok());
+        let relative_indent = elem.attribute_value("relativeIndent")
+            .and_then(|s| i64::from_str(s).ok());
+        let justify_last_line = elem.attribute_value("justifyLastLine")
+            .and_then(|s| s.as_xsd_boolean());
+        let shrink_to_fit = elem.attribute_value("shrinkToFit")
+            .and_then(|s| s.as_xsd_boolean());
+        let reading_order = elem.attribute_value("readingOrder")
+            .and_then(|s| u64::from_str(s).ok())
+            .map(|i| ReadingOrder::from_base_type(i));
+
+        Self {
+            horizontal,
+            vertical,
+            text_rotation,
+            wrap_text,
+            indent,
+            relative_indent,
+            justify_last_line,
+            shrink_to_fit,
+            reading_order,
+        }
+    }
 }
 
 #[derive(Clone, Copy, Debug, Eq, Hash, Ord, PartialEq, PartialOrd)]
@@ -571,18 +741,31 @@ impl FromStr for VerticalAlignment {
 }
 
 #[derive(Clone, Copy, Debug)]
-#[from_to_other(base_type = u32, derive_compare = "as_int")]
+#[from_to_other(base_type = u64, derive_compare = "as_int")]
 pub enum ReadingOrder {
     ContextDependent = 0,
     LeftToRight = 1,
     RightToLeft = 2,
-    Other(u32),
+    Other(u64),
 }
 
 #[derive(Clone, Copy, Debug, Default, Eq, Hash, Ord, PartialEq, PartialOrd)]
 pub struct CellProtection {
     pub locked: Option<bool>,
     pub hidden: Option<bool>,
+}
+impl CellProtection {
+    pub fn from_elem<'d>(elem: Element<'d>) -> Self {
+        let locked = elem.attribute_value("locked")
+            .and_then(|s| s.as_xsd_boolean());
+        let hidden = elem.attribute_value("hidden")
+            .and_then(|s| s.as_xsd_boolean());
+
+        Self {
+            locked,
+            hidden,
+        }
+    }
 }
 
 #[derive(Clone, Debug, Default, Eq, Hash, Ord, PartialEq, PartialOrd)]
@@ -624,7 +807,7 @@ impl Stylesheet {
                 "font", NS_SPRSH,
             );
         for font_elem in font_elems {
-            let font = Font::try_from_elem(font_elem, path)?;
+            let font = Font::from_elem(font_elem);
             fonts.push(font);
         }
 
@@ -646,7 +829,7 @@ impl Stylesheet {
                 "border", NS_SPRSH,
             );
         for border_elem in border_elems {
-            let border = Border::try_from_elem(border_elem, path)?;
+            let border = Border::from_elem(border_elem);
             borders.push(border);
         }
 
@@ -657,7 +840,7 @@ impl Stylesheet {
                 "xf", NS_SPRSH,
             );
         for csfr_elem in csfr_elems {
-            let formatting_record = FormattingRecord::try_from_elem(csfr_elem, path)?;
+            let formatting_record = FormattingRecord::from_elem(csfr_elem);
             cell_style_formatting_records.push(formatting_record);
         }
 
@@ -668,7 +851,7 @@ impl Stylesheet {
                 "xf", NS_SPRSH,
             );
         for cfr_elem in cfr_elems {
-            let formatting_record = FormattingRecord::try_from_elem(cfr_elem, path)?;
+            let formatting_record = FormattingRecord::from_elem(cfr_elem);
             cell_formatting_records.push(formatting_record);
         }
 
@@ -770,7 +953,18 @@ pub struct NumberFormat {
 }
 impl NumberFormat {
     pub fn try_from_elem<'d>(elem: Element<'d>, path: &str) -> Result<Self, Error> {
-        todo!();
+        let format_id: usize = elem.required_attribute_value_in_format(
+            "numFmtId",
+            path,
+            |s| s.parse().ok(),
+            "unsigned int",
+        )?;
+        let format_code = elem.required_attribute_value("formatCode", path)?
+            .to_owned();
+        Ok(Self {
+            format_id,
+            format_code,
+        })
     }
 }
 
@@ -785,7 +979,30 @@ pub struct CellStyle {
 }
 impl CellStyle {
     pub fn try_from_elem<'d>(elem: Element<'d>, path: &str) -> Result<Self, Error> {
-        todo!();
+        let name = elem.attribute_value("name")
+            .map(|s| s.to_owned());
+        let formatting_record_id: usize = elem.required_attribute_value_in_format(
+            "xfId",
+            path,
+            |s| s.parse().ok(),
+            "unsigned int",
+        )?;
+        let builtin_id = elem.attribute_value("builtinId")
+            .and_then(|s| usize::from_str(s).ok());
+        let i_level = elem.attribute_value("iLevel")
+            .and_then(|s| u64::from_str(s).ok());
+        let hidden = elem.attribute_value("hidden")
+            .and_then(|s| s.as_xsd_boolean());
+        let custom_builtin = elem.attribute_value("customBuiltin")
+            .and_then(|s| s.as_xsd_boolean());
+            Ok(Self {
+                name,
+                formatting_record_id,
+                builtin_id,
+                i_level,
+                hidden,
+                custom_builtin,
+            })
     }
 }
 
@@ -800,7 +1017,28 @@ pub struct DifferentialFormattingRecord {
 }
 impl DifferentialFormattingRecord {
     pub fn try_from_elem<'d>(elem: Element<'d>, path: &str) -> Result<Self, Error> {
-        todo!();
+        let font = elem.first_child_element_named_ns("font", NS_SPRSH)
+            .map(|e| Font::from_elem(e));
+        let number_format = elem.first_child_element_named_ns("numFmt", NS_SPRSH)
+            .map(|e| NumberFormat::try_from_elem(e, path))
+            .transpose()?;
+        let fill = elem.first_child_element_named_ns("fill", NS_SPRSH)
+            .map(|e| Fill::try_from_elem(e, path))
+            .transpose()?;
+        let alignment = elem.first_child_element_named_ns("alignment", NS_SPRSH)
+            .map(|e| CellAlignment::from_elem(e));
+        let border = elem.first_child_element_named_ns("border", NS_SPRSH)
+            .map(|e| Border::from_elem(e));
+        let protection = elem.first_child_element_named_ns("protection", NS_SPRSH)
+            .map(|e| CellProtection::from_elem(e));
+        Ok(Self {
+            font,
+            number_format,
+            fill,
+            alignment,
+            border,
+            protection,
+        })
     }
 }
 
@@ -813,7 +1051,31 @@ pub struct TableStyle {
 }
 impl TableStyle {
     pub fn try_from_elem<'d>(elem: Element<'d>, path: &str) -> Result<Self, Error> {
-        todo!();
+        let name = elem.attribute_value("name")
+            .ok_or_else(|| Error::MissingRequiredAttribute {
+                path: path.to_owned(),
+                element_name: elem.name().into(),
+                attribute_name: QualifiedName::new_bare("name"),
+            })?
+            .to_owned();
+        let pivot = elem.attribute_value("pivot")
+            .as_xsd_boolean();
+        let table = elem.attribute_value("table")
+            .as_xsd_boolean();
+
+        let mut elements = Vec::new();
+        let table_style_elems = elem
+            .child_elements_named_ns("tableStyleElement", NS_SPRSH);
+        for table_style_elem in table_style_elems {
+            let element = TableStyleElement::try_from_elem(table_style_elem, path)?;
+            elements.push(element);
+        }
+        Ok(Self {
+            name,
+            pivot,
+            table,
+            elements,
+        })
     }
 }
 
@@ -821,7 +1083,26 @@ impl TableStyle {
 pub struct TableStyleElement {
     pub style_type: TableStyleType,
     pub size: Option<u64>,
-    pub differential_formatting_record_id: usize,
+    pub differential_formatting_record_id: Option<usize>,
+}
+impl TableStyleElement {
+    pub fn try_from_elem<'d>(elem: Element<'d>, path: &str) -> Result<Self, Error> {
+        let style_type: TableStyleType = elem.required_attribute_value_in_format(
+            "type",
+            path,
+            |s| TableStyleType::try_from_str(s),
+            "ST_TableStyleType enum",
+        )?;
+        let size: Option<u64> = elem.attribute_value("size")
+            .and_then(|s| s.parse().ok());
+        let differential_formatting_record_id: Option<usize> = elem.attribute_value("dxfId")
+            .and_then(|s| s.parse().ok());
+        Ok(Self {
+            style_type,
+            size,
+            differential_formatting_record_id,
+        })
+    }
 }
 
 #[derive(Clone, Copy, Debug, Eq, Hash, Ord, PartialEq, PartialOrd)]

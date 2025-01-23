@@ -1,8 +1,10 @@
+use std::borrow::Cow;
+
 use strict_num::FiniteF64;
 use sxd_document::QName;
 use sxd_document::dom::{ChildOfElement, Document, Element};
 
-use crate::Error;
+use crate::{Error, QualifiedName};
 
 
 pub(crate) const NS_OFFDOC_RELS: &str = "http://schemas.openxmlformats.org/officeDocument/2006/relationships";
@@ -11,6 +13,7 @@ pub(crate) const NS_SPRSH: &str = "http://schemas.openxmlformats.org/spreadsheet
 pub(crate) const REL_TYPE_OFFDOC: &str = "http://schemas.openxmlformats.org/officeDocument/2006/relationships/officeDocument";
 pub(crate) const REL_TYPE_SHARED_STR: &str = "http://schemas.openxmlformats.org/officeDocument/2006/relationships/sharedStrings";
 pub(crate) const REL_TYPE_SHEET: &str = "http://schemas.openxmlformats.org/officeDocument/2006/relationships/worksheet";
+pub(crate) const REL_TYPE_STYLES: &str = "http://schemas.openxmlformats.org/officeDocument/2006/relationships/styles";
 
 
 #[derive(Clone, Debug, Eq, Hash, Ord, PartialEq, PartialOrd)]
@@ -38,6 +41,8 @@ pub(crate) trait ElemExt<'d> {
     fn child_elements_named_ns(&self, name: &str, namespace: &str) -> Vec<Element<'d>>;
     fn attribute_value_ns(&self, name: &str, namespace: &str) -> Option<&str>;
     fn collect_text_into(&self, buf: &mut String);
+    fn required_attribute_value(&self, name: &str, path: &str) -> Result<&str, Error>;
+    fn required_attribute_value_in_format<T, F: FnOnce(&str) -> Option<T>>(&self, name: &str, path: &str, parse_func: F, format_hint: &'static str) -> Result<T, Error>;
 
     fn collect_text(&self) -> String {
         let mut buf = String::new();
@@ -58,6 +63,28 @@ pub(crate) trait ElemExt<'d> {
             .child_elements_named_ns(name, namespace)
             .into_iter()
             .nth(0)
+    }
+
+    /// Returns the boolean property value of the child with the given name.
+    ///
+    /// If no child element with the given name is found, returns `None`.
+    ///
+    /// If the first child element with the given name has an attribute "val" with a valid xsd:boolean value
+    /// ("0"/"false"/"1"/"true"), returns `Some(_)` with that value.
+    ///
+    /// If the first child element with the given name does not have a "val" attribute, returns `Some(assumption)`.
+    ///
+    /// If the first child element with the given name has a "val" attribute with an invalid xsd:boolean value, returns
+    /// `Some(assumption)`.
+    fn first_child_element_ns_boolean_property_assuming(&self, name: &str, namespace: &str, assumption: bool) -> Option<bool> {
+        let child = match self.first_child_element_named_ns(name, namespace) {
+            Some(c) => c,
+            None => return None,
+        };
+        let boolean_value = child.attribute_value("val")
+            .and_then(|s| s.as_xsd_boolean())
+            .unwrap_or(assumption);
+        Some(boolean_value)
     }
 }
 impl<'d> ElemExt<'d> for Element<'d> {
@@ -104,6 +131,27 @@ impl<'d> ElemExt<'d> for Element<'d> {
                 ChildOfElement::ProcessingInstruction(_) => {},
             }
         }
+    }
+
+    fn required_attribute_value(&self, name: &str, path: &str) -> Result<&str, Error> {
+        self.attribute_value(name)
+            .ok_or_else(|| Error::MissingRequiredAttribute {
+                path: path.to_string(),
+                element_name: self.name().into(),
+                attribute_name: QualifiedName::new_bare(name),
+            })
+    }
+
+    fn required_attribute_value_in_format<T, F: FnOnce(&str) -> Option<T>>(&self, name: &str, path: &str, parse_func: F, format_hint: &'static str) -> Result<T, Error> {
+        let str_val = self.required_attribute_value(name, path)?;
+        parse_func(str_val)
+            .ok_or_else(|| Error::RequiredAttributeWrongFormat {
+                path: path.to_owned(),
+                element_name: self.name().into(),
+                attribute_name: QualifiedName::new_bare(name),
+                value: str_val.to_owned(),
+                format_hint: Cow::Borrowed(format_hint),
+            })
     }
 }
 

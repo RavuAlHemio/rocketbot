@@ -13,9 +13,10 @@ use zip::read::ZipArchive;
 use zip::result::ZipError;
 
 pub use crate::coordinate::{CoordinateError, ExcelCoordinate};
+use crate::style::Stylesheet;
 use crate::xml::{
     DocExt, ElemExt, NS_OFFDOC_RELS, NS_PKG_RELS, NS_SPRSH, Relationship, REL_TYPE_OFFDOC,
-    REL_TYPE_SHARED_STR, REL_TYPE_SHEET,
+    REL_TYPE_SHARED_STR, REL_TYPE_SHEET, REL_TYPE_STYLES,
 };
 
 
@@ -25,16 +26,17 @@ pub struct QualifiedName {
     pub namespace_uri: Option<String>,
 }
 impl QualifiedName {
-    pub fn new(local_name: String, namespace_uri: Option<String>) -> Self {
-        Self { local_name, namespace_uri }
+    pub fn new<S: Into<String>, N: Into<String>>(local_name: S, namespace_uri: Option<N>) -> Self {
+        Self { local_name: local_name.into(), namespace_uri: namespace_uri.map(|v| v.into()) }
     }
 
-    pub fn new_bare(local_name: String) -> Self {
-        Self::new(local_name, None)
+    pub fn new_bare<S: Into<String>>(local_name: S) -> Self {
+        let namespace_uri: Option<&'static str> = None;
+        Self::new(local_name.into(), namespace_uri)
     }
 
-    pub fn new_ns(local_name: String, namespace_uri: String) -> Self {
-        Self::new(local_name, Some(namespace_uri))
+    pub fn new_ns<S: Into<String>, N: Into<String>>(local_name: S, namespace_uri: N) -> Self {
+        Self::new(local_name.into(), Some(namespace_uri.into()))
     }
 }
 impl fmt::Display for QualifiedName {
@@ -66,6 +68,7 @@ pub enum Error {
     MissingWorkbookRelationship,
     MissingWorksheetRelationship { name: String, relationship_id: String },
     MissingSharedStringsRelationship,
+    MissingStylesheetRelationship,
     MissingCoordinate { path: String },
     InvalidCoordinate { path: String, coordinate_string: String, coordinate_error: CoordinateError },
     MissingRequiredAttribute { path: String, element_name: QualifiedName, attribute_name: QualifiedName },
@@ -94,6 +97,8 @@ impl fmt::Display for Error {
                 => write!(f, "failed to find relationship to worksheet {:?} (workbook relationship ID {:?})", name, relationship_id),
             Self::MissingSharedStringsRelationship
                 => write!(f, "no relationship to shared strings found"),
+            Self::MissingStylesheetRelationship
+                => write!(f, "no relationship to stylesheet found"),
             Self::MissingCoordinate { path }
                 => write!(f, "file {:?} has a cell with a missing coordinate string", path),
             Self::InvalidCoordinate { path, coordinate_string, coordinate_error }
@@ -121,6 +126,7 @@ impl std::error::Error for Error {
             Self::MissingWorkbookRelationship => None,
             Self::MissingWorksheetRelationship { .. } => None,
             Self::MissingSharedStringsRelationship => None,
+            Self::MissingStylesheetRelationship => None,
             Self::MissingCoordinate { .. } => None,
             Self::InvalidCoordinate { coordinate_error, .. } => Some(coordinate_error),
             Self::MissingRequiredAttribute { .. } => None,
@@ -265,6 +271,21 @@ impl<R: Read + Seek> XlsxFile<R> {
             );
         }
         Ok(map)
+    }
+
+    pub fn get_stylesheet(&mut self) -> Result<Stylesheet, Error> {
+        // obtain shared strings reference from workbook relationship file
+        let workbook_rels_path = Self::convert_file_path_to_rel_file_path(&self.workbook_path);
+        let workbook_rels = Self::read_relationships(&mut self.zip_archive, &workbook_rels_path)?;
+        let stylesheet_rel = workbook_rels.into_iter()
+            .filter(|rel| rel.rel_type == REL_TYPE_STYLES)
+            .nth(0).ok_or(Error::MissingSharedStringsRelationship)?;
+
+        let stylesheet = Self::read_xml(&mut self.zip_archive, &stylesheet_rel.target)?;
+        let stylesheet_root = stylesheet.as_document()
+            .root_element().ok_or_else(|| Error::MissingRootElement { path: stylesheet_rel.target.clone() })?
+            .ensure_name_ns_for_path("styleSheet", NS_SPRSH, &stylesheet_rel.target)?;
+        Stylesheet::try_from_elem(stylesheet_root, &workbook_rels_path)
     }
 
     fn convert_file_path_to_rel_file_path(path: &str) -> String {
