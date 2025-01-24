@@ -35,6 +35,12 @@ pub struct Angle {
 }
 
 #[derive(Clone, Copy, Debug, Eq, Hash, Ord, PartialEq, PartialOrd)]
+pub struct FixedAngle {
+    // a_ST_FixedAngle, xsd:int in -5400000..5400000
+    pub angle: u32,
+}
+
+#[derive(Clone, Copy, Debug, Eq, Hash, Ord, PartialEq, PartialOrd)]
 pub struct PositiveFixedAngle {
     // a_ST_PositiveFixedAngle, xsd:int in 0..21600000
     pub angle: u32,
@@ -87,4 +93,58 @@ impl TileFlipMode {
             _ => None,
         }
     }
+}
+
+#[derive(Clone, Copy, Debug, Eq, Hash, Ord, PartialEq, PartialOrd)]
+pub enum Coordinate {
+    Unqualified(CoordinateUnqualified),
+    UniversalMeasure(UniversalMeasure),
+}
+
+#[derive(Clone, Copy, Debug, Eq, Hash, Ord, PartialEq, PartialOrd)]
+pub struct CoordinateUnqualified {
+    // xsd:long in -27273042329600..=27273042316900
+    pub value: i64,
+}
+
+#[derive(Clone, Copy, Debug, Eq, Hash, Ord, PartialEq, PartialOrd)]
+pub struct UniversalMeasure {
+    // s_ST_UniversalMeasure = xsd:string matching "-?[0-9]+(\.[0-9]+)?(mm|cm|in|pt|pc|pi)"
+    pub value: FiniteF64,
+    pub unit: UniversalMeasureUnit,
+}
+
+#[derive(Clone, Copy, Debug, Eq, Hash, Ord, PartialEq, PartialOrd)]
+pub enum UniversalMeasureUnit {
+    Mm,
+    Cm,
+    In,
+    Pt,
+    Pc,
+    Pi,
+}
+impl UniversalMeasureUnit {
+    pub fn try_from_str(s: &str) -> Option<Self> {
+        match s {
+            "mm" => Some(Self::Mm),
+            "cm" => Some(Self::Cm),
+            "in" => Some(Self::In),
+            "pt" => Some(Self::Pt),
+            "pc" => Some(Self::Pc),
+            "pi" => Some(Self::Pi),
+            _ => None,
+        }
+    }
+}
+
+#[derive(Clone, Copy, Debug, Eq, Hash, Ord, PartialEq, PartialOrd)]
+pub struct PositiveCoordinate {
+    // xsd:long in 0..=27273042316900
+    pub coordinate: u64,
+}
+
+#[derive(Clone, Copy, Debug, Eq, Hash, Ord, PartialEq, PartialOrd)]
+pub struct LineWidth {
+    // xsd:int in 0..=20116800
+    pub width: u32,
 }
