@@ -7,6 +7,7 @@ use sxd_document::dom::{ChildOfElement, Document, Element};
 use crate::{Error, QualifiedName};
 
 
+pub(crate) const NS_DRAWINGML: &str = "http://schemas.openxmlformats.org/drawingml/2006/main";
 pub(crate) const NS_OFFDOC_RELS: &str = "http://schemas.openxmlformats.org/officeDocument/2006/relationships";
 pub(crate) const NS_PKG_RELS: &str = "http://schemas.openxmlformats.org/package/2006/relationships";
 pub(crate) const NS_SPRSH: &str = "http://schemas.openxmlformats.org/spreadsheetml/2006/main";
@@ -38,11 +39,13 @@ impl<'d> DocExt<'d> for Document<'d> {
 
 pub(crate) trait ElemExt<'d> {
     fn ensure_name_ns_for_path(self, name: &str, namespace: &str, path: &str) -> Result<Self, Error> where Self: Sized;
+    fn child_elements(&self) -> Vec<Element<'d>>;
     fn child_elements_named_ns(&self, name: &str, namespace: &str) -> Vec<Element<'d>>;
     fn attribute_value_ns(&self, name: &str, namespace: &str) -> Option<&str>;
     fn collect_text_into(&self, buf: &mut String);
     fn required_attribute_value(&self, name: &str, path: &str) -> Result<&str, Error>;
     fn required_attribute_value_in_format<T, F: FnOnce(&str) -> Option<T>>(&self, name: &str, path: &str, parse_func: F, format_hint: &'static str) -> Result<T, Error>;
+    fn required_first_child_element_named_ns(&self, name: &str, namespace: &str, path: &str) -> Result<Element<'d>, Error>;
 
     fn collect_text(&self) -> String {
         let mut buf = String::new();
@@ -102,11 +105,17 @@ impl<'d> ElemExt<'d> for Element<'d> {
         }
     }
 
-    fn child_elements_named_ns(&self, name: &str, namespace: &str) -> Vec<Element<'d>> {
-        let requested_name = QName::with_namespace_uri(Some(namespace), name);
+    fn child_elements(&self) -> Vec<Element<'d>> {
         self.children()
             .into_iter()
             .filter_map(|c| c.element())
+            .collect()
+    }
+
+    fn child_elements_named_ns(&self, name: &str, namespace: &str) -> Vec<Element<'d>> {
+        let requested_name = QName::with_namespace_uri(Some(namespace), name);
+        self.child_elements()
+            .into_iter()
             .filter(|e| e.name() == requested_name)
             .collect()
     }
@@ -151,6 +160,15 @@ impl<'d> ElemExt<'d> for Element<'d> {
                 attribute_name: QualifiedName::new_bare(name),
                 value: str_val.to_owned(),
                 format_hint: Cow::Borrowed(format_hint),
+            })
+    }
+
+    fn required_first_child_element_named_ns(&self, name: &str, namespace: &str, path: &str) -> Result<Element<'d>, Error> {
+        self.first_child_element_named_ns(name, namespace)
+            .ok_or_else(|| Error::MissingRequiredChildElement {
+                path: path.to_owned(),
+                parent_element_name: self.name().into(),
+                child_element_name: QualifiedName::new_ns(name, namespace),
             })
     }
 }

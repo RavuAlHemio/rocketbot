@@ -76,6 +76,7 @@ pub enum Error {
     RequiredAttributeWrongFormat { path: String, element_name: QualifiedName, attribute_name: QualifiedName, value: String, format_hint: Cow<'static, str> },
     MultiChoiceChildElements { path: String, parent_name: QualifiedName, one_child_name: QualifiedName, other_child_name: QualifiedName },
     MissingChildElement { path: String, childless_parent_name: QualifiedName },
+    MissingRequiredChildElement { path: String, parent_element_name: QualifiedName, child_element_name: QualifiedName },
 }
 impl fmt::Display for Error {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
@@ -112,6 +113,8 @@ impl fmt::Display for Error {
                 => write!(f, "file {path:?} element {parent_name} contains both a {one_child_name} and a {other_child_name} child but may only contain one of them"),
             Self::MissingChildElement { path, childless_parent_name }
                 => write!(f, "file {path:?} element {childless_parent_name} lacks children"),
+            Self::MissingRequiredChildElement { path, parent_element_name, child_element_name }
+                => write!(f, "file {path:?} element {parent_element_name} lacks required child {child_element_name}"),
         }
     }
 }
@@ -134,6 +137,7 @@ impl std::error::Error for Error {
             Self::RequiredAttributeWrongFormat { .. } => None,
             Self::MultiChoiceChildElements { .. } => None,
             Self::MissingChildElement { .. } => None,
+            Self::MissingRequiredChildElement { .. } => None,
         }
     }
 }

@@ -504,3 +504,38 @@ impl SystemColorValue {
         }
     }
 }
+
+#[derive(Clone, Copy, Debug, Eq, Hash, Ord, PartialEq, PartialOrd)]
+pub enum ColorSchemeIndex {
+    Dark1,
+    Light1,
+    Dark2,
+    Light2,
+    Accent1,
+    Accent2,
+    Accent3,
+    Accent4,
+    Accent5,
+    Accent6,
+    Hyperlink,
+    FollowedHyperlink,
+}
+impl ColorSchemeIndex {
+    pub fn try_from_str(s: &str) -> Option<Self> {
+        match s {
+            "dk1" => Some(Self::Dark1),
+            "lt1" => Some(Self::Light1),
+            "dk2" => Some(Self::Dark2),
+            "lt2" => Some(Self::Light2),
+            "accent1" => Some(Self::Accent1),
+            "accent2" => Some(Self::Accent2),
+            "accent3" => Some(Self::Accent3),
+            "accent4" => Some(Self::Accent4),
+            "accent5" => Some(Self::Accent5),
+            "accent6" => Some(Self::Accent6),
+            "hlink" => Some(Self::Hyperlink),
+            "folHlink" => Some(Self::FollowedHyperlink),
+            _ => None,
+        }
+    }
+}
