@@ -3,7 +3,7 @@ use std::fmt::Write;
 use std::sync::Weak;
 
 use async_trait::async_trait;
-use chrono::{Datelike, Local, NaiveDate, Weekday};
+use chrono::{Datelike, DateTime, Local, NaiveDate, Weekday};
 use julian;
 use once_cell::sync::Lazy;
 use regex::Regex;
@@ -198,9 +198,15 @@ impl DatePlugin {
             Some(i) => i,
         };
 
-        let date = match Self::parse_date_chrono(command.rest.trim()) {
-            Some(d) => d,
-            None => return,
+        let trimmed_date_str = command.rest.trim();
+        let today = Local::now().date_naive();
+        let date = if trimmed_date_str.len() == 0 {
+            today
+        } else {
+            match Self::parse_date_chrono(command.rest.trim()) {
+                Some(d) => d,
+                None => return,
+            }
         };
 
         let weekday_name = match date.weekday() {
@@ -213,7 +219,7 @@ impl DatePlugin {
             Weekday::Sun => "Sunday",
         };
 
-        let today = Local::now().date_naive();
+        
         let verb = if date < today {
             "was"
         } else if date == today {
