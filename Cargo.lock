@@ -2572,6 +2572,7 @@ dependencies = [
  "rocketbot_plugin_weather",
  "rocketbot_plugin_wienerlinien",
  "rocketbot_string",
+ "rustls",
  "serde",
  "serde_json",
  "sha2",

@@ -38,6 +38,10 @@ async fn run() -> Result<(), GeneralError> {
     let config = load_config().await?;
     set_config(config).await?;
 
+    // set rustls backend (TLS provider)
+    rustls::crypto::aws_lc_rs::default_provider().install_default()
+        .expect("failed to initialize rustls provider aws-lc-rs");
+
     // connect to the server
     let _connection = connect().await;
 

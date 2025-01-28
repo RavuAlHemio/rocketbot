@@ -71,6 +71,7 @@ rocketbot_plugin_vitals = { path = "../rocketbot_plugin_vitals" }
 rocketbot_plugin_weather = { path = "../rocketbot_plugin_weather" }
 rocketbot_plugin_wienerlinien = { path = "../rocketbot_plugin_wienerlinien" }
 rocketbot_string = { path = "../rocketbot_string", features = ["regex"] }
+rustls = { version = "0.23" }
 serde = { version = "1.0", features = ["derive"] }
 serde_json = { version = "1.0" }
 sha2 = { version = "0.10" }
