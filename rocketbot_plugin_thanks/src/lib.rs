@@ -1,5 +1,6 @@
 use std::collections::{BTreeMap, BTreeSet};
 use std::fmt::Write;
+use std::future::Future;
 use std::sync::Weak;
 
 use async_trait::async_trait;
@@ -123,6 +124,50 @@ fn construct_thanks_response(sender_username: &str, thankee_to_count: &BTreeMap<
     response
 }
 
+async fn find_thanks<F: FnMut(String) -> FR, FR: Future<Output = Option<String>>>(message: &str, addressing_regex_str: &str, mut resolve_username_func: F) -> Vec<String> {
+    // users are addressed using `@` and their username; try to find matches of this sort
+    let mut thankees = Vec::with_capacity(1);
+    match Regex::new(addressing_regex_str) {
+        Ok(addressing_regex) => {
+            for addressed in addressing_regex.find_iter(message) {
+                assert!(addressed.as_str().starts_with('@'));
+                thankees.push(addressed.as_str()[1..].to_owned());
+            }
+        },
+        Err(e) => {
+            error!("error compiling addressing regex {:?}: {}", addressing_regex_str, e);
+        },
+    }
+
+    if thankees.len() == 0 {
+        // classic matching
+        let mut raw_target = message;
+        if raw_target.starts_with("@") {
+            raw_target = &raw_target[1..];
+        }
+        let whitespace_index_opt = raw_target.char_indices()
+            .filter(|(_i, c)| c.is_whitespace())
+            .map(|(i, _c)| i)
+            .nth(0);
+        if let Some(whitespace_index) = whitespace_index_opt {
+            raw_target = &raw_target[..whitespace_index];
+        }
+
+        let target = match resolve_username_func(raw_target.to_owned()).await {
+            Some(u) => u,
+            None => raw_target.to_owned(),
+        };
+        thankees.push(target);
+    }
+
+    thankees
+}
+
+async fn interface_resolve_username(interface: Weak<dyn RocketBotInterface>, username: String) -> Option<String> {
+    let Some(my_interface) = interface.upgrade() else { return None };
+    my_interface.resolve_username(&username).await
+}
+
 pub struct ThanksPlugin {
     interface: Weak<dyn RocketBotInterface>,
     config: RwLock<Config>,
@@ -153,35 +198,13 @@ impl ThanksPlugin {
             Err(_e) => return,
         };
 
-        let mut thankees = Vec::with_capacity(1);
-
-        // users are addressed using `@` and their username; try to find matches of this sort
         let mut addressing_regex_string = interface.get_username_regex_string().await;
         addressing_regex_string.insert(0, '@');
-        match Regex::new(&addressing_regex_string) {
-            Ok(addressing_regex) => {
-                for addressed in addressing_regex.find_iter(&command.rest) {
-                    assert!(addressed.as_str().starts_with('@'));
-                    thankees.push(addressed.as_str()[1..].to_owned());
-                }
-            },
-            Err(e) => {
-                error!("error compiling addressing regex {:?}: {}", addressing_regex_string, e);
-            },
-        }
-
-        if thankees.len() == 0 {
-            // classic matching
-            let mut raw_target = command.rest.as_str();
-            if raw_target.starts_with("@") {
-                raw_target = &raw_target[1..];
-            }
-            let target = match interface.resolve_username(&raw_target).await {
-                Some(u) => u,
-                None => raw_target.to_owned(),
-            };
-            thankees.push(target);
-        }
+        let thankees = find_thanks(
+            &command.rest,
+            &addressing_regex_string,
+            |username| interface_resolve_username(self.interface.clone(), username),
+        ).await;
 
         let now = Utc::now();
         let thanker_lower = channel_message.message.sender.username.to_lowercase();
@@ -715,5 +738,38 @@ impl RocketBotPlugin for ThanksPlugin {
                 false
             },
         }
+    }
+}
+
+
+#[cfg(test)]
+mod tests {
+    use super::find_thanks;
+
+    const USERNAME_ADDRESSING_REGEX: &str = "@[A-Za-z_][A-Za-z0-9_]*";
+
+    async fn no_resolve(_username: String) -> Option<String> {
+        None
+    }
+
+    #[tokio::test]
+    async fn test_find_thanks() {
+        let thx = find_thanks("ravu", USERNAME_ADDRESSING_REGEX, no_resolve).await;
+        assert_eq!(thx.len(), 1);
+        assert_eq!(thx[0].as_str(), "ravu");
+
+        let thx = find_thanks("ravu for no good reason", USERNAME_ADDRESSING_REGEX, no_resolve).await;
+        assert_eq!(thx.len(), 1);
+        assert_eq!(thx[0].as_str(), "ravu");
+
+        let thx = find_thanks("@ravu and @paul", USERNAME_ADDRESSING_REGEX, no_resolve).await;
+        assert_eq!(thx.len(), 2);
+        assert_eq!(thx[0].as_str(), "ravu");
+        assert_eq!(thx[1].as_str(), "paul");
+
+        let thx = find_thanks("@ravu and @paul because of @12345", USERNAME_ADDRESSING_REGEX, no_resolve).await;
+        assert_eq!(thx.len(), 2);
+        assert_eq!(thx[0].as_str(), "ravu");
+        assert_eq!(thx[1].as_str(), "paul");
     }
 }
