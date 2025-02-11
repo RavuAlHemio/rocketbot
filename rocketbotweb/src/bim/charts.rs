@@ -3,7 +3,7 @@ use std::convert::Infallible;
 use std::fmt::Write;
 
 use askama::Template;
-use chrono::{DateTime, Datelike, Local};
+use chrono::{DateTime, Datelike, Days, Local, NaiveDate};
 use http_body_util::Full;
 use hyper::{Method, Request, Response};
 use hyper::body::{Bytes, Incoming};
@@ -269,6 +269,13 @@ pub(crate) async fn handle_bim_latest_rider_count_over_time_image(request: &Requ
         }
     }
 
+    let mut over_time = false;
+    if let Some(over_time_str) = query_pairs.get("over-time") {
+        if over_time_str == "1" {
+            over_time = true;
+        }
+    }
+
     let company = query_pairs
         .get("company");
 
@@ -279,13 +286,15 @@ pub(crate) async fn handle_bim_latest_rider_count_over_time_image(request: &Requ
 
     let query = format!(
         "
-            SELECT rvto.id, rvto.old_rider, rvto.new_rider, rvto.\"timestamp\"
+            SELECT {}, rvto.old_rider, rvto.new_rider, rvto.\"timestamp\"
             FROM bim.ridden_vehicles_between_riders(FALSE) rvto
             {}
             ORDER BY rvto.\"timestamp\", rvto.id
         ",
+        if over_time { "CAST(bim.to_transport_date(rvto.\"timestamp\") - CAST('2000-01-01' AS date) AS bigint)" } else { "rvto.id" },
         if company.is_some() { "WHERE rvto.company = $1" } else { "" },
     );
+    const TRANSPORT_EPOCH: NaiveDate = NaiveDate::from_ymd_opt(2000, 1, 1).unwrap();
 
     let mut params: Vec<&(dyn ToSql + Sync)> = Vec::with_capacity(1);
     if company.is_some() {
@@ -324,6 +333,17 @@ pub(crate) async fn handle_bim_latest_rider_count_over_time_image(request: &Requ
             let new_rider_to_latest_vehicle_count = ride_id_and_rider_to_latest_vehicle_count.last()
                 .map(|(_ride_id, rtlvc)| rtlvc.clone())
                 .unwrap_or_else(|| HashMap::new());
+            if over_time {
+                if let Some(lrid) = last_ride_id {
+                    // ensure ride IDs (actually day ordinals) are increasing
+                    assert!(lrid < ride_id);
+                    let mut walker_id = last_ride_id.unwrap() + 1;
+                    while walker_id < ride_id {
+                        ride_id_and_rider_to_latest_vehicle_count.push((walker_id, new_rider_to_latest_vehicle_count.clone()));
+                        walker_id += 1;
+                    }
+                }
+            }
             ride_id_and_rider_to_latest_vehicle_count.push((ride_id, new_rider_to_latest_vehicle_count));
         }
         let rider_to_latest_vehicle_count = &mut ride_id_and_rider_to_latest_vehicle_count
@@ -341,14 +361,30 @@ pub(crate) async fn handle_bim_latest_rider_count_over_time_image(request: &Requ
             .or_insert(0);
         *new_rider_count += 1;
 
-        let cur_year = timestamp.year();
-        if let Some(py) = prev_year {
-            if py != cur_year {
-                // year changed!
-                graph_x_to_new_year.insert(ride_id_and_rider_to_latest_vehicle_count.len(), cur_year);
+        if !over_time {
+            let cur_year = timestamp.year();
+            if let Some(py) = prev_year {
+                if py != cur_year {
+                    // year changed!
+                    graph_x_to_new_year.insert(ride_id_and_rider_to_latest_vehicle_count.len(), cur_year);
+                }
+            }
+            prev_year = Some(cur_year);
+        }
+    }
+
+    if over_time {
+        let mut last_year = None;
+        for (i, (date_ordinal, _)) in ride_id_and_rider_to_latest_vehicle_count.iter().enumerate(){
+            let date_ordinal_u64: u64 = (*date_ordinal).try_into().unwrap();
+            let date = TRANSPORT_EPOCH.checked_add_days(Days::new(date_ordinal_u64))
+                .unwrap();
+            let year = date.year();
+            if last_year != Some(year) {
+                graph_x_to_new_year.insert(i, year);
+                last_year = Some(year);
             }
         }
-        prev_year = Some(cur_year);
     }
 
     let mut rider_names: Vec<String> = all_riders
