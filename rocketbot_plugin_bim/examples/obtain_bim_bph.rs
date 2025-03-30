@@ -40,6 +40,7 @@ struct VehicleTypeConfig {
     pub vehicle_type: String,
     pub vehicle_class: VehicleClass,
     pub manufacturer: Option<String>,
+    #[serde(default)] pub number_evaluator: Option<String>,
     #[serde(default)] pub common_other_data: BTreeMap<String, String>,
 }
 
@@ -71,6 +72,19 @@ async fn obtain_vehicles(
     };
     let row_selector = Selector::parse("tr")
         .expect("failed to parse row selector");
+
+    // compile the number evaluator scripts
+    let compiler = rhai::Engine::new();
+    let mut raw_type_to_evaluator: BTreeMap<String, rhai::AST> = BTreeMap::new();
+    for (type_name, type_config) in &config.type_mapping {
+        if let Some(evaluator) = type_config.number_evaluator.as_ref() {
+            let compiled = match compiler.compile(evaluator) {
+                Ok(ast) => ast,
+                Err(e) => panic!("failed to compile number evaluator for type {:?}: {}", type_name, e),
+            };
+            raw_type_to_evaluator.insert(type_name.clone(), compiled);
+        }
+    }
 
     // download the page
     let response_res = client.get(url)
@@ -187,7 +201,18 @@ async fn obtain_vehicles(
                 other_data.entry(k.clone()).or_insert_with(|| v.clone());
             }
 
-            let vehicle_numbers: IndexSet<VehicleNumber> = if let Some(splitter) = config.number_splitter.as_ref() {
+            let vehicle_numbers: IndexSet<VehicleNumber> = if let Some(evaluator) = raw_type_to_evaluator.get(raw_type.as_ref().unwrap()) {
+                // okay, roll out the big guns
+                let engine = rhai::Engine::new();
+                let mut scope = rhai::Scope::new();
+                scope.set_value("vehicle_number", vehicle_number.unwrap().as_str().to_owned());
+                let vehicles_raw: Vec<rhai::Dynamic> = engine.eval_ast_with_scope(&mut scope, evaluator)
+                    .expect("failed to evaluate evaluator");
+                vehicles_raw
+                    .into_iter()
+                    .map(|v| VehicleNumber::from_string(v.into_string().unwrap()))
+                    .collect()
+            } else if let Some(splitter) = config.number_splitter.as_ref() {
                 vehicle_number
                     .as_ref().unwrap()
                     .split(splitter)
