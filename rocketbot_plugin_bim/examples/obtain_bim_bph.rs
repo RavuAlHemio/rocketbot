@@ -201,13 +201,24 @@ async fn obtain_vehicles(
                 other_data.entry(k.clone()).or_insert_with(|| v.clone());
             }
 
+            let mut overridden_fixed_coupling = IndexSet::new();
             let vehicle_numbers: IndexSet<VehicleNumber> = if let Some(evaluator) = raw_type_to_evaluator.get(raw_type.as_ref().unwrap()) {
                 // okay, roll out the big guns
                 let engine = rhai::Engine::new();
                 let mut scope = rhai::Scope::new();
                 scope.set_value("vehicle_number", vehicle_number.unwrap().as_str().to_owned());
+                scope.set_value("overridden_fixed_coupling", rhai::Array::new());
                 let vehicles_raw: Vec<rhai::Dynamic> = engine.eval_ast_with_scope(&mut scope, evaluator)
                     .expect("failed to evaluate evaluator");
+
+                // handle fixed-coupling override
+                let overridden_fixed: rhai::Array = scope.get_value("overridden_fixed_coupling")
+                    .expect("overridden_fixed_coupling gone missing?!");
+                for overridden_fixed_number in overridden_fixed {
+                    let number = VehicleNumber::from_string(overridden_fixed_number.into_string().unwrap());
+                    overridden_fixed_coupling.insert(number);
+                }
+
                 vehicles_raw
                     .into_iter()
                     .map(|v| VehicleNumber::from_string(v.into_string().unwrap()))
@@ -230,6 +241,14 @@ async fn obtain_vehicles(
                     continue;
                 }
 
+                let fixed_coupling = if overridden_fixed_coupling.len() > 0 {
+                    overridden_fixed_coupling.clone()
+                } else if vehicle_numbers.len() > 1 {
+                    vehicle_numbers.clone()
+                } else {
+                    IndexSet::new()
+                };
+
                 let vehicle = VehicleInfo {
                     number: individual_vehicle_number.clone(),
                     vehicle_class: type_info.vehicle_class,
@@ -239,7 +258,7 @@ async fn obtain_vehicles(
                     manufacturer: type_info.manufacturer.clone(),
                     depot: depot.clone(),
                     other_data: other_data.clone(),
-                    fixed_coupling: if vehicle_numbers.len() > 1 { vehicle_numbers.clone() } else { IndexSet::new() },
+                    fixed_coupling,
                 };
                 number_to_vehicle.insert(individual_vehicle_number.clone(), vehicle);
             }
