@@ -202,14 +202,14 @@ async fn process_page(
                 // data row
                 let line_column_index = line_column_index_opt
                     .expect("no line column index known");
-                let operator_column_index = operator_column_index_opt
-                    .expect("no operator column index known");
 
                 if c == line_column_index {
                     line_opt = Some(first_text.clone());
                 }
-                if c == operator_column_index {
-                    operator_opt = Some(first_text.clone());
+                if let Some(operator_column_index) = operator_column_index_opt {
+                    if c == operator_column_index {
+                        operator_opt = Some(first_text.clone());
+                    }
                 }
             }
         }
