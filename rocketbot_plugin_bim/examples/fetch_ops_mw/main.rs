@@ -10,13 +10,14 @@ use std::time::Duration;
 use reqwest::Client;
 use rocketbot_mediawiki_parsing::WikiParser;
 use rocketbot_plugin_bim::LineOperatorInfo;
-use serde::{Deserialize, Serialize};
+use serde::{Deserialize, Deserializer, Serialize, Serializer};
+use serde::de::Error as _;
 use serde_json;
 use sxd_document;
 use sxd_document::dom::Element;
 
 
-#[derive(Clone, Debug, Deserialize, Serialize)]
+#[derive(Clone, Debug, Deserialize, Eq, Hash, Ord, PartialEq, PartialOrd, Serialize)]
 struct Config {
     pub output_path: String,
     pub php_path: Option<String>,
@@ -25,19 +26,48 @@ struct Config {
     pub page_sources: Vec<PageSource>,
 }
 
-#[derive(Clone, Debug, Deserialize, Serialize)]
+#[derive(Clone, Debug, Deserialize, Eq, Hash, Ord, PartialEq, PartialOrd, Serialize)]
 struct PageSource {
     pub page_url_pattern: String,
     pub pages: Vec<PageConfig>,
     pub operator_name_to_abbrev: BTreeMap<String, String>,
 }
 
-#[derive(Clone, Debug, Deserialize, Serialize)]
+#[derive(Clone, Debug, Deserialize, Eq, Hash, Ord, PartialEq, PartialOrd, Serialize)]
 pub(crate) struct PageConfig {
     pub title: String,
     pub region: String,
     pub line_column: String,
-    pub operator_column: String,
+    pub operator_spec: Spec,
+}
+
+#[derive(Clone, Debug, Eq, Hash, Ord, PartialEq, PartialOrd)]
+pub(crate) enum Spec {
+    Column(String),
+    Fixed(String),
+}
+impl<'de> Deserialize<'de> for Spec {
+    fn deserialize<D: Deserializer<'de>>(deserializer: D) -> Result<Self, D::Error> {
+        let mut string: String = Deserialize::deserialize(deserializer)?;
+        if string.starts_with("$") {
+            string.remove(0);
+            Ok(Self::Column(string))
+        } else if string.starts_with("=") {
+            string.remove(0);
+            Ok(Self::Fixed(string))
+        } else {
+            Err(D::Error::custom("spec string must start with $ (column) or = (fixed string)"))
+        }
+    }
+}
+impl Serialize for Spec {
+    fn serialize<S: Serializer>(&self, serializer: S) -> Result<S::Ok, S::Error> {
+        let stringified = match self {
+            Self::Column(c) => format!("${}", c),
+            Self::Fixed(f) => format!("={}", f),
+        };
+        stringified.serialize(serializer)
+    }
 }
 
 
@@ -163,8 +193,10 @@ async fn process_page(
                 if first_text == page_config.line_column {
                     line_column_index_opt = Some(c);
                 }
-                if first_text == page_config.operator_column {
-                    operator_column_index_opt = Some(c);
+                if let Spec::Column(operator_column) = &page_config.operator_spec {
+                    if &first_text == operator_column {
+                        operator_column_index_opt = Some(c);
+                    }
                 }
             } else {
                 // data row
@@ -180,6 +212,10 @@ async fn process_page(
                     operator_opt = Some(first_text.clone());
                 }
             }
+        }
+
+        if let Spec::Fixed(operator_fixed) = &page_config.operator_spec {
+            operator_opt = Some(operator_fixed.clone());
         }
 
         let line = match line_opt {
