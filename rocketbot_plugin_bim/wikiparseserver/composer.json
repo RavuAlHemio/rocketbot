@@ -2,7 +2,7 @@
   "name": "ravualhemio/rocketbot-plugin-bim-wikiparseserver",
   "require": {
     "ext-sockets": "*",
-    "monolog/monolog": "^2.9.2",
-    "wikimedia/parsoid": "^0.19.0-a12"
+    "monolog/monolog": "^2.10.0",
+    "wikimedia/parsoid": "^0.21.0-a24"
   }
 }

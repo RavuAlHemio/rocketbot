@@ -29,8 +29,15 @@ struct Config {
 #[derive(Clone, Debug, Deserialize, Eq, Hash, Ord, PartialEq, PartialOrd, Serialize)]
 struct PageSource {
     pub page_url_pattern: String,
+    pub templates: Vec<String>,
+    #[serde(default = "PageSource::default_template_prefix")] pub template_prefix: String,
     pub pages: Vec<PageConfig>,
     pub operator_name_to_abbrev: BTreeMap<String, String>,
+}
+impl PageSource {
+    fn default_template_prefix() -> String {
+        "Template".to_owned()
+    }
 }
 
 #[derive(Clone, Debug, Deserialize, Eq, Hash, Ord, PartialEq, PartialOrd, Serialize)]
@@ -125,18 +132,11 @@ impl<'d> ElementExt<'d> for sxd_document::dom::Element<'d> {
 }
 
 
-async fn process_page(
+async fn obtain_wikitext(
     reqwest_client: &mut Client,
-    url_pattern: &str,
-    page_config: &PageConfig,
-    operator_name_to_abbrev: &BTreeMap<String, String>,
-    wiki_parser: &mut WikiParser,
-) -> BTreeMap<String, BTreeMap<String, LineOperatorInfo>> {
-    // return value is: region -> line -> operator_info
-
-    let url = url_pattern.replace("{TITLE}", &page_config.title);
-
-    // obtain wikitext from URL
+    url: &str,
+) -> (String, String) {
+    eprintln!("fetching URL {:?}", url);
     let pages_json_bytes = reqwest_client.get(url)
         .send().await.expect("sending request failed")
         .error_for_status().expect("response is an error")
@@ -148,8 +148,40 @@ async fn process_page(
         .as_str().expect("page title in JSON is not a string");
     let page_source = page_json["revisions"][0]["slots"]["main"]["content"]
         .as_str().expect("page content in JSON is not a string");
+    (page_title.to_owned(), page_source.to_owned())
+}
 
-    let page_xml_notag = wiki_parser.parse_article(page_title, page_source)
+
+async fn obtain_template(
+    reqwest_client: &mut Client,
+    url_pattern: &str,
+    template_prefix: &str,
+    template_name: &str,
+    wiki_parser: &mut WikiParser,
+) {
+    let prefixed_template_name = format!("{}:{}", template_prefix, template_name);
+    let url = url_pattern.replace("{TITLE}", &prefixed_template_name);
+
+    let (_, template_source) = obtain_wikitext(reqwest_client, &url).await;
+    wiki_parser.supply_template(template_name, &template_source)
+        .expect("supplying template failed");
+}
+
+
+async fn process_page(
+    reqwest_client: &mut Client,
+    url_pattern: &str,
+    page_config: &PageConfig,
+    operator_name_to_abbrev: &BTreeMap<String, String>,
+    wiki_parser: &mut WikiParser,
+) -> BTreeMap<String, BTreeMap<String, LineOperatorInfo>> {
+    // return value is: region -> line -> operator_info
+
+    let url = url_pattern.replace("{TITLE}", &page_config.title);
+
+    let (page_title, page_source) = obtain_wikitext(reqwest_client, &url).await;
+
+    let page_xml_notag = wiki_parser.parse_article(&page_title, &page_source)
         .expect("parsing wikitext failed");
     println!("{}", page_xml_notag);
     let page_xml = format!("<?xml version=\"1.0\"?>{}", page_xml_notag);
@@ -279,6 +311,17 @@ async fn main() {
         let mut reqwest_client = reqwest::Client::new();
 
         for page_source in &config.page_sources {
+            // load the templates
+            for template in &page_source.templates {
+                obtain_template(
+                    &mut reqwest_client,
+                    &page_source.page_url_pattern,
+                    &page_source.template_prefix,
+                    template,
+                    &mut parser,
+                ).await;
+            }
+
             for page in &page_source.pages {
                 let this_region_to_line_to_operator = process_page(
                     &mut reqwest_client,

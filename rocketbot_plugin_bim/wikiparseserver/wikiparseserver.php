@@ -4,11 +4,15 @@ require_once __DIR__ . '/vendor/autoload.php';
 
 use Wikimedia\Parsoid\Parsoid;
 use Wikimedia\Parsoid\Config\PageConfig;
+use Wikimedia\Parsoid\Config\PageContent;
+use Wikimedia\Parsoid\Config\SiteConfig;
 use Wikimedia\Parsoid\Core\ContentMetadataCollector;
+use Wikimedia\Parsoid\Core\LinkTarget;
 use Wikimedia\Parsoid\Mocks\MockDataAccess;
 use Wikimedia\Parsoid\Mocks\MockPageConfig;
 use Wikimedia\Parsoid\Mocks\MockPageContent;
 use Wikimedia\Parsoid\Mocks\MockSiteConfig;
+use Wikimedia\Parsoid\Utils\Title;
 use Wikimedia\Parsoid\Utils\Utils;
 
 
@@ -34,6 +38,17 @@ class WrongMagicException extends \Exception {
 
 
 class ParseServerDataAccess extends MockDataAccess {
+    private SiteConfig $siteConfig;
+    public array $titleToTemplateData;
+    private array $templateCache;
+
+    public function __construct( SiteConfig $siteConfig, array $opts ) {
+        $this->siteConfig = $siteConfig;
+        $this->titleToTemplateData = [];
+        $this->templateCache = [];
+        parent::__construct($siteConfig, $opts);
+    }
+
     /** @inheritDoc */
     public function parseWikitext(PageConfig $pageConfig, ContentMetadataCollector $metadata, string $wikitext): string {
         preg_match('#<([A-Za-z][^\t\n\v />\0]*)#', $wikitext, $match);
@@ -81,6 +96,35 @@ class ParseServerDataAccess extends MockDataAccess {
 
         return $ret;
     }
+
+    /** @inheritDoc */
+    public function fetchTemplateSource(PageConfig $pageConfig, LinkTarget $title): ?PageContent {
+        $normTitle = $this->wpsNormTitle( $title );
+        if (\array_key_exists($normTitle, $this->templateCache)) {
+            return $this->templateCache[$normTitle];
+        }
+
+        if (\array_key_exists($normTitle, $this->titleToTemplateData)) {
+            $content = [
+                "main" => $this->titleToTemplateData[$normTitle],
+            ];
+            $ret = new MockPageContent($content);
+            $this->templateCache[$normTitle] = $ret;
+            return $ret;
+        } else {
+            $content = [
+                "main" => "",
+            ];
+            $ret = new MockPageContent($content);
+            $this->templateCache[$normTitle] = $ret;
+            return null;
+        }
+    }
+
+    public function wpsSetTemplate($title, $content) {
+        $normTitle = $this->wpsNormTitle($title);
+        $this->titleToTemplateData[$normTitle] = $content;
+    }
 }
 
 class ParseServerSiteConfig extends MockSiteConfig {
@@ -108,14 +152,18 @@ class ParseServerSiteConfig extends MockSiteConfig {
 
 
 function makeSiteConfig(): ParseServerSiteConfig {
-    $arrConfigOpts = [];
-    return new ParseServerSiteConfig($arrConfigOpts);
+    $arrSiteConfigOpts = [];
+    return new ParseServerSiteConfig($arrSiteConfigOpts);
 }
 
 
-function makeParsoid(ParseServerSiteConfig $objSiteConfig): Parsoid {
-    $arrConfigOpts = [];
-    $objDataAccess = new ParseServerDataAccess($objSiteConfig, $arrConfigOpts);
+function makeDataAccess(ParseServerSiteConfig $objSiteConfig): ParseServerDataAccess {
+    $arrDataAccessConfigOpts = [];
+    return new ParseServerDataAccess($objSiteConfig, $arrDataAccessConfigOpts);
+}
+
+
+function makeParsoid(ParseServerSiteConfig $objSiteConfig, ParseServerDataAccess $objDataAccess): Parsoid {
     return new Parsoid($objSiteConfig, $objDataAccess);
 }
 
@@ -170,9 +218,10 @@ function int32ToBytes(int $intData): string {
 }
 
 
-function handleClient(Socket $objConn, ParseServerSiteConfig $objSiteConfig, Parsoid $objParsoid): bool {
+function handleClient(Socket $objConn, ParseServerSiteConfig $objSiteConfig, ParseServerDataAccess $objDataAccess, Parsoid $objParsoid): bool {
     // read magic
     $strExpectedMagic = "WiKiCrUnCh";
+    $strTemplateMagic = "WiKiTeMpL8";
     $strEndMagic = "EnOuGhWiKi";
 
     \assert(\strlen($strExpectedMagic) == \strlen($strEndMagic));
@@ -181,6 +230,25 @@ function handleClient(Socket $objConn, ParseServerSiteConfig $objSiteConfig, Par
     if ($strReadMagic === $strEndMagic) {
         // we are done :-)
         return false;
+    }
+
+    while ($strReadMagic === $strTemplateMagic) {
+        // read title length and value
+        $binTemplateTitleLength = recvExactly($objConn, 4);
+        $intTemplateTitleLength = bytesToInt32($binTemplateTitleLength);
+        $strTemplateTitle = recvExactly($objConn, $intTemplateTitleLength);
+
+        // read template wikitext length and value
+        $binTemplateLength = recvExactly($objConn, 4);
+        $intTemplateLength = bytesToInt32($binTemplateLength);
+        $strTemplate = recvExactly($objConn, $intTemplateLength);
+
+        echo "Template '$strTemplateTitle' with $intTemplateLength bytes of body\n";
+
+        $objDataAccess->wpsSetTemplate($strTemplateTitle, $strTemplate);
+
+        // read next magic
+        $strReadMagic = recvExactly($objConn, strlen($strExpectedMagic));
     }
 
     if ($strReadMagic !== $strExpectedMagic) {
@@ -208,15 +276,21 @@ function handleClient(Socket $objConn, ParseServerSiteConfig $objSiteConfig, Par
     $arrParsoidOpts = [
         'body_only' => false,
         'wrapSections' => true,
+        'nativeTemplateExpansion' => true, // https://gerrit.wikimedia.org/r/c/mediawiki/services/parsoid/+/1134341
     ];
 
     $strHtml = '';
+    $numStart = \hrtime(true);
     try {
         $strHtml = $objParsoid->wikitext2html($objPageConfig, $arrParsoidOpts);
     } catch (\DOMException $ex) {
         // e.g. an angle bracket within a syntax highlighting block
         $strHtml = '';
     }
+    $numEnd = \hrtime(true);
+    $numDeltaNanosec = $numEnd - $numStart;
+    $numDeltaSec = $numDeltaNanosec / (1000.0 * 1000.0 * 1000.0);
+    echo "conversion to HTML took $numDeltaSec seconds\n";
 
     // send back the length
     $binHtmlLen = int32ToBytes(\strlen($strHtml));
@@ -230,10 +304,6 @@ function handleClient(Socket $objConn, ParseServerSiteConfig $objSiteConfig, Par
 
 
 function runService(string $strListenIP, int $intPort) {
-    // make a parsoid
-    $objSiteConfig = makeSiteConfig();
-    $objParsoid = makeParsoid($objSiteConfig);
-
     // open a socket
     $objSock = \socket_create(AF_INET, SOCK_STREAM, SOL_TCP);
     if ($objSock === false) {
@@ -260,10 +330,15 @@ function runService(string $strListenIP, int $intPort) {
     }
 
     while (($objConn = \socket_accept($objSock)) !== false) {
+        // make a parsoid
+        $objSiteConfig = makeSiteConfig();
+        $objDataAccess = makeDataAccess($objSiteConfig);
+        $objParsoid = makeParsoid($objSiteConfig, $objDataAccess);
+
         try {
             // handle the same client until we're done
             for (;;) {
-                $blnRes = handleClient($objConn, $objSiteConfig, $objParsoid);
+                $blnRes = handleClient($objConn, $objSiteConfig, $objDataAccess, $objParsoid);
                 if (!$blnRes) {
                     break;
                 }

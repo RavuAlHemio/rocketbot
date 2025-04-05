@@ -14,6 +14,7 @@ use crate::droppable_child::DroppableChild;
 
 const PORT: u16 = 10101;
 const MAGIC: &[u8] = b"WiKiCrUnCh";
+const TEMPLATE_MAGIC: &[u8] = b"WiKiTeMpL8";
 const STOP_MAGIC: &[u8] = b"EnOuGhWiKi";
 
 
@@ -75,6 +76,27 @@ impl WikiParser {
             let socket = TcpStream::connect(SocketAddrV4::new(Ipv4Addr::LOCALHOST, PORT))?;
             self.socket = Some(socket);
         }
+        Ok(())
+    }
+
+    pub fn supply_template(&mut self, title: &str, wikitext: &str) -> Result<(), ParserError> {
+        self.ensure_open_socket()?;
+
+        let title_length_u32: u32 = title.len().try_into()
+            .map_err(|e| ParserError::LengthDoesNotFit(e))?;
+        let wikitext_length_u32: u32 = wikitext.len().try_into()
+            .map_err(|e| ParserError::LengthDoesNotFit(e))?;
+
+        let socket = self.socket.as_mut().unwrap();
+
+        socket.write_all(TEMPLATE_MAGIC)?;
+
+        socket.write_all(&title_length_u32.to_be_bytes())?;
+        socket.write_all(title.as_bytes())?;
+
+        socket.write_all(&wikitext_length_u32.to_be_bytes())?;
+        socket.write_all(wikitext.as_bytes())?;
+
         Ok(())
     }
 
