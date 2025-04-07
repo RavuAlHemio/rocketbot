@@ -8,6 +8,10 @@ use Wikimedia\Parsoid\Config\PageContent;
 use Wikimedia\Parsoid\Config\SiteConfig;
 use Wikimedia\Parsoid\Core\ContentMetadataCollector;
 use Wikimedia\Parsoid\Core\LinkTarget;
+use Wikimedia\Parsoid\Ext\Arguments;
+use Wikimedia\Parsoid\Ext\ExtensionModule;
+use Wikimedia\Parsoid\Ext\FragmentHandler;
+use Wikimedia\Parsoid\Ext\ParsoidExtensionAPI;
 use Wikimedia\Parsoid\Mocks\MockDataAccess;
 use Wikimedia\Parsoid\Mocks\MockPageConfig;
 use Wikimedia\Parsoid\Mocks\MockPageContent;
@@ -44,7 +48,10 @@ class ParseServerDataAccess extends MockDataAccess {
 
     public function __construct( SiteConfig $siteConfig, array $opts ) {
         $this->siteConfig = $siteConfig;
-        $this->titleToTemplateData = [];
+        $this->titleToTemplateData = [
+            // implemented on dewiki using Lua
+            "Template:Str_replace" => "{{#nativeInvoke|str_replace|{{1|}}|{{2|}}|{{3|}}|{{4|}}|{{5|}}}}",
+        ];
         $this->templateCache = [];
         parent::__construct($siteConfig, $opts);
     }
@@ -123,6 +130,10 @@ class ParseServerDataAccess extends MockDataAccess {
 
     public function wpsSetTemplate($title, $content) {
         $normTitle = $this->wpsNormTitle($title);
+        // Parsoid asks for the template starting with "Template:"
+        if (!\str_starts_with($normTitle, "Template:")) {
+            $normTitle = "Template:{$normTitle}";
+        }
         $this->titleToTemplateData[$normTitle] = $content;
     }
 }
@@ -150,10 +161,74 @@ class ParseServerSiteConfig extends MockSiteConfig {
     }
 }
 
+class WpsNativeInvokeFragmentHandler extends FragmentHandler {
+    public function sourceToFragment(
+        ParsoidExtensionAPI $extApi,
+        Arguments $arguments,
+        bool $tagSyntax
+    ) {
+        // function name?
+        $posArgs = $arguments->getOrderedArgs($extApi);
+        $funcName = $posArgs[0]->asMarkedWikitext();
+        if ($funcName === "str_replace") {
+            $haystack = $posArgs[1]->asMarkedWikitext();
+            $needle = $posArgs[2]->asMarkedWikitext();
+            $replacement = (\count($posArgs) > 3)
+                ? $posArgs[3]->asMarkedWikitext()
+                : "";
+            $maxCountStr = (\count($posArgs) > 4)
+                ? $posArgs[4]->asMarkedWikitext()
+                : "0";
+            $wantRegexp = (\count($posArgs) > 5)
+                ? $posArgs[5]->asMarkedWikitext()
+                : "";
+
+            $maxCount = (int)$maxCountStr;
+
+            if ($wantRegexp === "ja") {
+                $regexpMaxCount = ($maxCount === 0) ? -1 : $maxCount;
+                $replaced = \preg_replace('/' . $needle . '/', $replacement, $haystack, $regexpMaxCount);
+                return WikitextPFragment::newFromLiteral($replaced);
+            } else {
+                $replaced = ($maxCount === 0)
+                    ? \str_replace($needle, $replacement, $subject)
+                    : \str_replace($needle, $replacement, $subject, $maxCount);
+                return WikitextPFragment::newFromLiteral($replaced);
+            }
+        } else {
+            return WikitextPFragment::newFromLiteral("unknown native function");
+        }
+    }
+}
+
+class WpsNativeFunctionsExtModule implements ExtensionModule {
+    public function getConfig(): array {
+        return [
+            "name" => "WpsNativeFunctionsExtModule",
+            "fragmentHandlers" => [
+                [
+                    "key" => "nativeInvoke",
+                    "options" => [
+                        "parserFunction" => true,
+                        "nohash" => false,
+                        "hasAsyncContent" => false,
+                    ],
+                    "handler" => [
+                        "class" => "WpsNativeInvokeFragmentHandler",
+                    ],
+                ],
+            ],
+        ];
+    }
+}
+
 
 function makeSiteConfig(): ParseServerSiteConfig {
     $arrSiteConfigOpts = [];
-    return new ParseServerSiteConfig($arrSiteConfigOpts);
+    $objSiteConfig = new ParseServerSiteConfig($arrSiteConfigOpts);
+    $objExtMod = new WpsNativeFunctionsExtModule();
+    $objSiteConfig->registerExtensionModule($objExtMod->getConfig());
+    return $objSiteConfig;
 }
 
 

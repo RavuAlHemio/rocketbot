@@ -3,6 +3,12 @@
   "require": {
     "ext-sockets": "*",
     "monolog/monolog": "^2.10.0",
-    "wikimedia/parsoid": "^0.21.0-a24"
-  }
+    "wikimedia/parsoid": "dev-expose-native-template-expansion"
+  },
+  "repositories": [
+    {
+      "type": "vcs",
+      "url": "https://github.com/RavuAlHemio/parsoid"
+    }
+  ]
 }
