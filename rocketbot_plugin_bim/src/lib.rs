@@ -3696,7 +3696,6 @@ impl BimPlugin {
                 SELECT rvto.old_rider, rvto.new_rider
                 FROM bim.ridden_vehicles_between_riders(FALSE) rvto
                 {} {}
-                ORDER BY rvto.\"timestamp\"
             ",
             if criteria.len() > 0 { "WHERE" } else { "" },
             criteria.join(" AND "),
@@ -5004,7 +5003,7 @@ pub async fn add_ride(
                 AND rv.vehicle_number = $2
                 AND r.rider_username = $3
                 AND rv.coupling_mode = 'R'
-            ORDER BY r.\"timestamp\" DESC
+            ORDER BY r.\"timestamp\" DESC, r.id DESC
             LIMIT 1
         ",
     ).await?;
@@ -5043,7 +5042,7 @@ pub async fn add_ride(
                 AND rv.vehicle_number = $2
                 AND r.rider_username = $3
                 AND rv.coupling_mode <> 'R'
-            ORDER BY r.\"timestamp\" DESC
+            ORDER BY r.\"timestamp\" DESC, r.id DESC
             LIMIT 1
         ",
     ).await?;
@@ -5082,7 +5081,7 @@ pub async fn add_ride(
                 AND rv.vehicle_number = $2
                 AND r.rider_username <> $3
                 AND rv.coupling_mode = 'R'
-            ORDER BY r.\"timestamp\" DESC
+            ORDER BY r.\"timestamp\" DESC, r.id DESC
             LIMIT 1
         ",
     ).await?;
@@ -5121,7 +5120,7 @@ pub async fn add_ride(
                 AND rv.vehicle_number = $2
                 AND r.rider_username <> $3
                 AND rv.coupling_mode <> 'R'
-            ORDER BY r.\"timestamp\" DESC
+            ORDER BY r.\"timestamp\" DESC, r.id DESC
             LIMIT 1
         ",
     ).await?;

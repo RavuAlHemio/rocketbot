@@ -138,7 +138,7 @@ pub(crate) async fn handle_bim_detail(request: &Request<Incoming>) -> Result<Res
             FROM bim.rides_and_vehicles rav
             WHERE rav.company = $1
             AND rav.vehicle_number = $2
-            ORDER BY rav.\"timestamp\" DESC, rav.id
+            ORDER BY rav.\"timestamp\" DESC, rav.id DESC
         ",
         &[&company, &vehicle_number.as_str()],
     ).await;
@@ -225,7 +225,7 @@ pub(crate) async fn handle_bim_line_detail(request: &Request<Incoming>) -> Resul
             FROM bim.rides_and_vehicles rav
             WHERE rav.company = $1
             AND rav.line = $2
-            ORDER BY rav.\"timestamp\" DESC, rav.id, rav.spec_position, rav.fixed_coupling_position
+            ORDER BY rav.\"timestamp\" DESC, rav.id DESC, rav.spec_position, rav.fixed_coupling_position
         ",
         &[&company, &line],
     ).await;

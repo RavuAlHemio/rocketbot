@@ -71,7 +71,8 @@ pub async fn get(
                         AND rav.rider_username {} $3
                         {}
                     ORDER BY
-                        rav.\"timestamp\" DESC
+                        rav.\"timestamp\" DESC,
+                        rav.id DESC
                     LIMIT 1
                 ",
                 operator,

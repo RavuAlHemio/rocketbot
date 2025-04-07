@@ -668,7 +668,13 @@ pub(crate) async fn handle_bim_last_riders(request: &Request<Incoming>) -> Resul
                 FROM bim.rides_and_ridden_vehicles rarv2
                 WHERE rarv2.company = rarv.company
                 AND rarv2.vehicle_number = rarv.vehicle_number
-                AND rarv2.\"timestamp\" > rarv.\"timestamp\"
+                AND (
+                    rarv2.\"timestamp\" > rarv.\"timestamp\"
+                    OR (
+                        rarv2.\"timestamp\" = rarv.\"timestamp\"
+                        AND rarv2.id > rarv.id
+                    )
+                )
             )
         ",
         &[],
