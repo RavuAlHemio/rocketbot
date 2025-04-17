@@ -5,14 +5,11 @@ use std::collections::BTreeMap;
 use std::env::args_os;
 use std::fs::File;
 use std::path::PathBuf;
-use std::time::Duration;
 
 use reqwest::Client;
-use rocketbot_mediawiki_parsing::WikiParser;
 use rocketbot_plugin_bim::LineOperatorInfo;
 use serde::{Deserialize, Deserializer, Serialize, Serializer};
 use serde::de::Error as _;
-use serde_json;
 use sxd_document;
 use sxd_document::dom::Element;
 
@@ -21,23 +18,15 @@ use sxd_document::dom::Element;
 struct Config {
     pub output_path: String,
     pub php_path: Option<String>,
-    pub wiki_parse_server_dir: String,
-    pub parser_already_running: bool,
     pub page_sources: Vec<PageSource>,
 }
 
 #[derive(Clone, Debug, Deserialize, Eq, Hash, Ord, PartialEq, PartialOrd, Serialize)]
 struct PageSource {
     pub page_url_pattern: String,
-    pub templates: Vec<String>,
-    #[serde(default = "PageSource::default_template_prefix")] pub template_prefix: String,
+    pub authorization_token: Option<String>,
     pub pages: Vec<PageConfig>,
     pub operator_name_to_abbrev: BTreeMap<String, String>,
-}
-impl PageSource {
-    fn default_template_prefix() -> String {
-        "Template".to_owned()
-    }
 }
 
 #[derive(Clone, Debug, Deserialize, Eq, Hash, Ord, PartialEq, PartialOrd, Serialize)]
@@ -46,6 +35,7 @@ pub(crate) struct PageConfig {
     pub region: String,
     pub line_column: String,
     pub operator_spec: Spec,
+    pub section: Option<String>,
 }
 
 #[derive(Clone, Debug, Eq, Hash, Ord, PartialEq, PartialOrd)]
@@ -93,6 +83,7 @@ impl DocumentExt for sxd_document::dom::Document<'_> {
 
 trait ElementExt<'d> {
     fn child_elements_named<'s, 'n>(&'s self, local_name: &'n str) -> Vec<Element<'d>>;
+    fn descendant_elements_named<'s, 'n>(&'s self, local_name: &'n str) -> Vec<Element<'d>>;
     fn first_child_element_named<'s, 'n>(&'s self, local_name: &'n str) -> Option<Element<'d>>;
     fn first_text_rec<'s>(&'s self) -> Option<String>;
 }
@@ -129,42 +120,205 @@ impl<'d> ElementExt<'d> for sxd_document::dom::Element<'d> {
 
         None
     }
+
+    fn descendant_elements_named<'s, 'n>(&'s self, local_name: &'n str) -> Vec<Element<'d>> {
+        let mut element_stack = vec![(true, self.clone())];
+        let mut ret = Vec::new();
+
+        while let Some((is_root, element)) = element_stack.pop() {
+            // "descendant" means "not myself" so check for root
+            if !is_root && element.name().local_part() == local_name {
+                ret.push(element.clone());
+            }
+
+            let child_elements = element
+                .children()
+                .into_iter()
+                .rev()
+                .filter_map(|c| c.element());
+            for child_elem in child_elements {
+                element_stack.push((false, child_elem));
+            }
+        }
+
+        ret
+    }
 }
 
 
-async fn obtain_wikitext(
+async fn obtain_xhtml(
     reqwest_client: &mut Client,
     url: &str,
-) -> (String, String) {
+    authorization_token: Option<&str>,
+) -> String {
     eprintln!("fetching URL {:?}", url);
-    let pages_json_bytes = reqwest_client.get(url)
+    let mut builder = reqwest_client.get(url);
+    if let Some(token) = authorization_token {
+        builder = builder.bearer_auth(token);
+    }
+    let page_html_bytes = builder
         .send().await.expect("sending request failed")
         .error_for_status().expect("response is an error")
         .bytes().await.expect("obtaining response bytes failed");
-    let pages_json: serde_json::Value = serde_json::from_reader(pages_json_bytes.as_ref())
-        .expect("failed to parse JSON");
-    let page_json: &serde_json::Value = &pages_json["query"]["pages"][0];
-    let page_title = page_json["title"]
-        .as_str().expect("page title in JSON is not a string");
-    let page_source = page_json["revisions"][0]["slots"]["main"]["content"]
-        .as_str().expect("page content in JSON is not a string");
-    (page_title.to_owned(), page_source.to_owned())
+    let page_html_string = String::from_utf8(page_html_bytes.to_vec())
+        .expect("article is not UTF-8");
+    page_html_string
 }
 
 
-async fn obtain_template(
-    reqwest_client: &mut Client,
-    url_pattern: &str,
-    template_prefix: &str,
-    template_name: &str,
-    wiki_parser: &mut WikiParser,
-) {
-    let prefixed_template_name = format!("{}:{}", template_prefix, template_name);
-    let url = url_pattern.replace("{TITLE}", &prefixed_template_name);
+struct Table {
+    rows_then_cols: Vec<Vec<Option<String>>>,
+}
+impl Table {
+    pub fn new() -> Self {
+        Self {
+            rows_then_cols: Vec::new(),
+        }
+    }
 
-    let (_, template_source) = obtain_wikitext(reqwest_client, &url).await;
-    wiki_parser.supply_template(template_name, &template_source)
-        .expect("supplying template failed");
+    pub fn into_rows_some(self) -> Vec<Vec<String>> {
+        let mut ret = Vec::with_capacity(self.rows_then_cols.len());
+        for row in self.rows_then_cols {
+            let mut new_row = Vec::with_capacity(row.len());
+            for value in row {
+                if let Some(v) = value {
+                    new_row.push(v);
+                } else {
+                    new_row.push(String::with_capacity(0))
+                }
+            }
+            ret.push(new_row);
+        }
+        ret
+    }
+
+    pub fn set_next_cell(&mut self, row_span: usize, col_span: usize, value: String) {
+        if self.rows_then_cols.len() == 0 {
+            // start the first row
+            self.rows_then_cols.push(Vec::new());
+        }
+
+        // find the first empty cell
+        let mut empty_cell_opt = None;
+        for (r, row) in self.rows_then_cols.iter().enumerate() {
+            for (c, cell) in row.iter().enumerate() {
+                if cell.is_none() {
+                    empty_cell_opt = Some((r, c));
+                    break;
+                }
+            }
+            if empty_cell_opt.is_some() {
+                break;
+            }
+        }
+
+        let (empty_r, empty_c) = if let Some(ec) = empty_cell_opt {
+            ec
+        } else {
+            // table is full, we will be extending the final row
+            let last_row_index = self.rows_then_cols.len() - 1;
+            let last_row = self.rows_then_cols.last_mut().unwrap();
+            last_row.push(None);
+            (last_row_index, last_row.len() - 1)
+        };
+
+        for r in empty_r..empty_r+row_span {
+            for c in empty_c..empty_c+col_span {
+                self.set_cell(r, c, Some(value.clone()));
+            }
+        }
+    }
+
+    pub fn start_new_row(&mut self) {
+        if let Some(last) = self.rows_then_cols.last() {
+            if last.len() > 0 {
+                self.rows_then_cols.push(Vec::new());
+            }
+        } else {
+            self.rows_then_cols.push(Vec::new());
+        }
+    }
+    pub fn row_count(&self) -> usize {
+        self.rows_then_cols.len()
+    }
+
+    pub fn col_count(&self) -> usize {
+        self.rows_then_cols
+            .iter()
+            .map(|r| r.len())
+            .max()
+            .unwrap_or(0)
+    }
+
+    pub fn set_cell(&mut self, row: usize, col: usize, value: Option<String>) {
+        // ensure we are rectangular
+        let required_rows = self.row_count().max(row + 1);
+        let required_cols = self.col_count().max(col + 1);
+
+        while self.rows_then_cols.len() < required_rows {
+            self.rows_then_cols.push(Vec::with_capacity(required_cols));
+        }
+        for row in &mut self.rows_then_cols {
+            if row.len() < required_cols {
+                row.push(None);
+            }
+        }
+
+        self.rows_then_cols[row][col] = value;
+    }
+}
+
+
+fn reduce_table(table: Element) -> Vec<Vec<String>> {
+    let tbody = table.first_child_element_named("tbody")
+        .expect("no tbody element");
+    let rows = tbody.child_elements_named("tr");
+    let mut ret = Table::new();
+
+    for row in rows.into_iter() {
+        ret.start_new_row();
+
+        let cells = row.children()
+            .into_iter()
+            .filter_map(|n| n.element())
+            .filter(|e| e.name().local_part() == "td" || e.name().local_part() == "th");
+
+        for cell in cells {
+            let first_text_opt = cell.first_text_rec();
+            let first_text = match first_text_opt {
+                Some(ft) => ft,
+                None => {
+                    // try the first alt attribute of an <img> we find
+                    let mut img_children = cell.descendant_elements_named("img");
+                    img_children.retain(|c| c.attribute_value("alt").is_some());
+                    if let Some(ic) = img_children.get(0) {
+                        ic.attribute_value("alt").unwrap().to_owned()
+                    } else {
+                        // assume empty
+                        String::with_capacity(0)
+                    }
+                },
+            };
+
+            // rowspan? colspan?
+            let mut row_span: usize = cell.attribute_value("rowspan")
+                .and_then(|r| r.parse().ok())
+                .unwrap_or(1);
+            if row_span == 0 {
+                row_span = 1;
+            }
+            let mut col_span: usize = cell.attribute_value("colspan")
+                .and_then(|r| r.parse().ok())
+                .unwrap_or(1);
+            if col_span == 0 {
+                col_span = 1;
+            }
+
+            ret.set_next_cell(row_span, col_span, first_text);
+        }
+    }
+
+    ret.into_rows_some()
 }
 
 
@@ -173,17 +327,13 @@ async fn process_page(
     url_pattern: &str,
     page_config: &PageConfig,
     operator_name_to_abbrev: &BTreeMap<String, String>,
-    wiki_parser: &mut WikiParser,
+    authorization_token: Option<&str>,
 ) -> BTreeMap<String, BTreeMap<String, LineOperatorInfo>> {
     // return value is: region -> line -> operator_info
 
     let url = url_pattern.replace("{TITLE}", &page_config.title);
 
-    let (page_title, page_source) = obtain_wikitext(reqwest_client, &url).await;
-
-    let page_xml_notag = wiki_parser.parse_article(&page_title, &page_source)
-        .expect("parsing wikitext failed");
-    println!("{}", page_xml_notag);
+    let page_xml_notag = obtain_xhtml(reqwest_client, &url, authorization_token).await;
     let page_xml = format!("<?xml version=\"1.0\"?>{}", page_xml_notag);
 
     let page_package = sxd_document::parser::parse(&page_xml)
@@ -192,41 +342,56 @@ async fn process_page(
 
     let html = page.document_element().expect("no document element");
     let body = html.first_child_element_named("body").expect("no body element");
-    let table = body.child_elements_named("section")
+
+    let mut sections = body.child_elements_named("section");
+    if let Some(section_name) = page_config.section.as_ref() {
+        sections.retain(|section| {
+            // <section><h#>Something</h#></section>
+            let heading_elems = section
+                .children()
+                .into_iter()
+                .filter_map(|c| c.element())
+                .filter(|e| {
+                    let name = e.name().local_part();
+                    name.starts_with("h")
+                        && !name.chars().skip(1).any(|c| c < '0' || c > '9')
+                });
+            for heading_elem in heading_elems {
+                // we only need to check the first match
+                return if let Some(text) = heading_elem.first_text_rec() {
+                    section_name == &text
+                } else {
+                    section_name == ""
+                };
+            }
+            // no heading? not what we're looking for
+            false
+        });
+    }
+
+    let table = sections
         .into_iter()
         .flat_map(|section| section.child_elements_named("table"))
         .nth(0)
         .expect("no table element in any section");
-    let tbody = table.first_child_element_named("tbody").expect("no tbody element");
-    let first_table_rows = tbody.child_elements_named("tr");
+    let reduced_table = reduce_table(table);
 
     let mut line_column_index_opt = None;
     let mut operator_column_index_opt = None;
 
     let mut ret = BTreeMap::new();
 
-    for (r, row) in first_table_rows.into_iter().enumerate() {
-        let cells = row.children()
-            .into_iter()
-            .filter_map(|n| n.element())
-            .filter(|e| e.name().local_part() == "td" || e.name().local_part() == "th");
-
+    for (r, row) in reduced_table.iter().enumerate() {
         let mut line_opt = None;
         let mut operator_opt = None;
-        for (c, cell) in cells.enumerate() {
-            let first_text_opt = cell.first_text_rec();
-            let first_text = match first_text_opt {
-                Some(ft) => ft,
-                None => continue,
-            };
-
+        for (c, first_text) in row.iter().enumerate() {
             if r == 0 {
                 // heading row
-                if first_text == page_config.line_column {
+                if first_text == &page_config.line_column {
                     line_column_index_opt = Some(c);
                 }
                 if let Spec::Column(operator_column) = &page_config.operator_spec {
-                    if &first_text == operator_column {
+                    if first_text == operator_column {
                         operator_column_index_opt = Some(c);
                     }
                 }
@@ -291,58 +456,28 @@ async fn main() {
             .expect("failed to parse config file")
     };
 
-    let php_command = config.php_path.as_deref().unwrap_or("php");
-
     let mut region_to_line_to_operator = BTreeMap::new();
 
-    {
-        let mut parser = if config.parser_already_running {
-            WikiParser::new_existing()
-        } else {
-            let parser = WikiParser::new(php_command, &config.wiki_parse_server_dir)
-                .expect("error creating parser");
+    let mut reqwest_client = reqwest::Client::new();
 
-            // wait a bit to allow the parser to start
-            tokio::time::sleep(Duration::from_millis(500)).await;
-
-            parser
-        };
-
-        let mut reqwest_client = reqwest::Client::new();
-
-        for page_source in &config.page_sources {
-            // load the templates
-            for template in &page_source.templates {
-                obtain_template(
-                    &mut reqwest_client,
-                    &page_source.page_url_pattern,
-                    &page_source.template_prefix,
-                    template,
-                    &mut parser,
-                ).await;
-            }
-
-            for page in &page_source.pages {
-                let this_region_to_line_to_operator = process_page(
-                    &mut reqwest_client,
-                    &page_source.page_url_pattern,
-                    &page,
-                    &page_source.operator_name_to_abbrev,
-                    &mut parser,
-                ).await;
-                for (this_region, this_line_to_operator) in this_region_to_line_to_operator {
-                    let line_to_operator = region_to_line_to_operator
-                        .entry(this_region)
-                        .or_insert_with(|| BTreeMap::new());
-                    for (this_line, this_operator) in this_line_to_operator {
-                        line_to_operator.insert(this_line, this_operator);
-                    }
+    for page_source in &config.page_sources {
+        for page in &page_source.pages {
+            let this_region_to_line_to_operator = process_page(
+                &mut reqwest_client,
+                &page_source.page_url_pattern,
+                &page,
+                &page_source.operator_name_to_abbrev,
+                page_source.authorization_token.as_deref(),
+            ).await;
+            for (this_region, this_line_to_operator) in this_region_to_line_to_operator {
+                let line_to_operator = region_to_line_to_operator
+                    .entry(this_region)
+                    .or_insert_with(|| BTreeMap::new());
+                for (this_line, this_operator) in this_line_to_operator {
+                    line_to_operator.insert(this_line, this_operator);
                 }
             }
         }
-
-        parser.parsing_done()
-            .expect("error signalling end of parsing");
     }
 
     // output
