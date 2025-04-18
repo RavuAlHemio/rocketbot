@@ -12,7 +12,7 @@ use std::collections::{BTreeMap, HashMap};
 use std::fs::File;
 
 use form_urlencoded;
-use rocketbot_bim_common::{VehicleInfo, VehicleNumber};
+use rocketbot_bim_common::{RegionToLineToOperator, VehicleInfo, VehicleNumber};
 use serde::{Deserialize, Serialize};
 use tracing::{error, warn};
 
@@ -105,6 +105,57 @@ async fn obtain_company_to_definition() -> Option<BTreeMap<String, serde_json::V
         .map(|(k, v)| (k.clone(), v.clone()))
         .collect();
     Some(company_to_definition_set)
+}
+
+
+async fn obtain_region_to_lines() -> Option<RegionToLineToOperator> {
+    let bim_plugin = obtain_bim_plugin_config().await?;
+
+    let operator_databases = match bim_plugin["config"]["operator_databases"].as_array() {
+        Some(od) => od,
+        None => {
+            warn!("no operator_databases object found in bim plugin config");
+            return None;
+        },
+    };
+
+    let mut complete_database: RegionToLineToOperator = BTreeMap::new();
+
+    for operator_database in operator_databases {
+        let path = match operator_database.as_str() {
+            Some(p) => p,
+            None => {
+                warn!("operator_databases entry is not a string; skipping");
+                continue;
+            },
+        };
+
+        let database_str = match std::fs::read_to_string(path) {
+            Ok(ds) => ds,
+            Err(e) => {
+                warn!("failed to read operator_databases entry {:?} (skipping): {}", path, e);
+                continue;
+            },
+        };
+
+        let this_database: RegionToLineToOperator = match serde_json::from_str(&database_str) {
+            Ok(td) => td,
+            Err(e) => {
+                warn!("failed to parse operator_databases entry {:?} (skipping): {}", path, e);
+                continue;
+            },
+        };
+        for (region, line_to_operator) in this_database {
+            let complete_line_to_operator = complete_database
+                .entry(region)
+                .or_insert_with(|| BTreeMap::new());
+            for (line, operator) in line_to_operator {
+                complete_line_to_operator.insert(line, operator);
+            }
+        }
+    }
+
+    Some(complete_database)
 }
 
 

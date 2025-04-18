@@ -7,7 +7,7 @@ use std::fs::File;
 use std::path::PathBuf;
 
 use reqwest::Client;
-use rocketbot_plugin_bim::LineOperatorInfo;
+use rocketbot_bim_common::LineOperatorInfo;
 use serde::{Deserialize, Deserializer, Serialize, Serializer};
 use serde::de::Error as _;
 use sxd_document;

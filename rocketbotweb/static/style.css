@@ -229,10 +229,12 @@ table.bim-vehicles td.ride-count {
   text-align: right;
 }
 
-main.bim-coverage .vehicles-box {
+main.bim-coverage .vehicles-box,
+main.bim-line-coverage .lines-box {
   margin-bottom: 1em;
 }
-main.bim-coverage .vehicles-box .floaty {
+main.bim-coverage .vehicles-box .floaty,
+main.bim-line-coverage .lines-box .floaty {
   display: inline-block;
   padding: 1px 0.2em;
   margin-bottom: 0.2em;
@@ -242,15 +244,18 @@ main.bim-coverage .vehicles-box .floaty {
 main.bim-coverage .vehicles-box .block-name::after {
   content: "\002026";
 }
-main.bim-coverage .vehicles-box .vehicle.ridden {
+main.bim-coverage .vehicles-box .vehicle.ridden,
+main.bim-line-coverage .lines-box .line.ridden {
   background-color: #0f0;
   color: #000;
 }
-main.bim-coverage .vehicles-box .vehicle.unridden.other-ridden {
+main.bim-coverage .vehicles-box .vehicle.unridden.other-ridden,
+main.bim-line-coverage .lines-box .line.unridden.other-ridden {
   background-color: #66f;
   color: #000;
 }
-main.bim-coverage .vehicles-box .vehicle.unridden.other-unridden.active {
+main.bim-coverage .vehicles-box .vehicle.unridden.other-unridden.active,
+main.bim-line-coverage .lines-box .line.unridden.other-unridden {
   background-color: #ccc;
   color: #000;
 }

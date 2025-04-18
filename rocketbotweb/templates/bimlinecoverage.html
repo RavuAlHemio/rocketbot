@@ -1,0 +1,51 @@
+{% extends "base.html" %}
+
+{% macro output_line(line) -%}
+<div
+  class="line floaty {% if line.ride_count > 0 %}ridden{% else %}unridden{% endif %} {% if line.everybody_ride_count > 0 %}other-ridden{% else %}other-unridden{% endif %}"
+  {% if line.has_ride() -%}
+    style="background-color:{{ line.ride_count|mix_color(0, max_ride_count, "#eeffee", "#00ff00") }}"
+  {%- else if line.has_everybody_ride() -%}
+    style="background-color:{{ line.everybody_ride_count|mix_color(0, everybody_max_ride_count, "#ccccff", "#6666ff") }}"
+  {%- endif %}
+  data-ride-count="{{ line.ride_count }}"
+>{{ line.number_str|escape }}</div></a>
+{%- endmacro %}
+
+{% block title %}Public Transport Line Coverage{% endblock %}
+
+{% block content %}
+<main class="bim-line-coverage">
+
+<h1>Public Transport Line Coverage</h1>
+
+<section class="skiplinks">
+  <p>
+    {% for (region_name, region) in name_to_region -%}
+      {% if !loop.first -%}
+        &middot;
+      {% endif -%}
+      <a class="region" href="#r-{{ region_name|slugify }}">{{ region_name|escape }}</a>
+    {% endfor -%}
+  </p>
+</section>
+
+{% for (region_name, region) in name_to_region %}
+<section class="region" id="r-{{ region_name|slugify }}">
+<h2>{{ region_name|escape }}</h2>
+
+<section class="line-block">
+<div class="lines-box">
+
+{% for (line_name, line) in region.name_to_line -%}
+  {% call output_line(line) %}
+{%- endfor %}
+
+</div>{# lines-box #}
+</section>{# line-block #}
+</section>{# region #}
+{% endfor %}{# name_to_region #}
+
+</main>
+
+{% endblock %}

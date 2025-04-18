@@ -23,7 +23,9 @@ use chrono::{
 use once_cell::sync::{Lazy, OnceCell};
 use rand::{Rng, thread_rng};
 use regex::{Captures, Regex};
-use rocketbot_bim_common::{CouplingMode, LastRider, VehicleInfo, VehicleNumber};
+use rocketbot_bim_common::{
+    CouplingMode, LastRider, RegionToLineToOperator, VehicleInfo, VehicleNumber,
+};
 use rocketbot_bim_common::achievements::ACHIEVEMENT_DEFINITIONS;
 use rocketbot_bim_common::ride_table::{Ride, RideTableData, RideTableVehicle, UserRide};
 use rocketbot_interface::{phrase_join, send_channel_message};
@@ -122,9 +124,6 @@ impl AddLookbackFlags for CommandDefinitionBuilder {
             .add_flag("last-day")
     }
 }
-
-
-pub type RegionToLineToOperator = HashMap<String, HashMap<String, LineOperatorInfo>>;
 
 
 macro_rules! write_expect {
@@ -310,13 +309,6 @@ impl CompanyDefinition {
     }
 }
 
-#[derive(Clone, Debug, Default, Deserialize, Eq, Hash, Ord, PartialEq, PartialOrd, Serialize)]
-pub struct LineOperatorInfo {
-    pub canonical_line: String,
-    pub operator_name: String,
-    pub operator_abbrev: Option<String>,
-}
-
 
 #[derive(Clone, Debug, Deserialize, Serialize)]
 struct Config {
@@ -411,7 +403,7 @@ impl BimPlugin {
     }
 
     fn load_operator_databases(&self, config: &Config) -> Option<RegionToLineToOperator> {
-        let mut region_to_line_to_operator: RegionToLineToOperator = HashMap::new();
+        let mut region_to_line_to_operator: RegionToLineToOperator = BTreeMap::new();
 
         for db_path in &config.operator_databases {
             let f = match File::open(db_path) {
@@ -431,7 +423,7 @@ impl BimPlugin {
             for (this_region, this_line_to_operator) in this_region_to_line_to_operator {
                 let line_to_operator = region_to_line_to_operator
                     .entry(this_region)
-                    .or_insert_with(|| HashMap::new());
+                    .or_insert_with(|| BTreeMap::new());
                 for (this_line, this_operator) in this_line_to_operator {
                     line_to_operator.insert(this_line, this_operator);
                 }

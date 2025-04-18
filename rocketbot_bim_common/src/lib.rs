@@ -173,6 +173,18 @@ impl<'a> LastRider<'a> {
 }
 
 
+/// Information about a line and its operator.
+#[derive(Clone, Debug, Default, Deserialize, Eq, Hash, Ord, PartialEq, PartialOrd, Serialize)]
+pub struct LineOperatorInfo {
+    pub canonical_line: String,
+    pub operator_name: String,
+    pub operator_abbrev: Option<String>,
+}
+
+
+pub type RegionToLineToOperator = BTreeMap<String, BTreeMap<String, LineOperatorInfo>>;
+
+
 /// Formats a timestamp, possibly relative to another timestamp.
 ///
 /// If an anchor timestamp is provided and the timestamp has happened less than 24h before the

@@ -1,5 +1,5 @@
 use std::borrow::Cow;
-use std::collections::{BTreeMap, HashMap, HashSet};
+use std::collections::{BTreeMap, BTreeSet, HashMap, HashSet};
 use std::convert::Infallible;
 
 use askama::Template;
@@ -8,6 +8,7 @@ use http_body_util::Full;
 use hyper::{Method, Request, Response};
 use hyper::body::{Bytes, Incoming};
 use rocketbot_bim_common::{VehicleInfo, VehicleNumber};
+use rocketbot_string::NatSortedString;
 use serde::Serialize;
 use tokio_postgres::types::ToSql;
 use tracing::error;
@@ -17,11 +18,18 @@ use crate::bim::{connect_to_db, obtain_company_to_bim_database, obtain_company_t
 use crate::templating::filters;
 use crate::util::sort_as_text;
 
+use super::obtain_region_to_lines;
+
 
 #[derive(Clone, Debug, Eq, Hash, PartialEq, Serialize)]
 struct CoverageCompany {
     pub uncoupled_type_to_block_name_to_vehicles: BTreeMap<String, BTreeMap<String, Vec<CoverageVehiclePart>>>,
     pub coupled_sequences: Vec<Vec<CoverageVehiclePart>>,
+}
+
+#[derive(Clone, Debug, Eq, Hash, PartialEq, Serialize)]
+struct LineCoverageRegion {
+    pub name_to_line: BTreeMap<NatSortedString, CoverageLinePart>,
 }
 
 #[derive(Clone, Debug, Eq, Hash, PartialEq, Serialize)]
@@ -78,6 +86,22 @@ impl CoverageVehiclePart {
     }
 }
 
+#[derive(Clone, Debug, Eq, Hash, PartialEq, Serialize)]
+struct CoverageLinePart {
+    pub number_str: String,
+    pub ride_count: i64,
+    pub everybody_ride_count: i64,
+}
+impl CoverageLinePart {
+    pub fn has_ride(&self) -> bool {
+        self.ride_count > 0
+    }
+
+    pub fn has_everybody_ride(&self) -> bool {
+        self.everybody_ride_count > 0
+    }
+}
+
 #[derive(Clone, Debug, Eq, Hash, Ord, PartialEq, PartialOrd, Serialize)]
 enum MergeMode {
     SplitTypes,
@@ -122,6 +146,21 @@ struct BimCoverageTemplate {
 struct BimCoveragePickRiderTemplate {
     pub riders: Vec<String>,
     pub countries: Vec<String>,
+}
+
+
+#[derive(Clone, Debug, Eq, Hash, PartialEq, Serialize, Template)]
+#[template(path = "bimlinecoverage.html")]
+struct BimLineCoverageTemplate {
+    pub max_ride_count: i64,
+    pub everybody_max_ride_count: i64,
+    pub name_to_region: BTreeMap<String, LineCoverageRegion>,
+}
+
+#[derive(Clone, Debug, Eq, Hash, PartialEq, Serialize, Template)]
+#[template(path = "bimlinecoverage-pickrider.html")]
+struct BimLineCoveragePickRiderTemplate {
+    pub riders: Vec<String>,
 }
 
 
@@ -294,6 +333,155 @@ async fn get_company_to_vehicles_is_last_rider(
     }
 
     Some((company_to_vehicles_ridden, 4))
+}
+
+async fn get_company_to_lines_ridden(
+    db_conn: &tokio_postgres::Client,
+    to_date_opt: Option<DateTime<Local>>,
+    rider_username_opt: Option<&str>,
+) -> Option<BTreeMap<String, BTreeMap<String, i64>>> {
+    use std::fmt::Write as _;
+
+    let mut conditions = String::new();
+    let mut params: Vec<&(dyn ToSql + Sync)> = Vec::with_capacity(2);
+
+    if let Some(to_date) = to_date_opt.as_ref() {
+        write!(conditions, " AND \"timestamp\" <= ${}", conditions.len() + 1).unwrap();
+        params.push(to_date);
+    }
+
+    if let Some(rider_username) = rider_username_opt.as_ref() {
+        write!(conditions, " AND rider_username = ${}", conditions.len() + 1).unwrap();
+        params.push(rider_username);
+    }
+
+    let query = format!(
+        "
+            SELECT company, line, CAST(COUNT(*) AS bigint)
+            FROM bim.rides
+            WHERE line IS NOT NULL
+            {}
+            GROUP BY company, line
+        ",
+        conditions,
+    );
+
+    let lines_res = db_conn.query(&query, &params).await;
+    let line_rows = match lines_res {
+        Ok(r) => r,
+        Err(e) => {
+            error!("failed to query lines: {}", e);
+            return None;
+        },
+    };
+    let mut company_to_lines_ridden: BTreeMap<String, BTreeMap<String, i64>> = BTreeMap::new();
+    for vehicle_row in line_rows {
+        let company: String = vehicle_row.get(0);
+        let line: String = vehicle_row.get(1);
+        let ride_count: i64 = vehicle_row.get(2);
+        company_to_lines_ridden
+            .entry(company)
+            .or_insert_with(|| BTreeMap::new())
+            .insert(line, ride_count);
+    }
+    Some(company_to_lines_ridden)
+}
+
+async fn get_company_to_lines_is_last_rider(
+    db_conn: &tokio_postgres::Client,
+    to_date_opt: Option<DateTime<Local>>,
+    rider_username: &str,
+    query_everyone: bool,
+) -> Option<BTreeMap<String, BTreeMap<String, i64>>> {
+    let mut inner_conditions: Vec<String> = Vec::with_capacity(1);
+    let mut conditions: Vec<String> = Vec::with_capacity(1);
+    let mut params: Vec<&(dyn ToSql + Sync)> = Vec::with_capacity(2);
+
+    if let Some(to_date) = to_date_opt.as_ref() {
+        inner_conditions.push(format!("AND r2.\"timestamp\" <= ${}", params.len() + 1));
+        conditions.push(format!("AND r.\"timestamp\" <= ${}", params.len() + 1));
+        params.push(to_date);
+    }
+
+    let inner_conditions_string = inner_conditions.join(" ");
+    let conditions_string = conditions.join(" ");
+
+    let query = if query_everyone {
+        let query = format!(
+            "
+                SELECT
+                    r.company,
+                    r.line,
+                    CAST(CASE WHEN EXISTS (
+                        SELECT 1
+                        FROM bim.rides r2
+                        WHERE r2.company = r.company
+                        AND r2.line = r.line
+                        AND r2.rider_username = ${}
+                        {}
+                    ) THEN 1 ELSE 3 END AS bigint) count_value
+                FROM bim.rides r
+                WHERE r.line IS NOT NULL
+                {}
+            ",
+            params.len() + 1,
+            inner_conditions_string,
+            conditions_string,
+        );
+        params.push(&rider_username);
+        query
+    } else {
+        let query = format!(
+            "
+                SELECT r.company, r.line, CAST(1 AS bigint) count_value
+                FROM bim.rides r
+                WHERE NOT EXISTS (
+                    SELECT 1
+                    FROM bim.rides r2
+                    WHERE r2.company = r.company
+                    AND r2.line = r.line
+                    AND (
+                        r2.\"timestamp\" > r.\"timestamp\"
+                        OR (
+                            r2.\"timestamp\" = r.\"timestamp\"
+                            AND r2.id > r.id
+                        )
+                    )
+                    {}
+                )
+                AND r.line IS NOT NULL
+                AND r.rider_username = ${}
+                {}
+            ",
+            inner_conditions_string,
+            params.len() + 1,
+            conditions_string,
+        );
+        params.push(&rider_username);
+        query
+    };
+
+    // get ridden lines for rider
+    let lines_res = db_conn.query(&query, &params).await;
+    let line_rows = match lines_res {
+        Ok(r) => r,
+        Err(e) => {
+            error!("failed to query lines: {}", e);
+            return None;
+        },
+    };
+    let mut company_to_lines_ridden: BTreeMap<String, BTreeMap<String, i64>> = BTreeMap::new();
+    for vehicle_row in line_rows {
+        let company: String = vehicle_row.get(0);
+        let line: String = vehicle_row.get(1);
+        let count_value: i64 = vehicle_row.get(2);
+        company_to_lines_ridden
+            .entry(company)
+            .or_insert_with(|| BTreeMap::new())
+            .insert(line, count_value);
+    }
+
+    Some(company_to_lines_ridden)
 }
 
 
@@ -728,5 +916,238 @@ pub(crate) async fn handle_bim_coverage_field(request: &Request<Incoming>) -> Re
             error!("error generating PNG response: {}", e);
             return return_500();
         },
+    }
+}
+
+
+pub(crate) async fn handle_bim_line_coverage(request: &Request<Incoming>) -> Result<Response<Full<Bytes>>, Infallible> {
+    let query_pairs = get_query_pairs(request);
+
+    if request.method() != Method::GET {
+        return return_405(&query_pairs).await;
+    }
+
+    let compare_mode = query_pairs.get("compare")
+        .map(|qp| qp == "1")
+        .unwrap_or(false);
+    let last_rider = query_pairs.get("last-rider")
+        .map(|qp| qp == "1")
+        .unwrap_or(false);
+
+    let db_conn = match connect_to_db().await {
+        Some(c) => c,
+        None => return return_500(),
+    };
+
+    if let Some(rider_name) = query_pairs.get("rider") {
+        let rider_username_opt = if rider_name == "!ALL" {
+            None
+        } else {
+            Some(rider_name.as_ref())
+        };
+        let region_opt = query_pairs.get("region");
+
+        if last_rider && rider_username_opt.is_none() {
+            return return_400("last-rider mode requires a specific rider to be chosen", &query_pairs).await;
+        }
+
+        let mut to_date_opt: Option<DateTime<Local>> = None;
+        if let Some(date_str) = cow_empty_to_none(query_pairs.get("to-date")) {
+            let input_date = match NaiveDate::parse_from_str(date_str, "%Y-%m-%d") {
+                Ok(d) => d,
+                Err(_) => return return_400("invalid date format, expected yyyy-mm-dd", &query_pairs).await,
+            };
+
+            // end of that day is actually next day at 04:00
+            let naive_timestamp = input_date
+                .succ_opt().unwrap()
+                .and_hms_opt(4, 0, 0).unwrap();
+            to_date_opt = match Local.from_local_datetime(&naive_timestamp).earliest() {
+                Some(lts) => Some(lts),
+                None => return return_400("failed to convert timestamp to local time", &query_pairs).await,
+            };
+        }
+        let query_res = if last_rider {
+            get_company_to_lines_is_last_rider(
+                &db_conn,
+                to_date_opt,
+                rider_username_opt.unwrap(),
+                false,
+            ).await
+        } else {
+            get_company_to_lines_ridden(
+                &db_conn,
+                to_date_opt,
+                rider_username_opt,
+            ).await
+        };
+        let company_to_lines_ridden = match query_res {
+            Some(val) => val,
+            None => return return_500(),
+        };
+
+        let all_riders_company_to_lines_ridden = if compare_mode {
+            // get ridden vehicles for all riders
+            let query_res = if last_rider {
+                get_company_to_lines_is_last_rider(
+                    &db_conn,
+                    to_date_opt,
+                    rider_username_opt.unwrap(),
+                    true,
+                ).await
+            } else {
+                get_company_to_lines_ridden(
+                    &db_conn,
+                    to_date_opt,
+                    None,
+                ).await
+            };
+            match query_res {
+                Some(val) => val,
+                None => return return_500(),
+            }
+        } else {
+            BTreeMap::new()
+        };
+
+        // get region definitions
+        let mut region_to_lines = match obtain_region_to_lines().await {
+            Some(rtl) => rtl,
+            None => return return_500(),
+        };
+
+        if let Some(wanted_region) = region_opt {
+            // remove those that aren't ours
+            region_to_lines.retain(|r, _l| r == wanted_region);
+        }
+
+        // merge the company data in our regions
+        let mut region_to_lines_ridden: BTreeMap<String, BTreeMap<String, i64>> = BTreeMap::new();
+        let mut all_riders_region_to_lines_ridden: BTreeMap<String, BTreeMap<String, i64>> = BTreeMap::new();
+        let no_ridden_lines = BTreeMap::new();
+        for (region, name_to_line) in &region_to_lines {
+            let mut region_companies = BTreeSet::new();
+            for line in name_to_line.values() {
+                if let Some(op) = line.operator_abbrev.as_ref() {
+                    region_companies.insert(op.clone());
+                }
+            }
+
+            let lines_ridden = region_to_lines_ridden
+                .entry(region.clone())
+                .or_insert_with(|| BTreeMap::new());
+            let all_riders_lines_ridden = all_riders_region_to_lines_ridden
+                .entry(region.clone())
+                .or_insert_with(|| BTreeMap::new());
+
+            for line in name_to_line.values() {
+                let count = lines_ridden
+                    .entry(line.canonical_line.clone())
+                    .or_insert(0);
+                let all_riders_count = all_riders_lines_ridden
+                    .entry(line.canonical_line.clone())
+                    .or_insert(0);
+
+                // go through all companies in the region and pick out this line
+                for region_company in &region_companies {
+                    let ridden_here = company_to_lines_ridden
+                        .get(region_company)
+                        .unwrap_or(&no_ridden_lines)
+                        .get(&line.canonical_line)
+                        .copied()
+                        .unwrap_or(0);
+                    *count += ridden_here;
+                    let all_riders_ridden_here = all_riders_company_to_lines_ridden
+                        .get(region_company)
+                        .unwrap_or(&no_ridden_lines)
+                        .get(&line.canonical_line)
+                        .copied()
+                        .unwrap_or(0);
+                    *all_riders_count += all_riders_ridden_here;
+                }
+            }
+        }
+
+        // run through lines
+        let mut name_to_region: BTreeMap<String, LineCoverageRegion> = BTreeMap::new();
+        for (region, line_to_count) in &region_to_lines_ridden {
+            let all_riders_line_to_count = all_riders_region_to_lines_ridden
+                .get(region)
+                .unwrap_or(&no_ridden_lines);
+
+            let mut name_to_line = BTreeMap::new();
+
+            for (line, count) in line_to_count {
+                let all_riders_count = all_riders_line_to_count
+                    .get(line)
+                    .copied()
+                    .unwrap_or(0);
+
+                name_to_line.insert(
+                    NatSortedString::from_string(line.clone()),
+                    CoverageLinePart {
+                        number_str: line.clone(),
+                        ride_count: *count,
+                        everybody_ride_count: all_riders_count,
+                    }
+                );
+            }
+
+            name_to_region.insert(
+                region.clone(),
+                LineCoverageRegion {
+                    name_to_line,
+                },
+            );
+        }
+
+        // find maxima
+        let max_ride_count = name_to_region
+            .values()
+            .flat_map(|reg| reg.name_to_line.values())
+            .map(|ln| ln.ride_count)
+            .max()
+            .unwrap_or(0);
+        let everybody_max_ride_count = name_to_region
+            .values()
+            .flat_map(|reg| reg.name_to_line.values())
+            .map(|ln| ln.everybody_ride_count)
+            .max()
+            .unwrap_or(0);
+
+        let template = BimLineCoverageTemplate {
+            name_to_region,
+            max_ride_count,
+            everybody_max_ride_count,
+        };
+        match render_response(&template, &query_pairs, 200, vec![]).await {
+            Some(r) => Ok(r),
+            None => return_500(),
+        }
+    } else {
+        // list riders
+        let riders_res = db_conn.query("SELECT DISTINCT rider_username FROM bim.rides", &[]).await;
+        let rider_rows = match riders_res {
+            Ok(r) => r,
+            Err(e) => {
+                error!("failed to query riders: {}", e);
+                return return_500();
+            },
+        };
+        let mut riders_set: HashSet<String> = HashSet::new();
+        for rider_row in rider_rows {
+            let rider: String = rider_row.get(0);
+            riders_set.insert(rider);
+        }
+        let mut riders: Vec<String> = riders_set.into_iter().collect();
+        sort_as_text(&mut riders);
+
+        let template = BimLineCoveragePickRiderTemplate {
+            riders,
+        };
+        match render_response(&template, &query_pairs, 200, vec![]).await {
+            Some(r) => Ok(r),
+            None => return_500(),
+        }
     }
 }

@@ -45,7 +45,9 @@ use crate::bim::charts::{
     handle_bim_latest_rider_count_over_time_image, handle_bim_last_rider_histogram_by_fixed_pos,
     handle_bim_type_histogram,
 };
-use crate::bim::coverage::{handle_bim_coverage, handle_bim_coverage_field};
+use crate::bim::coverage::{
+    handle_bim_coverage, handle_bim_coverage_field, handle_bim_line_coverage,
+};
 use crate::bim::details::{handle_bim_detail, handle_bim_line_detail, handle_bim_ride_by_id};
 use crate::bim::drilldown::handle_bim_drilldown;
 use crate::bim::query::{handle_bim_query, handle_bim_vehicle_status};
@@ -335,6 +337,7 @@ async fn handle_request(request: Request<Incoming>) -> Result<Response<Full<Byte
         "/bim-types" => handle_bim_types(&request).await,
         "/bim-vehicles" => handle_bim_vehicles(&request).await,
         "/bim-coverage" => handle_bim_coverage(&request).await,
+        "/bim-line-coverage" => handle_bim_line_coverage(&request).await,
         "/bim-detail" => handle_bim_detail(&request).await,
         "/bim-line-detail" => handle_bim_line_detail(&request).await,
         "/top-bims" => handle_top_bims(&request).await,
