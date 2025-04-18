@@ -340,20 +340,20 @@ async fn get_company_to_lines_ridden(
     to_date_opt: Option<DateTime<Local>>,
     rider_username_opt: Option<&str>,
 ) -> Option<BTreeMap<String, BTreeMap<String, i64>>> {
-    use std::fmt::Write as _;
-
-    let mut conditions = String::new();
+    let mut conditions = Vec::with_capacity(2);
     let mut params: Vec<&(dyn ToSql + Sync)> = Vec::with_capacity(2);
 
     if let Some(to_date) = to_date_opt.as_ref() {
-        write!(conditions, " AND \"timestamp\" <= ${}", conditions.len() + 1).unwrap();
+        conditions.push(format!(" AND \"timestamp\" <= ${}", conditions.len() + 1));
         params.push(to_date);
     }
 
     if let Some(rider_username) = rider_username_opt.as_ref() {
-        write!(conditions, " AND rider_username = ${}", conditions.len() + 1).unwrap();
+        conditions.push(format!(" AND rider_username = ${}", conditions.len() + 1));
         params.push(rider_username);
     }
+
+    let conditions_string = conditions.concat();
 
     let query = format!(
         "
@@ -363,7 +363,7 @@ async fn get_company_to_lines_ridden(
             {}
             GROUP BY company, line
         ",
-        conditions,
+        conditions_string,
     );
 
     let lines_res = db_conn.query(&query, &params).await;
