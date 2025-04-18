@@ -166,13 +166,16 @@ async fn obtain_xhtml(
 }
 
 
+#[derive(Clone, Debug, Default, Eq, Hash, Ord, PartialEq, PartialOrd)]
 struct Table {
     rows_then_cols: Vec<Vec<Option<String>>>,
+    current_row: Option<usize>,
 }
 impl Table {
-    pub fn new() -> Self {
+    pub const fn new() -> Self {
         Self {
             rows_then_cols: Vec::new(),
+            current_row: None,
         }
     }
 
@@ -192,15 +195,42 @@ impl Table {
         ret
     }
 
+    fn make_rectangular(&mut self, up_to_row_index: Option<usize>, up_to_col_index: Option<usize>) {
+        let want_rows = if let Some(utri) = up_to_row_index {
+            self.row_count().max(utri + 1)
+        } else {
+            self.row_count()
+        };
+        let want_cols = if let Some(utci) = up_to_col_index {
+            self.col_count().max(utci + 1)
+        } else {
+            self.col_count()
+        };
+
+        while self.rows_then_cols.len() < want_rows {
+            self.rows_then_cols.push(Vec::with_capacity(want_cols));
+        }
+        for row in &mut self.rows_then_cols {
+            while row.len() < want_cols {
+                row.push(None);
+            }
+        }
+    }
+
     pub fn set_next_cell(&mut self, row_span: usize, col_span: usize, value: String) {
-        if self.rows_then_cols.len() == 0 {
-            // start the first row
+        // if we have a completely empty table, start the first row
+        if self.current_row.is_none() {
+            self.current_row = Some(0);
+        }
+        let current_row = self.current_row.unwrap();
+        while current_row >= self.rows_then_cols.len() {
             self.rows_then_cols.push(Vec::new());
         }
+        self.make_rectangular(None, None);
 
         // find the first empty cell
         let mut empty_cell_opt = None;
-        for (r, row) in self.rows_then_cols.iter().enumerate() {
+        for (r, row) in self.rows_then_cols.iter().enumerate().skip(current_row) {
             for (c, cell) in row.iter().enumerate() {
                 if cell.is_none() {
                     empty_cell_opt = Some((r, c));
@@ -216,6 +246,9 @@ impl Table {
             ec
         } else {
             // table is full, we will be extending the final row
+            if self.rows_then_cols.len() == 0 {
+                self.rows_then_cols.push(Vec::new());
+            }
             let last_row_index = self.rows_then_cols.len() - 1;
             let last_row = self.rows_then_cols.last_mut().unwrap();
             last_row.push(None);
@@ -230,16 +263,20 @@ impl Table {
     }
 
     pub fn start_new_row(&mut self) {
-        if let Some(last) = self.rows_then_cols.last() {
-            if last.len() > 0 {
-                self.rows_then_cols.push(Vec::new());
-            }
+        if let Some(cr) = self.current_row {
+            self.current_row = Some(cr + 1);
         } else {
-            self.rows_then_cols.push(Vec::new());
+            self.current_row = Some(0);
         }
     }
+
     pub fn row_count(&self) -> usize {
-        self.rows_then_cols.len()
+        let defined_rows = self.rows_then_cols.len();
+        if let Some(cr) = self.current_row {
+            defined_rows.max(cr)
+        } else {
+            defined_rows
+        }
     }
 
     pub fn col_count(&self) -> usize {
@@ -251,20 +288,28 @@ impl Table {
     }
 
     pub fn set_cell(&mut self, row: usize, col: usize, value: Option<String>) {
-        // ensure we are rectangular
-        let required_rows = self.row_count().max(row + 1);
-        let required_cols = self.col_count().max(col + 1);
-
-        while self.rows_then_cols.len() < required_rows {
-            self.rows_then_cols.push(Vec::with_capacity(required_cols));
-        }
-        for row in &mut self.rows_then_cols {
-            if row.len() < required_cols {
-                row.push(None);
-            }
-        }
-
+        // ensure we are rectangular and large enough
+        self.make_rectangular(Some(row), Some(col));
         self.rows_then_cols[row][col] = value;
+    }
+
+    #[allow(unused)]
+    pub fn to_sample_text(&self) -> String {
+        use std::fmt::Write as _;
+        let mut ret = String::new();
+        writeln!(ret, "CR={:?}", self.current_row).unwrap();
+        for row in &self.rows_then_cols {
+            ret.push_str("|");
+            for cell_opt in row {
+                if let Some(cell) = cell_opt {
+                    write!(ret, " {:5.5} |", cell).unwrap();
+                } else {
+                    ret.push_str(" ----- |");
+                }
+            }
+            ret.push('\n');
+        }
+        ret
     }
 }
 
