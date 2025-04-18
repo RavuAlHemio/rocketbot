@@ -7,7 +7,8 @@ use std::fs::File;
 use std::path::PathBuf;
 
 use reqwest::Client;
-use rocketbot_bim_common::LineOperatorInfo;
+use rocketbot_bim_common::{LineOperatorInfo, VehicleClass};
+use rocketbot_string::regex::EnjoyableRegex;
 use serde::{Deserialize, Deserializer, Serialize, Serializer};
 use serde::de::Error as _;
 use sxd_document;
@@ -17,7 +18,8 @@ use sxd_document::dom::Element;
 #[derive(Clone, Debug, Deserialize, Eq, Hash, Ord, PartialEq, PartialOrd, Serialize)]
 struct Config {
     pub output_path: String,
-        pub page_sources: Vec<PageSource>,
+    pub page_sources: Vec<PageSource>,
+    pub regex_to_vehicle_class: Vec<(EnjoyableRegex, VehicleClass)>,
 }
 
 #[derive(Clone, Debug, Deserialize, Eq, Hash, Ord, PartialEq, PartialOrd, Serialize)]
@@ -34,6 +36,7 @@ pub(crate) struct PageConfig {
     pub region: String,
     pub line_column: String,
     pub operator_spec: Spec,
+    pub vehicle_class_spec: Spec,
     pub section: Option<String>,
 }
 
@@ -371,6 +374,7 @@ async fn process_page(
     url_pattern: &str,
     page_config: &PageConfig,
     operator_name_to_abbrev: &BTreeMap<String, String>,
+    regex_to_vehicle_class: &[(EnjoyableRegex, VehicleClass)],
     authorization_token: Option<&str>,
 ) -> BTreeMap<String, BTreeMap<String, LineOperatorInfo>> {
     // return value is: region -> line -> operator_info
@@ -422,12 +426,14 @@ async fn process_page(
 
     let mut line_column_index_opt = None;
     let mut operator_column_index_opt = None;
+    let mut vehicle_class_column_opt = None;
 
     let mut ret = BTreeMap::new();
 
     for (r, row) in reduced_table.iter().enumerate() {
         let mut line_opt = None;
         let mut operator_opt = None;
+        let mut vehicle_class_text_opt = None;
         for (c, first_text) in row.iter().enumerate() {
             if r == 0 {
                 // heading row
@@ -437,6 +443,11 @@ async fn process_page(
                 if let Spec::Column(operator_column) = &page_config.operator_spec {
                     if first_text == operator_column {
                         operator_column_index_opt = Some(c);
+                    }
+                }
+                if let Spec::Column(vehicle_class_column) = &page_config.vehicle_class_spec {
+                    if first_text == vehicle_class_column {
+                        vehicle_class_column_opt = Some(c);
                     }
                 }
             } else {
@@ -452,12 +463,34 @@ async fn process_page(
                         operator_opt = Some(first_text.clone());
                     }
                 }
+                if let Some(vehicle_class_column_index) = vehicle_class_column_opt {
+                    if c == vehicle_class_column_index {
+                        vehicle_class_text_opt = Some(first_text.clone());
+                    }
+                }
             }
         }
 
         if let Spec::Fixed(operator_fixed) = &page_config.operator_spec {
             operator_opt = Some(operator_fixed.clone());
         }
+        if let Spec::Fixed(vehicle_class_fixed) = &page_config.vehicle_class_spec {
+            vehicle_class_text_opt = Some(vehicle_class_fixed.clone());
+        }
+
+        let vehicle_class_opt = if let Some(vct) = vehicle_class_text_opt.as_ref() {
+            // try to resolve the class text
+            let mut this_vehicle_class = None;
+            for (regex, vehicle_class) in regex_to_vehicle_class {
+                if regex.is_match(vct) {
+                    this_vehicle_class = Some(*vehicle_class);
+                    break;
+                }
+            }
+            this_vehicle_class
+        } else {
+            None
+        };
 
         let line = match line_opt {
             Some(l) => l,
@@ -474,6 +507,7 @@ async fn process_page(
             canonical_line: line.clone(),
             operator_name,
             operator_abbrev,
+            regular_type: vehicle_class_opt,
         };
 
         ret
@@ -511,6 +545,7 @@ async fn main() {
                 &page_source.page_url_pattern,
                 &page,
                 &page_source.operator_name_to_abbrev,
+                &config.regex_to_vehicle_class,
                 page_source.authorization_token.as_deref(),
             ).await;
             for (this_region, this_line_to_operator) in this_region_to_line_to_operator {

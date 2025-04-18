@@ -34,15 +34,23 @@
 <section class="region" id="r-{{ region_name|slugify }}">
 <h2>{{ region_name|escape }}</h2>
 
+{% for (vehicle_type, name_to_line) in region.vehtype_to_name_to_line %}
+<section class="vehicle-type">
+<h3>{% if let Some(vt) = vehicle_type %}{{ vt }}{% else %}other{% endif %}</h3>
+
 <section class="line-block">
 <div class="lines-box">
 
-{% for (line_name, line) in region.name_to_line -%}
+{% for (line_name, line) in name_to_line -%}
   {% call output_line(line) %}
 {%- endfor %}
 
 </div>{# lines-box #}
 </section>{# line-block #}
+</section>{# vehicle-type #}
+
+{% endfor %}{# vehtype_to_name_to_line #}
+
 </section>{# region #}
 {% endfor %}{# name_to_region #}
 

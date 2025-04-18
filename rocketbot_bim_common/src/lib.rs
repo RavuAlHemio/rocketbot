@@ -179,6 +179,7 @@ pub struct LineOperatorInfo {
     pub canonical_line: String,
     pub operator_name: String,
     pub operator_abbrev: Option<String>,
+    pub regular_type: Option<VehicleClass>,
 }
 
 

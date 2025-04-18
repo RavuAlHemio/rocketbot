@@ -7,7 +7,7 @@ use chrono::{DateTime, Local, NaiveDate, TimeZone};
 use http_body_util::Full;
 use hyper::{Method, Request, Response};
 use hyper::body::{Bytes, Incoming};
-use rocketbot_bim_common::{VehicleInfo, VehicleNumber};
+use rocketbot_bim_common::{VehicleClass, VehicleInfo, VehicleNumber};
 use rocketbot_string::NatSortedString;
 use serde::Serialize;
 use tokio_postgres::types::ToSql;
@@ -29,7 +29,7 @@ struct CoverageCompany {
 
 #[derive(Clone, Debug, Eq, Hash, PartialEq, Serialize)]
 struct LineCoverageRegion {
-    pub name_to_line: BTreeMap<NatSortedString, CoverageLinePart>,
+    pub vehtype_to_name_to_line: BTreeMap<Option<VehicleClass>, BTreeMap<NatSortedString, CoverageLinePart>>,
 }
 
 #[derive(Clone, Debug, Eq, Hash, PartialEq, Serialize)]
@@ -1022,8 +1022,8 @@ pub(crate) async fn handle_bim_line_coverage(request: &Request<Incoming>) -> Res
         }
 
         // merge the company data in our regions
-        let mut region_to_lines_ridden: BTreeMap<String, BTreeMap<String, i64>> = BTreeMap::new();
-        let mut all_riders_region_to_lines_ridden: BTreeMap<String, BTreeMap<String, i64>> = BTreeMap::new();
+        let mut region_to_vehtype_to_lines_ridden: BTreeMap<String, BTreeMap<Option<VehicleClass>, BTreeMap<String, i64>>> = BTreeMap::new();
+        let mut all_riders_region_to_vehtype_to_lines_ridden: BTreeMap<String, BTreeMap<Option<VehicleClass>, BTreeMap<String, i64>>> = BTreeMap::new();
         let no_ridden_lines = BTreeMap::new();
         for (region, name_to_line) in &region_to_lines {
             let mut region_companies = BTreeSet::new();
@@ -1033,18 +1033,22 @@ pub(crate) async fn handle_bim_line_coverage(request: &Request<Incoming>) -> Res
                 }
             }
 
-            let lines_ridden = region_to_lines_ridden
+            let lines_ridden = region_to_vehtype_to_lines_ridden
                 .entry(region.clone())
                 .or_insert_with(|| BTreeMap::new());
-            let all_riders_lines_ridden = all_riders_region_to_lines_ridden
+            let all_riders_lines_ridden = all_riders_region_to_vehtype_to_lines_ridden
                 .entry(region.clone())
                 .or_insert_with(|| BTreeMap::new());
 
             for line in name_to_line.values() {
                 let count = lines_ridden
+                    .entry(line.regular_type)
+                    .or_insert_with(|| BTreeMap::new())
                     .entry(line.canonical_line.clone())
                     .or_insert(0);
                 let all_riders_count = all_riders_lines_ridden
+                    .entry(line.regular_type)
+                    .or_insert_with(|| BTreeMap::new())
                     .entry(line.canonical_line.clone())
                     .or_insert(0);
 
@@ -1070,33 +1074,44 @@ pub(crate) async fn handle_bim_line_coverage(request: &Request<Incoming>) -> Res
 
         // run through lines
         let mut name_to_region: BTreeMap<String, LineCoverageRegion> = BTreeMap::new();
-        for (region, line_to_count) in &region_to_lines_ridden {
-            let all_riders_line_to_count = all_riders_region_to_lines_ridden
+        let no_vehicle_classes = BTreeMap::new();
+        for (region, vehtype_to_line_to_count) in &region_to_vehtype_to_lines_ridden {
+            let all_riders_vehtype_to_line_to_count = all_riders_region_to_vehtype_to_lines_ridden
                 .get(region)
-                .unwrap_or(&no_ridden_lines);
+                .unwrap_or(&no_vehicle_classes);
 
-            let mut name_to_line = BTreeMap::new();
+            let mut vehtype_to_name_to_line = BTreeMap::new();
 
-            for (line, count) in line_to_count {
-                let all_riders_count = all_riders_line_to_count
-                    .get(line)
-                    .copied()
-                    .unwrap_or(0);
+            for (vehtype, line_to_count) in vehtype_to_line_to_count {
+                let all_riders_line_to_count = all_riders_vehtype_to_line_to_count
+                    .get(vehtype)
+                    .unwrap_or(&no_ridden_lines);
 
-                name_to_line.insert(
-                    NatSortedString::from_string(line.clone()),
-                    CoverageLinePart {
-                        number_str: line.clone(),
-                        ride_count: *count,
-                        everybody_ride_count: all_riders_count,
-                    }
-                );
+                let name_to_line = vehtype_to_name_to_line
+                    .entry(*vehtype)
+                    .or_insert_with(|| BTreeMap::new());
+
+                for (line, count) in line_to_count {
+                    let all_riders_count = all_riders_line_to_count
+                        .get(line)
+                        .copied()
+                        .unwrap_or(0);
+
+                    name_to_line.insert(
+                        NatSortedString::from_string(line.clone()),
+                        CoverageLinePart {
+                            number_str: line.clone(),
+                            ride_count: *count,
+                            everybody_ride_count: all_riders_count,
+                        }
+                    );
+                }
             }
 
             name_to_region.insert(
                 region.clone(),
                 LineCoverageRegion {
-                    name_to_line,
+                    vehtype_to_name_to_line,
                 },
             );
         }
@@ -1104,13 +1119,15 @@ pub(crate) async fn handle_bim_line_coverage(request: &Request<Incoming>) -> Res
         // find maxima
         let max_ride_count = name_to_region
             .values()
-            .flat_map(|reg| reg.name_to_line.values())
+            .flat_map(|reg| reg.vehtype_to_name_to_line.values())
+            .flat_map(|ntl| ntl.values())
             .map(|ln| ln.ride_count)
             .max()
             .unwrap_or(0);
         let everybody_max_ride_count = name_to_region
             .values()
-            .flat_map(|reg| reg.name_to_line.values())
+            .flat_map(|reg| reg.vehtype_to_name_to_line.values())
+            .flat_map(|ntl| ntl.values())
             .map(|ln| ln.everybody_ride_count)
             .max()
             .unwrap_or(0);
