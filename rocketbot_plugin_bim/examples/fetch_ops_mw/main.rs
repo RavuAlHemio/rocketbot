@@ -17,8 +17,7 @@ use sxd_document::dom::Element;
 #[derive(Clone, Debug, Deserialize, Eq, Hash, Ord, PartialEq, PartialOrd, Serialize)]
 struct Config {
     pub output_path: String,
-    pub php_path: Option<String>,
-    pub page_sources: Vec<PageSource>,
+        pub page_sources: Vec<PageSource>,
 }
 
 #[derive(Clone, Debug, Deserialize, Eq, Hash, Ord, PartialEq, PartialOrd, Serialize)]
