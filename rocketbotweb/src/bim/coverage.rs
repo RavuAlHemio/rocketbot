@@ -29,6 +29,7 @@ struct CoverageCompany {
 
 #[derive(Clone, Debug, Eq, Hash, PartialEq, Serialize)]
 struct LineCoverageRegion {
+    pub all_companies: BTreeSet<String>,
     pub vehtype_to_name_to_line: BTreeMap<Option<VehicleClass>, BTreeMap<NatSortedString, CoverageLinePart>>,
 }
 
@@ -1024,6 +1025,7 @@ pub(crate) async fn handle_bim_line_coverage(request: &Request<Incoming>) -> Res
         // merge the company data in our regions
         let mut region_to_vehtype_to_lines_ridden: BTreeMap<String, BTreeMap<Option<VehicleClass>, BTreeMap<String, i64>>> = BTreeMap::new();
         let mut all_riders_region_to_vehtype_to_lines_ridden: BTreeMap<String, BTreeMap<Option<VehicleClass>, BTreeMap<String, i64>>> = BTreeMap::new();
+        let mut region_to_companies: BTreeMap<String, BTreeSet<String>> = BTreeMap::new();
         let no_ridden_lines = BTreeMap::new();
         for (region, name_to_line) in &region_to_lines {
             let mut region_companies = BTreeSet::new();
@@ -1070,6 +1072,9 @@ pub(crate) async fn handle_bim_line_coverage(request: &Request<Incoming>) -> Res
                     *all_riders_count += all_riders_ridden_here;
                 }
             }
+
+            // remember companies for later
+            region_to_companies.insert(region.clone(), region_companies);
         }
 
         // run through lines
@@ -1079,6 +1084,9 @@ pub(crate) async fn handle_bim_line_coverage(request: &Request<Incoming>) -> Res
             let all_riders_vehtype_to_line_to_count = all_riders_region_to_vehtype_to_lines_ridden
                 .get(region)
                 .unwrap_or(&no_vehicle_classes);
+            let region_companies = region_to_companies.get(region)
+                .cloned()
+                .unwrap_or_else(|| BTreeSet::new());
 
             let mut vehtype_to_name_to_line = BTreeMap::new();
 
@@ -1112,6 +1120,7 @@ pub(crate) async fn handle_bim_line_coverage(request: &Request<Incoming>) -> Res
                 region.clone(),
                 LineCoverageRegion {
                     vehtype_to_name_to_line,
+                    all_companies: region_companies,
                 },
             );
         }

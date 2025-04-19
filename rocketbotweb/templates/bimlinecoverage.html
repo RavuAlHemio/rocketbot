@@ -1,8 +1,8 @@
 {% extends "base.html" %}
 
-{% macro output_line(line) -%}
+{% macro output_line(line, all_companies) -%}
 <a
-  href="bim-query?line={{ line.number_str|urlencode|escape }}"
+  href="bim-query?line={{ line.number_str|urlencode|escape }}{% for company in all_companies %}&amp;company={{ company|urlencode|escape }}{% endfor %}"
 ><div
   class="line floaty {% if line.ride_count > 0 %}ridden{% else %}unridden{% endif %} {% if line.everybody_ride_count > 0 %}other-ridden{% else %}other-unridden{% endif %}"
   {% if line.has_ride() -%}
@@ -44,7 +44,7 @@
 <div class="lines-box">
 
 {% for (line_name, line) in name_to_line -%}
-  {% call output_line(line) %}
+  {% call output_line(line, region.all_companies|as_ref) %}
 {%- endfor %}
 
 </div>{# lines-box #}
