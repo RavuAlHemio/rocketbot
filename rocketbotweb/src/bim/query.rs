@@ -10,9 +10,11 @@ use hyper::body::{Bytes, Incoming};
 use rocketbot_bim_common::VehicleNumber;
 use serde::Serialize;
 use tokio_postgres::types::ToSql;
-use tracing::error;
+use tracing::{debug, error};
 
-use crate::{get_query_pairs, render_response, return_400, return_405, return_500};
+use crate::{
+    get_query_pairs, get_query_pairs_multiset, render_response, return_400, return_405, return_500,
+};
 use crate::bim::{
     append_to_query, connect_to_db, obtain_bim_plugin_config, obtain_company_to_bim_database,
     obtain_company_to_definition,
@@ -24,19 +26,17 @@ use crate::util::sort_as_text;
 #[derive(Clone, Debug, Default, Eq, Hash, Ord, PartialEq, PartialOrd, Serialize)]
 struct QueryFiltersPart {
     pub timestamp: Option<NaiveDate>,
-    pub rider_username: Option<String>,
-    pub company: Option<String>,
-    pub line: Option<String>,
-    pub vehicle_number: Option<String>,
-    pub vehicle_type: Option<String>,
+    pub rider_usernames: Vec<String>,
+    pub companies: Vec<String>,
+    pub lines: Vec<String>,
+    pub vehicle_numbers: Vec<String>,
+    pub vehicle_types: Vec<String>,
+    pub missing_vehicle_type: Option<bool>,
     pub vehicle_ridden_only: bool,
 }
 impl QueryFiltersPart {
-    pub fn want_missing_vehicle_types(&self) -> bool {
-        self.vehicle_type
-            .as_ref()
-            .map(|vt| vt == "\u{18}")
-            .unwrap_or(false)
+    pub fn filtering_on_vehicle_type(&self) -> bool {
+        self.vehicle_types.len() > 0 || self.missing_vehicle_type.is_some()
     }
 }
 
@@ -132,15 +132,18 @@ enum LastRideState {
 }
 
 
-#[inline]
-fn cow_to_owned_or_empty_to_none<'a, 'b>(val: Option<&'a Cow<'b, str>>) -> Option<String> {
-    match val {
-        None => None,
-        Some(x) => if x.len() > 0 {
-            Some(x.clone().into_owned())
-        } else {
-            None
-        },
+fn cows_to_owned_skip_empty<'a, 'b>(vals: Option<&'a Vec<Cow<'b, str>>>) -> Vec<String> {
+    if let Some(some_vals) = vals {
+        let mut ret = Vec::with_capacity(some_vals.len());
+        for val in some_vals {
+            if val.len() == 0 {
+                continue;
+            }
+            ret.push(val.clone().into_owned());
+        }
+        ret
+    } else {
+        Vec::with_capacity(0)
     }
 }
 
@@ -151,8 +154,12 @@ pub(crate) async fn handle_bim_query(request: &Request<Incoming>) -> Result<Resp
         return return_405(&query_pairs).await;
     }
 
+    let query_pairs_multiset = get_query_pairs_multiset(request);
     let filters = {
-        let timestamp = match query_pairs.get("timestamp") {
+        let last_timestamp = query_pairs_multiset
+            .get("timestamp")
+            .and_then(|tss| tss.last());
+        let timestamp = match last_timestamp {
             Some(ts) => if ts.len() == 0 {
                 None
             } else {
@@ -163,22 +170,35 @@ pub(crate) async fn handle_bim_query(request: &Request<Incoming>) -> Result<Resp
             },
             None => None,
         };
-        let rider_username = cow_to_owned_or_empty_to_none(query_pairs.get("rider"));
-        let company = cow_to_owned_or_empty_to_none(query_pairs.get("company"));
-        let line = cow_to_owned_or_empty_to_none(query_pairs.get("line"));
-        let vehicle_number = cow_to_owned_or_empty_to_none(query_pairs.get("vehicle-number"));
-        let vehicle_type = cow_to_owned_or_empty_to_none(query_pairs.get("vehicle-type"));
+        let rider_usernames = cows_to_owned_skip_empty(query_pairs_multiset.get("rider"));
+        let companies = cows_to_owned_skip_empty(query_pairs_multiset.get("company"));
+        let lines = cows_to_owned_skip_empty(query_pairs_multiset.get("line"));
+        let vehicle_numbers = cows_to_owned_skip_empty(query_pairs_multiset.get("vehicle-number"));
+        let mut vehicle_types = cows_to_owned_skip_empty(query_pairs_multiset.get("vehicle-type"));
         let vehicle_ridden_only = query_pairs.get("vehicle-ridden-only")
             .map(|qp| qp == "1")
             .unwrap_or(false);
 
+        let missing_vehicle_type = if vehicle_types.iter().any(|vt| vt == "\u{18}") {
+            // we are filtering on vehicle types and want vehicles with missing type
+            vehicle_types.retain(|vt| vt != "\u{18}");
+            Some(true)
+        } else if vehicle_types.len() > 0 {
+            // we are filtering on vehicle types but don't want vehicles with missing type
+            Some(false)
+        } else {
+            // we aren't filtering on vehicle types
+            None
+        };
+
         QueryFiltersPart {
             timestamp,
-            rider_username,
-            company,
-            line,
-            vehicle_number,
-            vehicle_type,
+            rider_usernames,
+            companies,
+            lines,
+            vehicle_numbers,
+            vehicle_types,
+            missing_vehicle_type,
             vehicle_ridden_only,
         }
     };
@@ -206,48 +226,70 @@ pub(crate) async fn handle_bim_query(request: &Request<Incoming>) -> Result<Resp
         filter_values.push(timestamp);
         append_to_query(&mut filter_query_and, "timestamp", &timestamp.format("%Y-%m-%d").to_string());
     }
-    if let Some(rider_username) = &filters.rider_username {
-        filter_pieces.push(format!("rav.rider_username = ${}", next_filter_index));
+    if filters.rider_usernames.len() > 0 {
+        filter_pieces.push(format!("rav.rider_username = ANY(${})", next_filter_index));
         next_filter_index += 1;
-        filter_values.push(rider_username);
-        append_to_query(&mut filter_query_and, "rider", rider_username);
+        filter_values.push(&filters.rider_usernames);
+        for value in &filters.rider_usernames {
+            append_to_query(&mut filter_query_and, "rider", value);
+        }
     }
-    if let Some(company) = &filters.company {
-        filter_pieces.push(format!("rav.company = ${}", next_filter_index));
+    if filters.companies.len() > 0 {
+        filter_pieces.push(format!("rav.company = ANY(${})", next_filter_index));
         next_filter_index += 1;
-        filter_values.push(company);
-        append_to_query(&mut filter_query_and, "company", company);
+        filter_values.push(&filters.companies);
+        for value in &filters.companies {
+            append_to_query(&mut filter_query_and, "company", value);
+        }
     }
-    if let Some(line) = &filters.line {
-        filter_pieces.push(format!("rav.line = ${}", next_filter_index));
+    if filters.lines.len() > 0 {
+        filter_pieces.push(format!("rav.line = ANY(${})", next_filter_index));
         next_filter_index += 1;
-        filter_values.push(line);
-        append_to_query(&mut filter_query_and, "line", line);
+        filter_values.push(&filters.lines);
+        for value in &filters.lines {
+            append_to_query(&mut filter_query_and, "line", value);
+        }
     }
-    if let Some(vehicle_number) = &filters.vehicle_number {
+    if filters.vehicle_numbers.len() > 0 {
         // filtering on vehicle_number directly would limit output to only the filtered vehicle number
         // instead, check if the ride generally contains the vehicle number
-        let mut num_piece = format!("EXISTS (SELECT 1 FROM bim.rides_and_vehicles rav_veh WHERE rav_veh.id = rav.id AND rav_veh.vehicle_number = ${}", next_filter_index);
+        let mut num_piece = format!("EXISTS (SELECT 1 FROM bim.rides_and_vehicles rav_veh WHERE rav_veh.id = rav.id AND rav_veh.vehicle_number = ANY(${})", next_filter_index);
         if filters.vehicle_ridden_only {
             num_piece.push_str(" AND rav_veh.coupling_mode = 'R'");
         }
         num_piece.push(')');
         filter_pieces.push(num_piece);
         next_filter_index += 1;
-        filter_values.push(vehicle_number);
-        append_to_query(&mut filter_query_and, "vehicle-number", vehicle_number);
+        filter_values.push(&filters.vehicle_numbers);
+        for value in &filters.vehicle_numbers {
+            append_to_query(&mut filter_query_and, "vehicle-number", value);
+        }
     }
-    if filters.want_missing_vehicle_types() {
-        // same caveat as with vehicle number
-        filter_pieces.push(format!("EXISTS (SELECT 1 FROM bim.rides_and_vehicles rav_vehtp WHERE rav_vehtp.id = rav.id AND rav_vehtp.vehicle_type IS NULL)"));
-        // no value here
-        append_to_query(&mut filter_query_and, "vehicle-type", "\u{18}");
-    } else if let Some(vehicle_type) = &filters.vehicle_type {
-        // same caveat as with vehicle number
-        filter_pieces.push(format!("EXISTS (SELECT 1 FROM bim.rides_and_vehicles rav_vehtp WHERE rav_vehtp.id = rav.id AND rav_vehtp.vehicle_type = ${})", next_filter_index));
-        next_filter_index += 1;
-        filter_values.push(vehicle_type);
-        append_to_query(&mut filter_query_and, "vehicle-type", vehicle_type);
+    if filters.filtering_on_vehicle_type() {
+        // same caveat as with vehicle number, also handle missing types
+        let final_condition = if filters.missing_vehicle_type == Some(true) {
+            if filters.vehicle_types.len() > 0 {
+                let fc = format!("(rav_vehtp.vehicle_type IS NULL OR rav_vehtp.vehicle_type = ANY(${}))", next_filter_index);
+                next_filter_index += 1;
+                filter_values.push(&filters.vehicle_types);
+                fc
+            } else {
+                "rav_vehtp.vehicle_type IS NULL".to_owned()
+            }
+        } else {
+            assert!(filters.vehicle_types.len() > 0);
+            let fc = format!("rav_vehtp.vehicle_type = ANY(${})", next_filter_index);
+            next_filter_index += 1;
+            filter_values.push(&filters.vehicle_types);
+            fc
+        };
+        filter_pieces.push(format!("EXISTS (SELECT 1 FROM bim.rides_and_vehicles rav_vehtp WHERE rav_vehtp.id = rav.id AND {})", final_condition));
+        if filters.missing_vehicle_type == Some(true) {
+            append_to_query(&mut filter_query_and, "vehicle-type", "\u{18}");
+        }
+        for value in &filters.vehicle_types {
+            append_to_query(&mut filter_query_and, "vehicle-type", value);
+        }
     }
 
     let filter_string = filter_pieces.join(" AND ");
@@ -276,6 +318,7 @@ pub(crate) async fn handle_bim_query(request: &Request<Incoming>) -> Result<Resp
         Ok(r) => r,
         Err(e) => {
             error!("failed to query rides for count: {}", e);
+            debug!("failed query is {:?}", count_query);
             return return_500();
         },
     };

@@ -279,6 +279,9 @@ td.numeric-field {
   text-align: right;
 }
 
+table.bim-ride-query tr.form td {
+  vertical-align: bottom;
+}
 table.bim-ride-query table.vehicles td.type {
   padding-right: 0.5em;
 }
