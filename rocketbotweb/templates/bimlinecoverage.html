@@ -1,7 +1,9 @@
 {% extends "base.html" %}
 
 {% macro output_line(line) -%}
-<div
+<a
+  href="bim-query?line={{ line.number_str|urlencode|escape }}"
+><div
   class="line floaty {% if line.ride_count > 0 %}ridden{% else %}unridden{% endif %} {% if line.everybody_ride_count > 0 %}other-ridden{% else %}other-unridden{% endif %}"
   {% if line.has_ride() -%}
     style="background-color:{{ line.ride_count|mix_color(0, max_ride_count, "#eeffee", "#00ff00") }}"
