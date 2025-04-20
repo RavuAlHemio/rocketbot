@@ -23,7 +23,7 @@
 
 <section class="skiplinks">
   <p>
-    {% for (region_name, region) in name_to_region -%}
+    {% for region_name in name_to_region.keys() -%}
       {% if !loop.first -%}
         &middot;
       {% endif -%}
@@ -36,36 +36,22 @@
 <section class="region" id="r-{{ region_name|slugify }}">
 <h2>{{ region_name|escape }}</h2>
 
-{% for (vehicle_type, name_to_line) in region.vehtype_to_name_to_line %}
-<section class="vehicle-type">
-<h3>{% if let Some(vt) = vehicle_type %}{{ vt }}{% else %}other{% endif %}</h3>
+{% for (vehicle_class, line_name_to_info) in region.class_to_line_name_to_info %}
+<section class="vehicle-type {{ vehicle_class.kind() }}">
+<h3>{{ vehicle_class }}</h3>
 
 <section class="line-block">
 <div class="lines-box">
 
-{% for (line_name, line) in name_to_line -%}
+{% for (line_name, line) in line_name_to_info -%}
   {% call output_line(line, region.all_companies|as_ref) %}
-{%- endfor %}
+{%- endfor %}{# line_name_to_info #}
 
 </div>{# lines-box #}
 </section>{# line-block #}
 </section>{# vehicle-type #}
 
-{% endfor %}{# vehtype_to_name_to_line #}
-
-<section class="unknown-lines">
-<h3>lines lost to the sands of time</h3>
-
-<section class="line-block">
-<div class="lines-box">
-
-{% for (line_name, line) in region.other_name_to_line -%}
-  {% call output_line(line, region.all_companies|as_ref) %}
-{%- endfor %}
-
-</div>{# lines-box #}
-</section>{# line-block #}
-</section>{# unknown-lines #}
+{% endfor %}{# class_to_line_name_to_info #}
 
 </section>{# region #}
 {% endfor %}{# name_to_region #}
