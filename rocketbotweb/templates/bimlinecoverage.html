@@ -53,6 +53,20 @@
 
 {% endfor %}{# vehtype_to_name_to_line #}
 
+<section class="unknown-lines">
+<h3>lines lost to the sands of time</h3>
+
+<section class="line-block">
+<div class="lines-box">
+
+{% for (line_name, line) in region.other_name_to_line -%}
+  {% call output_line(line, region.all_companies|as_ref) %}
+{%- endfor %}
+
+</div>{# lines-box #}
+</section>{# line-block #}
+</section>{# unknown-lines #}
+
 </section>{# region #}
 {% endfor %}{# name_to_region #}
 

@@ -31,6 +31,7 @@ struct CoverageCompany {
 struct LineCoverageRegion {
     pub all_companies: BTreeSet<String>,
     pub vehtype_to_name_to_line: BTreeMap<Option<VehicleClass>, BTreeMap<NatSortedString, CoverageLinePart>>,
+    pub other_name_to_line: BTreeMap<NatSortedString, CoverageLinePart>,
 }
 
 #[derive(Clone, Debug, Eq, Hash, PartialEq, Serialize)]
@@ -1025,6 +1026,8 @@ pub(crate) async fn handle_bim_line_coverage(request: &Request<Incoming>) -> Res
         // merge the company data in our regions
         let mut region_to_vehtype_to_lines_ridden: BTreeMap<String, BTreeMap<Option<VehicleClass>, BTreeMap<String, i64>>> = BTreeMap::new();
         let mut all_riders_region_to_vehtype_to_lines_ridden: BTreeMap<String, BTreeMap<Option<VehicleClass>, BTreeMap<String, i64>>> = BTreeMap::new();
+        let mut region_to_unknown_lines_ridden: BTreeMap<String, BTreeMap<String, i64>> = BTreeMap::new();
+        let mut all_riders_region_to_unknown_lines_ridden: BTreeMap<String, BTreeMap<String, i64>> = BTreeMap::new();
         let mut region_to_companies: BTreeMap<String, BTreeSet<String>> = BTreeMap::new();
         let no_ridden_lines = BTreeMap::new();
         for (region, name_to_line) in &region_to_lines {
@@ -1041,8 +1044,17 @@ pub(crate) async fn handle_bim_line_coverage(request: &Request<Incoming>) -> Res
             let all_riders_lines_ridden = all_riders_region_to_vehtype_to_lines_ridden
                 .entry(region.clone())
                 .or_insert_with(|| BTreeMap::new());
+            let unknown_lines_ridden = region_to_unknown_lines_ridden
+                .entry(region.clone())
+                .or_insert_with(|| BTreeMap::new());
+            let all_riders_unknown_lines_ridden = all_riders_region_to_unknown_lines_ridden
+                .entry(region.clone())
+                .or_insert_with(|| BTreeMap::new());
 
+            let mut region_known_lines = BTreeSet::new();
             for line in name_to_line.values() {
+                region_known_lines.insert(line.canonical_line.clone());
+
                 let count = lines_ridden
                     .entry(line.regular_type)
                     .or_insert_with(|| BTreeMap::new())
@@ -1073,6 +1085,33 @@ pub(crate) async fn handle_bim_line_coverage(request: &Request<Incoming>) -> Res
                 }
             }
 
+            // go through all companies in the region, collecting unknown lines
+            for region_company in &region_companies {
+                let lines_ridden = company_to_lines_ridden
+                    .get(region_company)
+                    .unwrap_or(&no_ridden_lines);
+                for (line, ride_count) in lines_ridden {
+                    if !region_known_lines.contains(line) {
+                        let total_ride_count = unknown_lines_ridden
+                            .entry(line.clone())
+                            .or_insert(0);
+                        *total_ride_count += *ride_count;
+                    }
+                }
+
+                let all_riders_lines_ridden = all_riders_company_to_lines_ridden
+                    .get(region_company)
+                    .unwrap_or(&no_ridden_lines);
+                for (line, ride_count) in lines_ridden {
+                    if !region_known_lines.contains(line) {
+                        let total_ride_count = all_riders_unknown_lines_ridden
+                            .entry(line.clone())
+                            .or_insert(0);
+                        *total_ride_count += *ride_count;
+                    }
+                }
+            }
+
             // remember companies for later
             region_to_companies.insert(region.clone(), region_companies);
         }
@@ -1087,6 +1126,12 @@ pub(crate) async fn handle_bim_line_coverage(request: &Request<Incoming>) -> Res
             let region_companies = region_to_companies.get(region)
                 .cloned()
                 .unwrap_or_else(|| BTreeSet::new());
+            let unknown_lines_ridden = region_to_unknown_lines_ridden
+                .get(region)
+                .unwrap_or(&no_ridden_lines);
+            let all_riders_unknown_lines_ridden = all_riders_region_to_unknown_lines_ridden
+                .get(region)
+                .unwrap_or(&no_ridden_lines);
 
             let mut vehtype_to_name_to_line = BTreeMap::new();
 
@@ -1116,10 +1161,28 @@ pub(crate) async fn handle_bim_line_coverage(request: &Request<Incoming>) -> Res
                 }
             }
 
+            let mut other_name_to_line = BTreeMap::new();
+
+            for (line, all_count) in all_riders_unknown_lines_ridden {
+                let my_count = unknown_lines_ridden
+                    .get(line)
+                    .copied()
+                    .unwrap_or(0);
+                other_name_to_line.insert(
+                    NatSortedString::from_string(line.clone()),
+                    CoverageLinePart {
+                        number_str: line.clone(),
+                        ride_count: my_count,
+                        everybody_ride_count: *all_count,
+                    }
+                );
+            }
+
             name_to_region.insert(
                 region.clone(),
                 LineCoverageRegion {
                     vehtype_to_name_to_line,
+                    other_name_to_line,
                     all_companies: region_companies,
                 },
             );
