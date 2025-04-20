@@ -12,7 +12,7 @@ use std::collections::{BTreeMap, HashMap};
 use std::fs::File;
 
 use form_urlencoded;
-use rocketbot_bim_common::{RegionToLineToOperator, VehicleInfo, VehicleNumber};
+use rocketbot_bim_common::{LineOperatorRegion, VehicleInfo, VehicleNumber};
 use serde::{Deserialize, Serialize};
 use tracing::{error, warn};
 
@@ -108,7 +108,7 @@ async fn obtain_company_to_definition() -> Option<BTreeMap<String, serde_json::V
 }
 
 
-async fn obtain_region_to_lines() -> Option<RegionToLineToOperator> {
+async fn obtain_operator_regions() -> Option<BTreeMap<String, LineOperatorRegion>> {
     let bim_plugin = obtain_bim_plugin_config().await?;
 
     let operator_databases = match bim_plugin["config"]["operator_databases"].as_array() {
@@ -119,7 +119,7 @@ async fn obtain_region_to_lines() -> Option<RegionToLineToOperator> {
         },
     };
 
-    let mut complete_database: RegionToLineToOperator = BTreeMap::new();
+    let mut complete_database: BTreeMap<String, LineOperatorRegion> = BTreeMap::new();
 
     for operator_database in operator_databases {
         let path = match operator_database.as_str() {
@@ -138,19 +138,22 @@ async fn obtain_region_to_lines() -> Option<RegionToLineToOperator> {
             },
         };
 
-        let this_database: RegionToLineToOperator = match serde_json::from_str(&database_str) {
+        let this_database: BTreeMap<String, LineOperatorRegion> = match serde_json::from_str(&database_str) {
             Ok(td) => td,
             Err(e) => {
                 warn!("failed to parse operator_databases entry {:?} (skipping): {}", path, e);
                 continue;
             },
         };
-        for (region, line_to_operator) in this_database {
-            let complete_line_to_operator = complete_database
-                .entry(region)
-                .or_insert_with(|| BTreeMap::new());
-            for (line, operator) in line_to_operator {
-                complete_line_to_operator.insert(line, operator);
+        for (region_name, region_data) in this_database {
+            let complete_region_data = complete_database
+                .entry(region_name)
+                .or_insert_with(|| LineOperatorRegion::new());
+            for (line, operator) in region_data.line_to_operator {
+                complete_region_data.line_to_operator.insert(line, operator);
+            }
+            for company in region_data.additional_companies {
+                complete_region_data.additional_companies.insert(company);
             }
         }
     }

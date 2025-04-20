@@ -23,9 +23,7 @@ use chrono::{
 use once_cell::sync::{Lazy, OnceCell};
 use rand::{Rng, thread_rng};
 use regex::{Captures, Regex};
-use rocketbot_bim_common::{
-    CouplingMode, LastRider, RegionToLineToOperator, VehicleInfo, VehicleNumber,
-};
+use rocketbot_bim_common::{CouplingMode, LastRider, LineOperatorRegion, VehicleInfo, VehicleNumber};
 use rocketbot_bim_common::achievements::ACHIEVEMENT_DEFINITIONS;
 use rocketbot_bim_common::ride_table::{Ride, RideTableData, RideTableVehicle, UserRide};
 use rocketbot_interface::{phrase_join, send_channel_message};
@@ -402,8 +400,8 @@ impl BimPlugin {
         Some(vehicle_hash_map)
     }
 
-    fn load_operator_databases(&self, config: &Config) -> Option<RegionToLineToOperator> {
-        let mut region_to_line_to_operator: RegionToLineToOperator = BTreeMap::new();
+    fn load_operator_databases(&self, config: &Config) -> Option<BTreeMap<String, LineOperatorRegion>> {
+        let mut name_to_region = BTreeMap::new();
 
         for db_path in &config.operator_databases {
             let f = match File::open(db_path) {
@@ -413,24 +411,27 @@ impl BimPlugin {
                     return None;
                 },
             };
-            let this_region_to_line_to_operator: RegionToLineToOperator = match serde_json::from_reader(f) {
+            let this_name_to_region: BTreeMap<String, LineOperatorRegion> = match serde_json::from_reader(f) {
                 Ok(v) => v,
                 Err(e) => {
                     error!("failed to parse bim database {:?}: {}", db_path, e);
                     return None;
                 },
             };
-            for (this_region, this_line_to_operator) in this_region_to_line_to_operator {
-                let line_to_operator = region_to_line_to_operator
-                    .entry(this_region)
-                    .or_insert_with(|| BTreeMap::new());
-                for (this_line, this_operator) in this_line_to_operator {
-                    line_to_operator.insert(this_line, this_operator);
+            for (this_region_name, this_region) in this_name_to_region {
+                let region = name_to_region
+                    .entry(this_region_name)
+                    .or_insert_with(|| LineOperatorRegion::new());
+                for (this_line, this_operator) in this_region.line_to_operator {
+                    region.line_to_operator.insert(this_line, this_operator);
+                }
+                for additional_company in this_region.additional_companies {
+                    region.additional_companies.insert(additional_company);
                 }
             }
         }
 
-        Some(region_to_line_to_operator)
+        Some(name_to_region)
     }
 
     fn lookback_range_from_command(command: &CommandInstance) -> Option<LookbackRange> {
@@ -3027,7 +3028,7 @@ impl BimPlugin {
             .map(|v| v.as_str().expect("region value not a string"))
             .unwrap_or_else(|| config_guard.default_operator_region.as_str());
 
-        let region_to_line_to_operator = match self.load_operator_databases(&config_guard) {
+        let name_to_region = match self.load_operator_databases(&config_guard) {
             Some(rlo) => rlo,
             None => {
                 send_channel_message!(
@@ -3040,10 +3041,9 @@ impl BimPlugin {
         };
 
         let line = command.rest.trim().to_lowercase();
-        let operator_opt = region_to_line_to_operator
+        let operator_opt = name_to_region
             .get(region)
-            .map(|lto| lto.get(&line))
-            .flatten();
+            .and_then(|lor| lor.line_to_operator.get(&line));
 
         match operator_opt {
             Some(o) => {
@@ -4144,7 +4144,7 @@ impl BimPlugin {
             region = config_guard.default_operator_region.as_str();
         }
 
-        let Some(region_to_line_to_operator) = self.load_operator_databases(&config_guard) else {
+        let Some(name_to_region) = self.load_operator_databases(&config_guard) else {
             send_channel_message!(
                 interface,
                 &channel_message.channel.name,
@@ -4152,7 +4152,7 @@ impl BimPlugin {
             ).await;
             return;
         };
-        let Some(line_to_operator) = region_to_line_to_operator.get(region) else {
+        let Some(region_data) = name_to_region.get(region) else {
             send_channel_message!(
                 interface,
                 &channel_message.channel.name,
@@ -4162,7 +4162,7 @@ impl BimPlugin {
         };
 
         let mut regional_operators = HashSet::new();
-        for operator_info in line_to_operator.values() {
+        for operator_info in region_data.line_to_operator.values() {
             if let Some(abbrev) = operator_info.operator_abbrev.as_ref() {
                 regional_operators.insert(abbrev.clone());
             }
@@ -4180,10 +4180,10 @@ impl BimPlugin {
         let mut companies_query = format!(
             "SELECT DISTINCT line, company FROM bim.rides WHERE line IN ("
         );
-        let mut companies_parameters: Vec<&(dyn ToSql + Sync)> = Vec::with_capacity(line_to_operator.len());
+        let mut companies_parameters: Vec<&(dyn ToSql + Sync)> = Vec::with_capacity(region_data.line_to_operator.len());
         let mut unridden_lines = BTreeSet::new();
         let mut first_operator = true;
-        for current_operator_info in line_to_operator.values() {
+        for current_operator_info in region_data.line_to_operator.values() {
             companies_parameters.push(&current_operator_info.canonical_line);
             unridden_lines.insert(NatSortedString::from_string(current_operator_info.canonical_line.clone()));
 

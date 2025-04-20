@@ -19,7 +19,7 @@ use crate::bim::{connect_to_db, obtain_company_to_bim_database, obtain_company_t
 use crate::templating::filters;
 use crate::util::sort_as_text;
 
-use super::obtain_region_to_lines;
+use super::obtain_operator_regions;
 
 
 #[derive(Clone, Debug, Eq, Hash, PartialEq, Serialize)]
@@ -1046,26 +1046,29 @@ pub(crate) async fn handle_bim_line_coverage(request: &Request<Incoming>) -> Res
         };
 
         // get region definitions
-        let mut region_to_lines = match obtain_region_to_lines().await {
+        let mut name_to_region = match obtain_operator_regions().await {
             Some(rtl) => rtl,
             None => return return_500(),
         };
 
         if let Some(wanted_region) = region_opt {
             // remove those that aren't ours
-            region_to_lines.retain(|r, _l| r == wanted_region);
+            name_to_region.retain(|r, _l| r == wanted_region);
         }
 
         // collect each region's companies
         let mut region_to_companies: BTreeMap<String, BTreeSet<String>> = BTreeMap::new();
-        for (region, lines) in &region_to_lines {
+        for (region_name, region_data) in &name_to_region {
             let companies = region_to_companies
-                .entry(region.clone())
+                .entry(region_name.clone())
                 .or_insert_with(|| BTreeSet::new());
-            for line in lines.values() {
+            for line in region_data.line_to_operator.values() {
                 if let Some(operator_abbrev) = line.operator_abbrev.as_ref() {
                     companies.insert(operator_abbrev.clone());
                 }
+            }
+            for line in &region_data.additional_companies {
+                companies.insert(line.clone());
             }
         }
 
@@ -1075,7 +1078,8 @@ pub(crate) async fn handle_bim_line_coverage(request: &Request<Incoming>) -> Res
         let no_lines = BTreeMap::new();
         let no_ridden_lines = BTreeMap::new();
         for (region, companies) in &region_to_companies {
-            let name_to_line = region_to_lines.get(region)
+            let name_to_line = name_to_region.get(region)
+                .map(|lor| &lor.line_to_operator)
                 .unwrap_or(&no_lines);
             let class_to_line_name_to_info = region_to_class_to_line_name_to_info
                 .entry(region.clone())

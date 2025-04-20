@@ -2,7 +2,7 @@ pub mod achievements;
 pub mod ride_table;
 
 
-use std::collections::BTreeMap;
+use std::collections::{BTreeMap, BTreeSet};
 use std::fmt;
 
 use chrono::{DateTime, TimeZone};
@@ -173,6 +173,22 @@ impl<'a> LastRider<'a> {
 }
 
 
+/// Information about a region of line operators.
+#[derive(Clone, Debug, Default, Deserialize, Eq, Hash, Ord, PartialEq, PartialOrd, Serialize)]
+pub struct LineOperatorRegion {
+    pub line_to_operator: BTreeMap<String, LineOperatorInfo>,
+    pub additional_companies: BTreeSet<String>,
+}
+impl LineOperatorRegion {
+    pub fn new() -> Self {
+        Self {
+            line_to_operator: BTreeMap::new(),
+            additional_companies: BTreeSet::new(),
+        }
+    }
+}
+
+
 /// Information about a line and its operator.
 #[derive(Clone, Debug, Default, Deserialize, Eq, Hash, Ord, PartialEq, PartialOrd, Serialize)]
 pub struct LineOperatorInfo {
@@ -181,9 +197,6 @@ pub struct LineOperatorInfo {
     pub operator_abbrev: Option<String>,
     pub regular_type: Option<VehicleClass>,
 }
-
-
-pub type RegionToLineToOperator = BTreeMap<String, BTreeMap<String, LineOperatorInfo>>;
 
 
 /// Formats a timestamp, possibly relative to another timestamp.

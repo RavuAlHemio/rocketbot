@@ -1,13 +1,13 @@
 //! Obtains service operator databases from tabular MediaWiki data, e.g. from Wikipedia.
 
 
-use std::collections::BTreeMap;
+use std::collections::{BTreeMap, BTreeSet};
 use std::env::args_os;
 use std::fs::File;
 use std::path::PathBuf;
 
 use reqwest::Client;
-use rocketbot_bim_common::{LineOperatorInfo, VehicleClass};
+use rocketbot_bim_common::{LineOperatorInfo, LineOperatorRegion, VehicleClass};
 use rocketbot_string::regex::EnjoyableRegex;
 use serde::{Deserialize, Deserializer, Serialize, Serializer};
 use serde::de::Error as _;
@@ -20,6 +20,7 @@ struct Config {
     pub output_path: String,
     pub page_sources: Vec<PageSource>,
     pub regex_to_vehicle_class: Vec<(EnjoyableRegex, VehicleClass)>,
+    pub region_to_additional_companies: BTreeMap<String, BTreeSet<String>>,
 }
 
 #[derive(Clone, Debug, Deserialize, Eq, Hash, Ord, PartialEq, PartialOrd, Serialize)]
@@ -376,9 +377,7 @@ async fn process_page(
     operator_name_to_abbrev: &BTreeMap<String, String>,
     regex_to_vehicle_class: &[(EnjoyableRegex, VehicleClass)],
     authorization_token: Option<&str>,
-) -> BTreeMap<String, BTreeMap<String, LineOperatorInfo>> {
-    // return value is: region -> line -> operator_info
-
+) -> BTreeMap<String, LineOperatorInfo> {
     let url = url_pattern.replace("{TITLE}", &page_config.title);
 
     let page_xml_notag = obtain_xhtml(reqwest_client, &url, authorization_token).await;
@@ -510,10 +509,7 @@ async fn process_page(
             regular_type: vehicle_class_opt,
         };
 
-        ret
-            .entry(page_config.region.clone())
-            .or_insert_with(|| BTreeMap::new())
-            .insert(line.to_lowercase(), operator_info);
+        ret.insert(line.to_lowercase(), operator_info);
     }
 
     ret
@@ -534,13 +530,13 @@ async fn main() {
             .expect("failed to parse config file")
     };
 
-    let mut region_to_line_to_operator = BTreeMap::new();
+    let mut name_to_region = BTreeMap::new();
 
     let mut reqwest_client = reqwest::Client::new();
 
     for page_source in &config.page_sources {
         for page in &page_source.pages {
-            let this_region_to_line_to_operator = process_page(
+            let mut name_to_line = process_page(
                 &mut reqwest_client,
                 &page_source.page_url_pattern,
                 &page,
@@ -548,14 +544,19 @@ async fn main() {
                 &config.regex_to_vehicle_class,
                 page_source.authorization_token.as_deref(),
             ).await;
-            for (this_region, this_line_to_operator) in this_region_to_line_to_operator {
-                let line_to_operator = region_to_line_to_operator
-                    .entry(this_region)
-                    .or_insert_with(|| BTreeMap::new());
-                for (this_line, this_operator) in this_line_to_operator {
-                    line_to_operator.insert(this_line, this_operator);
-                }
-            }
+            let region = name_to_region
+                .entry(page.region.clone())
+                .or_insert_with(|| LineOperatorRegion::new());
+            region.line_to_operator.append(&mut name_to_line);
+        }
+    }
+
+    for (region, additional_companies) in &config.region_to_additional_companies {
+        let region_data = name_to_region
+            .entry(region.clone())
+            .or_insert_with(|| LineOperatorRegion::new());
+        for additional_company in additional_companies {
+            region_data.additional_companies.insert(additional_company.clone());
         }
     }
 
@@ -563,7 +564,7 @@ async fn main() {
     {
         let f = File::create(config.output_path)
             .expect("failed to open output file");
-        serde_json::to_writer_pretty(f, &region_to_line_to_operator)
+        serde_json::to_writer_pretty(f, &name_to_region)
             .expect("failed to write operators");
     }
 }
