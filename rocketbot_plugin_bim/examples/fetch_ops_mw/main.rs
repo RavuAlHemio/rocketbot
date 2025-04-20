@@ -20,7 +20,7 @@ struct Config {
     pub output_path: String,
     pub page_sources: Vec<PageSource>,
     pub regex_to_vehicle_class: Vec<(EnjoyableRegex, VehicleClass)>,
-    pub region_to_additional_companies: BTreeMap<String, BTreeSet<String>>,
+    #[serde(default)] pub region_to_additional_companies: BTreeMap<String, BTreeSet<String>>,
 }
 
 #[derive(Clone, Debug, Deserialize, Eq, Hash, Ord, PartialEq, PartialOrd, Serialize)]
