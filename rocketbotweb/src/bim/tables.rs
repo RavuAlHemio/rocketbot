@@ -1,6 +1,7 @@
 use std::borrow::Cow;
 use std::collections::{BTreeMap, BTreeSet, HashMap};
 use std::convert::Infallible;
+use std::fmt::Write;
 
 use askama::Template;
 use http_body_util::Full;
@@ -10,8 +11,10 @@ use once_cell::sync::Lazy;
 use regex::{Captures, Regex};
 use rocketbot_bim_common::{VehicleInfo, VehicleNumber};
 use rocketbot_date_time::DateTimeLocalWithWeekday;
+use rocketbot_interface::clown::ClownExt;
 use serde::{Deserialize, Serialize, Serializer};
 use serde::ser::SerializeStruct;
+use tokio_postgres::types::ToSql;
 use tracing::error;
 
 use crate::{get_config, get_query_pairs, render_response, return_405, return_500};
@@ -280,6 +283,9 @@ pub(crate) async fn handle_bim_types(request: &Request<Incoming>) -> Result<Resp
         return return_405(&query_pairs).await;
     }
 
+    let rider = query_pairs.get("rider").clowned();
+    let company = query_pairs.get("company").clowned();
+
     let db_conn = match connect_to_db().await {
         Some(c) => c,
         None => return return_500(),
@@ -292,13 +298,30 @@ pub(crate) async fn handle_bim_types(request: &Request<Incoming>) -> Result<Resp
         None => return return_500(),
     };
 
-    let query_res = db_conn.query("
-        SELECT DISTINCT r.rider_username, r.company, rv.vehicle_number
-        FROM bim.rides r
-        INNER JOIN bim.ride_vehicles rv ON rv.ride_id = r.id
-        WHERE rv.coupling_mode = 'R'
-    ", &[]).await;
-    let rows = match query_res {
+    let mut additional_filters = String::new();
+    let mut query_params: Vec<&(dyn ToSql + Sync)> = Vec::with_capacity(2);
+
+    if let Some(r) = rider.as_ref() {
+        query_params.push(r);
+        write!(additional_filters, " AND r.rider_username = ${}", query_params.len()).unwrap();
+    }
+    if let Some(c) = company.as_ref() {
+        query_params.push(c);
+        write!(additional_filters, " AND r.company = ${}", query_params.len()).unwrap();
+    }
+
+    let query_string = format!(
+        "
+            SELECT DISTINCT r.rider_username, r.company, rv.vehicle_number
+            FROM bim.rides r
+            INNER JOIN bim.ride_vehicles rv ON rv.ride_id = r.id
+            WHERE rv.coupling_mode = 'R'
+            {}
+        ",
+        additional_filters,
+    );
+
+    let rows = match db_conn.query(&query_string, &query_params).await {
         Ok(r) => r,
         Err(e) => {
             error!("failed to query rides: {}", e);

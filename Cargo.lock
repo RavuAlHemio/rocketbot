@@ -3584,6 +3584,7 @@ dependencies = [
  "regex",
  "rocketbot_bim_common",
  "rocketbot_date_time",
+ "rocketbot_interface",
  "rocketbot_string",
  "serde",
  "serde_json",

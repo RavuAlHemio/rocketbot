@@ -1,3 +1,4 @@
+pub mod clown;
 pub mod commands;
 pub mod errors;
 pub mod interfaces;
