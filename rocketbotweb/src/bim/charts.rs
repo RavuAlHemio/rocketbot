@@ -8,6 +8,7 @@ use http_body_util::Full;
 use hyper::{Method, Request, Response};
 use hyper::body::{Bytes, Incoming};
 use rocketbot_bim_common::{CouplingMode, VehicleNumber};
+use rocketbot_interface::clown::ClownExt;
 use serde::Serialize;
 use tokio_postgres::types::ToSql;
 use tracing::error;
@@ -502,7 +503,7 @@ pub(crate) async fn handle_bim_latest_rider_count_over_time(request: &Request<In
 
     let company = query_pairs
         .get("company")
-        .map(|c| c.clone().into_owned());
+        .clowned();
 
     let db_conn = match connect_to_db().await {
         Some(c) => c,

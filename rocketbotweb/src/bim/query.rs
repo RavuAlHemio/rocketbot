@@ -8,6 +8,7 @@ use http_body_util::Full;
 use hyper::{Method, Request, Response};
 use hyper::body::{Bytes, Incoming};
 use rocketbot_bim_common::VehicleNumber;
+use rocketbot_interface::clown::ClownExt;
 use serde::Serialize;
 use tokio_postgres::types::ToSql;
 use tracing::{debug, error};
@@ -139,7 +140,7 @@ fn cows_to_owned_skip_empty<'a, 'b>(vals: Option<&'a Vec<Cow<'b, str>>>) -> Vec<
             if val.len() == 0 {
                 continue;
             }
-            ret.push(val.clone().into_owned());
+            ret.push(val.clowned());
         }
         ret
     } else {

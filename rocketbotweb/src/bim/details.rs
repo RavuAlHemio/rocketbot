@@ -9,6 +9,7 @@ use hyper::{Method, Request, Response};
 use hyper::body::{Bytes, Incoming};
 use rocketbot_bim_common::{CouplingMode, VehicleInfo, VehicleNumber};
 use rocketbot_date_time::DateTimeLocalWithWeekday;
+use rocketbot_interface::clown::ClownExt;
 use serde::Serialize;
 use tracing::error;
 
@@ -91,18 +92,13 @@ pub(crate) async fn handle_bim_detail(request: &Request<Incoming>) -> Result<Res
         return return_405(&query_pairs).await;
     }
 
-    let company = match query_pairs.get("company") {
-        Some(c) => c.to_owned().into_owned(),
-        None => return return_400("missing parameter \"company\"", &query_pairs).await,
+    let Some(company) = query_pairs.get("company").clowned() else {
+        return return_400("missing parameter \"company\"", &query_pairs).await
     };
-    let vehicle_number_str = match query_pairs.get("vehicle") {
-        Some(v) => v,
-        None => return return_400("missing parameter \"vehicle\"", &query_pairs).await,
+    let Some(vehicle_number_string) = query_pairs.get("vehicle").clowned() else {
+        return return_400("missing parameter \"vehicle\"", &query_pairs).await
     };
-    let vehicle_number: VehicleNumber = match vehicle_number_str.parse() {
-        Ok(vn) => VehicleNumber::from_string(vn),
-        Err(_) => return return_400("invalid parameter value for \"vehicle\"", &query_pairs).await,
-    };
+    let vehicle_number = VehicleNumber::from_string(vehicle_number_string);
 
     let company_to_bim_database_opt = obtain_company_to_definition().await
         .as_ref()
@@ -202,13 +198,11 @@ pub(crate) async fn handle_bim_line_detail(request: &Request<Incoming>) -> Resul
         return return_405(&query_pairs).await;
     }
 
-    let company = match query_pairs.get("company") {
-        Some(c) => c.to_owned().into_owned(),
-        None => return return_400("missing parameter \"company\"", &query_pairs).await,
+    let Some(company) = query_pairs.get("company").clowned() else {
+        return return_400("missing parameter \"company\"", &query_pairs).await
     };
-    let line = match query_pairs.get("line") {
-        Some(l) => l,
-        None => return return_400("missing parameter \"line\"", &query_pairs).await,
+    let Some(line) = query_pairs.get("line").clowned() else {
+        return return_400("missing parameter \"line\"", &query_pairs).await
     };
 
     let db_conn = match connect_to_db().await {
@@ -273,7 +267,7 @@ pub(crate) async fn handle_bim_line_detail(request: &Request<Incoming>) -> Resul
 
     let template = BimLineDetailsTemplate {
         company,
-        line: line.clone().into_owned(),
+        line,
         rides,
     };
     match render_response(&template, &query_pairs, 200, vec![]).await {
@@ -391,7 +385,7 @@ pub(crate) async fn handle_bim_ride_by_id(request: &Request<Incoming>) -> Result
     };
 
     let template = BimRideByIdTemplate {
-        id_param: ride_id_str.map(|s| s.clone().into_owned()).unwrap_or_else(|| "".to_owned()),
+        id_param: ride_id_str.clowned().unwrap_or_else(|| "".to_owned()),
         ride_state,
     };
     match render_response(&template, &query_pairs, 200, vec![]).await {
