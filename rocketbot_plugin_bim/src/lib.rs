@@ -721,10 +721,14 @@ impl BimPlugin {
         let company_def = match config_guard.company_to_definition.get(company) {
             Some(cd) => cd,
             None => {
+                let message = format!(
+                    "Unknown company {:?}.",
+                    company,
+                );
                 send_channel_message!(
                     interface,
                     &channel_message.channel.name,
-                    "Unknown company.",
+                    &message,
                 ).await;
                 return;
             }
