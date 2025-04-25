@@ -3110,13 +3110,19 @@ impl BimPlugin {
                     FROM bim.rides_and_vehicles rav1
                     WHERE rav1.coupling_mode = 'R'
                     AND NOT EXISTS (
-                        -- same vehicle, later timestamp
+                        -- same vehicle, later timestamp (or same timestamp and later ID)
                         SELECT 1
                         FROM bim.rides_and_vehicles rav2
                         WHERE rav2.company = rav1.company
                         AND rav2.vehicle_number = rav1.vehicle_number
                         AND rav2.coupling_mode = rav1.coupling_mode
-                        AND rav2.\"timestamp\" > rav1.\"timestamp\"
+                        AND (
+                            rav2.\"timestamp\" > rav1.\"timestamp\"
+                            OR (
+                                rav2.\"timestamp\" = rav1.\"timestamp\"
+                                AND rav2.id > rav1.id
+                            )
+                        )
                     )
                 ) innerquery
                 {}
