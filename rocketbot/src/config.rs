@@ -29,6 +29,13 @@ pub(crate) struct ServerConfig {
     pub emojione_emoji_json_uri: String,
     pub username: String,
     pub password: String,
+    #[serde(default)] pub rate_limit: Option<RateLimitConfig>,
+}
+
+#[derive(Clone, Copy, Debug, Deserialize, Eq, Hash, Ord, PartialEq, PartialOrd, Serialize)]
+pub(crate) struct RateLimitConfig {
+    pub max_messages: usize,
+    pub time_slot_ms: u64,
 }
 
 

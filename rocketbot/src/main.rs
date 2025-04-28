@@ -3,6 +3,7 @@ mod commands;
 mod errors;
 mod jsonage;
 mod plugins;
+mod rate_limiting;
 mod socketry;
 mod string_utils;
 

@@ -50,6 +50,7 @@ use crate::config::{CONFIG, load_config, PluginConfig, set_config};
 use crate::errors::WebSocketError;
 use crate::jsonage::parse_message;
 use crate::plugins::{load_plugins, Plugin};
+use crate::rate_limiting::MaybeRateLimitedStream;
 use crate::string_utils::{Token, tokenize};
 
 
@@ -1200,16 +1201,17 @@ fn sha256_hexdigest(data: &[u8]) -> String {
 
 
 async fn run_connection(mut state: &mut ConnectionState) -> Result<(), WebSocketError> {
-    let websocket_uri = {
+    let (websocket_uri, rate_limit_config) = {
         let config_lock = CONFIG
             .get().expect("no initial configuration set")
             .read().await;
-        config_lock.server.websocket_uri.clone()
+        (config_lock.server.websocket_uri.clone(), config_lock.server.rate_limit.clone())
     };
 
     debug!("run_connection: establishing connection with {}", websocket_uri);
-    let (mut stream, _response) = connect_async(&websocket_uri).await
+    let (websocket_stream, _response) = connect_async(&websocket_uri).await
         .map_err(|e| WebSocketError::Connecting(e))?;
+    let mut stream = MaybeRateLimitedStream::new(websocket_stream, rate_limit_config);
 
     // connect!
     let connect_message = serde_json::json!({
