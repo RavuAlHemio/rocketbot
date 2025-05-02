@@ -5,7 +5,7 @@ use std::collections::{BTreeMap, BTreeSet};
 use std::env::args_os;
 use std::fs::File;
 use std::path::PathBuf;
-use std::sync::LazyLock;
+use std::sync::{LazyLock, Mutex};
 
 use indexmap::IndexSet;
 use regex::Regex;
@@ -18,6 +18,7 @@ use url::Url;
 
 
 static WHITESPACE_RE: LazyLock<Regex> = LazyLock::new(|| Regex::new("\\s+").expect("failed to compile whitespace regex"));
+static REGEX_CACHE: Mutex<BTreeMap<String, Regex>> = Mutex::new(BTreeMap::new());
 
 
 #[derive(Clone, Debug, Deserialize, Eq, Hash, Ord, PartialEq, PartialOrd, Serialize)]
@@ -52,6 +53,24 @@ struct ColumnKeyConfig {
     pub out_of_service_since_column: Option<EnjoyableRegex>,
     pub depot_column: Option<EnjoyableRegex>,
     pub other_info_names_to_columns: BTreeMap<String, EnjoyableRegex>,
+}
+
+
+fn string_matches_regex(string: &str, regex_str: &str) -> Result<bool, Box<rhai::EvalAltResult>> {
+    // do we know this regex already?
+    let mut regex_cache_guard = REGEX_CACHE.lock()
+        .expect("REGEX_CACHE poisoned?!");
+
+    if let Some(known_regex) = regex_cache_guard.get(regex_str) {
+        Ok(known_regex.is_match(string))
+    } else {
+        let regex_obj = match Regex::new(regex_str) {
+            Ok(ro) => ro,
+            Err(e) => return Err(format!("failed to parse regex: {:?}", e).into()),
+        };
+        regex_cache_guard.insert(regex_str.to_owned(), regex_obj.clone());
+        Ok(regex_obj.is_match(string))
+    }
 }
 
 
@@ -204,7 +223,8 @@ async fn obtain_vehicles(
             let mut overridden_fixed_coupling = IndexSet::new();
             let vehicle_numbers: IndexSet<VehicleNumber> = if let Some(evaluator) = raw_type_to_evaluator.get(raw_type.as_ref().unwrap()) {
                 // okay, roll out the big guns
-                let engine = rhai::Engine::new();
+                let mut engine = rhai::Engine::new();
+                engine.register_fn("string_matches_regex", string_matches_regex);
                 let mut scope = rhai::Scope::new();
                 scope.set_value("vehicle_number", vehicle_number.unwrap().as_str().to_owned());
                 scope.set_value("overridden_fixed_coupling", rhai::Array::new());
