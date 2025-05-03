@@ -29,7 +29,7 @@ form_urlencoded = { version = "1.2" }
 futures-util = { version = "0.3" }
 indexmap = { version = "2.0", features = ["serde"] }
 reqwest = { version = "0.12", features = ["rustls-tls"] }
-rhai = { version = "1.21" }
+rhai = { version = "1.21", features = ["serde"] }
 rocketbot_mediawiki_parsing = { path = "../rocketbot_mediawiki_parsing" }
 scraper = { version = "0.22" }
 sxd-document = { version = "0.3" }

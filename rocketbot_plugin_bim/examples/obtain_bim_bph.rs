@@ -223,11 +223,15 @@ async fn obtain_vehicles(
             let mut overridden_fixed_coupling = IndexSet::new();
             let vehicle_numbers: IndexSet<VehicleNumber> = if let Some(evaluator) = raw_type_to_evaluator.get(raw_type.as_ref().unwrap()) {
                 // okay, roll out the big guns
+                let other_data_rhai = rhai::serde::to_dynamic(&other_data)
+                    .expect("failed to create dynamic value from other_data");
+
                 let mut engine = rhai::Engine::new();
                 engine.register_fn("string_matches_regex", string_matches_regex);
                 let mut scope = rhai::Scope::new();
                 scope.set_value("vehicle_number", vehicle_number.unwrap().as_str().to_owned());
                 scope.set_value("overridden_fixed_coupling", rhai::Array::new());
+                scope.set_value("other_data", other_data_rhai);
                 let vehicles_raw: Vec<rhai::Dynamic> = engine.eval_ast_with_scope(&mut scope, evaluator)
                     .expect("failed to evaluate evaluator");
 
@@ -238,6 +242,12 @@ async fn obtain_vehicles(
                     let number = VehicleNumber::from_string(overridden_fixed_number.into_string().unwrap());
                     overridden_fixed_coupling.insert(number);
                 }
+
+                // handle modifications of other_data
+                let other_data_modified = scope.get_value("other_data")
+                    .expect("other_data gone missing?!");
+                other_data = rhai::serde::from_dynamic(&other_data_modified)
+                    .expect("failed to obtain other_data from dynamic value");
 
                 vehicles_raw
                     .into_iter()
