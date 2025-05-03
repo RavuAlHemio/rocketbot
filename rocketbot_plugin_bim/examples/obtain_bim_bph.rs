@@ -34,6 +34,7 @@ struct Config {
     pub urls: Vec<String>,
     pub values_to_ignore: BTreeSet<String>,
     #[serde(default)] pub number_splitter: Option<String>,
+    #[serde(default)] pub number_evaluators: BTreeMap<String, String>,
 }
 
 #[derive(Clone, Debug, Deserialize, Eq, Hash, Ord, PartialEq, PartialOrd, Serialize)]
@@ -41,7 +42,7 @@ struct VehicleTypeConfig {
     pub vehicle_type: String,
     pub vehicle_class: VehicleClass,
     pub manufacturer: Option<String>,
-    #[serde(default)] pub number_evaluator: Option<String>,
+    #[serde(default)] pub number_evaluator_key: Option<String>,
     #[serde(default)] pub common_other_data: BTreeMap<String, String>,
 }
 
@@ -94,15 +95,13 @@ async fn obtain_vehicles(
 
     // compile the number evaluator scripts
     let compiler = rhai::Engine::new();
-    let mut raw_type_to_evaluator: BTreeMap<String, rhai::AST> = BTreeMap::new();
-    for (type_name, type_config) in &config.type_mapping {
-        if let Some(evaluator) = type_config.number_evaluator.as_ref() {
-            let compiled = match compiler.compile(evaluator) {
-                Ok(ast) => ast,
-                Err(e) => panic!("failed to compile number evaluator for type {:?}: {}", type_name, e),
-            };
-            raw_type_to_evaluator.insert(type_name.clone(), compiled);
-        }
+    let mut name_to_evaluator: BTreeMap<String, rhai::AST> = BTreeMap::new();
+    for (key, evaluator_string) in &config.number_evaluators {
+        let compiled = match compiler.compile(evaluator_string) {
+            Ok(ast) => ast,
+            Err(e) => panic!("failed to compile number evaluator {:?}: {}", key, e),
+        };
+        name_to_evaluator.insert(key.clone(), compiled);
     }
 
     // download the page
@@ -221,8 +220,12 @@ async fn obtain_vehicles(
             }
 
             let mut overridden_fixed_coupling = IndexSet::new();
-            let vehicle_numbers: IndexSet<VehicleNumber> = if let Some(evaluator) = raw_type_to_evaluator.get(raw_type.as_ref().unwrap()) {
+            let vehicle_numbers: IndexSet<VehicleNumber> = if let Some(evaluator_name) = type_info.number_evaluator_key.as_ref() {
                 // okay, roll out the big guns
+                let evaluator = match name_to_evaluator.get(evaluator_name) {
+                    Some(e) => e,
+                    None => panic!("failed to find evaluator {:?} of type {:?}", evaluator_name, raw_type.as_ref().unwrap()),
+                };
                 let other_data_rhai = rhai::serde::to_dynamic(&other_data)
                     .expect("failed to create dynamic value from other_data");
 
