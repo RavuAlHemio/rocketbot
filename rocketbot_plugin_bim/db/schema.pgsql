@@ -345,7 +345,7 @@ CREATE OR REPLACE FUNCTION bim.current_monopolies
 ) RETURNS TABLE
 ( company character varying(256)
 , rider_username character varying(256)
-, vehicles jsonb
+, vehicles character varying(256)[]
 )
 LANGUAGE plpython3u
 STABLE STRICT
@@ -403,10 +403,10 @@ for (company, vehicle_to_set) in company_to_vehicle_to_set.items():
                 break
 
         if is_monopoly:
-            yield (company, first_rider, json.dumps(sorted(set_vehicles)))
+            yield (company, first_rider, sorted(set_vehicles))
 $$;
 
 CREATE TABLE bim.schema_revision
 ( sch_rev bigint NOT NULL
 );
-INSERT INTO bim.schema_revision (sch_rev) VALUES (17);
+INSERT INTO bim.schema_revision (sch_rev) VALUES (18);
