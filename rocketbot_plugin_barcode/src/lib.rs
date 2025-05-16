@@ -131,7 +131,7 @@ impl BarcodePlugin {
 
         let bars = crate::ean13::encode_ean_13(digits);
         let barcode = LinearBitmap::new(bars.to_vec());
-        let bitmap = barcode.to_bitmap(8);
+        let bitmap = barcode.to_bitmap(32);
         let png = match bitmap.render(&BitmapRenderOptions::new()).to_png() {
             Ok(p) => p,
             Err(e) => {
