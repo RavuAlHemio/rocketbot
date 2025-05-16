@@ -76,7 +76,32 @@ impl BitmapRenderOptions {
 }
 
 
-#[derive(Clone, Debug, Eq, Hash, PartialEq)]
+#[derive(Clone, Debug, Eq, Hash, Ord, PartialEq, PartialOrd)]
+pub struct LinearBitmap {
+    bits: Vec<bool>,
+}
+impl LinearBitmap {
+    pub fn new(
+        bits: Vec<bool>,
+    ) -> Self {
+        Self {
+            bits,
+        }
+    }
+    pub fn bits(&self) -> &[bool] { self.bits.as_slice() }
+
+    pub fn to_bitmap(&self, height: usize) -> BarcodeBitmap {
+        let mut data = Vec::with_capacity(self.bits.len() * height);
+        for _ in 0..height {
+            data.extend_from_slice(&self.bits);
+        }
+        BarcodeBitmap::new(self.bits.len(), height, data)
+            .expect("converted bitmap invalid?!")
+    }
+}
+
+
+#[derive(Clone, Debug, Eq, Hash, Ord, PartialEq, PartialOrd)]
 pub struct BarcodeBitmap {
     width: usize,
     height: usize,

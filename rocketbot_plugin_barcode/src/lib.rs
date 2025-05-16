@@ -1,3 +1,4 @@
+pub mod ean13;
 pub mod vaxcert;
 
 
@@ -8,10 +9,10 @@ use async_trait::async_trait;
 use chrono::{Duration, NaiveDate, TimeZone, Utc};
 use rand::{Rng, SeedableRng};
 use rand::rngs::StdRng;
-use rocketbot_barcode::bitmap::BitmapRenderOptions;
+use rocketbot_barcode::bitmap::{BitmapRenderOptions, LinearBitmap};
 use rocketbot_barcode::datamatrix::datamatrix_string_to_bitmap;
 use rocketbot_barcode::qr::qr_string_to_bitmap;
-use rocketbot_interface::ResultExtensions;
+use rocketbot_interface::{send_channel_message, ResultExtensions};
 use rocketbot_interface::commands::{
     CommandDefinitionBuilder, CommandInstance, CommandValueType,
 };
@@ -20,6 +21,7 @@ use rocketbot_interface::model::{Attachment, ChannelMessage, OutgoingMessageWith
 use rocketbot_interface::sync::RwLock;
 use tracing::{debug, error};
 
+use crate::ean13::Digit;
 use crate::vaxcert::{encode_vax, make_vax_pdf, normalize_name, PdfSettings, VaxInfo};
 
 
@@ -80,6 +82,71 @@ impl BarcodePlugin {
                 Attachment::new(
                     png,
                     "datamatrix.png".to_owned(),
+                    "image/png".to_owned(),
+                    None,
+                ),
+                None,
+                None,
+            )
+        ).await;
+    }
+
+    async fn handle_ean13(&self, channel_message: &ChannelMessage, command: &CommandInstance) {
+        let interface = match self.interface.upgrade() {
+            None => return,
+            Some(i) => i,
+        };
+
+        let digit_string = command.rest.replace(" ", "");
+        if digit_string.chars().any(|c| c < '0' || c > '9') {
+            send_channel_message!(
+                interface,
+                &channel_message.channel.name,
+                "The number may only consist of digits from 0 to 9.",
+            ).await;
+            return;
+        }
+        if digit_string.len() < 12 || digit_string.len() > 13 {
+            send_channel_message!(
+                interface,
+                &channel_message.channel.name,
+                "You must supply 12 or 13 digits (i.e. an EAN-13 with or without a check digit) to encode an EAN-13 barcode.",
+            ).await;
+            return;
+        }
+
+        let mut digits = [Digit::default(); 13];
+        for (digit, digit_char) in digits.iter_mut().zip(digit_string.chars()) {
+            let digit_u8 = ((digit_char as u32) - ('0' as u32)).try_into().unwrap();
+            *digit = Digit::try_from_u8(digit_u8).unwrap();
+        }
+
+        if digit_string.len() == 12 {
+            // calculate check digit
+            let mut initial_digits = [Digit::default(); 12];
+            initial_digits.copy_from_slice(&digits[0..12]);
+            let check_digit = crate::ean13::calculate_check_digit(initial_digits);
+            digits[12] = check_digit;
+        }
+
+        let bars = crate::ean13::encode_ean_13(digits);
+        let barcode = LinearBitmap::new(bars.to_vec());
+        let bitmap = barcode.to_bitmap(8);
+        let png = match bitmap.render(&BitmapRenderOptions::new()).to_png() {
+            Ok(p) => p,
+            Err(e) => {
+                error!("error converting EAN-13 bitmap for {:?} to PNG: {}", command.rest, e);
+                return;
+            },
+        };
+
+        // send it as a response
+        interface.send_channel_message_with_attachment(
+            &channel_message.channel.name,
+            OutgoingMessageWithAttachment::new(
+                Attachment::new(
+                    png,
+                    "ean13.png".to_owned(),
                     "image/png".to_owned(),
                     None,
                 ),
@@ -365,6 +432,15 @@ impl RocketBotPlugin for BarcodePlugin {
         ).await;
         my_interface.register_channel_command(
             &CommandDefinitionBuilder::new(
+                "ean13",
+                "barcode",
+                "{cpfx}ean13 NUMBER",
+                "Encodes the given number into an EAN-13 barcode.",
+            )
+                .build()
+        ).await;
+        my_interface.register_channel_command(
+            &CommandDefinitionBuilder::new(
                 "vaxcert",
                 "barcode",
                 "{cpfx}vaxcert OPTIONS",
@@ -419,6 +495,8 @@ impl RocketBotPlugin for BarcodePlugin {
     async fn channel_command(&self, channel_message: &ChannelMessage, command: &CommandInstance) {
         if command.name == "datamatrix" {
             self.handle_datamatrix(channel_message, command).await;
+        } else if command.name == "ean13" {
+            self.handle_ean13(channel_message, command).await;
         } else if command.name == "vaxcert" {
             self.handle_vaxcert(channel_message, command).await;
         }
@@ -427,8 +505,10 @@ impl RocketBotPlugin for BarcodePlugin {
     async fn get_command_help(&self, command_name: &str) -> Option<String> {
         if command_name == "datamatrix" {
             Some(include_str!("../help/datamatrix.md").to_owned())
+        } else if command_name == "ean13" {
+            Some(include_str!("../help/ean13.md").to_owned())
         } else if command_name == "vaxcert" {
-                Some(include_str!("../help/vaxcert.md").to_owned())
+            Some(include_str!("../help/vaxcert.md").to_owned())
         } else {
             None
         }
