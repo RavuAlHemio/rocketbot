@@ -21,9 +21,7 @@ pub enum VehicleClass {
     Metro,
     PreMetro,
     Bus,
-    ElectricBus,
     Trolleybus,
-    BatteryTrolleybus,
     TramTrain,
     RegionalTrain,
     LongDistanceTrain,
@@ -37,6 +35,7 @@ pub enum VehicleClass {
     SeatAndGondolaLift,
     Ship,
     Hovercraft,
+    Taxibus,
 }
 impl fmt::Display for VehicleClass {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
@@ -45,9 +44,7 @@ impl fmt::Display for VehicleClass {
             Self::Metro => write!(f, "metro"),
             Self::PreMetro => write!(f, "premetro"),
             Self::Bus => write!(f, "bus"),
-            Self::ElectricBus => write!(f, "electric bus"),
             Self::Trolleybus => write!(f, "trolleybus"),
-            Self::BatteryTrolleybus => write!(f, "battery trolleybus"),
             Self::TramTrain => write!(f, "tram-train"),
             Self::RegionalTrain => write!(f, "train (regional)"),
             Self::LongDistanceTrain => write!(f, "train (long-distance)"),
@@ -61,6 +58,36 @@ impl fmt::Display for VehicleClass {
             Self::SeatAndGondolaLift => write!(f, "seat and gondola lift"),
             Self::Ship => write!(f, "ship"),
             Self::Hovercraft => write!(f, "hovercraft"),
+            Self::Taxibus => write!(f, "taxibus"),
+        }
+    }
+}
+
+#[derive(Clone, Copy, Debug, Deserialize, Eq, Hash, Ord, PartialEq, PartialOrd, Serialize)]
+#[serde(rename_all = "kebab-case")]
+pub enum PowerSource {
+    Unpowered,
+    OverheadWire,
+    Battery,
+    Hydrogen,
+    Gasoline,
+    Diesel,
+    Kerosene,
+    Human,
+    Animal,
+}
+impl fmt::Display for PowerSource {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match self {
+            Self::Unpowered => write!(f, "unpowered"),
+            Self::OverheadWire => write!(f, "overhead wire"),
+            Self::Battery => write!(f, "battery"),
+            Self::Hydrogen => write!(f, "hydrogen"),
+            Self::Gasoline => write!(f, "gasoline"),
+            Self::Diesel => write!(f, "diesel"),
+            Self::Kerosene => write!(f, "kerosene"),
+            Self::Human => write!(f, "human"),
+            Self::Animal => write!(f, "animal"),
         }
     }
 }
@@ -119,6 +146,7 @@ impl fmt::Display for CouplingMode {
 pub struct VehicleInfo {
     pub number: VehicleNumber,
     pub vehicle_class: VehicleClass,
+    #[serde(default)] pub power_sources: BTreeSet<PowerSource>,
     pub type_code: String,
     pub in_service_since: Option<String>,
     pub out_of_service_since: Option<String>,
@@ -132,6 +160,7 @@ impl VehicleInfo {
         Self {
             number,
             vehicle_class,
+            power_sources: BTreeSet::new(),
             type_code,
             in_service_since: None,
             out_of_service_since: None,

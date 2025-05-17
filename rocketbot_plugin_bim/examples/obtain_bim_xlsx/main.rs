@@ -1,7 +1,7 @@
 mod xlsx;
 
 
-use std::collections::{BTreeMap, HashSet};
+use std::collections::{BTreeMap, BTreeSet, HashSet};
 use std::env;
 use std::ffi::OsString;
 use std::fmt;
@@ -11,7 +11,7 @@ use std::str::FromStr;
 
 use ciborium;
 use regex::Regex;
-use rocketbot_bim_common::VehicleClass;
+use rocketbot_bim_common::{PowerSource, VehicleClass};
 use serde::{Deserialize, Deserializer, Serialize, Serializer};
 use serde::de::Error;
 use serde_json;
@@ -142,6 +142,7 @@ struct CodeConversion {
     pub code_extractor_regex: Regex,
     pub code_replacements: Vec<String>,
     pub vehicle_class: VehicleClass,
+    #[serde(default)] pub power_sources: BTreeSet<PowerSource>,
     pub overridden_type: Option<String>,
     #[serde(default)] pub common_props: BTreeMap<String, String>,
 }

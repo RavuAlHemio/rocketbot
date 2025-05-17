@@ -1,7 +1,7 @@
 //! Obtain vehicle databases from the SpotLog LocoList.
 
 
-use std::collections::{BTreeMap, HashMap};
+use std::collections::{BTreeMap, BTreeSet, HashMap};
 use std::env::args_os;
 use std::fs::File;
 use std::io::Read;
@@ -11,7 +11,7 @@ use std::time::Duration;
 use ciborium;
 use indexmap::IndexSet;
 use reqwest;
-use rocketbot_bim_common::{VehicleClass, VehicleInfo, VehicleNumber};
+use rocketbot_bim_common::{PowerSource, VehicleClass, VehicleInfo, VehicleNumber};
 use serde::{Deserialize, Serialize};
 use serde_json;
 use sxd_document;
@@ -34,6 +34,7 @@ struct PageInfo {
 struct ExportClass {
     pub type_code: String,
     pub vehicle_class: VehicleClass,
+    #[serde(default)] pub power_sources: BTreeSet<PowerSource>,
     #[serde(default)] pub other_data: BTreeMap<String, String>,
     #[serde(default)] pub include_deleted: bool,
 }
@@ -43,6 +44,7 @@ struct VehicleInfoBuilder {
     number: Option<VehicleNumber>,
     type_code: Option<String>,
     vehicle_class: Option<VehicleClass>,
+    power_sources: BTreeSet<PowerSource>,
     in_service_since: Option<String>,
     out_of_service_since: Option<String>,
     manufacturer: Option<String>,
@@ -56,6 +58,7 @@ impl VehicleInfoBuilder {
             number: None,
             type_code: None,
             vehicle_class: None,
+            power_sources: BTreeSet::new(),
             in_service_since: None,
             out_of_service_since: None,
             manufacturer: None,
@@ -77,6 +80,11 @@ impl VehicleInfoBuilder {
 
     pub fn vehicle_class(&mut self, vehicle_class: VehicleClass) -> &mut Self {
         self.vehicle_class = Some(vehicle_class);
+        self
+    }
+
+    pub fn power_source(&mut self, power_source: PowerSource) -> &mut Self {
+        self.power_sources.insert(power_source);
         self
     }
 
@@ -127,6 +135,7 @@ impl VehicleInfoBuilder {
             number,
             type_code,
             vehicle_class,
+            power_sources: self.power_sources,
             in_service_since: self.in_service_since,
             out_of_service_since: self.out_of_service_since,
             manufacturer: self.manufacturer,
@@ -300,6 +309,9 @@ async fn main() {
                     vib.number(veh.clone())
                         .type_code(&class_def.type_code)
                         .vehicle_class(class_def.vehicle_class);
+                    for power_source in &class_def.power_sources {
+                        vib.power_source(*power_source);
+                    }
                     if let Some(b) = builder_opt {
                         vib.manufacturer(b);
                     }

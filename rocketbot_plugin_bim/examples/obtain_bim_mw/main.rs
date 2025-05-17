@@ -4,7 +4,7 @@
 mod extract_info;
 
 
-use std::collections::{BTreeMap, HashMap};
+use std::collections::{BTreeMap, BTreeSet, HashMap};
 use std::env::args_os;
 use std::fs::File;
 use std::path::PathBuf;
@@ -13,7 +13,7 @@ use std::time::Duration;
 use ciborium;
 use indexmap::IndexMap;
 use regex::Regex;
-use rocketbot_bim_common::{VehicleClass, VehicleInfo};
+use rocketbot_bim_common::{PowerSource, VehicleClass, VehicleInfo};
 use rocketbot_interface::serde::{serde_opt_regex, serde_regex};
 use rocketbot_mediawiki_parsing::WikiParser;
 use serde::{Deserialize, Serialize};
@@ -42,6 +42,7 @@ pub(crate) struct PageConfig {
     pub title: String,
     pub type_code: String,
     pub vehicle_class: VehicleClass,
+    #[serde(default)] pub power_sources: BTreeSet<PowerSource>,
     #[serde(default)] pub fixed_couplings: bool,
     #[serde(default)] pub number_matcher: Option<MatcherTransformerConfig>,
     #[serde(default, with = "serde_opt_regex")] pub number_separator_regex: Option<Regex>,

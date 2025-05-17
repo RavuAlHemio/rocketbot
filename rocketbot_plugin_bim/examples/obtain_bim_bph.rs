@@ -10,7 +10,7 @@ use std::sync::{LazyLock, Mutex};
 use indexmap::IndexSet;
 use regex::Regex;
 use reqwest::header::{HeaderMap, HeaderValue};
-use rocketbot_bim_common::{VehicleClass, VehicleInfo, VehicleNumber};
+use rocketbot_bim_common::{PowerSource, VehicleClass, VehicleInfo, VehicleNumber};
 use rocketbot_string::regex::EnjoyableRegex;
 use scraper::{Html, Selector};
 use serde::{Deserialize, Serialize};
@@ -42,6 +42,7 @@ struct VehicleTypeConfig {
     pub vehicle_type: String,
     pub vehicle_class: VehicleClass,
     pub manufacturer: Option<String>,
+    #[serde(default)] pub power_sources: BTreeSet<PowerSource>,
     #[serde(default)] pub number_evaluator_key: Option<String>,
     #[serde(default)] pub common_other_data: BTreeMap<String, String>,
 }
@@ -285,6 +286,7 @@ async fn obtain_vehicles(
                 let vehicle = VehicleInfo {
                     number: individual_vehicle_number.clone(),
                     vehicle_class: type_info.vehicle_class,
+                    power_sources: type_info.power_sources.clone(),
                     type_code: type_info.vehicle_type.clone(),
                     in_service_since: in_service_since.clone(),
                     out_of_service_since: out_of_service_since.clone(),

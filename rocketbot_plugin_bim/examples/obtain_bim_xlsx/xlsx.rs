@@ -665,6 +665,7 @@ fn process_sheet<F: Read + Seek>(
                         let vehicle = VehicleInfo {
                             number: generated_name.clone().into(),
                             vehicle_class: conversion.vehicle_class,
+                            power_sources: conversion.power_sources.clone(),
                             type_code: my_type_code.clone(),
                             in_service_since: Some("?".to_owned()),
                             out_of_service_since: if out_of_order { Some("?".to_owned()) } else { None },

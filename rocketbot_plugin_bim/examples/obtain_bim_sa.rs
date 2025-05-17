@@ -3,7 +3,7 @@
 
 
 use std::cmp::Ordering;
-use std::collections::{BTreeMap, HashMap, HashSet};
+use std::collections::{BTreeMap, BTreeSet, HashMap, HashSet};
 use std::env::args_os;
 use std::fs::File;
 use std::io::Read;
@@ -14,7 +14,7 @@ use indexmap::IndexSet;
 use once_cell::sync::Lazy;
 use regex::Regex;
 use reqwest;
-use rocketbot_bim_common::{VehicleClass, VehicleInfo, VehicleNumber};
+use rocketbot_bim_common::{PowerSource, VehicleClass, VehicleInfo, VehicleNumber};
 use scraper::{ElementRef, Html, Node, Selector};
 use serde::{Deserialize, Serialize};
 use serde_json;
@@ -79,6 +79,7 @@ struct TypeInfo {
     pub type_code: String,
     pub manufacturer: Option<String>,
     pub vehicle_class: VehicleClass,
+    #[serde(default)] pub power_sources: BTreeSet<PowerSource>,
     #[serde(default)] pub other_data: BTreeMap<String, String>,
 }
 
@@ -87,6 +88,7 @@ struct VehicleInfoBuilder {
     number: Option<VehicleNumber>,
     type_code: Option<String>,
     vehicle_class: Option<VehicleClass>,
+    power_sources: BTreeSet<PowerSource>,
     in_service_since: Option<String>,
     out_of_service_since: Option<String>,
     manufacturer: Option<String>,
@@ -100,6 +102,7 @@ impl VehicleInfoBuilder {
             number: None,
             type_code: None,
             vehicle_class: None,
+            power_sources: BTreeSet::new(),
             in_service_since: None,
             out_of_service_since: None,
             manufacturer: None,
@@ -121,6 +124,12 @@ impl VehicleInfoBuilder {
 
     pub fn vehicle_class(&mut self, vehicle_class: VehicleClass) -> &mut Self {
         self.vehicle_class = Some(vehicle_class);
+        self
+    }
+
+    #[allow(unused)]
+    pub fn power_source(&mut self, power_source: PowerSource) -> &mut Self {
+        self.power_sources.insert(power_source);
         self
     }
 
@@ -159,6 +168,7 @@ impl VehicleInfoBuilder {
             if let Some(tc) = type_mapping.get(type_code) {
                 self.manufacturer = tc.manufacturer.clone();
                 self.type_code = Some(tc.type_code.clone());
+                self.power_sources = tc.power_sources.clone();
                 self.vehicle_class(tc.vehicle_class);
                 for (k, v) in &tc.other_data {
                     self.other_data
@@ -186,6 +196,7 @@ impl VehicleInfoBuilder {
             number,
             type_code,
             vehicle_class,
+            power_sources: self.power_sources,
             in_service_since: self.in_service_since,
             out_of_service_since: self.out_of_service_since,
             manufacturer: self.manufacturer,
