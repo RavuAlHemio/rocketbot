@@ -28,6 +28,12 @@
     <th>Class</th>
     <td>{{ veh.vehicle_class }}</td>
   </tr>
+  {% if veh.power_sources.len() > 0 %}
+  <tr class="power-sources">
+    <th>Power sources</th>
+    <td>{% for power_source in veh.power_sources %}{% if !loop.first %}, {% endif %}<span class="power-source">{{ power_source }}</span>{% endfor %}</td>
+  </tr>
+  {% endif %}
   {% if let Some(manufacturer) = veh.manufacturer %}
     <tr class="manufacturer">
       <th>Manufacturer</th>
