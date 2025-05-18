@@ -530,6 +530,22 @@ impl BimPlugin {
                             (None, None) => {},
                         };
 
+                        write_expect!(db_response, "\na *{}*", vehicle.vehicle_class);
+                        if vehicle.power_sources.len() > 0 {
+                            write_expect!(db_response, " powered by ");
+                            for (i, ps) in vehicle.power_sources.iter().enumerate() {
+                                if i == 0 {
+                                    // write nothing
+                                } else if i == vehicle.power_sources.len() - 1 {
+                                    // before final element
+                                    write_expect!(db_response, " and ");
+                                } else {
+                                    write_expect!(db_response, ", ");
+                                }
+                                write_expect!(db_response, "{}", ps);
+                            }
+                        }
+
                         if let Some(manuf) = &vehicle.manufacturer {
                             let full_manuf = config_guard.manufacturer_mapping.get(manuf).unwrap_or(manuf);
                             write_expect!(db_response, "\n*manufacturer*: {}", full_manuf);
