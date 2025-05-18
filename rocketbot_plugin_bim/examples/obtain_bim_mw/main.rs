@@ -75,6 +75,7 @@ struct ReplacementConfig {
 struct TypeMatchConfig {
     pub matcher: MatcherTransformerConfig,
     pub type_code: String,
+    #[serde(default)] pub power_sources: BTreeSet<PowerSource>,
 }
 
 

@@ -1,11 +1,11 @@
-use std::collections::{BTreeMap, HashMap};
+use std::collections::{BTreeMap, BTreeSet, HashMap};
 use std::io::Read;
 use std::fs::File;
 
 use form_urlencoded;
 use indexmap::IndexSet;
 use regex::Regex;
-use rocketbot_bim_common::{VehicleInfo, VehicleNumber};
+use rocketbot_bim_common::{PowerSource, VehicleInfo, VehicleNumber};
 use rocketbot_mediawiki_parsing::WikiParser;
 use sxd_document;
 use sxd_document::dom::Element;
@@ -85,7 +85,6 @@ pub(crate) fn row_data_to_trams(page_config: &PageConfig, row_data: Vec<(String,
     let mut vehicle = VehicleInfo::new("0".to_owned().into(), page_config.vehicle_class, page_config.type_code.clone());
 
     vehicle.depot = page_config.default_depot.clone();
-    vehicle.power_sources = page_config.power_sources.clone();
 
     let all_props: Vec<(&String, &String)> = page_config.common_props.iter()
         .chain(row_data.iter().map(|(k, v)| (k, v)))
@@ -100,7 +99,7 @@ pub(crate) fn row_data_to_trams(page_config: &PageConfig, row_data: Vec<(String,
         }
     }
 
-    let mut numbers_types: Vec<(VehicleNumber, String)> = Vec::new();
+    let mut numbers_types_powersources: Vec<(VehicleNumber, String, BTreeSet<PowerSource>)> = Vec::new();
     for (key, val) in &all_props {
         if val.len() == 0 {
             continue;
@@ -114,7 +113,12 @@ pub(crate) fn row_data_to_trams(page_config: &PageConfig, row_data: Vec<(String,
                 let vehicle_numbers = parse_vehicle_numbers(&number_text, &page_config.number_separator_regex);
                 for vehicle_number in vehicle_numbers {
                     // type-specific matcher type code trumps general type code
-                    numbers_types.push((vehicle_number, number_matcher.type_code.clone()));
+                    let power_sources = if number_matcher.power_sources.len() > 0 {
+                        number_matcher.power_sources.clone()
+                    } else {
+                        page_config.power_sources.clone()
+                    };
+                    numbers_types_powersources.push((vehicle_number, number_matcher.type_code.clone(), power_sources));
                 }
                 break;
             }
@@ -134,7 +138,7 @@ pub(crate) fn row_data_to_trams(page_config: &PageConfig, row_data: Vec<(String,
                     is_matched = true;
                     let vehicle_numbers = parse_vehicle_numbers(&number_text, &page_config.number_separator_regex);
                     for vehicle_number in vehicle_numbers {
-                        numbers_types.push((vehicle_number, type_code.clone()));
+                        numbers_types_powersources.push((vehicle_number, type_code.clone(), page_config.power_sources.clone()));
                     }
                 }
             }
@@ -182,15 +186,15 @@ pub(crate) fn row_data_to_trams(page_config: &PageConfig, row_data: Vec<(String,
     }
 
     let fixed_coupling_partners: IndexSet<VehicleNumber> = if page_config.fixed_couplings {
-        numbers_types
+        numbers_types_powersources
             .iter()
-            .map(|(num, _tc)| num.clone())
+            .map(|(num, _tc, _ps)| num.clone())
             .collect()
     } else {
         IndexSet::new()
     };
 
-    for (vehicle_number, vehicle_type_code) in &numbers_types {
+    for (vehicle_number, vehicle_type_code, power_sources) in &numbers_types_powersources {
         vehicle.number = vehicle_number.clone();
 
         if let Some(ctc) = &page_config.common_type_code {
@@ -198,6 +202,8 @@ pub(crate) fn row_data_to_trams(page_config: &PageConfig, row_data: Vec<(String,
         } else {
             vehicle.type_code = vehicle_type_code.clone();
         }
+
+        vehicle.power_sources = power_sources.clone();
 
         if let Some(stcp) = &page_config.specific_type_code_property {
             vehicle.other_data.insert(stcp.clone(), vehicle_type_code.clone());
