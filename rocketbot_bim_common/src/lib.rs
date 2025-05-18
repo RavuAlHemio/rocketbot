@@ -79,6 +79,7 @@ pub enum PowerSource {
     Lpg,
     Human,
     Animal,
+    Rope,
 }
 impl fmt::Display for PowerSource {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
@@ -96,6 +97,7 @@ impl fmt::Display for PowerSource {
             Self::Lpg => write!(f, "LPG"),
             Self::Human => write!(f, "human"),
             Self::Animal => write!(f, "animal"),
+            Self::Rope => write!(f, "rope"),
         }
     }
 }
