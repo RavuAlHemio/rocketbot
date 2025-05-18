@@ -74,6 +74,8 @@ pub enum PowerSource {
     Gasoline,
     Diesel,
     Kerosene,
+    Cng,
+    Lng,
     Human,
     Animal,
 }
@@ -88,6 +90,8 @@ impl fmt::Display for PowerSource {
             Self::Gasoline => write!(f, "gasoline"),
             Self::Diesel => write!(f, "diesel"),
             Self::Kerosene => write!(f, "kerosene"),
+            Self::Cng => write!(f, "CNG"),
+            Self::Lng => write!(f, "LNG"),
             Self::Human => write!(f, "human"),
             Self::Animal => write!(f, "animal"),
         }
