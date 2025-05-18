@@ -68,6 +68,7 @@ impl fmt::Display for VehicleClass {
 pub enum PowerSource {
     Unpowered,
     OverheadWire,
+    ThirdRail,
     Battery,
     Hydrogen,
     Gasoline,
@@ -81,6 +82,7 @@ impl fmt::Display for PowerSource {
         match self {
             Self::Unpowered => write!(f, "unpowered"),
             Self::OverheadWire => write!(f, "overhead wire"),
+            Self::ThirdRail => write!(f, "third rail"),
             Self::Battery => write!(f, "battery"),
             Self::Hydrogen => write!(f, "hydrogen"),
             Self::Gasoline => write!(f, "gasoline"),
