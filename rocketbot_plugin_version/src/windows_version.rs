@@ -37,7 +37,7 @@ impl Default for OSVERSIONINFOEXW {
 
 
 #[link(name = "ntdll")]
-extern {
+extern "C" {
     fn RtlGetVersion(version_information: *mut OSVERSIONINFOEXW) -> i32;
 }
 

@@ -3,7 +3,7 @@ use std::fmt::Write;
 use std::sync::Weak;
 
 use async_trait::async_trait;
-use chrono::{Datelike, DateTime, Local, NaiveDate, Weekday};
+use chrono::{Datelike, Local, NaiveDate, Weekday};
 use julian;
 use once_cell::sync::Lazy;
 use regex::Regex;

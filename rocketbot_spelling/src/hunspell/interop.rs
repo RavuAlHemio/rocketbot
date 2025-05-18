@@ -12,12 +12,12 @@ static HUNSPELL_LIBRARY: OnceCell<Library> = OnceCell::new();
 
 #[derive(Clone)]
 pub(crate) struct HunspellApi {
-    create_key: Symbol<'static, unsafe extern fn(*const c_char, *const c_char, *const c_char) -> *mut c_void>,
-    destroy: Symbol<'static, unsafe extern fn(*mut c_void)>,
-    add_dic: Symbol<'static, unsafe extern fn(*mut c_void, *const c_char) -> c_int>,
-    spell: Symbol<'static, unsafe extern fn(*mut c_void, *const c_char) -> c_int>,
-    suggest: Symbol<'static, unsafe extern fn(*mut c_void, *mut *mut *mut c_char, *const c_char) -> c_int>,
-    free_list: Symbol<'static, unsafe extern fn(*mut c_void, *mut *mut *mut c_char, c_int)>,
+    create_key: Symbol<'static, unsafe extern "C" fn(*const c_char, *const c_char, *const c_char) -> *mut c_void>,
+    destroy: Symbol<'static, unsafe extern "C" fn(*mut c_void)>,
+    add_dic: Symbol<'static, unsafe extern "C" fn(*mut c_void, *const c_char) -> c_int>,
+    spell: Symbol<'static, unsafe extern "C" fn(*mut c_void, *const c_char) -> c_int>,
+    suggest: Symbol<'static, unsafe extern "C" fn(*mut c_void, *mut *mut *mut c_char, *const c_char) -> c_int>,
+    free_list: Symbol<'static, unsafe extern "C" fn(*mut c_void, *mut *mut *mut c_char, c_int)>,
 }
 impl HunspellApi {
     fn get_or_load() -> Result<&'static Library, HunspellError> {
