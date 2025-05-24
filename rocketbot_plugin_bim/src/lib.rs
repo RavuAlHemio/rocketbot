@@ -765,9 +765,11 @@ impl BimPlugin {
         };
 
         let rider_username = if let Some(ar) = alternate_rider {
-            ar.as_str().expect("explicit rider not a string?!")
+            let ar_str = ar.as_str().expect("explicit rider not a string?!");
+            interface.resolve_username(ar_str).await
+                .unwrap_or_else(|| ar_str.to_owned())
         } else {
-            channel_message.message.sender.username.as_str()
+            channel_message.message.sender.username.clone()
         };
 
         let regular_price_string = command.options.get("price")
@@ -852,7 +854,7 @@ impl BimPlugin {
             bim_database_opt.as_ref(),
             company,
             company_def,
-            rider_username,
+            &rider_username,
             ride_timestamp,
             &regular_price,
             &actual_price,
