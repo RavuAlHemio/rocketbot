@@ -555,7 +555,6 @@ impl Number {
         }
 
         let zero = BigInt::from(0);
-        let one = BigInt::from(1);
         ret.push_str("\\,");
         let has_numerator_units = self.units.iter()
             .any(|(_unit, power)| power > &zero);
@@ -567,7 +566,7 @@ impl Number {
                 self.write_units(
                     &mut ret,
                     |_unit, power|
-                        if power > &one {
+                        if power > &zero {
                             Some(Cow::Borrowed(power))
                         } else {
                             None
@@ -580,7 +579,7 @@ impl Number {
             self.write_units(
                 &mut ret,
                 |_unit, power|
-                    if power < &one {
+                    if power < &zero {
                         Some(Cow::Owned(-power))
                     } else {
                         None
