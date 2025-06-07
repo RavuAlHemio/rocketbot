@@ -170,11 +170,14 @@ impl NumberValue {
             ret.push(c);
             cycle = (cycle + 1) % 3;
             if cycle == 0 {
-                ret.push('\\');
+                // we are scanning the number in reverse
+                // => appended spaces need to be reversed too
                 ret.push(',');
+                ret.push('\\');
             }
         }
-        if ret.ends_with(&['\\', ',']) {
+        // the number is still reversed
+        if ret.ends_with(&[',', '\\']) {
             ret.pop();
             ret.pop();
         }
