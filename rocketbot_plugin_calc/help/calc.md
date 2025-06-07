@@ -20,5 +20,6 @@ The output format can be modified by preceding the expression with one of the fo
 * `@trunc`: truncated decimal output
 * `@dms`: degrees-minutes-seconds output (with fractional seconds)
 * `@dm`: degrees-minutes output (with fractional minutes, as used e.g. in GPGGA messages in NMEA 0183)
+* `@tex`: (Ka)TeX output. Add `@thou` to also obtain thousands separators (this is ignored with `@hex`/`@bin`/`@oct`).
 
 For example, outputting the value of 12.5° in degrees-minutes-seconds, use `{cpfx}calc @dms 12.5` to obtain `12°30'0"`.

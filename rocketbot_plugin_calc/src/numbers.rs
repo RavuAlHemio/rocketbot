@@ -1,3 +1,4 @@
+use std::borrow::Cow;
 use std::cmp::Ordering;
 use std::fmt::{self, Write};
 use std::ops::{Add, AddAssign, Div, DivAssign, Mul, MulAssign, Neg, Rem, RemAssign, Sub, SubAssign};
@@ -151,6 +152,56 @@ impl NumberValue {
                 None => Self::Float(*f), // conversion failed
             },
         }
+    }
+
+    pub fn to_tex_string_thou_sep(&self) -> String {
+        let me_string = self.to_string();
+        let (whole_slice, fractional_slice) = if let Some(point_index) = me_string.find('.') {
+            (&me_string[..point_index], &me_string[point_index+1..])
+        } else {
+            (&me_string[..], "")
+        };
+
+        let mut ret = Vec::new();
+
+        // handle the whole-number part
+        let mut cycle: u8 = 0;
+        for c in whole_slice.chars().rev() {
+            ret.push(c);
+            cycle = (cycle + 1) % 3;
+            if cycle == 0 {
+                ret.push('\\');
+                ret.push(',');
+            }
+        }
+        if ret.ends_with(&['\\', ',']) {
+            ret.pop();
+            ret.pop();
+        }
+
+        // we ran through the whole-number part in reverse
+        ret.reverse();
+
+        if fractional_slice.len() > 0 {
+            ret.push('.');
+
+            // handle the fractional part
+            cycle = 0;
+            for c in fractional_slice.chars() {
+                ret.push(c);
+                cycle = (cycle + 1) % 3;
+                if cycle == 0 {
+                    ret.push('\\');
+                    ret.push(',');
+                }
+            }
+            if ret.ends_with(&['\\', ',']) {
+                ret.pop();
+                ret.pop();
+            }
+        }
+
+        ret.into_iter().collect()
     }
 }
 impl PartialOrd for NumberValue {
@@ -470,6 +521,81 @@ impl Number {
             }
         }
         ret
+    }
+
+    fn write_units<'me, 's, 'n, P>(&'me self, s: &mut String, filter_map: P)
+            where
+                P : Fn(&'s String, &'n BigInt) -> Option<Cow<'n, BigInt>>,
+                'me : 's,
+                'me : 'n {
+        let mut first_unit = false;
+        let one = BigInt::from(1);
+        for (unit, power) in &self.units {
+            let Some(mapped_power) = filter_map(unit, power) else {
+                continue;
+            };
+            if first_unit {
+                first_unit = false;
+            } else {
+                s.push_str("\\,");
+            }
+            s.push_str("\\text{");
+            s.push_str(unit);
+            s.push_str("}");
+            if &*mapped_power != &one {
+                write!(s, "^{}{}{}", '{', mapped_power, '}').unwrap();
+            }
+        }
+    }
+
+    pub fn units_to_tex(&self) -> String {
+        let mut ret = String::new();
+        if self.units.len() == 0 {
+            return ret;
+        }
+
+        let zero = BigInt::from(0);
+        let one = BigInt::from(1);
+        ret.push_str("\\,");
+        let has_numerator_units = self.units.iter()
+            .any(|(_unit, power)| power > &zero);
+        let has_denominator_units = self.units.iter()
+            .any(|(_unit, power)| power < &zero);
+        if has_denominator_units {
+            ret.push_str("\\frac{");
+            if has_numerator_units {
+                self.write_units(
+                    &mut ret,
+                    |_unit, power|
+                        if power > &one {
+                            Some(Cow::Borrowed(power))
+                        } else {
+                            None
+                        }
+                );
+            } else {
+                ret.push('1');
+            }
+            ret.push_str("}{");
+            self.write_units(
+                &mut ret,
+                |_unit, power|
+                    if power < &one {
+                        Some(Cow::Owned(-power))
+                    } else {
+                        None
+                    }
+            );
+            ret.push_str("}");
+            ret
+        } else {
+            // only numerator units
+            self.write_units(
+                &mut ret,
+                |_unit, power| Some(Cow::Borrowed(power))
+            );
+            ret
+        }
     }
 }
 impl fmt::Display for Number {
