@@ -531,7 +531,7 @@ impl Number {
                 P : Fn(&'s String, &'n BigInt) -> Option<Cow<'n, BigInt>>,
                 'me : 's,
                 'me : 'n {
-        let mut first_unit = false;
+        let mut first_unit = true;
         let one = BigInt::from(1);
         for (unit, power) in &self.units {
             let Some(mapped_power) = filter_map(unit, power) else {
