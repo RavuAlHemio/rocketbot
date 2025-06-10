@@ -75,3 +75,40 @@ AS $$
         END LOOP;
     END;
 $$;
+
+CREATE OR REPLACE FUNCTION bim.last_rider_count_reached
+( unit bigint
+) RETURNS TABLE
+( ride_count bigint
+, ride_id bigint
+, rider_username character varying(256)
+, "timestamp" timestamp with time zone
+)
+LANGUAGE plpython3u
+STABLE STRICT
+AS $$
+from collections import defaultdict
+global unit
+
+if unit is None:
+    return
+if unit == 0:
+    unit = 1
+
+rider_to_count = defaultdict(lambda: 0)
+hit_counts = set()
+for row in plpy.cursor('SELECT id, "timestamp", old_rider, new_rider FROM bim.ridden_vehicles_between_riders(false)'):
+    if row["old_rider"] is not None:
+        rider_to_count[row["old_rider"]] -= 1
+    rider_to_count[row["new_rider"]] += 1
+
+    for (rider, count) in rider_to_count.items():
+        if count == 0:
+            continue
+        if count % unit == 0:
+            if count in hit_counts:
+                continue
+            hit_counts.add(count)
+
+            yield (count, row["id"], row["new_rider"], row["timestamp"])
+$$;
