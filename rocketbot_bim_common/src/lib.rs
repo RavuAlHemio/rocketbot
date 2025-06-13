@@ -82,7 +82,7 @@ pub enum PowerSource {
     Rope,
 }
 impl PowerSource {
-    fn powered_from_str(&self) -> &'static str {
+    pub fn powered_from_str(&self) -> &'static str {
         match self {
             Self::Unpowered => "another vehicle",
             Self::OverheadWire => "overhead wire",
