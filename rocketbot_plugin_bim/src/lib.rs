@@ -532,7 +532,7 @@ impl BimPlugin {
 
                         write_expect!(db_response, "\na *{}*", vehicle.vehicle_class);
                         if vehicle.power_sources.len() > 0 {
-                            write_expect!(db_response, " powered by ");
+                            write_expect!(db_response, " powered from ");
                             for (i, ps) in vehicle.power_sources.iter().enumerate() {
                                 if i == 0 {
                                     // write nothing
@@ -542,7 +542,7 @@ impl BimPlugin {
                                 } else {
                                     write_expect!(db_response, ", ");
                                 }
-                                write_expect!(db_response, "{}", ps);
+                                write_expect!(db_response, "{}", ps.powered_from_str());
                             }
                         }
 

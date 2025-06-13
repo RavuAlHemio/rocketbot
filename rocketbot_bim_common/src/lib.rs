@@ -81,6 +81,26 @@ pub enum PowerSource {
     Animal,
     Rope,
 }
+impl PowerSource {
+    fn powered_from_str(&self) -> &'static str {
+        match self {
+            Self::Unpowered => "another vehicle",
+            Self::OverheadWire => "overhead wire",
+            Self::ThirdRail => "third rail",
+            Self::Battery => "battery",
+            Self::Hydrogen => "hydrogen tank",
+            Self::Gasoline => "gasoline tank",
+            Self::Diesel => "diesel tank",
+            Self::Kerosene => "kerosene tank",
+            Self::Cng => "CNG tank",
+            Self::Lng => "LNG tank",
+            Self::Lpg => "LPG tank",
+            Self::Human => "human power",
+            Self::Animal => "animal power",
+            Self::Rope => "rope",
+        }
+    }
+}
 impl fmt::Display for PowerSource {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
