@@ -9,6 +9,7 @@ mod parsing;
 mod units;
 
 
+use std::collections::BTreeSet;
 use std::sync::{Arc, Weak};
 use std::time::{Duration, Instant};
 
@@ -301,6 +302,34 @@ impl CalcPlugin {
         ).await;
     }
 
+    async fn handle_calcunit(&self, channel_message: &ChannelMessage, _command: &CommandInstance) {
+        let interface = match self.interface.upgrade() {
+            None => return,
+            Some(i) => i,
+        };
+
+        let all_unit_names = {
+            let config = self.config.read().await;
+            let mut all_unit_names: BTreeSet<String> = BTreeSet::new();
+            for unit in config.unit_database.get_base_unit_names() {
+                all_unit_names.insert(unit);
+            }
+            for unit in config.unit_database.get_derived_unit_names() {
+                all_unit_names.insert(unit);
+            }
+            all_unit_names
+        };
+        let unit_names: Vec<String> = all_unit_names.into_iter()
+            .map(|un| format!("`{}`", un))
+            .collect();
+        let units_str = unit_names.join(", ");
+        send_channel_message!(
+            interface,
+            &channel_message.channel.name,
+            &format!("The following units are known: {}", units_str),
+        ).await;
+    }
+
     async fn handle_factor(&self, channel_message: &ChannelMessage, command: &CommandInstance) {
         let interface = match self.interface.upgrade() {
             None => return,
@@ -516,6 +545,15 @@ impl RocketBotPlugin for CalcPlugin {
         ).await;
         my_interface.register_channel_command(
             &CommandDefinitionBuilder::new(
+                "calcunit",
+                "calc",
+                "{cpfx}calcunit",
+                "Lists available calculator units.",
+            )
+                .build()
+        ).await;
+        my_interface.register_channel_command(
+            &CommandDefinitionBuilder::new(
                 "factor",
                 "calc",
                 "{cpfx}factor NUMBER",
@@ -553,6 +591,8 @@ impl RocketBotPlugin for CalcPlugin {
             self.handle_calcconst(channel_message, command).await
         } else if command.name == "calcfunc" {
             self.handle_calcfunc(channel_message, command).await
+        } else if command.name == "calcunit" {
+            self.handle_calcunit(channel_message, command).await
         } else if command.name == "factor" {
             self.handle_factor(channel_message, command).await
         } else if command.name == "redfrac" {
@@ -567,6 +607,8 @@ impl RocketBotPlugin for CalcPlugin {
             Some(include_str!("../help/calcconst.md").to_owned())
         } else if command_name == "calcfunc" {
             Some(include_str!("../help/calcfunc.md").to_owned())
+        } else if command_name == "calcunit" {
+            Some(include_str!("../help/calcunit.md").to_owned())
         } else if command_name == "factor" {
             Some(include_str!("../help/factor.md").to_owned())
         } else if command_name == "redfrac" {

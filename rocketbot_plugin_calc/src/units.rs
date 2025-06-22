@@ -1,4 +1,4 @@
-use std::collections::{BTreeMap, HashMap};
+use std::collections::{BTreeMap, BTreeSet, HashMap};
 use std::collections::hash_map::Entry;
 use std::fmt;
 
@@ -235,6 +235,24 @@ impl UnitDatabase {
                 Err(UnitDatabaseError::UnknownDerivedUnit(letters.to_owned()))
             }
         }
+    }
+
+    pub fn get_base_unit_names(&self) -> BTreeSet<String> {
+        self.letters_to_base_unit.keys()
+            .map(|name| name.clone())
+            .collect()
+    }
+
+    pub fn get_derived_unit_names(&self) -> BTreeSet<String> {
+        self.letters_to_derived_unit.keys()
+            .map(|name| name.clone())
+            .collect()
+    }
+
+    pub fn get_si_prefixes(&self) -> BTreeMap<String, f64> {
+        self.si_prefix_to_factor.iter()
+            .map(|(pfx, fct)| (pfx.clone(), fct.clone()))
+            .collect()
     }
 }
 
