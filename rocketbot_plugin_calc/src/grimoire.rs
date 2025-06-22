@@ -18,6 +18,7 @@ pub const WGS84_EQUATOR_RADIUS_M: f64 = 6_378_137.0;
 pub const WGS84_INVERSE_FLATTENING: f64 = 298.257_223_563;
 pub static WGS84_MEAN_RADIUS: Lazy<f64> = Lazy::new(|| ellipsoid_mean_radius(WGS84_EQUATOR_RADIUS_M, WGS84_INVERSE_FLATTENING));
 pub const SPEED_LIGHT_M_PER_S: i64 = 299_792_458;
+pub const RACK_POST_GAP_19IN_IN: f64 = 17.75;
 
 
 pub(crate) fn get_canonical_constants() -> HashMap<String, AstNode> {
@@ -38,6 +39,13 @@ pub(crate) fn get_canonical_constants() -> HashMap<String, AstNode> {
     prepared.insert("c", AstNode::Number(Number::new(
         NumberValue::Int(BigInt::from(SPEED_LIGHT_M_PER_S)),
         m_per_s,
+    )));
+
+    let mut inches = NumberUnits::new();
+    inches.insert("in".to_owned(), (1i8).into());
+    prepared.insert("rackPostGap19in", AstNode::Number(Number::new(
+        NumberValue::Float(RACK_POST_GAP_19IN_IN),
+        inches,
     )));
 
     prepared.drain()
