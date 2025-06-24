@@ -6,6 +6,9 @@ use async_trait::async_trait;
 use chrono::{Datelike, Local, NaiveDate, Weekday};
 use julian;
 use once_cell::sync::Lazy;
+use ordered_float::NotNan;
+use rand::Rng;
+use rand::seq::SliceRandom;
 use regex::Regex;
 use rocketbot_interface::send_channel_message;
 use rocketbot_interface::commands::{CommandDefinitionBuilder, CommandInstance};
@@ -34,6 +37,7 @@ static DATE_REGEX: Lazy<Regex> = Lazy::new(|| Regex::new(concat!(
 #[derive(Clone, Default, Debug, Deserialize, Eq, Hash, Ord, PartialEq, PartialOrd, Serialize)]
 struct Config {
     #[serde(default)] pub additional_holidays: BTreeSet<Holiday>,
+    #[serde(default)] pub mess_up_date_probability: NotNan<f64>,
 }
 
 #[derive(Clone, Default, Debug, Deserialize, Eq, Hash, Ord, PartialEq, PartialOrd, Serialize)]
@@ -168,10 +172,82 @@ impl DatePlugin {
             Some(i) => i,
         };
 
-        let date = match Self::parse_date_chrono(command.rest.trim()) {
+        let mut date = match Self::parse_date_chrono(command.rest.trim()) {
             Some(d) => d,
             None => return,
         };
+
+        // detect Serious Mode
+        let mut serious_business = false;
+        let behavior_flags = serde_json::Value::Object(interface.obtain_behavior_flags().await);
+        if let Some(serious_mode_until) = behavior_flags["srs"][&channel_message.channel.id].as_i64() {
+            if serious_mode_until > Local::now().timestamp() {
+                serious_business = true;
+            }
+        }
+
+        if !serious_business {
+            let probability = {
+                let config_guard = self.config.read().await;
+                config_guard.mess_up_date_probability
+            };
+            if *probability > 0.0 {
+                let wibble: f64 = rand::thread_rng().gen();
+                if wibble < *probability {
+                    // mess up the date
+                    let century = u32::try_from(date.year() / 100).unwrap();
+                    let year = u32::try_from(date.year() % 100).unwrap();
+                    let month = date.month();
+                    let day = date.day();
+
+                    macro_rules! make_date {
+                        ($century:expr, $year:expr, $day:expr, $month:expr) => {
+                            NaiveDate::from_ymd_opt(i32::try_from($century*100 + $year).unwrap(), $day, $month)
+                        };
+                    }
+
+                    let permutations = vec![
+                        // 'CYDM', 'CMYD', 'CMDY', 'CDYM', 'CDMY'
+                        make_date!(century, year, day, month),
+                        make_date!(century, month, year, day),
+                        make_date!(century, month, day, year),
+                        make_date!(century, day, year, month),
+                        make_date!(century, day, month, year),
+
+                        // 'YCMD', 'YCDM', 'YMCD', 'YMDC', 'YDCM', 'YDMC',
+                        make_date!(year, century, month, day),
+                        make_date!(year, century, day, month),
+                        make_date!(year, month, century, day),
+                        make_date!(year, month, day, century),
+                        make_date!(year, day, century, month),
+                        make_date!(year, day, month, century),
+
+                        // 'MCYD', 'MCDY', 'MYCD', 'MYDC', 'MDCY', 'MDYC',
+                        make_date!(month, century, year, day),
+                        make_date!(month, century, day, year),
+                        make_date!(month, year, century, day),
+                        make_date!(month, year, day, century),
+                        make_date!(month, day, century, year),
+                        make_date!(month, day, year, century),
+
+                        // 'DCYM', 'DCMY', 'DYCM', 'DYMC', 'DMCY', 'DMYC'
+                        make_date!(day, century, year, month),
+                        make_date!(day, century, month, year),
+                        make_date!(day, year, century, month),
+                        make_date!(day, year, month, century),
+                        make_date!(day, month, century, year),
+                        make_date!(day, month, year, century),
+                    ];
+                    let valid_permutations: Vec<NaiveDate> = permutations.into_iter()
+                        .filter_map(|perm| perm)
+                        .collect();
+                    if valid_permutations.len() > 0 {
+                        // pick one :-)
+                        date = *valid_permutations.choose(&mut rand::thread_rng()).unwrap();
+                    }
+                }
+            }
+        }
 
         let delta = date.signed_duration_since(Local::now().date_naive());
         let in_days = delta.num_days();
