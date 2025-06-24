@@ -14,13 +14,19 @@ pub type NumberUnits = BTreeMap<String, BigInt>;
 #[derive(Clone, Debug, Deserialize, Eq, Hash, PartialEq, Serialize)]
 pub(crate) struct BaseUnit {
     pub letters: String,
+    #[serde(default)] pub name: Option<String>,
+    #[serde(default)] pub description: Option<String>,
 }
 impl BaseUnit {
     pub fn new(
         letters: String,
+        name: Option<String>,
+        description: Option<String>,
     ) -> Self {
         Self {
             letters,
+            name,
+            description,
         }
     }
 }
@@ -31,17 +37,23 @@ pub(crate) struct DerivedUnit {
     #[serde(with = "number_units_serde")]
     pub parents: NumberUnits,
     pub factor_of_parents: f64,
+    #[serde(default)] pub name: Option<String>,
+    #[serde(default)] pub description: Option<String>,
 }
 impl DerivedUnit {
     pub fn new(
         letters: String,
         parents: NumberUnits,
         factor_of_parents: f64,
+        name: Option<String>,
+        description: Option<String>,
     ) -> Self {
         Self {
             letters,
             parents,
             factor_of_parents,
+            name,
+            description,
         }
     }
 }
@@ -144,6 +156,8 @@ impl UnitDatabase {
                     letters.to_owned(),
                     synth_parents,
                     *ten_pow,
+                    None,
+                    None,
                 );
                 return Some(synth_derived_unit);
             }
@@ -473,21 +487,21 @@ mod tests {
         let mut db = UnitDatabase::new_empty();
         db.insert_canonical_si_prefixes();
 
-        db.register_base_unit(BaseUnit::new("kg".to_owned())).unwrap();
-        db.register_base_unit(BaseUnit::new("m".to_owned())).unwrap();
-        db.register_base_unit(BaseUnit::new("s".to_owned())).unwrap();
-        db.register_base_unit(BaseUnit::new("A".to_owned())).unwrap();
+        db.register_base_unit(BaseUnit::new("kg".to_owned(), None, None)).unwrap();
+        db.register_base_unit(BaseUnit::new("m".to_owned(), None, None)).unwrap();
+        db.register_base_unit(BaseUnit::new("s".to_owned(), None, None)).unwrap();
+        db.register_base_unit(BaseUnit::new("A".to_owned(), None, None)).unwrap();
 
         {
             let mut s = NumberUnits::new();
             s.insert("s".to_owned(), BigInt::from(1));
-            db.register_derived_unit(DerivedUnit::new("h".to_owned(), s, 60.0*60.0)).unwrap();
+            db.register_derived_unit(DerivedUnit::new("h".to_owned(), s, 60.0*60.0, None, None)).unwrap();
         }
 
         {
             let mut sx1 = NumberUnits::new();
             sx1.insert("s".to_owned(), BigInt::from(-1));
-            db.register_derived_unit(DerivedUnit::new("Hz".to_owned(), sx1, 1.0)).unwrap();
+            db.register_derived_unit(DerivedUnit::new("Hz".to_owned(), sx1, 1.0, None, None)).unwrap();
         }
 
         {
@@ -495,32 +509,32 @@ mod tests {
             kg_m_sx2.insert("kg".to_owned(), BigInt::from(1));
             kg_m_sx2.insert("m".to_owned(), BigInt::from(1));
             kg_m_sx2.insert("s".to_owned(), BigInt::from(-2));
-            db.register_derived_unit(DerivedUnit::new("N".to_owned(), kg_m_sx2, 1.0)).unwrap();
+            db.register_derived_unit(DerivedUnit::new("N".to_owned(), kg_m_sx2, 1.0, None, None)).unwrap();
         }
 
         {
             let mut n_mx2 = NumberUnits::new();
             n_mx2.insert("N".to_owned(), BigInt::from(1));
             n_mx2.insert("m".to_owned(), BigInt::from(-2));
-            db.register_derived_unit(DerivedUnit::new("Pa".to_owned(), n_mx2, 1.0)).unwrap();
+            db.register_derived_unit(DerivedUnit::new("Pa".to_owned(), n_mx2, 1.0, None, None)).unwrap();
         }
 
         {
             let mut m = NumberUnits::new();
             m.insert("m".to_owned(), BigInt::from(1));
-            db.register_derived_unit(DerivedUnit::new("in".to_owned(), m, 0.0254)).unwrap();
+            db.register_derived_unit(DerivedUnit::new("in".to_owned(), m, 0.0254, None, None)).unwrap();
         }
 
         {
             let mut inch = NumberUnits::new();
             inch.insert("in".to_owned(), BigInt::from(1));
-            db.register_derived_unit(DerivedUnit::new("ft".to_owned(), inch, 12.0)).unwrap();
+            db.register_derived_unit(DerivedUnit::new("ft".to_owned(), inch, 12.0, None, None)).unwrap();
         }
 
         {
             let mut kg = NumberUnits::new();
             kg.insert("kg".to_owned(), BigInt::from(1));
-            db.register_derived_unit(DerivedUnit::new("lb".to_owned(), kg, 0.45359237)).unwrap();
+            db.register_derived_unit(DerivedUnit::new("lb".to_owned(), kg, 0.45359237, None, None)).unwrap();
         }
 
         {
@@ -528,7 +542,7 @@ mod tests {
             ft_lb_sx2.insert("ft".to_owned(), BigInt::from(1));
             ft_lb_sx2.insert("lb".to_owned(), BigInt::from(1));
             ft_lb_sx2.insert("s".to_owned(), BigInt::from(-2));
-            db.register_derived_unit(DerivedUnit::new("lbf".to_owned(), ft_lb_sx2, 32.1740485564304)).unwrap();
+            db.register_derived_unit(DerivedUnit::new("lbf".to_owned(), ft_lb_sx2, 32.1740485564304, None, None)).unwrap();
         }
 
         {
@@ -537,7 +551,7 @@ mod tests {
             kg_m2_sx3_ax1.insert("m".to_owned(), BigInt::from(2));
             kg_m2_sx3_ax1.insert("s".to_owned(), BigInt::from(-3));
             kg_m2_sx3_ax1.insert("A".to_owned(), BigInt::from(-1));
-            db.register_derived_unit(DerivedUnit::new("V".to_owned(), kg_m2_sx3_ax1, 1.0)).unwrap();
+            db.register_derived_unit(DerivedUnit::new("V".to_owned(), kg_m2_sx3_ax1, 1.0, None, None)).unwrap();
         }
 
         {
@@ -545,7 +559,7 @@ mod tests {
             kg_m2_sx3.insert("kg".to_owned(), BigInt::from(1));
             kg_m2_sx3.insert("m".to_owned(), BigInt::from(2));
             kg_m2_sx3.insert("s".to_owned(), BigInt::from(-3));
-            db.register_derived_unit(DerivedUnit::new("W".to_owned(), kg_m2_sx3, 1.0)).unwrap();
+            db.register_derived_unit(DerivedUnit::new("W".to_owned(), kg_m2_sx3, 1.0, None, None)).unwrap();
         }
 
         db

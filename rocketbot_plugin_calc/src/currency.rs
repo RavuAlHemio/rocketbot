@@ -15,6 +15,8 @@ pub(crate) async fn update_currencies(unit_database: &mut UnitDatabase) {
     if unit_database.get_base_unit("EUR").is_none() {
         unit_database.register_base_unit(BaseUnit::new(
             "EUR".to_owned(),
+            Some("euro".to_owned()),
+            Some("base unit of currency within the Eurozone".to_owned()),
         )).expect("failed to register base unit EUR");
     }
 
@@ -96,6 +98,8 @@ pub(crate) async fn update_currencies(unit_database: &mut UnitDatabase) {
                 currency.to_owned(),
                 eur_parent,
                 rate_eur_to_cur,
+                Some("(currency)".to_owned()),
+                None,
             ))
         };
         if let Err(e) = change_result {
