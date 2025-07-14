@@ -112,3 +112,50 @@ for row in plpy.cursor('SELECT id, "timestamp", old_rider, new_rider FROM bim.ri
 
             yield (count, row["id"], row["new_rider"], row["timestamp"])
 $$;
+
+CREATE OR REPLACE FUNCTION bim.days_without_rides
+( since_date date
+) RETURNS TABLE
+( from_date date
+, to_date date
+)
+LANGUAGE plpython3u
+STABLE STRICT
+AS $$
+import datetime
+import re
+
+global since_date
+
+if since_date is None:
+    return
+
+DATE_RE = re.compile("^(?P<year>[0-9]+)-(?P<month>[0-9]+)-(?P<day>[0-9]+)$")
+def parse_date(date_str):
+    m = DATE_RE.match(date_str)
+    return datetime.date(
+        int(m.group("year")),
+        int(m.group("month")),
+        int(m.group("day")),
+    )
+def stringify_date(date):
+    return f"{date.year:04}-{date.month:02}-{date.day:02}"
+
+date_walker = parse_date(since_date)
+today = datetime.date.today()
+for row in plpy.execute('SELECT DISTINCT CAST("timestamp" AS date) tsdate FROM bim.rides ORDER BY tsdate'):
+    ride_date = parse_date(row["tsdate"])
+    if ride_date < date_walker:
+        # fast forward
+        continue
+
+    if date_walker < ride_date:
+        # there is a drought between date_walker and (ride_date - 1)
+        day_before_ride = datetime.date.fromordinal(ride_date.toordinal() - 1)
+        yield (stringify_date(date_walker), stringify_date(day_before_ride))
+        date_walker = ride_date
+    date_walker = datetime.date.fromordinal(date_walker.toordinal() + 1)
+if date_walker < today:
+    # drought at the end
+    yield (stringify_date(date_walker), stringify_date(today))
+$$;
