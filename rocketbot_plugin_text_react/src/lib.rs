@@ -9,20 +9,25 @@ use rocketbot_interface::model::ChannelMessage;
 use rocketbot_interface::sync::RwLock;
 use serde_json;
 use tracing::error;
+use unicode_normalization::UnicodeNormalization;
+use unicode_properties::{GeneralCategory, UnicodeGeneralCategory};
 
 
 #[derive(Clone, Debug)]
 struct Reaction {
     text_pattern: Regex,
+    strip_diacritics: bool,
     reaction_names: Vec<String>,
 }
 impl Reaction {
     pub fn new(
         text_pattern: Regex,
+        strip_diacritics: bool,
         reaction_names: Vec<String>,
     ) -> Self {
         Self {
             text_pattern,
+            strip_diacritics,
             reaction_names,
         }
     }
@@ -55,6 +60,11 @@ impl TextReactPlugin {
             let text_pattern = Regex::new(text_pattern_str)
                 .or_msg("failed to parse text_pattern")?;
 
+            let strip_diacritics = match reaction_config.get("strip_diacritics") {
+                Some(sd) => sd.as_bool().ok_or("strip_diacritics is not a bool")?,
+                None => false,
+            };
+
             let reaction_names_values = reaction_config
                 .get("reaction_names").ok_or("reaction_names is missing")?
                 .as_array().ok_or("reaction_names is not a list")?;
@@ -67,6 +77,7 @@ impl TextReactPlugin {
 
             reactions.push(Reaction::new(
                 text_pattern,
+                strip_diacritics,
                 reaction_names,
             ));
         }
@@ -115,11 +126,25 @@ impl RocketBotPlugin for TextReactPlugin {
             None => return, // just some attachments
         };
 
+        // to strip diacritics:
+        // 1. decompose to NFD or NFKD (which splits base and combining characters)
+        // 2. strip any combining character (nonspacing mark, Mn)
+        let raw_message_without_diacritics: String = raw_message
+            .nfd()
+            .filter(|c| c.general_category() != GeneralCategory::NonspacingMark)
+            .collect();
+
         let config_guard = self.config.read().await;
 
         // look for a match
         for reaction in &config_guard.reactions {
-            if reaction.text_pattern.is_match(&raw_message) {
+            let string_to_check = if reaction.strip_diacritics {
+                raw_message_without_diacritics.as_str()
+            } else {
+                raw_message.as_str()
+            };
+
+            if reaction.text_pattern.is_match(string_to_check) {
                 // react
                 for reaction_name in &reaction.reaction_names {
                     interface.add_reaction(

@@ -10,3 +10,5 @@ regex = { version = "1.9" }
 rocketbot_interface = { path = "../rocketbot_interface" }
 serde_json = { version = "1.0" }
 tracing = { version = "0.1" }
+unicode-normalization = { version = "0.1" }
+unicode-properties = { version = "0.1" }
