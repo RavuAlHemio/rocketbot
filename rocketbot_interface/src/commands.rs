@@ -10,6 +10,7 @@ bitflags! {
         const ACCEPT_FROM_BOTS = 0b00000001;
         const NO_ARGUMENT_PARSING = 0b00000010;
         const REST_AS_ARGS = 0b00000100;
+        const ALLOW_PRECEDING_QUOTE = 0b00001000;
     }
 }
 
@@ -202,6 +203,7 @@ pub struct CommandInstance {
     pub options: HashMap<String, CommandValue>,
     pub args: Vec<String>,
     pub rest: String,
+    pub preceding_quote: Option<String>,
 }
 impl CommandInstance {
     pub fn new(
@@ -210,6 +212,7 @@ impl CommandInstance {
         options: HashMap<String, CommandValue>,
         args: Vec<String>,
         rest: String,
+        preceding_quote: Option<String>,
     ) -> CommandInstance {
         CommandInstance {
             name,
@@ -217,6 +220,7 @@ impl CommandInstance {
             options,
             args,
             rest,
+            preceding_quote,
         }
     }
 }

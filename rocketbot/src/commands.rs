@@ -21,7 +21,11 @@ pub(crate) fn parse_command(
     command_config: &CommandConfiguration,
     pieces: &[Token],
     raw_message: &str,
+    preceding_quote: Option<&str>,
 ) -> Option<CommandInstance> {
+    // bot check must be performed by caller
+    // preceding quote check must be performed by caller
+
     if command.behaviors.contains(CommandBehaviors::NO_ARGUMENT_PARSING) {
         let rest_string = if pieces.len() > 1 {
             raw_message[pieces[1].orig_range.start..].to_owned()
@@ -36,6 +40,7 @@ pub(crate) fn parse_command(
             HashMap::new(),
             Vec::new(),
             rest_string,
+            preceding_quote.map(|q| q.to_owned()),
         ));
     }
 
@@ -142,6 +147,7 @@ pub(crate) fn parse_command(
         option_values,
         pos_args,
         rest_string,
+        preceding_quote.map(|q| q.to_owned()),
     ))
 }
 
@@ -253,6 +259,7 @@ mod tests {
             &CommandConfiguration::default(),
             &pieces,
             &message,
+            None,
         )
     }
 

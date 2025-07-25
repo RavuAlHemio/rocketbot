@@ -5,7 +5,7 @@ use std::collections::hash_map::Entry as HashMapEntry;
 use std::fmt::Write as FmtWrite;
 use std::io::{Cursor, Read, Write as IoWrite};
 use std::ops::{Deref, DerefMut};
-use std::sync::{Arc, Weak};
+use std::sync::{Arc, LazyLock, Weak};
 use std::time::Duration;
 
 use async_trait::async_trait;
@@ -63,6 +63,9 @@ static ID_ALPHABET: &'static str = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqr
 const ID_LENGTH: usize = 17;
 static BOUNDARY_ALPHABET: &'static str = ID_ALPHABET;
 const BOUNDARY_LENGTH: usize = 64;
+static QUOTE_RE: LazyLock<Regex> = LazyLock::new(|| Regex::new(
+    "^\\s*\\[ \\]\\([^)]+\\)\\s*",
+).expect("failed to compile quote regular expression"));
 
 
 struct ChannelDatabase {
@@ -2530,10 +2533,23 @@ async fn distribute_channel_message_commands(channel_message: &ChannelMessage, s
 
     let command_prefix = &command_config.command_prefix;
     let message = &channel_message.message;
-    let raw_message = match &message.raw {
-        Some(rm) => rm,
+    let raw_message_with_quote = match &message.raw {
+        Some(rmwq) => rmwq,
         None => return, // no commands in non-textual messages
     };
+
+    // do we have a quote to strip?
+    let (raw_message, preceding_quote) = if let Some(stripped_quote) = QUOTE_RE.find(raw_message_with_quote) {
+        if stripped_quote.start() == 0 {
+            let (rm, iq) = raw_message_with_quote.split_at(stripped_quote.len());
+            (rm, Some(iq))
+        } else {
+            (raw_message_with_quote.as_str(), None)
+        }
+    } else {
+        (raw_message_with_quote.as_str(), None)
+    };
+
     if !raw_message.starts_with(command_prefix) {
         return;
     }
@@ -2563,7 +2579,12 @@ async fn distribute_channel_message_commands(channel_message: &ChannelMessage, s
         return;
     }
 
-    let instance_opt = parse_command(&command, &command_config, &pieces, &raw_message);
+    if preceding_quote.is_some() && !command.behaviors.contains(CommandBehaviors::ALLOW_PRECEDING_QUOTE) {
+        // command does not allow a quote in front of it
+        return;
+    }
+
+    let instance_opt = parse_command(&command, &command_config, &pieces, &raw_message, preceding_quote);
 
     // distribute among plugins
     {
@@ -2585,10 +2606,23 @@ async fn distribute_private_message_commands(private_message: &PrivateMessage, s
 
     let command_prefix = &command_config.command_prefix;
     let message = &private_message.message;
-    let raw_message = match &message.raw {
-        Some(rm) => rm,
+    let raw_message_with_quote = match &message.raw {
+        Some(rmwq) => rmwq,
         None => return, // no commands in non-textual messages
     };
+
+    // do we have a quote to strip?
+    let (raw_message, preceding_quote) = if let Some(stripped_quote) = QUOTE_RE.find(raw_message_with_quote) {
+        if stripped_quote.start() == 0 {
+            let (rm, iq) = raw_message_with_quote.split_at(stripped_quote.len());
+            (rm, Some(iq))
+        } else {
+            (raw_message_with_quote.as_str(), None)
+        }
+    } else {
+        (raw_message_with_quote.as_str(), None)
+    };
+
     if !raw_message.starts_with(command_prefix) {
         return;
     }
@@ -2618,7 +2652,12 @@ async fn distribute_private_message_commands(private_message: &PrivateMessage, s
         return;
     }
 
-    let instance_opt = parse_command(&command, &command_config, &pieces, &raw_message);
+    if preceding_quote.is_some() && !command.behaviors.contains(CommandBehaviors::ALLOW_PRECEDING_QUOTE) {
+        // command does not allow a quote in front of it
+        return;
+    }
+
+    let instance_opt = parse_command(&command, &command_config, &pieces, &raw_message, preceding_quote);
 
     // distribute among plugins
     {

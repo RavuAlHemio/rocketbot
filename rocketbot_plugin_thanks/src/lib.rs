@@ -7,7 +7,7 @@ use async_trait::async_trait;
 use chrono::Utc;
 use regex::Regex;
 use rocketbot_interface::{JsonValueExtensions, send_channel_message};
-use rocketbot_interface::commands::{CommandDefinitionBuilder, CommandInstance};
+use rocketbot_interface::commands::{CommandBehaviors, CommandDefinitionBuilder, CommandInstance};
 use rocketbot_interface::interfaces::{RocketBotInterface, RocketBotPlugin};
 use rocketbot_interface::model::ChannelMessage;
 use rocketbot_interface::sync::RwLock;
@@ -209,7 +209,11 @@ impl ThanksPlugin {
         let now = Utc::now();
         let thanker_lower = channel_message.message.sender.username.to_lowercase();
         let channel = channel_message.channel.name.clone();
-        let reason = command.rest.clone();
+        let reason = if let Some(preceding_quote) = command.preceding_quote.as_ref() {
+            format!("{} {}", preceding_quote, command.rest)
+        } else {
+            command.rest.clone()
+        };
 
         let thankees_lower: BTreeSet<String> = thankees.iter()
             .map(|thankee| thankee.to_lowercase())
@@ -643,6 +647,7 @@ impl RocketBotPlugin for ThanksPlugin {
             "{cpfx}{cmd} USERNAME [REASON]",
             "Thanks a user.",
         )
+            .behaviors(CommandBehaviors::ALLOW_PRECEDING_QUOTE)
             .build();
         let thank_command = thanks_command.copy_named("thank");
         let thx_command = thanks_command.copy_named("thx");
