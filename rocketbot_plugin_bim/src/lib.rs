@@ -5134,95 +5134,23 @@ async fn collect_vehicle_data(
     highlight_coupled_rides: bool,
     before_timestamp_or_id: Option<(DateTime<Local>, i64)>,
 ) -> Result<Vec<RideTableVehicle>, tokio_postgres::Error> {
-    async fn prepare_pair(
-        ride_conn: &tokio_postgres::Transaction<'_>,
-        count_query: &str,
-        count_query_before_suffix: &str,
-        streak_suffix_start: &str,
-        streak_suffix_before_infix: &str,
-        streak_suffix_end: &str,
-        before: bool,
-    ) -> Result<(tokio_postgres::Statement, tokio_postgres::Statement), tokio_postgres::Error> {
-        let count_stmt = if before {
-            ride_conn.prepare(&format!("{} {}", count_query, count_query_before_suffix)).await?
-        } else {
-            ride_conn.prepare(count_query).await?
-        };
-        let streak_stmt = if before {
-            ride_conn.prepare(&format!(
-                "{} {} {} {} {}",
-                count_query, count_query_before_suffix, streak_suffix_start,
-                streak_suffix_before_infix, streak_suffix_end,
-            )).await?
-        } else {
-            ride_conn.prepare(&format!("{} {} {}", count_query, streak_suffix_start, streak_suffix_end)).await?
-        };
-        Ok((count_stmt, streak_stmt))
+    struct QueryTriplet {
+        pub count_stmt: tokio_postgres::Statement,
+        pub streak_stmt: tokio_postgres::Statement,
+        pub row_stmt: tokio_postgres::Statement,
     }
 
-    let (prev_my_same_count_stmt, prev_my_same_streak_stmt) = prepare_pair(
-        ride_conn,
-        "
-            SELECT CAST(COUNT(*) AS bigint)
-            FROM bim.rides r
-            INNER JOIN bim.ride_vehicles rv ON rv.ride_id = r.id
-            WHERE
-                r.company = $1
-                AND rv.vehicle_number = $2
-                AND r.rider_username = $3
-                AND rv.coupling_mode = 'R'
-        ",
-        "
-                AND (
-                    r.\"timestamp\" < $4
-                    OR (
-                        r.\"timestamp\" = $4
-                        AND r.id < $5
-                    )
-                )
-        ",
-        "
-                AND NOT EXISTS (
-                    SELECT 1
-                    FROM bim.rides r2
-                    INNER JOIN bim.ride_vehicles rv2 ON rv2.ride_id = r2.id
-                    WHERE r2.company = r.company
-                    AND rv2.vehicle_number = rv.vehicle_number
-                    AND r2.rider_username <> r.rider_username
-                    AND rv2.coupling_mode = 'R'
-                    AND r2.\"timestamp\" > r.\"timestamp\"
-        ",
-        "
-                    AND (
-                        r2.\"timestamp\" < $4
-                        OR (
-                            r2.\"timestamp\" = $4
-                            AND r2.id < $5
-                        )
-                    )
-        ",
-        "
-                )
-        ",
-        before_timestamp_or_id.is_some(),
-    ).await?;
-    let prev_my_same_row_query = format!(
-        "
-            SELECT r.\"timestamp\", r.line
-            FROM bim.rides r
-            INNER JOIN bim.ride_vehicles rv ON rv.ride_id = r.id
-            WHERE
-                r.company = $1
-                AND rv.vehicle_number = $2
-                AND r.rider_username = $3
-                AND rv.coupling_mode = 'R'
-                {}
-            ORDER BY r.\"timestamp\" DESC, r.id DESC
-            LIMIT 1
-        ",
-        if before_timestamp_or_id.is_some() {
+    async fn prepare_triplet(
+        ride_conn: &tokio_postgres::Transaction<'_>,
+        my_not_other: bool,
+        same_not_coupled: bool,
+        before_specific_ride: bool,
+    ) -> Result<QueryTriplet, tokio_postgres::Error> {
+        let rider_comp_op = if my_not_other { "=" } else { "<>" };
+        let coupling_mode_r_comp_op = if same_not_coupled { "=" } else { "<>" };
+        let r_before_block = if before_specific_ride {
             "
-                AND (
+                    AND (
                         r.\"timestamp\" < $4
                         OR (
                             r.\"timestamp\" = $4
@@ -5232,42 +5160,9 @@ async fn collect_vehicle_data(
             "
         } else {
             ""
-        },
-    );
-    let prev_my_same_row_stmt = ride_conn.prepare(&prev_my_same_row_query).await?;
-    let (prev_my_coupled_count_stmt, prev_my_coupled_streak_stmt) = prepare_pair(
-        ride_conn,
-        "
-            SELECT CAST(COUNT(*) AS bigint)
-            FROM bim.rides r
-            INNER JOIN bim.ride_vehicles rv ON rv.ride_id = r.id
-            WHERE
-                r.company = $1
-                AND rv.vehicle_number = $2
-                AND r.rider_username = $3
-                AND rv.coupling_mode <> 'R'
-        ",
-        "
-                AND (
-                    r.\"timestamp\" < $4
-                    OR (
-                        r.\"timestamp\" = $4
-                        AND r.id < $5
-                    )
-                )
-        ",
-        "
-                AND NOT EXISTS (
-                    SELECT 1
-                    FROM bim.rides r2
-                    INNER JOIN bim.ride_vehicles rv2 ON rv2.ride_id = r2.id
-                    WHERE r2.company = r.company
-                    AND rv2.vehicle_number = rv.vehicle_number
-                    AND r2.rider_username <> r.rider_username
-                    AND rv2.coupling_mode <> 'R'
-                    AND r2.\"timestamp\" > r.\"timestamp\"
-        ",
-        "
+        };
+        let r2_before_block = if before_specific_ride {
+            "
                     AND (
                         r2.\"timestamp\" < $4
                         OR (
@@ -5275,191 +5170,93 @@ async fn collect_vehicle_data(
                             AND r2.id < $5
                         )
                     )
-        ",
-        "
-                )
-        ",
-        before_timestamp_or_id.is_some(),
-    ).await?;
-    let prev_my_coupled_row_query = format!(
-        "
-            SELECT r.\"timestamp\", r.line
-            FROM bim.rides r
-            INNER JOIN bim.ride_vehicles rv ON rv.ride_id = r.id
-            WHERE
-                r.company = $1
-                AND rv.vehicle_number = $2
-                AND r.rider_username = $3
-                AND rv.coupling_mode <> 'R'
-                {}
-            ORDER BY r.\"timestamp\" DESC, r.id DESC
-            LIMIT 1
-        ",
-        if before_timestamp_or_id.is_some() {
-            "
-                AND (
-                        r.\"timestamp\" < $4
-                        OR (
-                            r.\"timestamp\" = $4
-                            AND r.id < $5
-                        )
-                    )
             "
         } else {
             ""
-        }
-    );
-    let prev_my_coupled_row_stmt = ride_conn.prepare(&prev_my_coupled_row_query).await?;
-    let (prev_other_same_count_stmt, prev_other_same_streak_stmt) = prepare_pair(
+        };
+
+        let count_query = format!(
+            "
+                SELECT CAST(COUNT(*) AS bigint)
+                FROM bim.rides r
+                INNER JOIN bim.ride_vehicles rv ON rv.ride_id = r.id
+                WHERE
+                    r.company = $1
+                    AND rv.vehicle_number = $2
+                    AND r.rider_username {rider_comp_op} $3
+                    AND rv.coupling_mode {coupling_mode_r_comp_op} 'R'
+                    {r_before_block}
+            "
+        );
+        // streak query: "r2.rider_username <> r.rider_username" is always <>
+        // regardless of rider_comp_op!
+        let streak_query = format!(
+            "
+                {count_query}
+                    AND NOT EXISTS (
+                        SELECT 1
+                        FROM bim.rides r2
+                        INNER JOIN bim.ride_vehicles rv2 ON rv2.ride_id = r2.id
+                        WHERE r2.company = r.company
+                        AND rv2.vehicle_number = rv.vehicle_number
+                        AND r2.rider_username <> r.rider_username
+                        AND rv2.coupling_mode {coupling_mode_r_comp_op} 'R'
+                        AND r2.\"timestamp\" > r.\"timestamp\"
+                        {r2_before_block}
+                    )
+            "
+        );
+        let row_query = format!(
+            "
+                SELECT r.\"timestamp\", r.line
+                FROM bim.rides r
+                INNER JOIN bim.ride_vehicles rv ON rv.ride_id = r.id
+                WHERE
+                    r.company = $1
+                    AND rv.vehicle_number = $2
+                    AND r.rider_username {rider_comp_op} $3
+                    AND rv.coupling_mode {coupling_mode_r_comp_op} 'R'
+                    {r_before_block}
+                ORDER BY r.\"timestamp\" DESC, r.id DESC
+                LIMIT 1
+            "
+        );
+
+        // now prepare the statements
+        let count_stmt = ride_conn.prepare(&count_query).await?;
+        let streak_stmt = ride_conn.prepare(&streak_query).await?;
+        let row_stmt = ride_conn.prepare(&row_query).await?;
+        Ok(QueryTriplet {
+            count_stmt,
+            streak_stmt,
+            row_stmt,
+        })
+    }
+
+    let my_same_qt = prepare_triplet(
         ride_conn,
-        "
-            SELECT CAST(COUNT(*) AS bigint)
-            FROM bim.rides r
-            INNER JOIN bim.ride_vehicles rv ON rv.ride_id = r.id
-            WHERE
-                r.company = $1
-                AND rv.vehicle_number = $2
-                AND r.rider_username <> $3
-                AND rv.coupling_mode = 'R'
-        ",
-        "
-                AND (
-                    r.\"timestamp\" < $4
-                    OR (
-                        r.\"timestamp\" = $4
-                        AND r.id < $5
-                    )
-                )
-        ",
-        "
-                AND NOT EXISTS (
-                    SELECT 1
-                    FROM bim.rides r2
-                    INNER JOIN bim.ride_vehicles rv2 ON rv2.ride_id = r2.id
-                    WHERE r2.company = r.company
-                    AND rv2.vehicle_number = rv.vehicle_number
-                    AND r2.rider_username <> r.rider_username
-                    AND rv2.coupling_mode = 'R'
-                    AND r2.\"timestamp\" > r.\"timestamp\"
-        ",
-        "
-                    AND (
-                        r2.\"timestamp\" < $4
-                        OR (
-                            r2.\"timestamp\" = $4
-                            AND r2.id < $5
-                        )
-                    )
-        ",
-        "
-                )
-        ",
+        true,
+        true,
         before_timestamp_or_id.is_some(),
     ).await?;
-    let prev_other_same_row_query = format!(
-        "
-            SELECT r.\"timestamp\", r.line, r.rider_username
-            FROM bim.rides r
-            INNER JOIN bim.ride_vehicles rv ON rv.ride_id = r.id
-            WHERE
-                r.company = $1
-                AND rv.vehicle_number = $2
-                AND r.rider_username <> $3
-                AND rv.coupling_mode = 'R'
-                {}
-            ORDER BY r.\"timestamp\" DESC, r.id DESC
-            LIMIT 1
-        ",
-        if before_timestamp_or_id.is_some() {
-            "
-                AND (
-                        r.\"timestamp\" < $4
-                        OR (
-                            r.\"timestamp\" = $4
-                            AND r.id < $5
-                        )
-                    )
-            "
-        } else {
-            ""
-        },
-    );
-    let prev_other_same_row_stmt = ride_conn.prepare(&prev_other_same_row_query).await?;
-    let (prev_other_coupled_count_stmt, prev_other_coupled_streak_stmt) = prepare_pair(
+    let my_coupled_qt = prepare_triplet(
         ride_conn,
-        "
-            SELECT CAST(COUNT(*) AS bigint)
-            FROM bim.rides r
-            INNER JOIN bim.ride_vehicles rv ON rv.ride_id = r.id
-            WHERE
-                r.company = $1
-                AND rv.vehicle_number = $2
-                AND r.rider_username <> $3
-                AND rv.coupling_mode <> 'R'
-        ",
-        "
-                AND (
-                    r.\"timestamp\" < $4
-                    OR (
-                        r.\"timestamp\" = $4
-                        AND r.id < $5
-                    )
-                )
-        ",
-        "
-                AND NOT EXISTS (
-                    SELECT 1
-                    FROM bim.rides r2
-                    INNER JOIN bim.ride_vehicles rv2 ON rv2.ride_id = r2.id
-                    WHERE r2.company = r.company
-                    AND rv2.vehicle_number = rv.vehicle_number
-                    AND r2.rider_username <> r.rider_username
-                    AND rv2.coupling_mode <> 'R'
-                    AND r2.\"timestamp\" > r.\"timestamp\"
-        ",
-        "
-                    AND (
-                        r2.\"timestamp\" < $4
-                        OR (
-                            r2.\"timestamp\" = $4
-                            AND r2.id < $5
-                        )
-                    )
-        ",
-        "
-                )
-        ",
+        true,
+        false,
         before_timestamp_or_id.is_some(),
     ).await?;
-    let prev_other_coupled_row_query = format!(
-        "
-            SELECT r.\"timestamp\", r.line, r.rider_username
-            FROM bim.rides r
-            INNER JOIN bim.ride_vehicles rv ON rv.ride_id = r.id
-            WHERE
-                r.company = $1
-                AND rv.vehicle_number = $2
-                AND r.rider_username <> $3
-                AND rv.coupling_mode <> 'R'
-                {}
-            ORDER BY r.\"timestamp\" DESC, r.id DESC
-            LIMIT 1
-        ",
-        if before_timestamp_or_id.is_some() {
-            "
-                AND (
-                        r.\"timestamp\" < $4
-                        OR (
-                            r.\"timestamp\" = $4
-                            AND r.id < $5
-                        )
-                    )
-            "
-        } else {
-            ""
-        },
-    );
-    let prev_other_coupled_row_stmt = ride_conn.prepare(&prev_other_coupled_row_query).await?;
+    let other_same_qt = prepare_triplet(
+        ride_conn,
+        false,
+        true,
+        before_timestamp_or_id.is_some(),
+    ).await?;
+    let other_coupled_qt = prepare_triplet(
+        ride_conn,
+        false,
+        false,
+        before_timestamp_or_id.is_some(),
+    ).await?;
 
     let mut vehicle_data = Vec::new();
     for vehicle in vehicles {
@@ -5475,21 +5272,21 @@ async fn collect_vehicle_data(
 
         let prev_my_same_streak: i64 = {
             let prev_my_same_streak_row = ride_conn.query_one(
-                &prev_my_same_streak_stmt,
+                &my_same_qt.streak_stmt,
                 &params,
             ).await?;
             prev_my_same_streak_row.get(0)
         };
         let prev_my_same_count: i64 = {
             let prev_my_same_count_row = ride_conn.query_one(
-                &prev_my_same_count_stmt,
+                &my_same_qt.count_stmt,
                 &params,
             ).await?;
             prev_my_same_count_row.get(0)
         };
         let (prev_my_same_timestamp, prev_my_same_line): (Option<DateTime<Local>>, Option<String>) = {
             let prev_my_same_row_opt = ride_conn.query_opt(
-                &prev_my_same_row_stmt,
+                &my_same_qt.row_stmt,
                 &params,
             ).await?;
             let prev_my_same_timestamp = prev_my_same_row_opt.as_ref().map(|r| r.get(0));
@@ -5499,21 +5296,21 @@ async fn collect_vehicle_data(
 
         let prev_my_coupled_streak: i64 = {
             let prev_my_coupled_streak_row = ride_conn.query_one(
-                &prev_my_coupled_streak_stmt,
+                &my_coupled_qt.streak_stmt,
                 &params,
             ).await?;
             prev_my_coupled_streak_row.get(0)
         };
         let prev_my_coupled_count: i64 = {
             let prev_my_coupled_count_row = ride_conn.query_one(
-                &prev_my_coupled_count_stmt,
+                &my_coupled_qt.count_stmt,
                 &params,
             ).await?;
             prev_my_coupled_count_row.get(0)
         };
         let (prev_my_coupled_timestamp, prev_my_coupled_line): (Option<DateTime<Local>>, Option<String>) = {
             let prev_my_coupled_row_opt = ride_conn.query_opt(
-                &prev_my_coupled_row_stmt,
+                &my_coupled_qt.row_stmt,
                 &params,
             ).await?;
             let prev_my_coupled_timestamp = prev_my_coupled_row_opt.as_ref().map(|r| r.get(0));
@@ -5523,21 +5320,21 @@ async fn collect_vehicle_data(
 
         let prev_other_same_streak: i64 = {
             let prev_other_same_streak_row = ride_conn.query_one(
-                &prev_other_same_streak_stmt,
+                &other_same_qt.streak_stmt,
                 &params,
             ).await?;
             prev_other_same_streak_row.get(0)
         };
         let prev_other_same_count: i64 = {
             let prev_other_same_count_row = ride_conn.query_one(
-                &prev_other_same_count_stmt,
+                &other_same_qt.count_stmt,
                 &params,
             ).await?;
             prev_other_same_count_row.get(0)
         };
         let (prev_other_same_timestamp, prev_other_same_line, prev_other_same_rider): (Option<DateTime<Local>>, Option<String>, Option<String>) = {
             let prev_other_same_row_opt = ride_conn.query_opt(
-                &prev_other_same_row_stmt,
+                &other_same_qt.row_stmt,
                 &params,
             ).await?;
             let prev_other_same_timestamp = prev_other_same_row_opt.as_ref().map(|r| r.get(0));
@@ -5548,21 +5345,21 @@ async fn collect_vehicle_data(
 
         let prev_other_coupled_streak: i64 = {
             let prev_other_coupled_streak_row = ride_conn.query_one(
-                &prev_other_coupled_streak_stmt,
+                &other_coupled_qt.streak_stmt,
                 &params,
             ).await?;
             prev_other_coupled_streak_row.get(0)
         };
         let prev_other_coupled_count: i64 = {
             let prev_other_coupled_count_row = ride_conn.query_one(
-                &prev_other_coupled_count_stmt,
+                &other_coupled_qt.count_stmt,
                 &params,
             ).await?;
             prev_other_coupled_count_row.get(0)
         };
         let (prev_other_coupled_timestamp, prev_other_coupled_line, prev_other_coupled_rider): (Option<DateTime<Local>>, Option<String>, Option<String>) = {
             let prev_other_coupled_row_opt = ride_conn.query_opt(
-                &prev_other_coupled_row_stmt,
+                &other_coupled_qt.row_stmt,
                 &params,
             ).await?;
             let prev_other_coupled_timestamp = prev_other_coupled_row_opt.as_ref().map(|r| r.get(0));
