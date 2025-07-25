@@ -2856,11 +2856,171 @@ impl BimPlugin {
             return;
         }
 
-        send_channel_message!(
-            interface,
-            &channel_message.channel.name,
-            &format!("Ride {} modified.", ride_id),
-        ).await;
+        // output what the ride would have looked like if it were input correctly the first time
+        {
+            // collect the necessary information
+            let ride_metadata_row_res = ride_conn.query_one(
+                "SELECT company, \"timestamp\", rider_username, line FROM bim.rides WHERE id = $1",
+                &[&ride_id],
+            ).await;
+            let ride_metadata_row = match ride_metadata_row_res {
+                Ok(rmr) => rmr,
+                Err(e) => {
+                    error!("failed to collect modified ride metadata: {}", e);
+
+                    // just send a simple response instead
+                    send_channel_message!(
+                        interface,
+                        &channel_message.channel.name,
+                        &format!("Ride {} modified.", ride_id),
+                    ).await;
+
+                    // don't bother with the achievements since the database is having issues
+                    return;
+                },
+            };
+            let company: String = ride_metadata_row.get(0);
+            let timestamp: DateTime<Local> = ride_metadata_row.get(1);
+            let rider_username: String = ride_metadata_row.get(2);
+            let line: Option<String> = ride_metadata_row.get(3);
+
+            let ride_vehicles_res = ride_conn.query(
+                "
+                    SELECT
+                        vehicle_number,
+                        vehicle_type,
+                        spec_position,
+                        fixed_coupling_position,
+                        coupling_mode
+                    FROM
+                        bim.ride_vehicles WHERE ride_id = $1
+                ",
+                &[&ride_id],
+            ).await;
+            let ride_vehicles = match ride_vehicles_res {
+                Ok(rv) => rv,
+                Err(e) => {
+                    error!("failed to collect modified ride vehicles: {}", e);
+
+                    // just send a simple response instead
+                    send_channel_message!(
+                        interface,
+                        &channel_message.channel.name,
+                        &format!("Ride {} modified.", ride_id),
+                    ).await;
+
+                    // don't bother with the achievements since the database is having issues
+                    return;
+                }
+            };
+
+            let mut vehicle_entries = Vec::with_capacity(ride_vehicles.len());
+            for row in ride_vehicles {
+                let number_string: String = row.get(0);
+                let type_code: Option<String> = row.get(1);
+                let spec_position: i64 = row.get(2);
+                let fixed_coupling_position: i64 = row.get(3);
+                let coupling_mode_string: String = row.get(4);
+
+                let number = number_string.into();
+                let Some(coupling_mode) = CouplingMode::try_from_db_str(&coupling_mode_string)
+                    else { continue };
+
+                vehicle_entries.push(NewVehicleEntry {
+                    number,
+                    type_code,
+                    spec_position,
+                    coupling_mode,
+                    fixed_coupling_position,
+                });
+            }
+
+            // collect the data for the table
+            let xact = match ride_conn.transaction().await {
+                Ok(x) => x,
+                Err(e) => {
+                    error!("error starting transaction for modified vehicle data: {}", e);
+
+                    // just send a simple response instead
+                    send_channel_message!(
+                        interface,
+                        &channel_message.channel.name,
+                        &format!("Ride {} modified.", ride_id),
+                    ).await;
+
+                    // don't bother with the achievements since the database is having issues
+                    return;
+                },
+            };
+            let vehicles_res = collect_vehicle_data(
+                &xact,
+                &company,
+                &vehicle_entries,
+                &rider_username,
+                config_guard.highlight_coupled_rides,
+                Some((timestamp, ride_id)),
+            ).await;
+            let vehicles = match vehicles_res {
+                Ok(v) => v,
+                Err(e) => {
+                    error!("error collecting vehicle data: {}", e);
+
+                    // just send a simple response instead
+                    send_channel_message!(
+                        interface,
+                        &channel_message.channel.name,
+                        &format!("Ride {} modified.", ride_id),
+                    ).await;
+
+                    // don't bother with the achievements since the database is having issues
+                    return;
+                },
+            };
+
+            // collect the ride table data
+            let rtd = RideTableData {
+                ride_id,
+                company,
+                line,
+                rider_username,
+                vehicles,
+                relative_time: Some(Local::now()),
+            };
+
+            // render it
+            let table_canvas = draw_ride_table(&rtd);
+            let table_data_string = match serde_json::to_string(&rtd) {
+                Ok(tds) => Some(tds),
+                Err(e) => {
+                    error!("error serializing ride table data: {}", e);
+                    None
+                },
+            };
+            let mut png_buf = Vec::new();
+            {
+                let cursor = Cursor::new(&mut png_buf);
+                const MARGIN: u32 = 8;
+                let text_blocks: &[(&str, &str)] = if let Some(tds) = table_data_string.as_ref() {
+                    &[("bimride", tds.as_str())]
+                } else {
+                    &[]
+                };
+                map_to_png(cursor, &table_canvas, MARGIN, MARGIN, MARGIN, MARGIN, text_blocks)
+                    .expect("failed to write PNG data");
+            }
+
+            let attachment = Attachment::new(
+                png_buf,
+                format!("ride{}-fixed.png", rtd.ride_id),
+                "image/png".to_owned(),
+                None,
+            );
+            interface.send_channel_message_with_attachment(
+                &channel_message.channel.name,
+                OutgoingMessageWithAttachmentBuilder::new(attachment)
+                    .build()
+            ).await;
+        }
 
         // enqueue achievement recalculation
         if config_guard.achievements_active {
@@ -4966,25 +5126,37 @@ const INSERT_VEHICLE_STMT_STR: &str = "
 ";
 
 
-pub async fn add_ride(
+async fn collect_vehicle_data(
     ride_conn: &tokio_postgres::Transaction<'_>,
     company: &str,
     vehicles: &[NewVehicleEntry],
     rider_username: &str,
-    timestamp: DateTime<Local>,
-    line: Option<&str>,
-    regular_price: &BigDecimal,
-    actual_price: &BigDecimal,
-    sandbox: bool,
     highlight_coupled_rides: bool,
-) -> Result<(i64, Vec<RideTableVehicle>), tokio_postgres::Error> {
+    before_timestamp_or_id: Option<(DateTime<Local>, i64)>,
+) -> Result<Vec<RideTableVehicle>, tokio_postgres::Error> {
     async fn prepare_pair(
         ride_conn: &tokio_postgres::Transaction<'_>,
         count_query: &str,
-        streak_suffix: &str,
+        count_query_before_suffix: &str,
+        streak_suffix_start: &str,
+        streak_suffix_before_infix: &str,
+        streak_suffix_end: &str,
+        before: bool,
     ) -> Result<(tokio_postgres::Statement, tokio_postgres::Statement), tokio_postgres::Error> {
-        let count_stmt = ride_conn.prepare(count_query).await?;
-        let streak_stmt = ride_conn.prepare(&format!("{} {}", count_query, streak_suffix)).await?;
+        let count_stmt = if before {
+            ride_conn.prepare(&format!("{} {}", count_query, count_query_before_suffix)).await?
+        } else {
+            ride_conn.prepare(count_query).await?
+        };
+        let streak_stmt = if before {
+            ride_conn.prepare(&format!(
+                "{} {} {} {} {}",
+                count_query, count_query_before_suffix, streak_suffix_start,
+                streak_suffix_before_infix, streak_suffix_end,
+            )).await?
+        } else {
+            ride_conn.prepare(&format!("{} {} {}", count_query, streak_suffix_start, streak_suffix_end)).await?
+        };
         Ok((count_stmt, streak_stmt))
     }
 
@@ -5001,6 +5173,15 @@ pub async fn add_ride(
                 AND rv.coupling_mode = 'R'
         ",
         "
+                AND (
+                    r.\"timestamp\" < $4
+                    OR (
+                        r.\"timestamp\" = $4
+                        AND r.id < $5
+                    )
+                )
+        ",
+        "
                 AND NOT EXISTS (
                     SELECT 1
                     FROM bim.rides r2
@@ -5010,10 +5191,22 @@ pub async fn add_ride(
                     AND r2.rider_username <> r.rider_username
                     AND rv2.coupling_mode = 'R'
                     AND r2.\"timestamp\" > r.\"timestamp\"
+        ",
+        "
+                    AND (
+                        r2.\"timestamp\" < $4
+                        OR (
+                            r2.\"timestamp\" = $4
+                            AND r2.id < $5
+                        )
+                    )
+        ",
+        "
                 )
         ",
+        before_timestamp_or_id.is_some(),
     ).await?;
-    let prev_my_same_row_stmt = ride_conn.prepare(
+    let prev_my_same_row_query = format!(
         "
             SELECT r.\"timestamp\", r.line
             FROM bim.rides r
@@ -5023,10 +5216,25 @@ pub async fn add_ride(
                 AND rv.vehicle_number = $2
                 AND r.rider_username = $3
                 AND rv.coupling_mode = 'R'
+                {}
             ORDER BY r.\"timestamp\" DESC, r.id DESC
             LIMIT 1
         ",
-    ).await?;
+        if before_timestamp_or_id.is_some() {
+            "
+                AND (
+                        r.\"timestamp\" < $4
+                        OR (
+                            r.\"timestamp\" = $4
+                            AND r.id < $5
+                        )
+                    )
+            "
+        } else {
+            ""
+        },
+    );
+    let prev_my_same_row_stmt = ride_conn.prepare(&prev_my_same_row_query).await?;
     let (prev_my_coupled_count_stmt, prev_my_coupled_streak_stmt) = prepare_pair(
         ride_conn,
         "
@@ -5040,6 +5248,15 @@ pub async fn add_ride(
                 AND rv.coupling_mode <> 'R'
         ",
         "
+                AND (
+                    r.\"timestamp\" < $4
+                    OR (
+                        r.\"timestamp\" = $4
+                        AND r.id < $5
+                    )
+                )
+        ",
+        "
                 AND NOT EXISTS (
                     SELECT 1
                     FROM bim.rides r2
@@ -5049,10 +5266,22 @@ pub async fn add_ride(
                     AND r2.rider_username <> r.rider_username
                     AND rv2.coupling_mode <> 'R'
                     AND r2.\"timestamp\" > r.\"timestamp\"
+        ",
+        "
+                    AND (
+                        r2.\"timestamp\" < $4
+                        OR (
+                            r2.\"timestamp\" = $4
+                            AND r2.id < $5
+                        )
+                    )
+        ",
+        "
                 )
         ",
+        before_timestamp_or_id.is_some(),
     ).await?;
-    let prev_my_coupled_row_stmt = ride_conn.prepare(
+    let prev_my_coupled_row_query = format!(
         "
             SELECT r.\"timestamp\", r.line
             FROM bim.rides r
@@ -5062,10 +5291,25 @@ pub async fn add_ride(
                 AND rv.vehicle_number = $2
                 AND r.rider_username = $3
                 AND rv.coupling_mode <> 'R'
+                {}
             ORDER BY r.\"timestamp\" DESC, r.id DESC
             LIMIT 1
         ",
-    ).await?;
+        if before_timestamp_or_id.is_some() {
+            "
+                AND (
+                        r.\"timestamp\" < $4
+                        OR (
+                            r.\"timestamp\" = $4
+                            AND r.id < $5
+                        )
+                    )
+            "
+        } else {
+            ""
+        }
+    );
+    let prev_my_coupled_row_stmt = ride_conn.prepare(&prev_my_coupled_row_query).await?;
     let (prev_other_same_count_stmt, prev_other_same_streak_stmt) = prepare_pair(
         ride_conn,
         "
@@ -5079,6 +5323,15 @@ pub async fn add_ride(
                 AND rv.coupling_mode = 'R'
         ",
         "
+                AND (
+                    r.\"timestamp\" < $4
+                    OR (
+                        r.\"timestamp\" = $4
+                        AND r.id < $5
+                    )
+                )
+        ",
+        "
                 AND NOT EXISTS (
                     SELECT 1
                     FROM bim.rides r2
@@ -5088,10 +5341,22 @@ pub async fn add_ride(
                     AND r2.rider_username <> r.rider_username
                     AND rv2.coupling_mode = 'R'
                     AND r2.\"timestamp\" > r.\"timestamp\"
+        ",
+        "
+                    AND (
+                        r2.\"timestamp\" < $4
+                        OR (
+                            r2.\"timestamp\" = $4
+                            AND r2.id < $5
+                        )
+                    )
+        ",
+        "
                 )
         ",
+        before_timestamp_or_id.is_some(),
     ).await?;
-    let prev_other_same_row_stmt = ride_conn.prepare(
+    let prev_other_same_row_query = format!(
         "
             SELECT r.\"timestamp\", r.line, r.rider_username
             FROM bim.rides r
@@ -5101,10 +5366,25 @@ pub async fn add_ride(
                 AND rv.vehicle_number = $2
                 AND r.rider_username <> $3
                 AND rv.coupling_mode = 'R'
+                {}
             ORDER BY r.\"timestamp\" DESC, r.id DESC
             LIMIT 1
         ",
-    ).await?;
+        if before_timestamp_or_id.is_some() {
+            "
+                AND (
+                        r.\"timestamp\" < $4
+                        OR (
+                            r.\"timestamp\" = $4
+                            AND r.id < $5
+                        )
+                    )
+            "
+        } else {
+            ""
+        },
+    );
+    let prev_other_same_row_stmt = ride_conn.prepare(&prev_other_same_row_query).await?;
     let (prev_other_coupled_count_stmt, prev_other_coupled_streak_stmt) = prepare_pair(
         ride_conn,
         "
@@ -5118,6 +5398,15 @@ pub async fn add_ride(
                 AND rv.coupling_mode <> 'R'
         ",
         "
+                AND (
+                    r.\"timestamp\" < $4
+                    OR (
+                        r.\"timestamp\" = $4
+                        AND r.id < $5
+                    )
+                )
+        ",
+        "
                 AND NOT EXISTS (
                     SELECT 1
                     FROM bim.rides r2
@@ -5127,10 +5416,22 @@ pub async fn add_ride(
                     AND r2.rider_username <> r.rider_username
                     AND rv2.coupling_mode <> 'R'
                     AND r2.\"timestamp\" > r.\"timestamp\"
+        ",
+        "
+                    AND (
+                        r2.\"timestamp\" < $4
+                        OR (
+                            r2.\"timestamp\" = $4
+                            AND r2.id < $5
+                        )
+                    )
+        ",
+        "
                 )
         ",
+        before_timestamp_or_id.is_some(),
     ).await?;
-    let prev_other_coupled_row_stmt = ride_conn.prepare(
+    let prev_other_coupled_row_query = format!(
         "
             SELECT r.\"timestamp\", r.line, r.rider_username
             FROM bim.rides r
@@ -5140,31 +5441,56 @@ pub async fn add_ride(
                 AND rv.vehicle_number = $2
                 AND r.rider_username <> $3
                 AND rv.coupling_mode <> 'R'
+                {}
             ORDER BY r.\"timestamp\" DESC, r.id DESC
             LIMIT 1
         ",
-    ).await?;
+        if before_timestamp_or_id.is_some() {
+            "
+                AND (
+                        r.\"timestamp\" < $4
+                        OR (
+                            r.\"timestamp\" = $4
+                            AND r.id < $5
+                        )
+                    )
+            "
+        } else {
+            ""
+        },
+    );
+    let prev_other_coupled_row_stmt = ride_conn.prepare(&prev_other_coupled_row_query).await?;
 
     let mut vehicle_data = Vec::new();
     for vehicle in vehicles {
+        let vehicle_number_str = vehicle.number.as_str();
+        let mut params: Vec<&(dyn ToSql + Sync)> = Vec::with_capacity(5);
+        params.push(&company);
+        params.push(&vehicle_number_str);
+        params.push(&rider_username);
+        if let Some((before_timestamp, before_id)) = before_timestamp_or_id.as_ref() {
+            params.push(before_timestamp);
+            params.push(before_id);
+        }
+
         let prev_my_same_streak: i64 = {
             let prev_my_same_streak_row = ride_conn.query_one(
                 &prev_my_same_streak_stmt,
-                &[&company, &vehicle.number.as_str(), &rider_username],
+                &params,
             ).await?;
             prev_my_same_streak_row.get(0)
         };
         let prev_my_same_count: i64 = {
             let prev_my_same_count_row = ride_conn.query_one(
                 &prev_my_same_count_stmt,
-                &[&company, &vehicle.number.as_str(), &rider_username],
+                &params,
             ).await?;
             prev_my_same_count_row.get(0)
         };
         let (prev_my_same_timestamp, prev_my_same_line): (Option<DateTime<Local>>, Option<String>) = {
             let prev_my_same_row_opt = ride_conn.query_opt(
                 &prev_my_same_row_stmt,
-                &[&company, &vehicle.number.as_str(), &rider_username],
+                &params,
             ).await?;
             let prev_my_same_timestamp = prev_my_same_row_opt.as_ref().map(|r| r.get(0));
             let prev_my_same_line = prev_my_same_row_opt.as_ref().map(|r| r.get(1)).flatten();
@@ -5174,21 +5500,21 @@ pub async fn add_ride(
         let prev_my_coupled_streak: i64 = {
             let prev_my_coupled_streak_row = ride_conn.query_one(
                 &prev_my_coupled_streak_stmt,
-                &[&company, &vehicle.number.as_str(), &rider_username],
+                &params,
             ).await?;
             prev_my_coupled_streak_row.get(0)
         };
         let prev_my_coupled_count: i64 = {
             let prev_my_coupled_count_row = ride_conn.query_one(
                 &prev_my_coupled_count_stmt,
-                &[&company, &vehicle.number.as_str(), &rider_username],
+                &params,
             ).await?;
             prev_my_coupled_count_row.get(0)
         };
         let (prev_my_coupled_timestamp, prev_my_coupled_line): (Option<DateTime<Local>>, Option<String>) = {
             let prev_my_coupled_row_opt = ride_conn.query_opt(
                 &prev_my_coupled_row_stmt,
-                &[&company, &vehicle.number.as_str(), &rider_username],
+                &params,
             ).await?;
             let prev_my_coupled_timestamp = prev_my_coupled_row_opt.as_ref().map(|r| r.get(0));
             let prev_my_coupled_line = prev_my_coupled_row_opt.as_ref().map(|r| r.get(1)).flatten();
@@ -5198,21 +5524,21 @@ pub async fn add_ride(
         let prev_other_same_streak: i64 = {
             let prev_other_same_streak_row = ride_conn.query_one(
                 &prev_other_same_streak_stmt,
-                &[&company, &vehicle.number.as_str(), &rider_username],
+                &params,
             ).await?;
             prev_other_same_streak_row.get(0)
         };
         let prev_other_same_count: i64 = {
             let prev_other_same_count_row = ride_conn.query_one(
                 &prev_other_same_count_stmt,
-                &[&company, &vehicle.number.as_str(), &rider_username],
+                &params,
             ).await?;
             prev_other_same_count_row.get(0)
         };
         let (prev_other_same_timestamp, prev_other_same_line, prev_other_same_rider): (Option<DateTime<Local>>, Option<String>, Option<String>) = {
             let prev_other_same_row_opt = ride_conn.query_opt(
                 &prev_other_same_row_stmt,
-                &[&company, &vehicle.number.as_str(), &rider_username],
+                &params,
             ).await?;
             let prev_other_same_timestamp = prev_other_same_row_opt.as_ref().map(|r| r.get(0));
             let prev_other_same_line = prev_other_same_row_opt.as_ref().map(|r| r.get(1)).flatten();
@@ -5223,21 +5549,21 @@ pub async fn add_ride(
         let prev_other_coupled_streak: i64 = {
             let prev_other_coupled_streak_row = ride_conn.query_one(
                 &prev_other_coupled_streak_stmt,
-                &[&company, &vehicle.number.as_str(), &rider_username],
+                &params,
             ).await?;
             prev_other_coupled_streak_row.get(0)
         };
         let prev_other_coupled_count: i64 = {
             let prev_other_coupled_count_row = ride_conn.query_one(
                 &prev_other_coupled_count_stmt,
-                &[&company, &vehicle.number.as_str(), &rider_username],
+                &params,
             ).await?;
             prev_other_coupled_count_row.get(0)
         };
         let (prev_other_coupled_timestamp, prev_other_coupled_line, prev_other_coupled_rider): (Option<DateTime<Local>>, Option<String>, Option<String>) = {
             let prev_other_coupled_row_opt = ride_conn.query_opt(
                 &prev_other_coupled_row_stmt,
-                &[&company, &vehicle.number.as_str(), &rider_username],
+                &params,
             ).await?;
             let prev_other_coupled_timestamp = prev_other_coupled_row_opt.as_ref().map(|r| r.get(0));
             let prev_other_coupled_line = prev_other_coupled_row_opt.as_ref().map(|r| r.get(1)).flatten();
@@ -5282,6 +5608,31 @@ pub async fn add_ride(
             coupling_mode: vehicle.coupling_mode,
         });
     }
+
+    Ok(vehicle_data)
+}
+
+
+pub async fn add_ride(
+    ride_conn: &tokio_postgres::Transaction<'_>,
+    company: &str,
+    vehicles: &[NewVehicleEntry],
+    rider_username: &str,
+    timestamp: DateTime<Local>,
+    line: Option<&str>,
+    regular_price: &BigDecimal,
+    actual_price: &BigDecimal,
+    sandbox: bool,
+    highlight_coupled_rides: bool,
+) -> Result<(i64, Vec<RideTableVehicle>), tokio_postgres::Error> {
+    let vehicle_data = collect_vehicle_data(
+        ride_conn,
+        company,
+        vehicles,
+        rider_username,
+        highlight_coupled_rides,
+        None,
+    ).await?;
 
     let regular_price_string = regular_price.to_string();
     let actual_price_string = actual_price.to_string();
