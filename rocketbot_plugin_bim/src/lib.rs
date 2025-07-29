@@ -5208,7 +5208,7 @@ async fn collect_vehicle_data(
         );
         let row_query = format!(
             "
-                SELECT r.\"timestamp\", r.line
+                SELECT r.\"timestamp\", r.line, r.rider_username
                 FROM bim.rides r
                 INNER JOIN bim.ride_vehicles rv ON rv.ride_id = r.id
                 WHERE
