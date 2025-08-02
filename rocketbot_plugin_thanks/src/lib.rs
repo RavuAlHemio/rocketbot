@@ -16,10 +16,11 @@ use tokio_postgres::{self, NoTls};
 use tracing::{error, info};
 
 
-#[derive(Clone, Debug, Eq, Hash, PartialEq)]
+#[derive(Clone, Debug, Eq, Hash, Ord, PartialEq, PartialOrd)]
 struct Config {
     db_conn_string: String,
     most_grateful_count: usize,
+    admin_usernames: BTreeSet<String>,
 }
 
 
@@ -166,6 +167,16 @@ async fn find_thanks<F: FnMut(String) -> FR, FR: Future<Output = Option<String>>
 async fn interface_resolve_username(interface: Weak<dyn RocketBotInterface>, username: String) -> Option<String> {
     let Some(my_interface) = interface.upgrade() else { return None };
     my_interface.resolve_username(&username).await
+}
+
+async fn normalize_username(interface: Weak<dyn RocketBotInterface>, mut username: &str) -> String {
+    if username.starts_with("@") {
+        username = &username[1..];
+    }
+    match interface_resolve_username(interface, username.to_owned()).await {
+        Some(r) => r,
+        None => username.to_owned(),
+    }
 }
 
 pub struct ThanksPlugin {
@@ -333,15 +344,7 @@ impl ThanksPlugin {
             Err(_e) => return,
         };
 
-        let mut raw_target = command.args[0].as_str();
-        if raw_target.starts_with("@") {
-            raw_target = &raw_target[1..];
-        }
-        let target = match interface.resolve_username(&raw_target).await {
-            Some(u) => u,
-            None => raw_target.to_owned(),
-        };
-
+        let target = normalize_username(self.interface.clone(), &command.args[0]).await;
         let target_lower = target.to_lowercase();
         let count_row_res = db_client.query_one(
             r#"
@@ -612,6 +615,162 @@ impl ThanksPlugin {
         }
     }
 
+    async fn handle_thxfer(&self, channel_message: &ChannelMessage, command: &CommandInstance) {
+        let interface = match self.interface.upgrade() {
+            None => return,
+            Some(i) => i,
+        };
+        let config_guard = self.config.read().await;
+
+        if !config_guard.admin_usernames.contains(&channel_message.message.sender.username) {
+            send_channel_message!(
+                interface,
+                &channel_message.channel.name,
+                &format!(
+                    "@{} This command can only be run by thanks administrators.",
+                    channel_message.message.sender.username,
+                ),
+            ).await;
+            return;
+        }
+
+        if command.rest.trim().len() > 0 {
+            // excess arguments
+            send_channel_message!(
+                interface,
+                &channel_message.channel.name,
+                &format!(
+                    "@{} Only two arguments are accepted: OLDUSER and NEWUSER.",
+                    channel_message.message.sender.username,
+                ),
+            ).await;
+            return;
+        }
+
+        assert_eq!(command.args.len(), 2);
+        let old_user_lower = normalize_username(self.interface.clone(), &command.args[0])
+            .await
+            .to_lowercase();
+        let new_user_lower = normalize_username(self.interface.clone(), &command.args[1])
+            .await
+            .to_lowercase();
+        if old_user_lower == new_user_lower {
+            send_channel_message!(
+                interface,
+                &channel_message.channel.name,
+                &format!(
+                    "@{} That's twice the same user ({}).",
+                    channel_message.message.sender.username,
+                    old_user_lower,
+                ),
+            ).await;
+            return;
+        }
+
+        let mut db_client = match self.connect_db(&config_guard).await {
+            Ok(c) => c,
+            Err(_e) => return,
+        };
+        let txn = match db_client.transaction().await {
+            Ok(t) => t,
+            Err(e) => {
+                error!("failed to start database transaction: {}", e);
+                send_channel_message!(
+                    interface,
+                    &channel_message.channel.name,
+                    &format!(
+                        "@{} Database ain't playing along. :disappointed:",
+                        channel_message.message.sender.username,
+                    ),
+                ).await;
+                return;
+            },
+        };
+
+        // first, delete any thanks from the new user to the old user
+        // because those would turn into new-to-new thanks
+        let delete_res = txn.execute(
+            r#"
+                DELETE FROM thanks.thanks
+                WHERE thanker_lowercase = $1
+                AND thankee_lowercase = $2
+            "#,
+            &[&new_user_lower, &old_user_lower],
+        ).await;
+        if let Err(e) = delete_res {
+            error!(
+                "transferring thanks from {:?} to {:?}: failed to delete putative self-thanks: {}",
+                old_user_lower, new_user_lower, e,
+            );
+            send_channel_message!(
+                interface,
+                &channel_message.channel.name,
+                &format!(
+                    "@{} Database ain't playing along. :disappointed:",
+                    channel_message.message.sender.username,
+                ),
+            ).await;
+            return;
+        }
+
+        // next, transfer the thanks
+        let xfer_res = txn.execute(
+            r#"
+                UPDATE thanks.thanks
+                SET thankee_lowercase = $1
+                WHERE thankee_lowercase = $2
+            "#,
+            &[&new_user_lower, &old_user_lower],
+        ).await;
+        let transferred_count = match xfer_res {
+            Ok(tc) => tc,
+            Err(e) => {
+                error!(
+                    "transferring thanks from {:?} to {:?}: failed to transfer thanks: {}",
+                    old_user_lower, new_user_lower, e,
+                );
+                send_channel_message!(
+                    interface,
+                    &channel_message.channel.name,
+                    &format!(
+                        "@{} Database ain't playing along. :disappointed:",
+                        channel_message.message.sender.username,
+                    ),
+                ).await;
+                return;
+            },
+        };
+
+        // finally, consume the transaction
+        if let Err(e) = txn.commit().await {
+            error!(
+                "transferring thanks from {:?} to {:?}: failed to commit transaction: {}",
+                old_user_lower, new_user_lower, e,
+            );
+            send_channel_message!(
+                interface,
+                &channel_message.channel.name,
+                &format!(
+                    "@{} Database ain't playing along. :disappointed:",
+                    channel_message.message.sender.username,
+                ),
+            ).await;
+            return;
+        }
+
+        send_channel_message!(
+            interface,
+            &channel_message.channel.name,
+            &format!(
+                "@{} Alright -- {} thanks transferred from {} to {}.",
+                channel_message.message.sender.username,
+                transferred_count,
+                old_user_lower,
+                new_user_lower,
+            ),
+        ).await;
+    }
+
     fn try_get_config(config: serde_json::Value) -> Result<Config, &'static str> {
         let db_conn_string = config["db_conn_string"]
             .as_str().ok_or("db_conn_string is not a string")?
@@ -619,9 +778,26 @@ impl ThanksPlugin {
         let most_grateful_count = config["most_grateful_count"]
             .as_usize().ok_or("most_grateful_count is not a usize")?;
 
+        let mut admin_usernames = BTreeSet::new();
+        if config.has_key("admin_usernames") {
+            let admin_usernames_json = config["admin_usernames"]
+                .as_array().ok_or("admin_usernames is not an array")?;
+            for admin_username_json in admin_usernames_json {
+                let admin_username_str = match admin_username_json.as_str() {
+                    Some(s) => s,
+                    None => {
+                        error!("admin_usernames member {:?} is not a string; skipping", admin_username_json);
+                        continue;
+                    },
+                };
+                admin_usernames.insert(admin_username_str.to_owned());
+            }
+        }
+
         Ok(Config {
             db_conn_string,
             most_grateful_count,
+            admin_usernames,
         })
     }
 }
@@ -691,6 +867,17 @@ impl RocketBotPlugin for ThanksPlugin {
         my_interface.register_channel_command(&topthanked_command).await;
         my_interface.register_channel_command(&topgrateful_command).await;
 
+        my_interface.register_channel_command(
+            &CommandDefinitionBuilder::new(
+                "thxfer",
+                "thanks",
+                "{cpfx}thxfer OLDUSER NEWUSER",
+                "Transfers thanks received by OLDUSER to NEWUSER.",
+            )
+                .arg_count(2)
+                .build()
+        ).await;
+
         ThanksPlugin {
             interface,
             config: config_lock,
@@ -712,6 +899,8 @@ impl RocketBotPlugin for ThanksPlugin {
             self.handle_topthanked(channel_message, command).await
         } else if command.name == "topgrateful" {
             self.handle_topgrateful(channel_message, command).await
+        } else if command.name == "thxfer" {
+            self.handle_thxfer(channel_message, command).await
         }
     }
 
@@ -726,6 +915,8 @@ impl RocketBotPlugin for ThanksPlugin {
             Some(include_str!("../help/topthanked.md").to_owned())
         } else if command_name == "topgrateful" {
             Some(include_str!("../help/topgrateful.md").to_owned())
+        } else if command_name == "thxfer" {
+            Some(include_str!("../help/thxfer.md").to_owned())
         } else {
             None
         }
