@@ -719,3 +719,63 @@ pub(crate) async fn handle_bim_last_riders(request: &Request<Incoming>) -> Resul
         None => return_500(),
     }
 }
+
+pub(crate) async fn handle_bim_fixed_monopolies(request: &Request<Incoming>) -> Result<Response<Full<Bytes>>, Infallible> {
+    let query_pairs = get_query_pairs(request);
+
+    if request.method() != Method::GET {
+        return return_405(&query_pairs).await;
+    }
+
+    let db_conn = match connect_to_db().await {
+        Some(c) => c,
+        None => return return_500(),
+    };
+
+    let monopoly_rows_res = db_conn.query(
+        "
+            SELECT company, rider_username, vehicles[1] first_vehicle
+            FROM bim.current_monopolies()
+        ",
+        &[],
+    ).await;
+    let monopoly_rows = match monopoly_rows_res {
+        Ok(mr) => mr,
+        Err(e) => {
+            error!("error querying vehicle rides: {}", e);
+            return return_500();
+        },
+    };
+
+    let mut rider_to_monopolies: BTreeMap<String, BTreeSet<VehiclePart>> = BTreeMap::new();
+    for ride_row in monopoly_rows {
+        let company: String = ride_row.get(0);
+        let rider_username: String = ride_row.get(1);
+        let vehicle_number = VehicleNumber::from_string(ride_row.get(2));
+
+        rider_to_monopolies
+            .entry(rider_username)
+            .or_insert_with(|| BTreeSet::new())
+            .insert(VehiclePart {
+                company,
+                number: vehicle_number,
+            });
+    }
+
+    let riders: Vec<RiderVehiclesPart> = rider_to_monopolies.into_iter()
+        .map(|(rider, vehicles)| {
+            RiderVehiclesPart {
+                rider,
+                vehicles,
+            }
+        })
+        .collect();
+
+    let template = LastRidersTemplate {
+        riders,
+    };
+    match render_response(&template, &query_pairs, 200, vec![]).await {
+        Some(r) => Ok(r),
+        None => return_500(),
+    }
+}
