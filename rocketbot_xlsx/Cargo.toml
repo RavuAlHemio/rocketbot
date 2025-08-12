@@ -11,4 +11,4 @@ theme = []
 from-to-repr = { version = "0.2", features = ["from_to_other"] }
 strict-num = { version = "0.2" }
 sxd-document = { version = "0.3" }
-zip = { version = "2.2" }
+zip = { version = "4.3" }
