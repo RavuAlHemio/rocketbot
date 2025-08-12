@@ -11,7 +11,9 @@ use crate::interface::VitalsReader;
 
 
 trait BeepeeMeasurement {
+    #[allow(unused)]
     fn id(&self) -> i64;
+
     fn timestamp(&self) -> DateTime<Local>;
 }
 

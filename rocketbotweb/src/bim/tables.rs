@@ -3,7 +3,7 @@ use std::collections::{BTreeMap, BTreeSet, HashMap};
 use std::convert::Infallible;
 use std::fmt::Write;
 
-use askama::Template;
+use askama::{NO_VALUES, Template};
 use http_body_util::Full;
 use hyper::{Method, Request, Response};
 use hyper::body::{Bytes, Incoming};
@@ -671,7 +671,7 @@ pub(crate) async fn handle_bim_odds_ends(request: &Request<Incoming>) -> Result<
 
                         let unencoded = row[column_index].value.as_str();
                         if url_encode {
-                            Cow::Owned(crate::templating::filters::encode_query_parameter(unencoded).unwrap())
+                            Cow::Owned(crate::templating::filters::encode_query_parameter(unencoded, NO_VALUES).unwrap())
                         } else {
                             Cow::Borrowed(unencoded)
                         }

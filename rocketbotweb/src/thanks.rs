@@ -9,7 +9,6 @@ use serde::{Deserialize, Serialize};
 use tracing::error;
 
 use crate::{connect_to_db, get_query_pairs, render_response, return_405, return_500};
-use crate::templating::filters;
 
 
 #[derive(Clone, Debug, Deserialize, Eq, PartialEq, Serialize, Template)]

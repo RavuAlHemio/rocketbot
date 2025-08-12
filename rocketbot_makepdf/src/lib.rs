@@ -3,23 +3,14 @@ pub mod model;
 
 use std::collections::HashMap;
 use std::fmt;
-use std::io::Cursor;
 
 use printpdf::{
-    Cmyk, Color, Greyscale, Image, ImageTransform, Mm, OP_PATH_CONST_4BEZIER,
-    OP_PATH_CONST_CLOSE_SUBPATH, OP_PATH_CONST_LINE_TO, OP_PATH_CONST_MOVE_TO, OP_PATH_PAINT_END,
-    OP_PATH_PAINT_FILL_NZ, OP_PATH_PAINT_FILL_STROKE_CLOSE_NZ, OP_PATH_PAINT_FILL_STROKE_NZ,
-    OP_PATH_PAINT_STROKE, OP_PATH_PAINT_STROKE_CLOSE, PdfDocument, PdfDocumentReference, Pt, Rgb,
+    Cmyk, Color, Greyscale, Line, LinePoint, Mm, Op, ParsedFont, PdfDocument, PdfPage, PdfSaveOptions, Point, Pt, RawImage, Rgb, TextItem, XObjectTransform
 };
-use printpdf::image_crate::codecs::jpeg::JpegDecoder;
-use printpdf::image_crate::codecs::png::PngDecoder;
-use printpdf::lopdf::Object;
-use printpdf::lopdf::content::Operation;
 use rustybuzz::{Face, UnicodeBuffer};
 
 use crate::model::{
-    PdfColorDescription, PdfDescription, PdfElementDescription, PdfPathCommandDescription,
-    TextAlignmentDescription,
+    PdfColorDescription, PdfDescription, PdfElementDescription, TextAlignmentDescription,
 };
 
 
@@ -27,11 +18,9 @@ use crate::model::{
 pub enum PdfDefinitionError {
     NoPages,
     UndefinedFont(String),
-    AddingFont(String, printpdf::Error),
     LoadingFont(String),
-    AddingImage(String, printpdf::image_crate::ImageError),
+    AddingImage(String, String),
     UnsupportedImageType(String),
-    SavingFailed(printpdf::Error),
 }
 impl fmt::Display for PdfDefinitionError {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
@@ -40,16 +29,12 @@ impl fmt::Display for PdfDefinitionError {
                 => write!(f, "document has no pages"),
             PdfDefinitionError::UndefinedFont(name)
                 => write!(f, "font {:?} is referenced but not defined", name),
-            PdfDefinitionError::AddingFont(name, e)
-                => write!(f, "failed to add font {:?}: {}", name, e),
             PdfDefinitionError::LoadingFont(name)
                 => write!(f, "failed to load font {:?}", name),
             PdfDefinitionError::AddingImage(image_type, e)
                 => write!(f, "failed to add image of type {:?}: {}", image_type, e),
             PdfDefinitionError::UnsupportedImageType(image_type)
                 => write!(f, "images of type {:?} are not supported", image_type),
-            PdfDefinitionError::SavingFailed(e)
-                => write!(f, "failed to save PDF file: {}", e),
         }
     }
 }
@@ -79,28 +64,22 @@ fn color_from_def(color: &PdfColorDescription) -> Color {
     }
 }
 
-#[inline]
-fn object_from_mm(mm: f32) -> Object {
-    let pt: Pt = Mm(mm).into();
-    pt.into()
-}
-
-pub fn render_description(description: &PdfDescription) -> Result<PdfDocumentReference, PdfDefinitionError> {
+pub fn render_description(description: &PdfDescription) -> Result<Vec<u8>, PdfDefinitionError> {
     if description.pages.len() == 0 {
         return Err(PdfDefinitionError::NoPages);
     }
 
-    let (doc, page1, layer1) = PdfDocument::new(
-        description.title.as_str(),
-        Mm(description.pages[0].width_mm), Mm(description.pages[0].height_mm),
-        "Layer",
-    );
+    let mut doc = PdfDocument::new(description.title.as_str());
 
     let mut pdf_fonts = HashMap::new();
     let mut buzz_fonts = HashMap::new();
     for (font_name, font_data) in &description.fonts {
-        let font_ref = doc.add_external_font(Cursor::new(&font_data.0))
-            .map_err(|e| PdfDefinitionError::AddingFont(font_name.clone(), e))?;
+        let font = ParsedFont::from_bytes(
+            &font_data.0,
+            0,
+            &mut vec![],
+        ).unwrap();
+        let font_ref = doc.add_font(&font);
         pdf_fonts.insert(font_name.clone(), font_ref);
 
         let face = Face::from_slice(&font_data.0, 0)
@@ -108,87 +87,81 @@ pub fn render_description(description: &PdfDescription) -> Result<PdfDocumentRef
         buzz_fonts.insert(font_name.clone(), face);
     }
 
-    for (i, page) in description.pages.iter().enumerate() {
-        let (this_page_index, this_layer_index) = if i == 0 {
-            (page1, layer1)
-        } else {
-            doc.add_page(Mm(page.width_mm), Mm(page.height_mm), "Layer")
-        };
+    for page in &description.pages {
+        let mut page_ops = Vec::new();
 
+        page_ops.push(Op::SaveGraphicsState);
         for elem in &page.elements {
-            let this_layer = doc.get_page(this_page_index).get_layer(this_layer_index);
-
             match elem {
                 PdfElementDescription::Path(path) => {
+                    if path.stroke.is_none() && path.fill.is_none() {
+                        // nothing to paint
+                        continue;
+                    }
+
+                    page_ops.push(Op::SaveGraphicsState);
+
                     if let Some(stroke) = &path.stroke {
-                        this_layer.set_outline_color(color_from_def(stroke));
+                        page_ops.push(Op::SetOutlineColor { col: color_from_def(stroke) });
                     }
                     if let Some(stroke_width) = path.stroke_width {
-                        this_layer.set_outline_thickness(stroke_width);
+                        page_ops.push(Op::SetOutlineThickness { pt: Pt(stroke_width) });
                     }
                     if let Some(fill) = &path.fill {
-                        this_layer.set_fill_color(color_from_def(fill));
+                        page_ops.push(Op::SetFillColor { col: color_from_def(fill) });
                     }
 
-                    for cmd in &path.commands_mm {
-                        let op = match cmd {
-                            PdfPathCommandDescription::LineTo { x, y }
-                                => Operation::new(OP_PATH_CONST_LINE_TO, vec![object_from_mm(*x), object_from_mm(*y)]),
-                            PdfPathCommandDescription::MoveTo { x, y }
-                                => Operation::new(OP_PATH_CONST_MOVE_TO, vec![object_from_mm(*x), object_from_mm(*y)]),
-                            PdfPathCommandDescription::CubicBezierTo { c1x, c1y, c2x, c2y, x, y }
-                                => Operation::new(OP_PATH_CONST_4BEZIER, vec![object_from_mm(*c1x), object_from_mm(*c1y), object_from_mm(*c2x), object_from_mm(*c2y), object_from_mm(*x), object_from_mm(*y)]),
-                        };
-                        this_layer.add_operation(op);
+                    let mut points = Vec::with_capacity(path.points.len());
+                    for cmd in &path.points {
+                        points.push(LinePoint {
+                            p: Point::new(Mm(cmd.x), Mm(cmd.y)),
+                            bezier: false,
+                        });
                     }
 
-                    let final_char = match (path.stroke.is_some(), path.fill.is_some(), path.close) {
-                        (false, false, false) => OP_PATH_PAINT_END,
-                        (false, false, true) => OP_PATH_CONST_CLOSE_SUBPATH,
-                        (false, true, _) => OP_PATH_PAINT_FILL_NZ,
-                        (true, false, false) => OP_PATH_PAINT_STROKE,
-                        (true, false, true) => OP_PATH_PAINT_STROKE_CLOSE,
-                        (true, true, false) => OP_PATH_PAINT_FILL_STROKE_NZ,
-                        (true, true, true) => OP_PATH_PAINT_FILL_STROKE_CLOSE_NZ,
-                    };
-                    let final_op = Operation::new(final_char, vec![]);
-                    this_layer.add_operation(final_op);
+                    page_ops.push(Op::DrawLine {
+                        line: Line {
+                            points: points,
+                            is_closed: path.close,
+                        }
+                    });
+
+                    page_ops.push(Op::RestoreGraphicsState);
                 },
                 PdfElementDescription::Image(img) => {
-                    let cursor = Cursor::new(&img.data.0);
-
-                    let image: Image = match img.mime_type.as_str() {
-                        "image/jpeg" => Image::try_from(
-                            JpegDecoder::new(cursor)
-                                .map_err(|e| PdfDefinitionError::AddingImage("JPEG".to_owned(), e))?
-                            ).expect("failed to convert JPEG to image"),
-                        "image/png" => Image::try_from(
-                            PngDecoder::new(cursor)
-                                .map_err(|e| PdfDefinitionError::AddingImage("PNG".to_owned(), e))?
-                            ).expect("failed to convert PNG to image"),
+                    let image: RawImage = match img.mime_type.as_str() {
+                        "image/jpeg" => RawImage::decode_from_bytes(
+                            &img.data.0,
+                            &mut vec![],
+                            )
+                                .map_err(|e| PdfDefinitionError::AddingImage("JPEG".to_owned(), e))?,
+                        "image/png" => RawImage::decode_from_bytes(
+                            &img.data.0,
+                            &mut vec![],
+                            )
+                                .map_err(|e| PdfDefinitionError::AddingImage("PNG".to_owned(), e))?,
                         other => return Err(PdfDefinitionError::UnsupportedImageType(other.to_owned())),
                     };
-                    let transform = ImageTransform {
-                        translate_x: Some(Mm(img.x)),
-                        translate_y: Some(Mm(img.y)),
+                    let image_id = doc.add_image(&image);
+                    let transform = XObjectTransform {
+                        translate_x: Some(Mm(img.x).into_pt()),
+                        translate_y: Some(Mm(img.y).into_pt()),
                         scale_x: Some(img.scale_x),
                         scale_y: Some(img.scale_y),
                         ..Default::default()
                     };
-                    image.add_to_layer(
-                        this_layer,
+                    page_ops.push(Op::UseXobject {
+                        id: image_id,
                         transform,
-                    );
+                    });
                 },
                 PdfElementDescription::Text(txt) => {
                     if txt.text.len() == 0 {
                         continue;
                     }
 
-                    this_layer.set_fill_color(Color::Greyscale(Greyscale { percent: 0.0, icc_profile: None }));
-
                     let font_ref = match pdf_fonts.get(&txt.font) {
-                        Some(f) => f,
+                        Some(f) => f.clone(),
                         None => return Err(PdfDefinitionError::UndefinedFont(txt.font.clone())),
                     };
 
@@ -218,11 +191,51 @@ pub fn render_description(description: &PdfDescription) -> Result<PdfDocumentRef
                         },
                     };
 
-                    this_layer.use_text(&txt.text, txt.size_pt, Mm(txt.x + offset_mm), Mm(txt.y), font_ref);
+                    page_ops.push(Op::SaveGraphicsState);
+                    page_ops.push(Op::StartTextSection);
+                    page_ops.push(Op::SetTextCursor {
+                        pos: Point::new(Mm(txt.x + offset_mm), Mm(txt.y)),
+                    });
+                    page_ops.push(Op::SetFontSize {
+                        size: Pt(txt.size_pt),
+                        font: font_ref.clone(),
+                    });
+                    page_ops.push(Op::SetFillColor {
+                        col: Color::Greyscale(Greyscale {
+                            percent: 0.0,
+                            icc_profile: None,
+                        }),
+                    });
+
+                    page_ops.push(Op::WriteText {
+                        items: vec![
+                            TextItem::Text(txt.text.clone()),
+                        ],
+                        font: font_ref.clone(),
+                    });
+
+                    page_ops.push(Op::EndTextSection);
+                    page_ops.push(Op::RestoreGraphicsState);
                 },
             }
         }
+        page_ops.push(Op::RestoreGraphicsState);
+
+        let pdf_page = PdfPage::new(
+            Mm(description.pages[0].width_mm),
+            Mm(description.pages[0].height_mm),
+            Vec::new(),
+        );
+        doc.pages.push(pdf_page);
     }
 
-    Ok(doc)
+    // render
+    let opts = PdfSaveOptions {
+        optimize: false,
+        subset_fonts: false,
+        secure: false,
+        image_optimization: None,
+    };
+    let bytes = doc.save(&opts, &mut vec![]);
+    Ok(bytes)
 }

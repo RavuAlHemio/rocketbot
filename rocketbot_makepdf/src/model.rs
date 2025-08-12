@@ -37,7 +37,7 @@ pub struct PdfPathDescription {
     pub stroke_width: Option<f32>,
     pub fill: Option<PdfColorDescription>,
     pub close: bool,
-    pub commands_mm: Vec<PdfPathCommandDescription>,
+    pub points: Vec<PdfPoint>,
 }
 
 #[derive(Clone, Copy, Debug, Deserialize, PartialEq, Serialize)]
@@ -49,15 +49,9 @@ pub enum PdfColorDescription {
 }
 
 #[derive(Clone, Copy, Debug, Deserialize, PartialEq, Serialize)]
-pub enum PdfPathCommandDescription {
-    #[serde(rename = "m")]
-    MoveTo { x: f32, y: f32 },
-
-    #[serde(rename = "l")]
-    LineTo { x: f32, y: f32 },
-
-    #[serde(rename = "c")]
-    CubicBezierTo { c1x: f32, c1y: f32, c2x: f32, c2y: f32, x: f32, y: f32 },
+pub struct PdfPoint {
+    pub x: f32,
+    pub y: f32,
 }
 
 #[derive(Clone, Copy, Debug, Deserialize, PartialEq, Serialize)]

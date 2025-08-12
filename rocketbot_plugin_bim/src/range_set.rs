@@ -91,12 +91,12 @@ impl<T: Clone + Ord + QuasiStep> RangeSet<T> {
         }
     }
 
-    pub fn ranges(&self) -> BTreeSetIter<OrderableRange<T>> {
+    pub fn ranges(&self) -> BTreeSetIter<'_, OrderableRange<T>> {
         self.inner_set.iter()
     }
 
     #[allow(unused)]
-    pub fn elements(&self) -> RangeSetElementIter<T> {
+    pub fn elements(&self) -> RangeSetElementIter<'_, T> {
         RangeSetElementIter::new(&self)
     }
 

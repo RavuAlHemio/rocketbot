@@ -38,7 +38,11 @@ impl LineGraph {
         debug_assert_eq!(self.pixels.len() % self.width, 0);
         self.pixels.len() / self.width
     }
+
+    #[allow(unused)]
     pub fn thicken(&self) -> usize { self.thicken }
+
+    #[allow(unused)]
     pub fn pixels(&self) -> &[ChartColor] { self.pixels.as_slice() }
 
     fn data_height_with_headroom(max_y_value: usize) -> usize {

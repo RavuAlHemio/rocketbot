@@ -5,8 +5,8 @@ edition = "2021"
 
 [dependencies]
 async-trait = { version = "0.1" }
-once_cell = { version = "1.18" }
-regex = { version = "1.9" }
+once_cell = { version = "1.21" }
+regex = { version = "1.11" }
 rocketbot_interface = { path = "../rocketbot_interface" }
 serde = { version = "1.0", features = ["derive"] }
 serde_json = { version = "1.0" }

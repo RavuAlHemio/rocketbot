@@ -1,7 +1,7 @@
 use std::env;
 use std::ffi::OsString;
 use std::fs::File;
-use std::io::{BufWriter, Write};
+use std::io::Write;
 
 use rocketbot_makepdf::render_description;
 use rocketbot_makepdf::model::PdfDescription;
@@ -38,15 +38,8 @@ fn main() {
         }
     };
 
-    let rendered = render_description(&defn)
+    let pdf_bytes = render_description(&defn)
         .expect("failed to render definition");
-
-    let mut pdf_bytes = Vec::new();
-    {
-        let mut bufferer = BufWriter::new(&mut pdf_bytes);
-        rendered.save(&mut bufferer)
-            .expect("saving PDF failed");
-    }
 
     {
         let mut output_file = File::create(&args[first_file_index+1])

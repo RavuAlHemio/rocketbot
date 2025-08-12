@@ -11,6 +11,8 @@ use crate::units::{coerce_to_common_unit, NumberUnits, UnitDatabase};
 
 trait WholeDiv {
     type Output;
+
+    #[allow(unused)]
     fn whole_div(self, rhs: Self) -> Self::Output;
 }
 

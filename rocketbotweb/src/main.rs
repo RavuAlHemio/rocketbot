@@ -85,13 +85,13 @@ static STATIC_FILE_REGEX: Lazy<Regex> = Lazy::new(|| Regex::new(concat!(
 struct IndexTemplate;
 
 
-fn get_query_pairs<T>(request: &Request<T>) -> HashMap<Cow<str>, Cow<str>> {
+fn get_query_pairs<'a, T>(request: &'a Request<T>) -> HashMap<Cow<'a, str>, Cow<'a, str>> {
     get_query_pairs_vec(request)
         .into_iter()
         .collect()
 }
 
-fn get_query_pairs_multiset<T>(request: &Request<T>) -> HashMap<Cow<str>, Vec<Cow<str>>> {
+fn get_query_pairs_multiset<'a, T>(request: &'a Request<T>) -> HashMap<Cow<'a, str>, Vec<Cow<'a, str>>> {
     let mut ret = HashMap::new();
     for (key, value) in get_query_pairs_vec(request) {
         ret
@@ -102,7 +102,7 @@ fn get_query_pairs_multiset<T>(request: &Request<T>) -> HashMap<Cow<str>, Vec<Co
     ret
 }
 
-fn get_query_pairs_vec<T>(request: &Request<T>) -> Vec<(Cow<str>, Cow<str>)> {
+fn get_query_pairs_vec<'a, T>(request: &'a Request<T>) -> Vec<(Cow<'a, str>, Cow<'a, str>)> {
     if let Some(q) = request.uri().query() {
         form_urlencoded::parse(q.as_bytes())
             .collect()

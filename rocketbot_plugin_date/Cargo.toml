@@ -7,10 +7,10 @@ edition = "2021"
 async-trait = { version = "0.1" }
 chrono = { version = "0.4" }
 julian = { version = "0.7", default-features = false }
-once_cell = { version = "1.18" }
+once_cell = { version = "1.21" }
 ordered-float = { version = "5.0", features = ["serde"] }
 rand = { version = "0.8" }
-regex = { version = "1.9" }
+regex = { version = "1.11" }
 rocketbot_interface = { path = "../rocketbot_interface" }
 serde = { version = "1.0", features = ["derive"] }
 serde_json = { version = "1.0" }

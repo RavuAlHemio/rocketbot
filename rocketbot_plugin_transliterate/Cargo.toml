@@ -6,7 +6,7 @@ edition = "2021"
 [dependencies]
 async-trait = { version = "0.1" }
 rand = { version = "0.8" }
-regex = { version = "1.9" }
+regex = { version = "1.11" }
 rocketbot_interface = { path = "../rocketbot_interface" }
 rocketbot_regex_replace = { path = "../rocketbot_regex_replace" }
 serde = { version = "1.0", features = ["derive"] }

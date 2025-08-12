@@ -1,4 +1,4 @@
-use std::io::{BufWriter, Cursor, Write};
+use std::io::{Cursor, Write};
 
 use chrono::{DateTime, NaiveDate, Utc};
 use flate2::write::ZlibEncoder;
@@ -7,8 +7,7 @@ use minicbor::data::Tag;
 use rocketbot_barcode::qr::qr_string_to_bitmap;
 use rocketbot_makepdf;
 use rocketbot_makepdf::model::{
-    PdfColorDescription, PdfDescription, PdfElementDescription, PdfPathDescription,
-    PdfPathCommandDescription,
+    PdfColorDescription, PdfDescription, PdfElementDescription, PdfPathDescription, PdfPoint,
 };
 use serde::{Deserialize, Serialize};
 use unicode_normalization::UnicodeNormalization;
@@ -203,11 +202,11 @@ pub(crate) fn make_vax_pdf(vax_info: &VaxInfo, pdf_settings: &PdfSettings) -> Ve
                     stroke_width: None,
                     fill: Some(PdfColorDescription::Grayscale { white: 0.0 }),
                     close: true,
-                    commands_mm: vec![
-                        PdfPathCommandDescription::MoveTo { x: pdf_x, y: pdf_y },
-                        PdfPathCommandDescription::LineTo { x: pdf_x + pdf_settings.qr_pixel_width, y: pdf_y },
-                        PdfPathCommandDescription::LineTo { x: pdf_x + pdf_settings.qr_pixel_width, y: pdf_y - pdf_settings.qr_pixel_height },
-                        PdfPathCommandDescription::LineTo { x: pdf_x, y: pdf_y - pdf_settings.qr_pixel_height },
+                    points: vec![
+                        PdfPoint { x: pdf_x, y: pdf_y },
+                        PdfPoint { x: pdf_x + pdf_settings.qr_pixel_width, y: pdf_y },
+                        PdfPoint { x: pdf_x + pdf_settings.qr_pixel_width, y: pdf_y - pdf_settings.qr_pixel_height },
+                        PdfPoint { x: pdf_x, y: pdf_y - pdf_settings.qr_pixel_height },
                     ],
                 };
                 first_page.elements.push(PdfElementDescription::Path(path));
@@ -216,15 +215,7 @@ pub(crate) fn make_vax_pdf(vax_info: &VaxInfo, pdf_settings: &PdfSettings) -> Ve
     }
 
     // render the PDF
-    let pdf = rocketbot_makepdf::render_description(&my_pdf)
+    let pdf_bytes = rocketbot_makepdf::render_description(&my_pdf)
         .expect("rendering static PDF data failed");
-
-    // store it into bytes
-    let mut pdf_bytes = Vec::new();
-    {
-        let mut buf_writer = BufWriter::new(&mut pdf_bytes);
-        pdf.save(&mut buf_writer)
-            .expect("rendering PDF failed");
-    }
     pdf_bytes
 }

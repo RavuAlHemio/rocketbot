@@ -72,7 +72,7 @@ macro_rules! write_expect {
 /// If it is a string value, the string value is returned. If it is a different type of value, it is
 /// converted into the JSON string representation and returned. This means that strings are returned
 /// without quote marks but all other values are returned in their JSON representation.
-fn stringify(value: &serde_json::Value) -> Cow<str> {
+fn stringify<'a>(value: &'a serde_json::Value) -> Cow<'a, str> {
     if let Some(v) = value.as_str() {
         Cow::Borrowed(v)
     } else {

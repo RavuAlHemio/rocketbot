@@ -5820,7 +5820,7 @@ fn is_digits_number_prime(number_with_digits: &str) -> bool {
 
 /// Fold whitespace as in XML: leading whitespace is completely trimmed and any other whitespace is
 /// reduced to one occurrence of ' ' (U+0020).
-fn fold_whitespace_xml(s: &str) -> Cow<str> {
+fn fold_whitespace_xml<'a>(s: &'a str) -> Cow<'a, str> {
     SPACES_RE.replace_all(s, |caps: &Captures| {
         let m = caps.get(0).expect("Captures has no match 0?!");
         if m.start() == 0 || m.end() == s.len() {

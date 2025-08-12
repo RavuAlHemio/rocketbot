@@ -19,10 +19,10 @@
     {% endfor %}
   </tr>
   {% for (company, stats) in company_to_stats %}
-    {% for (type, stats) in stats.type_to_stats %}
+    {% for (vehicle_type, stats) in stats.type_to_stats %}
       <tr class="known-type">
         <td class="company">{{ company|escape }}</td>
-        <td class="vehicle-type">{{ type|escape }}</td>
+        <td class="vehicle-type">{{ vehicle_type|escape }}</td>
         <td class="total count">{{ stats.total_count }}</td>
         <td class="total active">
           <span class="absolute">{{ stats.active_count }}</span>

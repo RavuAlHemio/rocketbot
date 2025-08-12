@@ -4,5 +4,5 @@ version = "0.1.0"
 edition = "2021"
 
 [dependencies]
-once_cell = { version = "1.18" }
-regex = { version = "1.9" }
+once_cell = { version = "1.21" }
+regex = { version = "1.11" }

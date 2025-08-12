@@ -44,7 +44,7 @@
 <div class="lines-box">
 
 {% for (line_name, line) in line_name_to_info -%}
-  {% call output_line(line, region.all_companies|as_ref) %}
+  {% call output_line(line, region.all_companies|ref) %}
 {%- endfor %}{# line_name_to_info #}
 
 </div>{# lines-box #}

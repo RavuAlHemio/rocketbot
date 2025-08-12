@@ -263,6 +263,7 @@ impl UnitDatabase {
             .collect()
     }
 
+    #[allow(unused)]
     pub fn get_si_prefixes(&self) -> BTreeMap<String, f64> {
         self.si_prefix_to_factor.iter()
             .map(|(pfx, fct)| (pfx.clone(), fct.clone()))

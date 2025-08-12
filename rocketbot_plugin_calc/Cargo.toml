@@ -13,14 +13,14 @@ chrono = { version = "0.4" }
 minidom = { version = "0.16", optional = true }
 num-bigint = { version = "0.4", features = ["rand", "serde"] }
 num-traits = { version = "0.2" }
-once_cell = { version = "1.18" }
-pest = { version = "2.1" }
-pest_derive = { version = "2.1" }
-regex = { version = "1.9" }
+once_cell = { version = "1.21" }
+pest = { version = "2.8" }
+pest_derive = { version = "2.8" }
+regex = { version = "1.11" }
 reqwest = { version = "0.12", features = ["rustls-tls"], optional = true }
 rocketbot_interface = { path = "../rocketbot_interface" }
 serde = { version = "1.0", features = ["derive"] }
 serde_json = { version = "1.0" }
-tokio = { version = "1.37", features = ["macros"] }
-toml = { version = "0.8" }
+tokio = { version = "1.47", features = ["macros"] }
+toml = { version = "0.9" }
 tracing = { version = "0.1" }

@@ -55,13 +55,13 @@ pub trait JsonValueExtensions {
     ///
     /// Returns `Some(_)` (an iterator over the object's entries) if the value is an
     /// [object][serde_json::Value::Object]; returns `None` otherwise.
-    fn entries(&self) -> Option<serde_json::map::Iter>;
+    fn entries(&self) -> Option<serde_json::map::Iter<'_>>;
 
     /// Attempts to interpret the JSON value as a list and return an iterator of its members.
     ///
     /// Returns `Some(_)` (an iterator over the list's members) if the value is a
     /// [list][serde_json::Value::Array]; returns `None` otherwise.
-    fn members(&self) -> Option<slice::Iter<serde_json::Value>>;
+    fn members(&self) -> Option<slice::Iter<'_, serde_json::Value>>;
 
     /// Attempts to interpret the JSON value as an object and return whether it contains the given
     /// key.
@@ -90,7 +90,7 @@ pub trait JsonValueExtensions {
     /// If the value is an [object][serde_json::Value::Object], returns an iterator over the entries
     /// of this object; otherwise, returns an iterator over the entries of an empty object (an empty
     /// iterator).
-    fn entries_or_empty(&self) -> serde_json::map::Iter {
+    fn entries_or_empty(&self) -> serde_json::map::Iter<'_> {
         match self.entries() {
             Some(i) => i,
             None => EMPTY_MAP.iter(),
@@ -103,7 +103,7 @@ pub trait JsonValueExtensions {
     /// If the value is a [list][serde_json::Value::Array], returns an iterator over the members of
     /// this array; otherwise, returns an iterator over the entries of an empty object (an empty
     /// iterator).
-    fn members_or_empty(&self) -> slice::Iter<serde_json::Value> {
+    fn members_or_empty(&self) -> slice::Iter<'_, serde_json::Value> {
         match self.members() {
             Some(i) => i,
             None => [].iter(),
@@ -117,7 +117,7 @@ pub trait JsonValueExtensions {
     /// entries of this object; if the value is [null][serde_json::Value::Null], returns an iterator
     /// over the entries of an empty object (an empty iterator); otherwise, i.e. if the value has
     /// any other type, returns `None`.
-    fn entries_or_empty_strict(&self) -> Option<serde_json::map::Iter>;
+    fn entries_or_empty_strict(&self) -> Option<serde_json::map::Iter<'_>>;
 
     /// Attempts to interpret the JSON value as a list and return an iterator over its entries or
     /// an empty iterator for null values.
@@ -126,7 +126,7 @@ pub trait JsonValueExtensions {
     /// of this list; if the value is [null][serde_json::Value::Null], returns an iterator over the
     /// entries of an empty list (an empty iterator); otherwise, i.e. if the value has any other
     /// type, returns `None`.
-    fn members_or_empty_strict(&self) -> Option<slice::Iter<serde_json::Value>>;
+    fn members_or_empty_strict(&self) -> Option<slice::Iter<'_, serde_json::Value>>;
 
     /// Inserts the given key and value into this object value. Panics if this is not an object
     /// value.
@@ -137,11 +137,11 @@ impl JsonValueExtensions for serde_json::Value {
     uint_conv!(as_u32, u32);
     uint_conv!(as_usize, usize);
 
-    fn entries(&self) -> Option<serde_json::map::Iter> {
+    fn entries(&self) -> Option<serde_json::map::Iter<'_>> {
         self.as_object().map(|o| o.iter())
     }
 
-    fn members(&self) -> Option<slice::Iter<serde_json::Value>> {
+    fn members(&self) -> Option<slice::Iter<'_, serde_json::Value>> {
         self.as_array().map(|o| o.iter())
     }
 
@@ -164,7 +164,7 @@ impl JsonValueExtensions for serde_json::Value {
         }
     }
 
-    fn entries_or_empty_strict(&self) -> Option<serde_json::map::Iter> {
+    fn entries_or_empty_strict(&self) -> Option<serde_json::map::Iter<'_>> {
         if self.is_null() {
             Some(EMPTY_MAP.iter())
         } else {
@@ -172,7 +172,7 @@ impl JsonValueExtensions for serde_json::Value {
         }
     }
 
-    fn members_or_empty_strict(&self) -> Option<slice::Iter<serde_json::Value>> {
+    fn members_or_empty_strict(&self) -> Option<slice::Iter<'_, serde_json::Value>> {
         if self.is_null() {
             Some([].iter())
         } else {
