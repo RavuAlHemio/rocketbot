@@ -111,10 +111,10 @@ pub fn render_description(description: &PdfDescription) -> Result<Vec<u8>, PdfDe
                         page_ops.push(Op::SetFillColor { col: color_from_def(fill) });
                     }
 
-                    let mut points = Vec::with_capacity(path.points.len());
-                    for cmd in &path.points {
+                    let mut points = Vec::with_capacity(path.points_mm.len());
+                    for point in &path.points_mm {
                         points.push(LinePoint {
-                            p: Point::new(Mm(cmd.x), Mm(cmd.y)),
+                            p: Point::new(Mm(point.x), Mm(point.y)),
                             bezier: false,
                         });
                     }

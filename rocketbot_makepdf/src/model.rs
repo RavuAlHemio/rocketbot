@@ -37,7 +37,7 @@ pub struct PdfPathDescription {
     pub stroke_width: Option<f32>,
     pub fill: Option<PdfColorDescription>,
     pub close: bool,
-    pub points: Vec<PdfPoint>,
+    pub points_mm: Vec<PdfPoint>, // mm is the unit used
 }
 
 #[derive(Clone, Copy, Debug, Deserialize, PartialEq, Serialize)]
