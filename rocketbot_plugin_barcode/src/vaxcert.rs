@@ -202,7 +202,7 @@ pub(crate) fn make_vax_pdf(vax_info: &VaxInfo, pdf_settings: &PdfSettings) -> Ve
                     stroke_width: None,
                     fill: Some(PdfColorDescription::Grayscale { white: 0.0 }),
                     close: true,
-                    points: vec![
+                    points_mm: vec![
                         PdfPoint { x: pdf_x, y: pdf_y },
                         PdfPoint { x: pdf_x + pdf_settings.qr_pixel_width, y: pdf_y },
                         PdfPoint { x: pdf_x + pdf_settings.qr_pixel_width, y: pdf_y - pdf_settings.qr_pixel_height },
