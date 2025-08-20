@@ -85,6 +85,7 @@ pub(crate) fn row_data_to_trams(page_config: &PageConfig, row_data: Vec<(String,
     let mut vehicle = VehicleInfo::new("0".to_owned().into(), page_config.vehicle_class, page_config.type_code.clone());
 
     vehicle.depot = page_config.default_depot.clone();
+    vehicle.manufacturer = page_config.default_manufacturer.clone();
 
     let all_props: Vec<(&String, &String)> = page_config.common_props.iter()
         .chain(row_data.iter().map(|(k, v)| (k, v)))
