@@ -293,10 +293,13 @@ pub(crate) async fn handle_bim_types(request: &Request<Incoming>) -> Result<Resp
     let company_to_bim_database_opt = obtain_company_to_definition().await
         .as_ref()
         .and_then(|ctd| obtain_company_to_bim_database(ctd));
-    let company_to_bim_database = match company_to_bim_database_opt {
+    let mut company_to_bim_database = match company_to_bim_database_opt {
         Some(ctbdb) => ctbdb,
         None => return return_500(),
     };
+    if let Some(c) = company.as_ref() {
+        company_to_bim_database.retain(|co, _bd| co == c);
+    }
 
     let mut additional_filters = String::new();
     let mut query_params: Vec<&(dyn ToSql + Sync)> = Vec::with_capacity(2);
