@@ -80,6 +80,7 @@ pub enum PowerSource {
     Human,
     Animal,
     Rope,
+    GuideBar,
 }
 impl PowerSource {
     pub fn powered_from_str(&self) -> &'static str {
@@ -98,6 +99,7 @@ impl PowerSource {
             Self::Human => "human power",
             Self::Animal => "animal power",
             Self::Rope => "rope",
+            Self::GuideBar => "guide bar",
         }
     }
 }
@@ -118,6 +120,7 @@ impl fmt::Display for PowerSource {
             Self::Human => write!(f, "human"),
             Self::Animal => write!(f, "animal"),
             Self::Rope => write!(f, "rope"),
+            Self::GuideBar => write!(f, "guide bar"),
         }
     }
 }
