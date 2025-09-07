@@ -4,17 +4,17 @@
 use std::collections::{BTreeMap, BTreeSet, HashMap};
 use std::env::args_os;
 use std::fs::File;
-use std::io::Read;
+use std::io::{Cursor, Read};
 use std::path::PathBuf;
 use std::time::Duration;
 
 use ciborium;
-use indexmap::IndexSet;
+use csv;
+use indexmap::{IndexMap, IndexSet};
 use reqwest;
 use rocketbot_bim_common::{PowerSource, VehicleClass, VehicleInfo, VehicleNumber};
 use serde::{Deserialize, Serialize};
 use serde_json;
-use sxd_document;
 
 
 #[derive(Clone, Debug, Deserialize, Eq, Serialize, PartialEq)]
@@ -25,124 +25,38 @@ struct Config {
 
 #[derive(Clone, Debug, Deserialize, Eq, Serialize, PartialEq)]
 struct PageInfo {
-    pub export_url: String,
+    pub csv_url: String,
+    pub subset: String,
     pub timeout_ms: Option<u64>,
-    pub web_id_to_export_class: HashMap<String, ExportClass>,
+    pub class_to_export_class: HashMap<String, ExportClass>,
 }
 
 #[derive(Clone, Debug, Deserialize, Eq, Serialize, PartialEq)]
 struct ExportClass {
     pub type_code: String,
     pub vehicle_class: VehicleClass,
+    #[serde(default)] pub manufacturer: Option<String>,
     #[serde(default)] pub power_sources: BTreeSet<PowerSource>,
     #[serde(default)] pub other_data: BTreeMap<String, String>,
     #[serde(default)] pub include_deleted: bool,
 }
 
-#[derive(Clone, Debug, Eq, PartialEq)]
-struct VehicleInfoBuilder {
-    number: Option<VehicleNumber>,
-    type_code: Option<String>,
-    vehicle_class: Option<VehicleClass>,
-    power_sources: BTreeSet<PowerSource>,
-    in_service_since: Option<String>,
-    out_of_service_since: Option<String>,
-    manufacturer: Option<String>,
-    depot: Option<String>,
-    other_data: BTreeMap<String, String>,
-    fixed_coupling: IndexSet<VehicleNumber>,
+trait EmptyNoneElseCloned {
+    type Output;
+    fn empty_none_else_cloned(&self) -> Self::Output;
 }
-impl VehicleInfoBuilder {
-    pub fn new() -> Self {
-        Self {
-            number: None,
-            type_code: None,
-            vehicle_class: None,
-            power_sources: BTreeSet::new(),
-            in_service_since: None,
-            out_of_service_since: None,
-            manufacturer: None,
-            depot: None,
-            other_data: BTreeMap::new(),
-            fixed_coupling: IndexSet::new(),
+impl EmptyNoneElseCloned for Option<&String> {
+    type Output = Option<String>;
+    fn empty_none_else_cloned(&self) -> Self::Output {
+        if let Some(s) = self {
+            if s.len() == 0 {
+                None
+            } else {
+                Some((*s).to_owned())
+            }
+        } else {
+            None
         }
-    }
-
-    pub fn number(&mut self, number: VehicleNumber) -> &mut Self {
-        self.number = Some(number);
-        self
-    }
-
-    pub fn type_code<T: Into<String>>(&mut self, type_code: T) -> &mut Self {
-        self.type_code = Some(type_code.into());
-        self
-    }
-
-    pub fn vehicle_class(&mut self, vehicle_class: VehicleClass) -> &mut Self {
-        self.vehicle_class = Some(vehicle_class);
-        self
-    }
-
-    pub fn power_source(&mut self, power_source: PowerSource) -> &mut Self {
-        self.power_sources.insert(power_source);
-        self
-    }
-
-    pub fn in_service_since<S: Into<String>>(&mut self, since: S) -> &mut Self {
-        self.in_service_since = Some(since.into());
-        self
-    }
-
-    pub fn out_of_service_since<S: Into<String>>(&mut self, since: S) -> &mut Self {
-        self.out_of_service_since = Some(since.into());
-        self
-    }
-
-    pub fn manufacturer<M: Into<String>>(&mut self, manuf: M) -> &mut Self {
-        self.manufacturer = Some(manuf.into());
-        self
-    }
-
-    pub fn depot<D: Into<String>>(&mut self, depot: D) -> &mut Self {
-        self.depot = Some(depot.into());
-        self
-    }
-
-    pub fn other_data<K: Into<String>, V: Into<String>>(&mut self, key: K, value: V) -> &mut Self {
-        self.other_data.insert(key.into(), value.into());
-        self
-    }
-
-    pub fn fixed_coupling<C: IntoIterator<Item = VehicleNumber>>(&mut self, coupling: C) -> &mut Self {
-        self.fixed_coupling = coupling.into_iter().collect();
-        self
-    }
-
-    pub fn try_build(self) -> Result<VehicleInfo, Self> {
-        let number = match &self.number {
-            Some(n) => n.clone(),
-            None => return Err(self),
-        };
-        let vehicle_class = match self.vehicle_class {
-            Some(vc) => vc,
-            None => return Err(self),
-        };
-        let type_code = match self.type_code {
-            Some(tc) => tc,
-            None => return Err(self),
-        };
-        Ok(VehicleInfo {
-            number,
-            type_code,
-            vehicle_class,
-            power_sources: self.power_sources,
-            in_service_since: self.in_service_since,
-            out_of_service_since: self.out_of_service_since,
-            manufacturer: self.manufacturer,
-            depot: self.depot,
-            other_data: self.other_data,
-            fixed_coupling: self.fixed_coupling,
-        })
     }
 }
 
@@ -190,159 +104,153 @@ async fn main() {
 
     let mut vehicles: Vec<VehicleInfo> = Vec::new();
     for page in &config.pages {
-        eprintln!("fetching {}", page.export_url);
+        eprintln!("fetching {}", page.csv_url);
 
         let timeout = page.timeout_ms.map(|ms| Duration::from_millis(ms));
 
-        let page_bytes = obtain_page_bytes(&page.export_url, timeout).await;
-        let page_string = String::from_utf8(page_bytes)
-            .expect("failed to decode page as UTF-8");
-        let package = sxd_document::parser::parse(&page_string)
-            .expect("failed to parse page as XML");
-        let document = package.as_document();
-
-        let definition = document.root()
-            .children().iter()
-            .filter_map(|c| c.element())
-            .nth(0).expect("no root element found");
-        if definition.name().local_part() != "Definition" {
-            panic!("root element is not named \"Definition\"");
+        let page_bytes_utf16le = obtain_page_bytes(&page.csv_url, timeout).await;
+        let page_words: Vec<u16> = page_bytes_utf16le
+            .chunks(2)
+            .map(|ch| u16::from_le_bytes(ch.try_into().unwrap()))
+            .collect();
+        let mut page_text = String::from_utf16(&page_words)
+            .expect("failed to interpret page text as UTF-16LE");
+        if page_text.starts_with("\u{FEFF}") {
+            page_text.remove(0);
         }
+        let page_bytes_cursor = Cursor::new(&page_text);
+        let mut csv_reader = csv::ReaderBuilder::new()
+            .delimiter(b',')
+            .has_headers(true)
+            .quote(b'"')
+            .quoting(true)
+            .double_quote(true)
+            .escape(None)
+            .from_reader(page_bytes_cursor);
 
-        let set = definition.children().iter()
-            .filter_map(|c| c.element())
-            .filter(|e| e.name().local_part() == "Set")
-            .nth(0).expect("no Set child of Definition found");
+        let headers: Vec<String> = csv_reader.headers()
+            .expect("failed to read headers")
+            .iter()
+            .map(|h| h.to_owned())
+            .collect();
+        for record_res in csv_reader.records() {
+            let record = record_res.expect("invalid CSV record");
+            let map: IndexMap<String, String> = headers
+                .iter()
+                .zip(record.iter())
+                .map(|(k, v)| (k.clone(), v.to_owned()))
+                .collect();
 
-        let classes = set.children().into_iter()
-            .filter_map(|c| c.element())
-            .filter(|e| e.name().local_part() == "Class");
-        for class in classes {
-            // is this class interesting for us?
-            let web_id = match class.attribute_value("Webid") {
-                Some(wi) => wi,
-                None => continue, // classes without Webid are not interesting to us
-            };
-            let class_def = match page.web_id_to_export_class.get(web_id) {
-                Some(cd) => cd,
-                None => continue, // not one of the classes we care about
-            };
+            if !map.get("Subset").map(|s| s == &page.subset).unwrap_or(true) {
+                // wrong subset
+                continue;
+            }
 
-            let builder_opt = class.attribute_value("Builder");
-            let introduced: Option<&str> = class.attribute_value("Introduced");
-            let withdrawn: Option<&str> = class.attribute_value("Withdrawn");
+            let Some(cls) = map.get("Class") else { continue };
+            let Some(class_def) = page.class_to_export_class.get(cls) else { continue };
 
-            let locos = class.children().into_iter()
-                .filter_map(|c| c.element())
-                .filter(|e| e.name().local_part() == "Loco");
-            for loco in locos {
-                let formation_str_opt = loco.attribute_value("Form")
-                    .and_then(|f| if f.len() == 0 { None } else { Some(f) })
-                    .or_else(|| loco.attribute_value("Number"))
-                    .and_then(|f| if f.len() == 0 { None } else { Some(f) });
-                let formation_str = match formation_str_opt {
-                    Some(f) => f,
-                    None => continue,
-                };
-                // formation might be split by "," or ", "
-                let formation: IndexSet<VehicleNumber> = formation_str
+            let formation_opt = map.get("Form");
+            let Some(number) = map.get("Number") else { continue };
+            let coupled_vehicles = if let Some(formation_str) = formation_opt {
+                // vehicles in formation may be split by "," or ", "
+                let pieces: Vec<&str> = formation_str
                     .split(",")
-                    .map(|s| if let Some(spaceless) = s.strip_prefix(" ") {
-                        spaceless.to_owned().into()
+                    .map(|piece| if let Some(rest) = piece.strip_prefix(" ") {
+                        rest
                     } else {
-                        s.to_owned().into()
+                        piece
                     })
                     .collect();
-
-                let status_value_opt = loco.attribute_value("Status");
-                let is_active = status_value_opt
-                    .map(|v| v == "A") // active
-                    .unwrap_or(false);
-                let is_withdrawn = status_value_opt
-                    .map(|v| v == "W" || v == "X") // withdrawn or scrapped
-                    .unwrap_or(false);
-                let is_deleted = loco.attribute_value("Deleted")
-                    .map(|v| v == "true")
-                    .unwrap_or(false);
-                if is_deleted && !class_def.include_deleted {
-                    continue;
+                if pieces.len() == 0 || (pieces.len() == 1 && pieces[0].len() == 0) {
+                    vec![number.as_str()]
+                } else {
+                    pieces
                 }
+            } else {
+                vec![number.as_str()]
+            };
 
-                let depot_opt = loco.attribute_value("Depot")
-                    .and_then(|d| if d.len() == 0 { None } else { Some(d) });
+            let depot = map
+                .get("Depot")
+                .empty_none_else_cloned();
+            let status = map
+                .get("Status")
+                .empty_none_else_cloned()
+                .unwrap_or_else(|| "A".to_owned());
 
-                // additional attributes
-                let mut my_other_data = BTreeMap::new();
-                for attrib in loco.attributes() {
-                    let name = attrib.name().local_part();
-                    if name == "id" || name == "Webid" {
-                        // SpotLog LocoList internal ID
-                        continue;
-                    }
-                    if name == "Number" || name == "Form" || name == "form" {
-                        // vehicle numbers are processed further above
-                        continue;
-                    }
-                    if name == "Status" {
-                        // status is processed above
-                        continue;
-                    }
-                    if name == "Depot" {
-                        // depot is processed above
-                        continue;
-                    }
-                    if name == "Updated" {
-                        // SpotLog LocoList internal timestamp
-                        continue;
-                    }
+            let (want_from, want_to) = match status.as_str() {
+                "A" => {
+                    // active
+                    (true, false)
+                },
+                "W"|"X" => {
+                    // withdrawn/scrapped
+                    (true, true)
+                },
+                _ => {
+                    // other (assume active)
+                    (true, false)
+                },
+            };
 
-                    if attrib.value().trim().len() == 0 {
-                        // no value, no interest
-                        continue;
-                    }
+            let in_service_since = if want_from {
+                Some(
+                    map
+                        .get("InService")
+                        .empty_none_else_cloned()
+                        .unwrap_or_else(|| "?".to_owned())
+                )
+            } else {
+                None
+            };
+            let out_of_service_since = if want_to {
+                Some(
+                    map
+                        .get("InService")
+                        .empty_none_else_cloned()
+                        .or_else(|| map
+                            .get("Scrapped")
+                            .empty_none_else_cloned()
+                        )
+                        .unwrap_or_else(|| "?".to_owned())
+                )
+            } else {
+                None
+            };
+            let pool = map.get("Pool").empty_none_else_cloned();
 
-                    my_other_data.insert(name.to_owned(), attrib.value().to_owned());
-                }
+            let mut other_data = class_def.other_data.clone();
+            if let Some(p) = pool {
+                other_data.insert("Pool".to_owned(), p);
+            }
 
-                for veh in &formation {
-                    let mut vib = VehicleInfoBuilder::new();
-                    vib.number(veh.clone())
-                        .type_code(&class_def.type_code)
-                        .vehicle_class(class_def.vehicle_class);
-                    for power_source in &class_def.power_sources {
-                        vib.power_source(*power_source);
-                    }
-                    if let Some(b) = builder_opt {
-                        vib.manufacturer(b);
-                    }
-                    if let Some(d) = depot_opt {
-                        vib.depot(d);
-                    }
-                    if let Some(i) = introduced {
-                        vib.in_service_since(i);
-                    } else if is_active || is_withdrawn {
-                        vib.in_service_since("?");
-                    }
-                    if is_withdrawn {
-                        vib.out_of_service_since(withdrawn.unwrap_or("?"));
-                    }
-
-                    for (k, v) in &class_def.other_data {
-                        vib.other_data(k, v);
-                    }
-                    // my data overrides class data
-                    for (k, v) in &my_other_data {
-                        vib.other_data(k, v);
-                    }
-
-                    if formation.len() > 1 {
-                        vib.fixed_coupling(formation.clone());
-                    }
-
-                    let vehicle = vib.try_build()
-                        .expect("failed to build vehicle");
-                    vehicles.push(vehicle);
-                }
+            // create the vehicles
+            let coupled_vehicle_numbers: Vec<_> = coupled_vehicles
+                .iter()
+                .map(|cv| VehicleNumber::from((*cv).to_owned()))
+                .collect();
+            let fixed_coupling = if coupled_vehicle_numbers.len() > 1 {
+                coupled_vehicle_numbers
+                    .iter()
+                    .cloned()
+                    .collect()
+            } else {
+                IndexSet::with_capacity(0)
+            };
+            for coupled_vehicle_number in &coupled_vehicle_numbers {
+                let vehicle = VehicleInfo {
+                    number: coupled_vehicle_number.clone(),
+                    vehicle_class: class_def.vehicle_class,
+                    power_sources: class_def.power_sources.clone(),
+                    type_code: class_def.type_code.clone(),
+                    in_service_since: in_service_since.clone(),
+                    out_of_service_since: out_of_service_since.clone(),
+                    manufacturer: class_def.manufacturer.clone(),
+                    depot: depot.clone(),
+                    other_data: other_data.clone(),
+                    fixed_coupling: fixed_coupling.clone(),
+                };
+                vehicles.push(vehicle);
             }
         }
     }
