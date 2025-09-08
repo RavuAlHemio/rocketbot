@@ -41,7 +41,7 @@ struct VehicleEntry {
     pub vehicle_number: VehicleNumber,
     pub full_vehicle_number: String,
     pub operator: String,
-    pub variant: String,
+    pub variant: Option<String>,
 }
 
 
@@ -276,7 +276,7 @@ async fn main() -> ExitCode {
 
                         let vehicle_number_match = line_caps.name("vehnum").unwrap();
                         let operator_match = line_caps.name("operator").unwrap();
-                        let variant_match = line_caps.name("variant").unwrap();
+                        let variant_match_opt = line_caps.name("variant");
 
                         let Some(vn_caps) = vehicle_page_config.short_vehicle_number_extractor.captures(vehicle_number_match.as_str()) else {
                             eprintln!("extractor regex did not match vehicle number {:?}; skipping", vehicle_number_match.as_str());
@@ -292,7 +292,7 @@ async fn main() -> ExitCode {
                             vehicle_number: VehicleNumber::from(short_vehicle_number),
                             full_vehicle_number: vehicle_number_match.as_str().to_owned(),
                             operator: operator_match.as_str().to_owned(),
-                            variant: variant_match.as_str().to_owned(),
+                            variant: variant_match_opt.map(|vm| vm.as_str().to_owned()),
                         });
                     }
                 } else if i == 2 {
@@ -336,10 +336,12 @@ async fn main() -> ExitCode {
                     "Fahrzeughalter".to_owned(),
                     vehicle_entry.operator,
                 );
-                other_data.insert(
-                    "Variante".to_owned(),
-                    vehicle_entry.variant,
-                );
+                if let Some(v) = vehicle_entry.variant {
+                    other_data.insert(
+                        "Variante".to_owned(),
+                        v,
+                    );
+                }
                 if let Some(serial_number) = serial_number_opt.as_ref() {
                     other_data.insert(
                         "Seriennummer".to_owned(),
