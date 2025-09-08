@@ -3438,6 +3438,7 @@ dependencies = [
  "ciborium",
  "clap",
  "csv",
+ "ego-tree",
  "form_urlencoded",
  "futures-util",
  "indexmap",
