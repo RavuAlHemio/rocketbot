@@ -3535,7 +3535,9 @@ name = "rocketbot_plugin_config_user_alias"
 version = "0.1.0"
 dependencies = [
  "async-trait",
+ "regex",
  "rocketbot_interface",
+ "rocketbot_string",
  "serde_json",
  "tracing",
 ]
