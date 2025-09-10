@@ -1,9 +1,13 @@
 //! Obtains vehicles from Ilostan Pojazdów Trakcyjnych (https://ilostan.forumkolejowe.pl/).
+//!
+//! Since the same model of rolling stock can be in use at multiple operators and IPT groups all
+//! sets of one model together independent of operator, multiple per-operator output files can be
+//! generated.
 
 
 use std::collections::{BTreeMap, BTreeSet, HashSet};
 use std::sync::LazyLock;
-use std::env::args_os;
+use std::env::{args_os, var_os};
 use std::ffi::OsString;
 use std::fs::File;
 use std::io::{Read, Write};
@@ -21,7 +25,7 @@ use serde::{Deserialize, Serialize};
 
 #[derive(Clone, Debug, Deserialize, Eq, Hash, Ord, PartialEq, PartialOrd, Serialize)]
 struct Config {
-    pub output_path: String,
+    pub operator_to_output_path: BTreeMap<String, String>,
     pub vehicle_pages: Vec<VehiclePageConfig>,
 }
 
@@ -134,6 +138,8 @@ async fn obtain_page_bytes(url: &str) -> Vec<u8> {
 
 fn output_usage() {
     eprintln!("Usage: obtain_bim_ipt [CONFIG.JSON]");
+    eprintln!();
+    eprintln!("set environment variable OBTAIN_BIM_DEBUG to 1 for additional debug output");
 }
 
 
@@ -198,10 +204,18 @@ async fn main() -> ExitCode {
     let config: Config = serde_json::from_str(&config_str)
         .expect("failed to parse config file");
 
+    let mut output_path_to_operators: BTreeMap<String, BTreeSet<String>> = BTreeMap::new();
+    for (operator, output_path) in &config.operator_to_output_path {
+        output_path_to_operators
+            .entry(output_path.clone())
+            .or_insert_with(|| BTreeSet::new())
+            .insert(operator.clone());
+    }
+
     // prepare CSS selectors
     let table_row_selector = Selector::parse("tbody#myTable > tr").unwrap();
 
-    let mut number_to_vehicle = BTreeMap::new();
+    let mut operator_to_number_to_vehicle = BTreeMap::new();
     for vehicle_page_config in &config.vehicle_pages {
         let page_bytes = obtain_page_bytes(&vehicle_page_config.url).await;
 
@@ -334,7 +348,7 @@ async fn main() -> ExitCode {
                 );
                 other_data.insert(
                     "Fahrzeughalter".to_owned(),
-                    vehicle_entry.operator,
+                    vehicle_entry.operator.clone(),
                 );
                 if let Some(v) = vehicle_entry.variant {
                     other_data.insert(
@@ -368,10 +382,13 @@ async fn main() -> ExitCode {
                     fixed_coupling: fixed_coupling.clone(),
                 };
 
+                let number_to_vehicle = operator_to_number_to_vehicle
+                    .entry(vehicle_entry.operator.clone())
+                    .or_insert_with(|| BTreeMap::new());
                 if let Some(known_vehicle) = number_to_vehicle.get(&vehicle.number) {
                     eprintln!(
-                        "DUPE {:?}: we already know vehicle {:?} and are trying to add vehicle {:?}",
-                        vehicle.number, known_vehicle, vehicle,
+                        "operator {:?} DUPE {:?}: we already know vehicle {:?} and are trying to add vehicle {:?}",
+                        vehicle_entry.operator, vehicle.number, known_vehicle, vehicle,
                     );
                     continue;
                 }
@@ -380,19 +397,51 @@ async fn main() -> ExitCode {
         }
     }
 
-    let vehicles: Vec<VehicleInfo> = number_to_vehicle
-        .into_iter()
-        .map(|(_vn, v)| v)
-        .collect();
+    let debug_mode = var_os("OBTAIN_BIM_DEBUG").map(|v| v == "1").unwrap_or(false);
+    for (output_path, operators) in &output_path_to_operators {
+        let mut all_vehicles_map = BTreeMap::new();
+        for operator in operators {
+            let Some(number_to_vehicle) = operator_to_number_to_vehicle.get(operator) else {
+                continue;
+            };
+            for (vehicle_number, vehicle) in number_to_vehicle {
+                if let Some(known_vehicle) = all_vehicles_map.insert(vehicle_number.clone(), vehicle.clone()) {
+                    eprintln!(
+                        "output file {:?} DUPE {:?}: we already know vehicle {:?} which was now overwritten by vehicle {:?}",
+                        output_path, vehicle_number, known_vehicle, vehicle,
+                    );
+                }
+            }
+        }
 
-    // write out to CBOR file
-    {
-        let mut out_file = File::create(&config.output_path)
-            .expect("failed to open output file");
-        ciborium::into_writer(&vehicles, &mut out_file)
-            .expect("failed to write out CBOR data");
-        out_file.flush()
-            .expect("failed to flush output file");
+        let vehicles: Vec<VehicleInfo> = all_vehicles_map
+            .into_iter()
+            .map(|(_vn, v)| v)
+            .collect();
+
+        // write out to CBOR file
+        {
+            let mut out_file = match File::create(output_path) {
+                Ok(of) => of,
+                Err(e) => {
+                    panic!("failed to open output file {:?}: {}", output_path, e);
+                },
+            };
+            if let Err(e) = ciborium::into_writer(&vehicles, &mut out_file) {
+                panic!("failed to write out CBOR data into {:?}: {}", output_path, e);
+            }
+            if let Err(e) = out_file.flush() {
+                panic!("failed to flush output file {:?}: {}", output_path, e);
+            }
+        }
+    }
+    for (operator, number_to_vehicle) in &operator_to_number_to_vehicle {
+        if !config.operator_to_output_path.contains_key(operator) {
+            eprintln!("skipping operator {:?}", operator);
+            if debug_mode {
+                eprintln!("vehicles of {:?}: {:?}", operator, number_to_vehicle);
+            }
+        }
     }
 
     ExitCode::SUCCESS
