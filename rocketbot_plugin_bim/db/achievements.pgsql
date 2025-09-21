@@ -501,9 +501,9 @@ last_rider_to_count = defaultdict(lambda: 0)
 
 ride_query = plpy.prepare(
     """
-        SELECT DISTINCT company, vehicle_number, rider_username, "timestamp"
+        SELECT company, vehicle_number, rider_username, "timestamp"
         FROM bim.rides_and_ridden_vehicles
-        ORDER BY "timestamp"
+        ORDER BY "timestamp", id
     """,
     [],
 )
