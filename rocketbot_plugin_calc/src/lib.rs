@@ -266,40 +266,82 @@ impl CalcPlugin {
         };
     }
 
-    async fn handle_calcconst(&self, channel_message: &ChannelMessage, _command: &CommandInstance) {
+    async fn handle_calcconst(&self, channel_message: &ChannelMessage, command: &CommandInstance) {
         let interface = match self.interface.upgrade() {
             None => return,
             Some(i) => i,
         };
 
-        let mut const_names: Vec<String> = get_canonical_constants().drain()
-            .map(|(cn, _cdef)| format!("`{}`", cn))
-            .collect();
-        const_names.sort_unstable();
-        let consts_str = const_names.join(", ");
-        send_channel_message!(
-            interface,
-            &channel_message.channel.name,
-            &format!("The following constants are available: {}", consts_str),
-        ).await;
+        let const_name = command.rest.as_str().trim();
+
+        if const_name.len() > 0 {
+            let const_help_opt = get_canonical_constants()
+                .get(const_name)
+                .map(|c| c.help_text.clone());
+            if let Some(const_help) = const_help_opt {
+                send_channel_message!(
+                    interface,
+                    &channel_message.channel.name,
+                    &format!("`{}`: {}", const_name, const_help),
+                ).await;
+            } else {
+                send_channel_message!(
+                    interface,
+                    &channel_message.channel.name,
+                    "Constant not found.",
+                ).await;
+            }
+        } else {
+            let mut const_names: Vec<String> = get_canonical_constants().drain()
+                .map(|(cn, _cdef)| format!("`{}`", cn))
+                .collect();
+            const_names.sort_unstable();
+            let consts_str = const_names.join(", ");
+            send_channel_message!(
+                interface,
+                &channel_message.channel.name,
+                &format!("The following constants are available: {}", consts_str),
+            ).await;
+        }
     }
 
-    async fn handle_calcfunc(&self, channel_message: &ChannelMessage, _command: &CommandInstance) {
+    async fn handle_calcfunc(&self, channel_message: &ChannelMessage, command: &CommandInstance) {
         let interface = match self.interface.upgrade() {
             None => return,
             Some(i) => i,
         };
 
-        let mut func_names: Vec<String> = get_canonical_functions().drain()
-            .map(|(fname, _fdef)| format!("`{}`", fname))
-            .collect();
-        func_names.sort_unstable();
-        let funcs_str = func_names.join(", ");
-        send_channel_message!(
-            interface,
-            &channel_message.channel.name,
-            &format!("The following functions are available: {}", funcs_str),
-        ).await;
+        let func_name = command.rest.as_str().trim();
+
+        if func_name.len() > 0 {
+            let func_help_opt = get_canonical_functions()
+                .get(func_name)
+                .map(|fi| fi.help_text.clone());
+            if let Some(func_help) = func_help_opt {
+                send_channel_message!(
+                    interface,
+                    &channel_message.channel.name,
+                    &func_help,
+                ).await;
+            } else {
+                send_channel_message!(
+                    interface,
+                    &channel_message.channel.name,
+                    "Function not found.",
+                ).await;
+            }
+        } else {
+            let mut func_names: Vec<String> = get_canonical_functions().drain()
+                .map(|(fname, _fdef)| format!("`{}`", fname))
+                .collect();
+            func_names.sort_unstable();
+            let funcs_str = func_names.join(", ");
+            send_channel_message!(
+                interface,
+                &channel_message.channel.name,
+                &format!("The following functions are available: {}", funcs_str),
+            ).await;
+        }
     }
 
     async fn handle_calcunit(&self, channel_message: &ChannelMessage, _command: &CommandInstance) {

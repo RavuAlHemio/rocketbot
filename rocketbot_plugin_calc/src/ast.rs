@@ -5,6 +5,7 @@ use std::time::{Duration, Instant};
 use num_bigint::BigInt;
 use num_traits::cast::ToPrimitive;
 
+use crate::grimoire::{Constant, Function};
 use crate::numbers::{Number, NumberOperationError, NumberValue};
 use crate::units::{NumberUnits, UnitDatabase};
 
@@ -36,6 +37,11 @@ pub(crate) enum AstNode {
     FunctionCall(String, Vec<AstNodeAtLocation>),
     BinaryOperation(BinaryOperation, Box<AstNodeAtLocation>, Box<AstNodeAtLocation>),
     UnaryOperation(UnaryOperation, Box<AstNodeAtLocation>),
+}
+impl From<Number> for AstNode {
+    fn from(n: Number) -> Self {
+        AstNode::Number(n)
+    }
 }
 impl From<f64> for AstNode {
     fn from(f: f64) -> Self {
@@ -153,8 +159,8 @@ pub(crate) type BuiltInFuncResult = Result<AstNode, SimplificationError>;
 pub(crate) type BuiltInFunction = Box<dyn Fn(&SimplificationState, &[AstNodeAtLocation]) -> BuiltInFuncResult>;
 
 pub(crate) struct SimplificationState {
-    pub constants: HashMap<String, AstNode>,
-    pub functions: HashMap<String, BuiltInFunction>,
+    pub constants: HashMap<String, Constant>,
+    pub functions: HashMap<String, Function>,
     pub units: UnitDatabase,
     pub start_time: Instant,
     pub timeout: Duration,
@@ -336,7 +342,7 @@ impl AstNodeAtLocation {
                 match state.constants.get(name) {
                     None => Err(SimplificationError::ConstantNotFound(name.clone()).at_location_of(self)),
                     Some(c) => Ok(AstNodeAtLocation {
-                        node: c.clone(),
+                        node: c.value.clone(),
                         start_end: self.start_end,
                     }),
                 }
@@ -352,7 +358,7 @@ impl AstNodeAtLocation {
                 }
 
                 let func = state.functions.get(name).unwrap();
-                match func(&state, &simplified_args) {
+                match (func.function)(&state, &simplified_args) {
                     Ok(node) => Ok(AstNodeAtLocation {
                         node,
                         start_end: self.start_end,
