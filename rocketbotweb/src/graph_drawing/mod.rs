@@ -1,7 +1,8 @@
+pub mod line;
+
+
 use std::collections::BTreeMap;
 use std::sync::LazyLock;
-
-use png;
 
 
 #[derive(Clone, Copy, Debug, Eq, Hash, Ord, PartialEq, PartialOrd)]
@@ -27,45 +28,29 @@ impl ChartColor {
     }
 }
 
-pub struct LineGraph {
+#[derive(Clone, Debug, Eq, Hash, Ord, PartialEq, PartialOrd)]
+pub struct Canvas {
     width: usize,
-    thicken: usize,
     pixels: Vec<ChartColor>,
 }
-impl LineGraph {
+impl Canvas {
+    pub fn new(width: usize, height: usize) -> Self {
+        let pixel_count = width * height;
+        let pixels = vec![ChartColor::Background; pixel_count];
+
+        Self {
+            width,
+            pixels,
+        }
+    }
+
     pub fn width(&self) -> usize { self.width }
     pub fn height(&self) -> usize {
         debug_assert_eq!(self.pixels.len() % self.width, 0);
         self.pixels.len() / self.width
     }
-
-    #[allow(unused)]
-    pub fn thicken(&self) -> usize { self.thicken }
-
     #[allow(unused)]
     pub fn pixels(&self) -> &[ChartColor] { self.pixels.as_slice() }
-
-    fn data_height_with_headroom(max_y_value: usize) -> usize {
-        if max_y_value % 100 > 75 {
-            // 80 -> 200
-            ((max_y_value / 100) + 2) * 100
-        } else {
-            // 50 -> 100
-            ((max_y_value / 100) + 1) * 100
-        }
-    }
-
-    fn calculate_image_size(x_positions: usize, max_y_value: usize) -> (usize, usize) {
-        // 2 = frame width on both edges
-        let width = 2 + x_positions;
-        let height = 2 + Self::data_height_with_headroom(max_y_value);
-
-        // crash early if the dimensions are too large
-        u32::try_from(width).expect("width too large");
-        u32::try_from(height).expect("height too large");
-
-        (width, height)
-    }
 
     pub fn set_pixel(&mut self, x: usize, y: usize, color: ChartColor) {
         self.pixels[y * self.width + x] = color;
@@ -76,70 +61,6 @@ impl LineGraph {
             return;
         }
         self.set_pixel(x, y, color);
-    }
-
-    pub fn new_for_ranges(x_positions: usize, max_y_value: usize, thicken: usize) -> Self {
-        let (width, height) = Self::calculate_image_size(x_positions, max_y_value);
-        let pixels = vec![ChartColor::Background; width * height];
-        let mut image = Self {
-            width,
-            thicken,
-            pixels,
-        };
-
-        // draw ticks
-        const HORIZONTAL_TICK_STEP: usize = 100;
-        const VERTICAL_TICK_STEP: usize = 100;
-        for graph_y in (0..height).step_by(VERTICAL_TICK_STEP) {
-            let y = height - (1 + graph_y);
-            for x in 1..(width-1) {
-                image.set_pixel(x, y, ChartColor::Tick);
-            }
-        }
-        for graph_x in (0..width).step_by(HORIZONTAL_TICK_STEP) {
-            let x = 1 + graph_x;
-            for y in 1..(height-1) {
-                image.set_pixel(x, y, ChartColor::Tick);
-            }
-        }
-
-        // draw frame
-        for y in 0..height {
-            image.set_pixel(0, y, ChartColor::Border);
-            image.set_pixel(width - 1, y, ChartColor::Border);
-        }
-        for x in 0..width {
-            image.set_pixel(x, 0, ChartColor::Border);
-            image.set_pixel(x, height - 1, ChartColor::Border);
-        }
-
-        image
-    }
-
-    pub fn draw_data_point(&mut self, graph_x: usize, value: usize, color: u8) {
-        let x = 1 + graph_x;
-        let y = self.height() - (1 + value);
-        let pixel_value = ChartColor::Data(color);
-
-        self.set_pixel(x, y, pixel_value);
-
-        for graph_thicker_y in 0..self.thicken {
-            let thicker_y_down = y + 1 + graph_thicker_y;
-            if thicker_y_down < self.height() {
-                self.set_pixel(x, thicker_y_down, pixel_value);
-            }
-
-            if let Some(thicker_y_up) = y.checked_sub(1 + graph_thicker_y) {
-                self.set_pixel(x, thicker_y_up, pixel_value);
-            }
-        }
-    }
-
-    pub fn draw_time_subdivision(&mut self, graph_x: usize) {
-        let x = 1 + graph_x;
-        for y in 1..(self.height()-1) {
-            self.set_pixel(x, y, ChartColor::TimeSubdivision);
-        }
     }
 
     pub fn draw_string(&mut self, mut x: usize, y: usize, text: &str) {
@@ -162,7 +83,7 @@ impl LineGraph {
             }
         }
     }
-
+ 
     pub fn to_png(&self) -> Vec<u8> {
         let palette: Vec<u8> = GRAPH_BACKGROUND_COLOR.into_iter()
             .chain(GRAPH_BORDER_COLOR.into_iter())
@@ -229,14 +150,14 @@ pub(crate) const GRAPH_COLORS: [[u8; 3]; 30] = [
     [0x32, 0x3c, 0x39], // #323c39
     [0x69, 0x6a, 0x6a], // #696a6a
 ];
-const GRAPH_BORDER_COLOR: [u8; 3] = [0, 0, 0]; // #000000
-const GRAPH_BACKGROUND_COLOR: [u8; 3] = [255, 255, 255]; // #ffffff
-const GRAPH_TICK_COLOR: [u8; 3] = [221, 221, 221]; // #dddddd
-const GRAPH_TIME_SUBDIVISION_COLOR: [u8; 3] = [136, 136, 136]; // #888888
-const GRAPH_TEXT_COLOR: [u8; 3] = [136, 136, 136]; // #888888
+pub(crate) const GRAPH_BORDER_COLOR: [u8; 3] = [0, 0, 0]; // #000000
+pub(crate) const GRAPH_BACKGROUND_COLOR: [u8; 3] = [255, 255, 255]; // #ffffff
+pub(crate) const GRAPH_TICK_COLOR: [u8; 3] = [221, 221, 221]; // #dddddd
+pub(crate) const GRAPH_TIME_SUBDIVISION_COLOR: [u8; 3] = [136, 136, 136]; // #888888
+pub(crate) const GRAPH_TEXT_COLOR: [u8; 3] = [136, 136, 136]; // #888888
 
 
-static DIGIT_FONT: LazyLock<BTreeMap<char, &'static [u8]>> = LazyLock::new(|| {
+pub(crate) static DIGIT_FONT: LazyLock<BTreeMap<char, &'static [u8]>> = LazyLock::new(|| {
     let mut font: BTreeMap<char, &'static [u8]> = BTreeMap::new();
 
     // encoding is column by column; each byte represents one column
@@ -257,4 +178,4 @@ static DIGIT_FONT: LazyLock<BTreeMap<char, &'static [u8]>> = LazyLock::new(|| {
 
     font
 });
-const DIGIT_FONT_REPLACEMENT_CHARACTER: &'static [u8] = &[0b11111, 0b01010, 0b11000, 0b11111, 0b00000];
+pub(crate) const DIGIT_FONT_REPLACEMENT_CHARACTER: &'static [u8] = &[0b11111, 0b01010, 0b11000, 0b11111, 0b00000];

@@ -15,7 +15,8 @@ use tracing::error;
 
 use crate::{get_query_pairs, render_response, return_400, return_405, return_500};
 use crate::bim::{connect_to_db, obtain_company_to_bim_database, obtain_vehicle_extract};
-use crate::line_graph_drawing::{LineGraph, GRAPH_COLORS};
+use crate::graph_drawing::GRAPH_COLORS;
+use crate::graph_drawing::line::LineGraph;
 use crate::templating::filters;
 
 use super::obtain_company_to_definition;
@@ -459,7 +460,7 @@ pub(crate) async fn handle_bim_latest_rider_count_over_time_image(request: &Requ
 
         // year number text
         let new_year_string = new_year.to_string();
-        graph.draw_string(
+        graph.canvas_mut().draw_string(
             *graph_x + YEAR_NUMBER_X_OFFSET,
             YEAR_NUMBER_Y_OFFSET + YEAR_NUMBER_LEVEL_OFFSET * current_year_number_level,
             &new_year_string,
@@ -480,7 +481,7 @@ pub(crate) async fn handle_bim_latest_rider_count_over_time_image(request: &Requ
     }
 
     // gimme PNG
-    let png_bytes = graph.to_png();
+    let png_bytes = graph.canvas().to_png();
 
     let response_res = Response::builder()
         .header("Content-Type", "image/png")

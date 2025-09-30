@@ -1,7 +1,7 @@
 mod aliases;
 mod bim;
 mod config;
-mod line_graph_drawing;
+mod graph_drawing;
 mod quotes;
 mod templating;
 mod thanks;
