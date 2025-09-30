@@ -1,3 +1,4 @@
+pub mod bar;
 pub mod line;
 
 
@@ -109,6 +110,16 @@ impl Canvas {
         }
 
         png_bytes
+    }
+
+    pub fn data_height_with_headroom(max_y_value: usize) -> usize {
+        if max_y_value % 100 > 75 {
+            // 80 -> 200
+            ((max_y_value / 100) + 2) * 100
+        } else {
+            // 50 -> 100
+            ((max_y_value / 100) + 1) * 100
+        }
     }
 }
 

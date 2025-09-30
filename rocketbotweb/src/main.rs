@@ -43,7 +43,7 @@ use crate::bim::charts::{
     handle_bim_histogram_by_vehicle_ride_count_group, handle_bim_histogram_fixed_coupling,
     handle_bim_last_rider_pie, handle_bim_latest_rider_count_over_time,
     handle_bim_latest_rider_count_over_time_image, handle_bim_last_rider_histogram_by_fixed_pos,
-    handle_bim_type_histogram,
+    handle_bim_rider_rides_per_week_image, handle_bim_type_histogram,
 };
 use crate::bim::coverage::{
     handle_bim_coverage, handle_bim_coverage_field, handle_bim_line_coverage,
@@ -367,6 +367,7 @@ async fn handle_request(request: Request<Incoming>) -> Result<Response<Full<Byte
         "/bim-depot-last-rider-pie" => handle_bim_depot_last_rider_pie(&request).await,
         "/bim-last-riders" => handle_bim_last_riders(&request).await,
         "/bim-fixed-monopolies" => handle_bim_fixed_monopolies(&request).await,
+        "/bim-rider-rides-per-week/image" => handle_bim_rider_rides_per_week_image(&request).await,
         _ => {
             if let Some(caps) = STATIC_FILE_REGEX.captures(request.uri().path()) {
                 debug!(

@@ -1,6 +1,7 @@
 use crate::graph_drawing::{Canvas, ChartColor};
 
 
+#[derive(Clone, Debug, Eq, Hash, Ord, PartialEq, PartialOrd)]
 pub struct LineGraph {
     thicken: usize,
     canvas: Canvas,
@@ -9,20 +10,10 @@ impl LineGraph {
     pub fn canvas(&self) -> &Canvas { &self.canvas }
     pub fn canvas_mut(&mut self) -> &mut Canvas { &mut self.canvas }
 
-    fn data_height_with_headroom(max_y_value: usize) -> usize {
-        if max_y_value % 100 > 75 {
-            // 80 -> 200
-            ((max_y_value / 100) + 2) * 100
-        } else {
-            // 50 -> 100
-            ((max_y_value / 100) + 1) * 100
-        }
-    }
-
     fn calculate_image_size(x_positions: usize, max_y_value: usize) -> (usize, usize) {
         // 2 = frame width on both edges
         let width = 2 + x_positions;
-        let height = 2 + Self::data_height_with_headroom(max_y_value);
+        let height = 2 + Canvas::data_height_with_headroom(max_y_value);
 
         // crash early if the dimensions are too large
         u32::try_from(width).expect("width too large");
@@ -42,13 +33,13 @@ impl LineGraph {
         // draw ticks
         const HORIZONTAL_TICK_STEP: usize = 100;
         const VERTICAL_TICK_STEP: usize = 100;
-        for graph_y in (0..height).step_by(VERTICAL_TICK_STEP) {
+        for graph_y in (0..height).step_by(HORIZONTAL_TICK_STEP) {
             let y = height - (1 + graph_y);
             for x in 1..(width-1) {
                 image.canvas.set_pixel(x, y, ChartColor::Tick);
             }
         }
-        for graph_x in (0..width).step_by(HORIZONTAL_TICK_STEP) {
+        for graph_x in (0..width).step_by(VERTICAL_TICK_STEP) {
             let x = 1 + graph_x;
             for y in 1..(height-1) {
                 image.canvas.set_pixel(x, y, ChartColor::Tick);

@@ -3,7 +3,7 @@ use std::convert::Infallible;
 use std::fmt::Write;
 
 use askama::Template;
-use chrono::{DateTime, Datelike, Days, Local, NaiveDate};
+use chrono::{DateTime, Datelike, Days, Local, NaiveDate, Weekday};
 use http_body_util::Full;
 use hyper::{Method, Request, Response};
 use hyper::body::{Bytes, Incoming};
@@ -16,6 +16,7 @@ use tracing::error;
 use crate::{get_query_pairs, render_response, return_400, return_405, return_500};
 use crate::bim::{connect_to_db, obtain_company_to_bim_database, obtain_vehicle_extract};
 use crate::graph_drawing::GRAPH_COLORS;
+use crate::graph_drawing::bar::BarGraph;
 use crate::graph_drawing::line::LineGraph;
 use crate::templating::filters;
 
@@ -1656,5 +1657,236 @@ pub(crate) async fn handle_bim_depot_last_rider_pie(request: &Request<Incoming>)
     match render_response(&template, &query_pairs, 200, vec![]).await {
         Some(r) => Ok(r),
         None => return_500(),
+    }
+}
+
+pub(crate) async fn handle_bim_rider_rides_per_week_image(request: &Request<Incoming>) -> Result<Response<Full<Bytes>>, Infallible> {
+    let query_pairs = get_query_pairs(request);
+    if request.method() != Method::GET {
+        return return_405(&query_pairs).await;
+    }
+
+    let db_conn = match connect_to_db().await {
+        Some(c) => c,
+        None => return return_500(),
+    };
+
+    let ride_res = db_conn.query(
+        "
+            WITH week_rides(ts_week, ts_year, rider_username) AS (
+                SELECT
+                    CAST(EXTRACT(WEEK FROM r.\"timestamp\") AS bigint) wk,
+                    CAST(EXTRACT(ISOYEAR FROM r.\"timestamp\") AS bigint) wkyr,
+                    r.rider_username
+                FROM
+                    bim.rides r
+            )
+            SELECT
+                wr.ts_week,
+                wr.ts_year,
+                wr.rider_username,
+                CAST(COUNT(*) AS bigint) ride_count
+            FROM
+                week_rides wr
+            GROUP BY
+                wr.ts_week,
+                wr.ts_year,
+                wr.rider_username
+            ORDER BY
+                wr.ts_week,
+                wr.ts_year,
+                wr.rider_username
+        ",
+        &[],
+    ).await;
+    let ride_rows = match ride_res {
+        Ok(r) => r,
+        Err(e) => {
+            error!("failed to query rides-per-week: {}", e);
+            return return_500();
+        },
+    };
+
+    let mut all_riders = HashSet::new();
+    let mut year_to_week_to_rider_to_count: BTreeMap<i64, BTreeMap<i64, BTreeMap<String, usize>>> = BTreeMap::new();
+    for row in &ride_rows {
+        let week: i64 = row.get(0);
+        let year: i64 = row.get(1);
+        let rider: String = row.get(2);
+        let count: i64 = row.get(3);
+
+        all_riders.insert(rider.clone());
+
+        year_to_week_to_rider_to_count
+            .entry(year)
+            .or_insert_with(|| BTreeMap::new())
+            .entry(week)
+            .or_insert_with(|| BTreeMap::new())
+            .insert(rider, count.try_into().unwrap());
+    }
+
+    // collect rider names
+    let mut rider_names: Vec<String> = all_riders
+        .iter()
+        .map(|rn| rn.clone())
+        .collect();
+    rider_names.sort_unstable_by_key(|r| (r.to_lowercase(), r.clone()));
+
+    if year_to_week_to_rider_to_count.len() == 0 {
+        // welp
+        return return_500();
+    }
+
+    // fill out missing weeks
+    let (start_year, week_to_rider_to_count) = year_to_week_to_rider_to_count
+        .first_key_value()
+        .map(|(sy, wtrtc)| (*sy, wtrtc))
+        .unwrap();
+    let start_week = week_to_rider_to_count
+        .first_key_value()
+        .map(|(sw, _rtc)| *sw)
+        .unwrap();
+    let start_date = NaiveDate::from_isoywd_opt(
+        start_year.try_into().unwrap(),
+        start_week.try_into().unwrap(),
+        Weekday::Mon,
+    )
+        .unwrap();
+
+    let (last_year, week_to_rider_to_count) = year_to_week_to_rider_to_count
+        .last_key_value()
+        .map(|(ly, wtrtc)| (*ly, wtrtc))
+        .unwrap();
+    let last_week = week_to_rider_to_count
+        .last_key_value()
+        .map(|(lw, _rtc)| *lw)
+        .unwrap();
+    let end_date = NaiveDate::from_isoywd_opt(
+        last_year.try_into().unwrap(),
+        last_week.try_into().unwrap(),
+        Weekday::Mon,
+    )
+        .unwrap();
+
+    for current_week_date in start_date.iter_weeks() {
+        if current_week_date > end_date {
+            break;
+        }
+
+        let current_week = current_week_date.iso_week();
+
+        year_to_week_to_rider_to_count
+            .entry(current_week.year().into())
+            .or_insert_with(|| BTreeMap::new())
+            .entry(current_week.week().into())
+            .or_insert_with(|| BTreeMap::new());
+    }
+
+    // fill out riders with no rides in a week
+    for week_to_rider_to_count in year_to_week_to_rider_to_count.values_mut() {
+        for rider_to_count in week_to_rider_to_count.values_mut() {
+            for rider in &rider_names {
+                rider_to_count.entry(rider.clone())
+                    .or_insert(0);
+            }
+        }
+    }
+
+    if query_pairs.get("format").map(|f| f == "tsv").unwrap_or(false) {
+        let mut tsv_output = String::new();
+
+        tsv_output.push_str("year\tweek");
+
+        for rider in &rider_names {
+            tsv_output.push('\t');
+            tsv_output.push_str(rider);
+        }
+
+        for (&year, week_to_rider_to_count) in &year_to_week_to_rider_to_count {
+            for (&week, rider_to_count) in week_to_rider_to_count {
+                write!(tsv_output, "\n{}\t{}", year, week).unwrap();
+                for count in rider_to_count.values() {
+                    write!(tsv_output, "\t{}", count).unwrap();
+                }
+            }
+        }
+
+        let response_res = Response::builder()
+            .header("Content-Type", "text/tab-separated-values; charset=utf-8")
+            .body(Full::new(Bytes::from(tsv_output)));
+        match response_res {
+            Ok(r) => return Ok(r),
+            Err(e) => {
+                error!("failed to construct rider-rides-per-week TSV response: {}", e);
+                return return_500();
+            }
+        }
+    }
+
+    // prepare the graph
+    let total_weeks: usize = year_to_week_to_rider_to_count
+        .iter()
+        .map(|(_year, year_weeks)| year_weeks.len())
+        .sum();
+    let max_ride_count = year_to_week_to_rider_to_count
+        .values()
+        .flat_map(|wtrtc| wtrtc.values())
+        .flat_map(|rtc| rtc.values())
+        .copied()
+        .max()
+        .unwrap_or(0);
+    let mut graph = BarGraph::new_for_ranges(
+        4,
+        rider_names.len(),
+        total_weeks,
+        max_ride_count,
+    );
+
+    // draw the "start of new year" bars
+    const YEAR_NUMBER_X_OFFSET: usize = 4;
+    const YEAR_NUMBER_Y_OFFSET: usize = 4;
+    let mut chunk_index = 0;
+    for (_year, weeks) in &year_to_week_to_rider_to_count {
+        // line
+        chunk_index += weeks.len();
+        graph.draw_time_subdivision(chunk_index);
+
+        // TODO: year number text
+        /*
+        let new_year_string = new_year.to_string();
+        graph.canvas_mut().draw_string(
+            *graph_x + YEAR_NUMBER_X_OFFSET,
+            YEAR_NUMBER_Y_OFFSET + YEAR_NUMBER_LEVEL_OFFSET * current_year_number_level,
+            &new_year_string,
+        );
+        current_year_number_level = (current_year_number_level + 1) % YEAR_NUMBER_LEVELS;
+        */
+    }
+
+    // draw the data
+    let mut chunk_index = 0;
+    for week_to_rider_to_count in year_to_week_to_rider_to_count.values() {
+        for rider_to_count in week_to_rider_to_count.values() {
+            let counts: Vec<usize> = rider_to_count
+                .values()
+                .copied()
+                .collect();
+            graph.draw_chunk_bars(chunk_index, &counts);
+            chunk_index += 1;
+        }
+    }
+
+    // gimme PNG
+    let png_bytes = graph.canvas().to_png();
+
+    let response_res = Response::builder()
+        .header("Content-Type", "image/png")
+        .body(Full::new(Bytes::from(png_bytes)));
+    match response_res {
+        Ok(r) => Ok(r),
+        Err(e) => {
+            error!("failed to construct rider-rides-per-week response: {}", e);
+            return return_500();
+        }
     }
 }
