@@ -4435,6 +4435,100 @@ impl BimPlugin {
         ).await;
     }
 
+    async fn channel_command_toplastbims(&self, channel_message: &ChannelMessage, _command: &CommandInstance) {
+        let interface = match self.interface.upgrade() {
+            None => return,
+            Some(i) => i,
+        };
+
+        let config_guard = self.config.read().await;
+
+        let Ok(ride_conn) = connect_ride_db(&config_guard).await else {
+            send_channel_message!(
+                interface,
+                &channel_message.channel.name,
+                "Failed to open database connection. :disappointed:",
+            ).await;
+            return;
+        };
+
+        let changed_hands_rows_res = ride_conn.query(
+            "
+                SELECT
+                    \"timestamp\",
+                    old_rider,
+                    new_rider
+                FROM
+                    bim.ridden_vehicles_between_riders(FALSE)
+            ",
+            &[],
+        ).await;
+        let changed_hands_rows = match changed_hands_rows_res {
+            Ok(rs) => rs,
+            Err(e) => {
+                error!("failed to select vehicles changing hands: {}", e);
+                send_channel_message!(
+                    interface,
+                    &channel_message.channel.name,
+                    "A database error occurred. :disappointed:",
+                ).await;
+                return;
+            },
+        };
+
+        let mut rider_to_ride_count: BTreeMap<String, u64> = BTreeMap::new();
+        let mut maximum: Option<(u64, String, DateTime<Local>)> = None;
+        for row in changed_hands_rows {
+            let timestamp: DateTime<Local> = row.get(0);
+            let old_rider_opt: Option<String> = row.get(1);
+            let new_rider: String = row.get(2);
+
+            if let Some(old_rider) = old_rider_opt {
+                let old_count = rider_to_ride_count
+                    .entry(old_rider)
+                    .or_insert(0);
+                *old_count = old_count.checked_sub(1).unwrap();
+            }
+
+            let new_count = rider_to_ride_count
+                .entry(new_rider)
+                .or_insert(0);
+            *new_count = new_count.checked_add(1).unwrap();
+
+            for (rider, ride_count) in &rider_to_ride_count {
+                if let Some((max_count, _, _)) = maximum.as_ref() {
+                    if max_count < ride_count {
+                        maximum = Some((*ride_count, rider.clone(), timestamp));
+                    }
+                    // otherwise, the current maximum stays
+                } else {
+                    // we need to start somewhere
+                    maximum = Some((*ride_count, rider.clone(), timestamp));
+                }
+            }
+        }
+
+        let response_text = if let Some((max_count, max_rider, max_timestamp)) = maximum {
+            let mut resp = format!(
+                "The greatest number of last-rider vehicles, {}, was reached by {} ",
+                max_count,
+                max_rider,
+            );
+            canonical_date_format(&mut resp, &max_timestamp, true, true)
+                .expect("failed to format date/time");
+            resp.push_str(".");
+            resp
+        } else {
+            "It appears nobody ever reached any number of last-rider vehicles...".to_owned()
+        };
+
+        send_channel_message!(
+            interface,
+            &channel_message.channel.name,
+            &response_text,
+        ).await;
+    }
+
     fn english_adverbial_number(num: i64) -> String {
         match num {
             1 => "once".to_owned(),
@@ -4813,6 +4907,15 @@ impl RocketBotPlugin for BimPlugin {
             )
                 .build()
         ).await;
+        my_interface.register_channel_command(
+            &CommandDefinitionBuilder::new(
+                "toplastbims",
+                "bim",
+                "{cpfx}toplastbims",
+                "Obtains the maximum number of simultaneous last-rider vehicles ever reached by any rider.",
+            )
+                .build()
+        ).await;
 
         // set up the achievement update loop
         let (achievement_update_sender, mut achievement_update_receiver) = mpsc::unbounded_channel();
@@ -4914,6 +5017,8 @@ impl RocketBotPlugin for BimPlugin {
             self.channel_command_bimcost(channel_message, command).await
         } else if command.name == "missingbimlines" {
             self.channel_command_missingbimlines(channel_message, command).await
+        } else if command.name == "toplastbims" {
+            self.channel_command_toplastbims(channel_message, command).await
         }
     }
 
@@ -4983,6 +5088,8 @@ impl RocketBotPlugin for BimPlugin {
             Some(include_str!("../help/bimcost.md").to_owned())
         } else if command_name == "missingbimlines" {
             Some(include_str!("../help/missingbimlines.md").to_owned())
+        } else if command_name == "toplastbims" {
+            Some(include_str!("../help/toplastbims.md").to_owned())
         } else {
             None
         }
