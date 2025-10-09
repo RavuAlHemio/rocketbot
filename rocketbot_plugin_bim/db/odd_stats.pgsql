@@ -159,3 +159,34 @@ if date_walker < today:
     # drought at the end
     yield (stringify_date(date_walker), stringify_date(today))
 $$;
+
+CREATE OR REPLACE FUNCTION bim.max_last_rider_counts
+() RETURNS TABLE
+( rider_username character varying(256)
+, last_rider_count bigint
+, "timestamp" timestamp with time zone
+)
+LANGUAGE plpython3u
+STABLE STRICT
+AS $$
+from collections import defaultdict
+
+rider_to_count = defaultdict(lambda: 0)
+rider_to_max = {}
+for row in plpy.cursor('SELECT "timestamp", old_rider, new_rider FROM bim.ridden_vehicles_between_riders(false)'):
+    if row["old_rider"] is not None:
+        rider_to_count[row["old_rider"]] -= 1
+    rider_to_count[row["new_rider"]] += 1
+
+    for (rider, count) in rider_to_count.items():
+        cur_max = rider_to_max.get(rider, None)
+        if cur_max is None:
+            rider_to_max[rider] = (count, row["timestamp"])
+        else:
+            cur_max_count = cur_max[0]
+            if cur_max_count < count:
+                rider_to_max[rider] = (count, row["timestamp"])
+
+for (rider, (max_count, timestamp)) in sorted(rider_to_max.items()):
+    yield (rider, max_count, timestamp)
+$$;
