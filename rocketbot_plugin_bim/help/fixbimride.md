@@ -28,5 +28,6 @@ The following options concern long-term ticket amortization calculation (see als
 The following options can modify the command behavior further:
 
 * `{sopfx}u` or `{lopfx}utc`: Interprets timestamps as UTC. The default assumes local time. This option is useful if the local timestamp is ambiguous (e.g. during daylight saving time adjustments).
+* `{sopfx}n` or `{lopfx}none-ridden`: When replacing vehicles, even if only one vehicle number is given, mark it only as explicit, not as ridden (for situations where the actually-ridden vehicle can no longer be identified).
 
 `bim` administrators can modify all rides. Riders can only modify their own rides which have been registered recently enough.

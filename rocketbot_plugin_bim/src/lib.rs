@@ -2483,6 +2483,7 @@ impl BimPlugin {
 
         let delete = command.flags.contains("d") || command.flags.contains("delete");
         let utc_time = command.flags.contains("u") || command.flags.contains("utc");
+        let none_ridden = command.flags.contains("n") || command.flags.contains("none-ridden");
         let ride_id = command.options.get("i")
             .or_else(|| command.options.get("id"))
             .map(|cv| cv.as_i64().unwrap());
@@ -2820,6 +2821,7 @@ impl BimPlugin {
                 nvs,
                 this_bim_db_opt.as_ref(),
                 config_guard.allow_fixed_coupling_combos,
+                !none_ridden,
             );
             let vehicles = match vehicles_res {
                 Ok(vehicles) => vehicles,
@@ -3778,6 +3780,7 @@ impl BimPlugin {
                 vehicle_spec,
                 bim_database_opt.as_ref(),
                 config_guard.allow_fixed_coupling_combos,
+                true,
             );
             let vehicles = match vehicles_res {
                 Ok(veh) => veh,
@@ -4765,6 +4768,8 @@ impl RocketBotPlugin for BimPlugin {
                 .add_flag("delete")
                 .add_flag("u")
                 .add_flag("utc")
+                .add_flag("n")
+                .add_flag("none-ridden")
                 .add_option("i", CommandValueType::Integer)
                 .add_option("id", CommandValueType::Integer)
                 .add_option("r", CommandValueType::String)
@@ -5642,6 +5647,7 @@ fn spec_to_vehicles(
     vehicles_str: &str,
     bim_database_opt: Option<&HashMap<VehicleNumber, VehicleInfo>>,
     allow_fixed_coupling_combos: bool,
+    single_is_ridden: bool,
 ) -> Result<Vec<NewVehicleEntry>, IncrementBySpecError> {
     let vehicle_num_strs: Vec<&str> = vehicles_str.split("+").collect();
     let mut vehicle_nums_and_modes = Vec::new();
@@ -5650,7 +5656,7 @@ fn spec_to_vehicles(
         let (no_exclamation_vehicle_num, coupling_mode) = if let Some(nevn) = vehicle_num.strip_suffix("!") {
             (nevn, CouplingMode::Ridden)
         } else {
-            let coupling_mode = if vehicle_num_strs.len() == 1 {
+            let coupling_mode = if vehicle_num_strs.len() == 1 && single_is_ridden {
                 CouplingMode::Ridden
             } else {
                 CouplingMode::Explicit
@@ -5784,6 +5790,7 @@ pub async fn increment_rides_by_spec(
         vehicles_str,
         bim_database_opt,
         allow_fixed_coupling_combos,
+        true,
     )?;
 
     let (ride_id, vehicles) = {
