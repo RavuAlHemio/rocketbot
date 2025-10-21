@@ -18,6 +18,7 @@ use sxd_document::dom::Element;
 #[derive(Clone, Debug, Deserialize, Eq, Hash, Ord, PartialEq, PartialOrd, Serialize)]
 struct Config {
     pub output_path: String,
+    pub user_agent: String,
     pub page_sources: Vec<PageSource>,
     pub regex_to_vehicle_class: Vec<(EnjoyableRegex, VehicleClass)>,
     #[serde(default)] pub region_to_additional_companies: BTreeMap<String, BTreeSet<String>>,
@@ -532,7 +533,12 @@ async fn main() {
 
     let mut name_to_region = BTreeMap::new();
 
-    let mut reqwest_client = reqwest::Client::new();
+    let mut client_builder = reqwest::Client::builder();
+    if config.user_agent.len() > 0 {
+        client_builder = client_builder.user_agent(&config.user_agent);
+    }
+    let mut reqwest_client = client_builder.build()
+        .expect("failed to build reqwest client");
 
     for page_source in &config.page_sources {
         for page in &page_source.pages {
