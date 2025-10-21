@@ -5,6 +5,8 @@ use askama::Template;
 use http_body_util::Full;
 use hyper::{Method, Request, Response};
 use hyper::body::{Bytes, Incoming};
+use regex::Regex;
+use rocketbot_string::regex::EnjoyableRegex;
 use serde::{Deserialize, Serialize};
 use tracing::error;
 
@@ -32,8 +34,8 @@ pub(crate) async fn handle_plaintext_aliases_for_nick(request: &Request<Incoming
     }
 
     let nick_opt = query_pairs.get("nick");
-    let nick_lowercase = match nick_opt {
-        Some(n) => n.to_lowercase(),
+    let nick = match nick_opt {
+        Some(n) => n,
         None => {
             return Response::builder()
                 .status(400)
@@ -52,19 +54,22 @@ pub(crate) async fn handle_plaintext_aliases_for_nick(request: &Request<Incoming
         None => return return_500(),
     };
 
-    let mut lower_base_to_aliases: HashMap<String, BTreeSet<String>> = HashMap::new();
-    let mut lower_alias_to_base: HashMap<String, String> = HashMap::new();
-
+    let mut regexes_and_bases: Vec<(EnjoyableRegex, String)> = Vec::new();
+    let mut base_to_regex_strings: HashMap<String, BTreeSet<String>> = HashMap::new();
     if let Some(plugins) = bot_config["plugins"].as_array() {
         for plugin in plugins {
             if plugin["name"] == "config_user_alias" && plugin["enabled"].as_bool().unwrap_or(false) {
-                if let Some(latu) = plugin["config"]["lowercase_alias_to_username"].as_object() {
-                    for (alias, base_nick_val) in latu {
+                if let Some(artu) = plugin["config"]["alias_regex_to_username"].as_object() {
+                    for (alias_regex_str, base_nick_val) in artu {
                         if let Some(base_nick) = base_nick_val.as_str() {
-                            lower_alias_to_base.insert(alias.to_lowercase(), base_nick.to_owned());
-                            lower_base_to_aliases.entry(base_nick.to_lowercase())
-                                .or_insert_with(|| BTreeSet::new())
-                                .insert(alias.clone());
+                            if let Ok(re) = Regex::new(&alias_regex_str) {
+                                let alias_regex = EnjoyableRegex::from(re);
+                                regexes_and_bases.push((alias_regex, base_nick.to_owned()));
+                                base_to_regex_strings
+                                    .entry(base_nick.to_owned())
+                                    .or_insert_with(|| BTreeSet::new())
+                                    .insert(alias_regex_str.to_owned());
+                            }
                         }
                     }
                 }
@@ -72,14 +77,23 @@ pub(crate) async fn handle_plaintext_aliases_for_nick(request: &Request<Incoming
         }
     }
 
-    let base = lower_alias_to_base.get(&nick_lowercase).unwrap_or(&nick_lowercase);
-    let base_lowercase = base.to_lowercase();
-    let body = match lower_base_to_aliases.get(&base_lowercase) {
-        Some(aliases) => {
-            let mut lines = Vec::with_capacity(aliases.len() + 1);
-            lines.push(base.clone());
-            for alias in aliases {
-                lines.push(alias.clone());
+    let mut base_opt = None;
+    for (regex, base) in &regexes_and_bases {
+        if regex.is_match(nick) {
+            base_opt = Some(base.clone());
+            break;
+        }
+    }
+    let body = match base_opt {
+        Some(b) => {
+            let empty_set = BTreeSet::new();
+            let regex_strings = base_to_regex_strings
+                .get(&b)
+                .unwrap_or(&empty_set);
+            let mut lines = Vec::with_capacity(regex_strings.len() + 1);
+            lines.push(b);
+            for regex_string in regex_strings {
+                lines.push(regex_string.clone());
             }
             lines.join("\n")
         },
