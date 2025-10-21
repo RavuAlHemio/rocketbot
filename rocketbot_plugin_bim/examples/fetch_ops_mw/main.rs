@@ -72,10 +72,10 @@ impl Serialize for Spec {
 
 
 trait DocumentExt {
-    fn document_element(&self) -> Option<Element>;
+    fn document_element(&self) -> Option<Element<'_>>;
 }
 impl DocumentExt for sxd_document::dom::Document<'_> {
-    fn document_element(&self) -> Option<Element> {
+    fn document_element(&self) -> Option<Element<'_>> {
         self
             .root().children().into_iter()
             .filter_map(|c| c.element())
