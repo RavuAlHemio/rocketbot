@@ -3253,6 +3253,7 @@ dependencies = [
  "rocketbot_plugin_group_pressure",
  "rocketbot_plugin_hackernews",
  "rocketbot_plugin_help",
+ "rocketbot_plugin_linguistics",
  "rocketbot_plugin_logger",
  "rocketbot_plugin_netdev",
  "rocketbot_plugin_new_year",
@@ -3722,6 +3723,19 @@ dependencies = [
  "async-trait",
  "rocketbot_interface",
  "serde_json",
+ "tracing",
+]
+
+[[package]]
+name = "rocketbot_plugin_linguistics"
+version = "0.1.0"
+dependencies = [
+ "async-trait",
+ "rocketbot_interface",
+ "serde",
+ "serde_json",
+ "tokio",
+ "tokio-postgres",
  "tracing",
 ]
 

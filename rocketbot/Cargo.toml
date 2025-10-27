@@ -38,6 +38,7 @@ rocketbot_plugin_grammargen = { path = "../rocketbot_plugin_grammargen" }
 rocketbot_plugin_group_pressure = { path = "../rocketbot_plugin_group_pressure" }
 rocketbot_plugin_hackernews = { path = "../rocketbot_plugin_hackernews" }
 rocketbot_plugin_help = { path = "../rocketbot_plugin_help" }
+rocketbot_plugin_linguistics = { path = "../rocketbot_plugin_linguistics" }
 rocketbot_plugin_logger = { path = "../rocketbot_plugin_logger" }
 rocketbot_plugin_netdev = { path = "../rocketbot_plugin_netdev" }
 rocketbot_plugin_new_year = { path = "../rocketbot_plugin_new_year" }

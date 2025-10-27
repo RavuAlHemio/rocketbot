@@ -30,6 +30,7 @@ members = [
     "rocketbot_plugin_group_pressure",
     "rocketbot_plugin_hackernews",
     "rocketbot_plugin_help",
+    "rocketbot_plugin_linguistics",
     "rocketbot_plugin_logger",
     "rocketbot_plugin_netdev",
     "rocketbot_plugin_new_year",
