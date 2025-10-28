@@ -3731,11 +3731,13 @@ name = "rocketbot_plugin_linguistics"
 version = "0.1.0"
 dependencies = [
  "async-trait",
+ "flate2",
  "rocketbot_interface",
  "serde",
  "serde_json",
  "tokio",
  "tokio-postgres",
+ "toml",
  "tracing",
 ]
 
