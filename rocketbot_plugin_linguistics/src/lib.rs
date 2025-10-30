@@ -18,8 +18,9 @@ struct Config {
     pub db_conn_string: String,
 }
 
-#[derive(Clone, Copy, Debug, Eq, Hash, Ord, PartialEq, PartialOrd)]
+#[derive(Clone, Debug, Eq, Hash, Ord, PartialEq, PartialOrd)]
 struct GermanGender {
+    pub word: String,
     pub masculine: bool,
     pub feminine: bool,
     pub neuter: bool,
@@ -53,20 +54,23 @@ impl LinguisticsPlugin {
         let db_client = self.connect_db(config).await?;
         let row_opt = db_client.query_opt(
             "
-                SELECT  masculine
+                SELECT  word
+                    ,   masculine
                     ,   feminine
                     ,   neuter
                 FROM    linguistics.german_genders
-                WHERE   word = $1
+                WHERE   LOWER(word) = LOWER($1)
             ",
             &[&word],
         ).await?;
         let gender_opt = row_opt
             .map(|row| {
-                let masculine: bool = row.get(0);
-                let feminine: bool = row.get(1);
-                let neuter: bool = row.get(2);
+                let word: String = row.get(0);
+                let masculine: bool = row.get(1);
+                let feminine: bool = row.get(2);
+                let neuter: bool = row.get(3);
                 GermanGender {
+                    word,
                     masculine,
                     feminine,
                     neuter,
@@ -94,7 +98,7 @@ impl LinguisticsPlugin {
                 if gender.neuter {
                     gender_words.push("neuter");
                 }
-                Cow::Owned(format!("_{}_ is {}", word, phrase_join(&gender_words, ", ", " and ")))
+                Cow::Owned(format!("_{}_ is {}", gender.word, phrase_join(&gender_words, ", ", " and ")))
             },
             Ok(None) => Cow::Borrowed("Wiktionary does not know this word. :disappointed:"),
             Err(e) => {
