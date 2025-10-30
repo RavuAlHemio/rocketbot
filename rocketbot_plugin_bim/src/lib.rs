@@ -4104,7 +4104,7 @@ impl BimPlugin {
                 SELECT  cm.rider_username
                     ,   CAST(ARRAY_LENGTH(cm.vehicles, 1) AS bigint) mono_length
                     ,   CAST(COUNT(*) AS bigint) mono_count
-                FROM    bim.current_monopolies cm
+                FROM    bim.current_monopolies() cm
                 {}
                 GROUP BY    cm.rider_username
                     ,       CAST(ARRAY_LENGTH(cm.vehicles, 1) AS bigint)
