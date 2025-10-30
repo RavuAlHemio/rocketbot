@@ -4076,39 +4076,6 @@ impl BimPlugin {
         };
 
         let config_guard = self.config.read().await;
-        let company = command.options.get("company")
-            .or_else(|| command.options.get("c"))
-            .map(|v| v.as_str().unwrap())
-            .unwrap_or(config_guard.default_company.as_str());
-
-        let database = match self.load_bim_database(&config_guard, company) {
-            Some(db) => db,
-            None => {
-                send_channel_message!(
-                    interface,
-                    &channel_message.channel.name,
-                    "No vehicle database exists for this company, so I don't know of any fixed couplings. :disappointed:",
-                ).await;
-                return;
-            },
-        };
-        if database.len() == 0 {
-            send_channel_message!(
-                interface,
-                &channel_message.channel.name,
-                "The vehicle database for this company is empty, so I don't know of any fixed couplings. :disappointed:",
-            ).await;
-            return;
-        }
-        if database.values().all(|v| v.fixed_coupling.len() == 0) {
-            send_channel_message!(
-                interface,
-                &channel_message.channel.name,
-                "I don't know of any fixed couplings for this company. :disappointed:",
-            ).await;
-            return;
-        }
- 
         let ride_conn = match connect_ride_db(&config_guard).await {
             Ok(c) => c,
             Err(_) => {
@@ -4121,85 +4088,52 @@ impl BimPlugin {
             },
         };
 
-        let query = "
-            SELECT rarv.rider_username
-            FROM bim.rides_and_ridden_vehicles rarv
-            WHERE
-                rarv.company = $1
-                AND rarv.vehicle_number = $2
-                AND NOT EXISTS (
-                    SELECT 1
-                    FROM bim.rides_and_ridden_vehicles rarv2
-                    WHERE rarv2.company = rarv.company
-                    AND rarv2.vehicle_number = rarv.vehicle_number
-                    AND rarv2.\"timestamp\" > rarv.\"timestamp\"
-                )
-        ";
-        let statement = match ride_conn.prepare(query).await {
-            Ok(s) => s,
+        let company_opt = command.options.get("company")
+            .or_else(|| command.options.get("c"))
+            .map(|c| c.as_str().expect("company option value not a string?!"));
+
+        let mut params: Vec<&(dyn ToSql + Sync)> = Vec::with_capacity(1);
+        let company;
+        if let Some(company_str) = company_opt {
+            company = company_str.to_owned();
+            params.push(&company);
+        }
+
+        let query = format!(
+            "
+                SELECT  cm.rider_username
+                    ,   CAST(ARRAY_LENGTH(cm.vehicles, 1) AS bigint) mono_length
+                    ,   CAST(COUNT(*) AS bigint) mono_count
+                FROM    bim.current_monopolies cm
+                {}
+                GROUP BY    cm.rider_username
+                    ,       CAST(ARRAY_LENGTH(cm.vehicles, 1) AS bigint)
+            ",
+            if company_opt.is_some() { "WHERE cm.company = $1" } else { "" },
+        );
+        let mono_res = ride_conn.query(&query, &params).await;
+        let mono_rows = match mono_res {
+            Ok(mr) => mr,
             Err(e) => {
-                error!("failed to prepare rider query: {}", e);
+                error!("failed to query database for current monopolies: {}", e);
                 send_channel_message!(
                     interface,
                     &channel_message.channel.name,
-                    "Failed to prepare rider query. :disappointed:",
+                    "A database error occurred. :disappointed:",
                 ).await;
                 return;
             },
         };
 
         let mut rider_to_coupling_length_to_count = BTreeMap::new();
-        for vehicle in database.values() {
-            if vehicle.fixed_coupling.len() == 0 {
-                // not a fixed coupling
-                continue;
-            }
-
-            if !vehicle.fixed_coupling.first().map(|f| f == &vehicle.number).unwrap_or(false) {
-                // we are not the first vehicle in the coupling
-                continue;
-            }
-
-            // alright, look it up
-            let mut riders = HashSet::new();
-            for vehicle_number in &vehicle.fixed_coupling {
-                match ride_conn.query(&statement, &[&company, &vehicle_number.as_str()]).await {
-                    Ok(mut rr) => {
-                        if rr.len() == 0 {
-                            // this vehicle does not have a last rider
-                            // => nobody can have a monopoly
-                            riders.clear();
-                            break;
-                        }
-                        if rr.len() != 1 {
-                            error!("obtained more than one rider row ({} rows) for company {:?} vehicle {:?}", rr.len(), company, vehicle.number);
-                            riders.clear();
-                            break;
-                        }
-
-                        let row = rr.remove(0);
-                        let rider_username: String = row.get(0);
-                        riders.insert(rider_username);
-                    },
-                    Err(e) => {
-                        error!("failed to obtain latest rider for company {:?} vehicle {:?}: {}", company, vehicle.number, e);
-                        riders.clear();
-                        break;
-                    },
-                };
-            }
-
-            if riders.len() == 1 {
-                // monopoly!
-                let rider_username = riders.iter().nth(0).map(|ru| ru.clone()).unwrap();
-
-                let monopoly_count = rider_to_coupling_length_to_count
-                    .entry(rider_username)
-                    .or_insert_with(|| BTreeMap::new())
-                    .entry(vehicle.fixed_coupling.len())
-                    .or_insert(0usize);
-                *monopoly_count += 1;
-            }
+        for row in mono_rows {
+            let rider: String = row.get(0);
+            let coupling_length: i64 = row.get(1);
+            let count: i64 = row.get(2);
+            rider_to_coupling_length_to_count
+                .entry(rider)
+                .or_insert_with(|| BTreeMap::new())
+                .insert(coupling_length, count);
         }
 
         if rider_to_coupling_length_to_count.len() == 0 {
@@ -4211,13 +4145,13 @@ impl BimPlugin {
             return;
         }
 
-        let mut riders_and_total_count: Vec<(&String, usize)> = rider_to_coupling_length_to_count
+        let mut riders_and_total_count: Vec<(&String, i64)> = rider_to_coupling_length_to_count
             .iter()
             .map(|(r, cltc)| (r, cltc.values().map(|count| *count).sum()))
             .collect();
-        riders_and_total_count.sort_unstable_by_key(|(rider, total_count)| (usize::MAX - total_count, *rider));
+        riders_and_total_count.sort_unstable_by_key(|(rider, total_count)| (-(*total_count), *rider));
 
-        let mut response_body = format!("Fixed-coupling monopolies for company {}:", company);
+        let mut response_body = format!("Fixed-coupling monopolies:");
         for (rider, total_count) in riders_and_total_count {
             write!(response_body, "\n{}: {} (", rider, total_count).unwrap();
             let mut first_coupling_length = true;
