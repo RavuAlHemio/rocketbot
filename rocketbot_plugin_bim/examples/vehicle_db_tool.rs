@@ -1,3 +1,4 @@
+use std::collections::BTreeMap;
 use std::fs::File;
 use std::io;
 use std::path::{Path, PathBuf};
@@ -5,7 +6,7 @@ use std::time::Instant;
 
 use ciborium;
 use clap::Parser;
-use rocketbot_bim_common::VehicleInfo;
+use rocketbot_bim_common::{VehicleInfo, VehicleNumber};
 
 
 #[derive(Parser)]
@@ -15,6 +16,9 @@ enum Mode {
 
     #[command(about = "Convert a CBOR vehicle database to JSON.")]
     ToJson(ToJsonOptions),
+
+    #[command(about = "Merge multiple JSON vehicle databases to CBOR.")]
+    MergeJsonToCbor(MergeJsonToCborOptions),
 }
 
 #[derive(Parser)]
@@ -36,6 +40,18 @@ struct ToJsonOptions {
 
     #[arg(help = "The JSON vehicle database file to write.")]
     pub target_json: PathBuf,
+
+    #[arg(long, help = "Output timing statistics when converting.")]
+    pub benchmark: bool,
+}
+
+#[derive(Parser)]
+struct MergeJsonToCborOptions {
+    #[arg(help = "The JSON vehicle database file to merge.")]
+    pub source_jsons: Vec<PathBuf>,
+
+    #[arg(help = "The CBOR file into which to write the merged vehicle database.")]
+    pub target_cbor: PathBuf,
 
     #[arg(long, help = "Output timing statistics when converting.")]
     pub benchmark: bool,
@@ -129,6 +145,26 @@ fn main() {
                     (write_end - read_end_write_start).as_secs_f64(),
                 );
             }
+        },
+        Mode::MergeJsonToCbor(opts) => {
+            let mut database: BTreeMap<VehicleNumber, VehicleInfo> = BTreeMap::new();
+            for source_json in &opts.source_jsons {
+                let this_database = read_json_vehicle_db(&*source_json);
+                for vehicle in this_database {
+                    let old_opt = database.insert(
+                        vehicle.number.clone(),
+                        vehicle,
+                    );
+                    if let Some(old) = old_opt {
+                        eprintln!(
+                            "warning: duplicate vehicle {}",
+                            old.number,
+                        );
+                    }
+                }
+            }
+            let database_vec: Vec<VehicleInfo> = database.into_values().collect();
+            write_cbor_vehicle_db(&opts.target_cbor, &database_vec);
         },
     }
 }
