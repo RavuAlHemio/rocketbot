@@ -247,16 +247,27 @@ impl CompanyDefinition {
         // {line}:{vehicle}
         // {line}:{vehicle}+{vehicle}+{vehicle}
         // {line}:{vehicle}+{vehicle}!+{vehicle}
+        //
+        // word of warning: *always* wrap the vehicle and line regexes into (?:...) at the deepest
+        // level! do not place anything else apart from the contents of the vehicle/line regex into
+        // the (?:...) or things will break (especially if someone uses a | in the vehicle/line
+        // regex)!
         let valr_string = format!(
             concat!(
                 "^",
                 "(?:",
                     "(?:",
                         "(?P<vehicles>",
-                            "(?:{}[!]?)",
+                            "(?:",
+                                "(?:{})",
+                                "[!]?",
+                            ")",
                             "(?:",
                                 "[+]",
-                                "(?:{}[!]?)",
+                                "(?:",
+                                    "(?:{})",
+                                    "[!]?",
+                                ")",
                             ")*",
                         ")",
                         "(?:",
@@ -273,10 +284,16 @@ impl CompanyDefinition {
                         ")",
                         ":",
                         "(?P<vehicles_lv>",
-                            "(?:{}[!]?)",
+                            "(?:",
+                                "(?:{})",
+                                "[!]?",
+                            ")",
                             "(?:",
                                 "[+]",
-                                "(?:{}[!]?)",
+                                "(?:",
+                                    "(?:{})",
+                                    "[!]?",
+                                ")",
                             ")*",
                         ")",
                     ")",
