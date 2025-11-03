@@ -26,7 +26,7 @@ struct Config {
 #[derive(Clone, Debug, Deserialize, Eq, Serialize, PartialEq)]
 struct PageInfo {
     pub csv_url: String,
-    pub subset: String,
+    pub subsets: BTreeSet<String>,
     pub timeout_ms: Option<u64>,
     pub class_to_export_class: HashMap<String, ExportClass>,
 }
@@ -141,7 +141,7 @@ async fn main() {
                 .map(|(k, v)| (k.clone(), v.to_owned()))
                 .collect();
 
-            if !map.get("Subset").map(|s| s == &page.subset).unwrap_or(true) {
+            if !map.get("Subset").map(|s| page.subsets.contains(s)).unwrap_or(true) {
                 // wrong subset
                 continue;
             }
