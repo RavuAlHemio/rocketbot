@@ -86,7 +86,12 @@ async fn main() -> ExitCode {
 
         let Ok(page): Result<Page, _> = serde_json::from_slice(&buf)
             else { continue };
-        if !page.categories.contains("German nouns") {
+        if
+                !page.categories.contains("German nouns")
+                && !page.categories.contains("German proper nouns")
+                && !page.categories.contains("German masculine nouns")
+                && !page.categories.contains("German feminine nouns")
+                && !page.categories.contains("German neuter nouns") {
             continue;
         }
         xact.execute(&insert_stmt, &[
