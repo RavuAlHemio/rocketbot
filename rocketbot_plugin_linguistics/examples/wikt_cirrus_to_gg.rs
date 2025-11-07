@@ -30,6 +30,7 @@ use toml;
 struct Config {
     pub cirrus_json_gz_path: PathBuf,
     pub db_conn_string: String,
+    #[serde(default)] pub empty_first: bool,
 }
 
 #[derive(Clone, Debug, Deserialize, Eq, Hash, Ord, PartialEq, PartialOrd, Serialize)]
@@ -73,6 +74,10 @@ async fn main() -> ExitCode {
         .await.expect("failed to start database transaction");
     let insert_stmt = xact.prepare("INSERT INTO linguistics.german_genders (word, masculine, feminine, neuter) VALUES ($1, $2, $3, $4)")
         .await.expect("failed to prepare insertion statement");
+    if config.empty_first {
+        xact.execute("DELETE FROM linguistics.german_genders", &[])
+            .await.expect("failed to execute deletion statement");
+    }
 
     let mut buf = Vec::new();
     loop {
