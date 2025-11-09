@@ -521,7 +521,13 @@ pub(crate) async fn handle_bim_vehicle_status(request: &Request<Incoming>) -> Re
                         AND rav2.vehicle_number = rav.vehicle_number
                         AND rav2.coupling_mode = rav.coupling_mode
                         AND rav2.rider_username = $2
-                        AND rav2.\"timestamp\" > rav.\"timestamp\"
+                        AND (
+                            rav2.\"timestamp\" > rav.\"timestamp\"
+                            OR (
+                                rav2.\"timestamp\" = rav.\"timestamp\"
+                                AND rav2.id > rav.id
+                            ) 
+                        )
                     )
 
                     UNION ALL
@@ -539,7 +545,13 @@ pub(crate) async fn handle_bim_vehicle_status(request: &Request<Incoming>) -> Re
                         AND rav4.vehicle_number = rav3.vehicle_number
                         AND rav4.coupling_mode = rav3.coupling_mode
                         AND rav4.rider_username <> $2
-                        AND rav4.\"timestamp\" > rav3.\"timestamp\"
+                        AND (
+                            rav4.\"timestamp\" > rav3.\"timestamp\"
+                            OR (
+                                rav4.\"timestamp\" = rav3.\"timestamp\"
+                                AND rav4.id > rav3.id
+                            )
+                        )  
                     )
                 ",
                 &[&company.as_ref(), &rider.as_ref()],
