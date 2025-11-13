@@ -13,6 +13,7 @@ use csv;
 use indexmap::{IndexMap, IndexSet};
 use reqwest;
 use rocketbot_bim_common::{PowerSource, VehicleClass, VehicleInfo, VehicleNumber};
+use rocketbot_string::regex::EnjoyableRegex;
 use serde::{Deserialize, Serialize};
 use serde_json;
 
@@ -27,6 +28,7 @@ struct Config {
 struct PageInfo {
     pub csv_url: String,
     pub subsets: BTreeSet<String>,
+    #[serde(default)] pub pool_regexes: Option<BTreeSet<EnjoyableRegex>>,
     pub timeout_ms: Option<u64>,
     pub class_to_export_class: HashMap<String, ExportClass>,
 }
@@ -144,6 +146,18 @@ async fn main() {
             if !map.get("Subset").map(|s| page.subsets.contains(s)).unwrap_or(true) {
                 // wrong subset
                 continue;
+            }
+
+            if let Some(pool_regexes) = page.pool_regexes.as_ref() {
+                if let Some(pool) = map.get("Pool") {
+                    let pool_matches = pool_regexes
+                        .iter()
+                        .any(|pr| pr.is_match(pool));
+                    if !pool_matches {
+                        // wrong pool
+                        continue;
+                    }
+                }
             }
 
             let Some(cls) = map.get("Class") else { continue };
