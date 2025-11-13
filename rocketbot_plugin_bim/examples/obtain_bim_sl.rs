@@ -41,6 +41,7 @@ struct ExportClass {
     #[serde(default)] pub power_sources: BTreeSet<PowerSource>,
     #[serde(default)] pub other_data: BTreeMap<String, String>,
     #[serde(default)] pub include_deleted: bool,
+    #[serde(default)] pub formation_number_key: Option<String>,
 }
 
 trait EmptyNoneElseCloned {
@@ -251,6 +252,14 @@ async fn main() {
             } else {
                 IndexSet::with_capacity(0)
             };
+
+            // if we have more than one, also store the number of the whole formation
+            if coupled_vehicle_numbers.len() > 1 {
+                if let Some(formation_number_key) = class_def.formation_number_key.as_ref() {
+                    other_data.insert(formation_number_key.clone(), number.clone());
+                }
+            }
+
             for coupled_vehicle_number in &coupled_vehicle_numbers {
                 let vehicle = VehicleInfo {
                     number: coupled_vehicle_number.clone(),
