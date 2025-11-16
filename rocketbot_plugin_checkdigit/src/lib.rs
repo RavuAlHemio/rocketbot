@@ -290,6 +290,94 @@ fn check_digit_iban(check_digit_input: &str) -> Result<String, Error> {
     Ok(format!("{:02}", check_number))
 }
 
+fn check_digit_ean(check_digit_input: &str) -> Result<String, Error> {
+    const EXPECTED_FORMAT_EAN: &str = "0...#";
+
+    // 1. assign the digits indexes from right to left starting at 0
+    // 2. total_sum = 0
+    // 3. for each digit
+    //   a. value = if the index is divisible by 2, 3*digit, otherwise digit
+    //   b. total_sum = total_sum + value
+    // 4. check_digit = (10 - (total_sum mod 10)) mod 10
+
+    if !is_only_ascii_digits_and_placeholders(check_digit_input) {
+        return Err(Error::InvalidInputFormat {
+            expected_format: Cow::Borrowed(EXPECTED_FORMAT_EAN),
+        });
+    }
+
+    let mut digits = extract_ascii_digits_and_placeholders(check_digit_input);
+    if digits.last() == Some(&0xFF) {
+        digits.pop();
+    }
+    if digits.len() == 0 || digits.contains(&0xFF) {
+        return Err(Error::InvalidInputFormat {
+            expected_format: Cow::Borrowed(EXPECTED_FORMAT_EAN),
+        });
+    }
+    digits.reverse();
+
+    let mut multiply_by_three = true;
+    let mut total_sum = 0u8;
+    for digit in digits {
+        let multiplied = if multiply_by_three {
+            digit * 3
+        } else {
+            digit
+        };
+
+        total_sum = (total_sum + multiplied) % 10;
+
+        multiply_by_three = !multiply_by_three;
+    }
+
+    let check_digit = (10 - total_sum) % 10;
+    Ok(format!("{}", check_digit))
+}
+
+fn check_digit_isbn10(check_digit_input: &str) -> Result<String, Error> {
+    const EXPECTED_FORMAT_ISBN10: &str = "000000000#";
+
+    // 1. assign the non-check digits weights from right to left starting at 2
+    // 2. total_sum = 0
+    // 3. for each digit
+    //   a. value = digit * digit_weight
+    //   b. total_sum = total_sum + value
+    // 4. check_digit = (11 - (total_sum mod 11)) mod 11
+
+    if !is_only_ascii_digits_and_placeholders(check_digit_input) {
+        return Err(Error::InvalidInputFormat {
+            expected_format: Cow::Borrowed(EXPECTED_FORMAT_ISBN10),
+        });
+    }
+
+    let mut digits = extract_ascii_digits_and_placeholders(check_digit_input);
+    if digits.last() == Some(&0xFF) {
+        digits.pop();
+    }
+    if digits.len() == 0 || digits.contains(&0xFF) {
+        return Err(Error::InvalidInputFormat {
+            expected_format: Cow::Borrowed(EXPECTED_FORMAT_ISBN10),
+        });
+    }
+    digits.reverse();
+
+    let mut total_sum = 0u8;
+    let mut weight = 2;
+    for digit in digits {
+        let value = digit * weight;
+        weight += 1;
+        total_sum = (total_sum + value) % 11;
+    }
+
+    let check_digit = (11 - total_sum) % 11;
+    if check_digit == 10 {
+        Ok("X".to_owned())
+    } else {
+        Ok(format!("{}", check_digit))
+    }
+}
+
 
 pub struct CheckDigitPlugin {
     interface: Weak<dyn RocketBotInterface>,
@@ -320,6 +408,12 @@ impl CheckDigitPlugin {
             },
             "iban" => {
                 check_digit_iban(check_digit_input)
+            },
+            "ean"|"isbn13" => {
+                check_digit_ean(check_digit_input)
+            },
+            "isbn10" => {
+                check_digit_isbn10(check_digit_input)
             },
             _ => {
                 send_channel_message!(
@@ -418,7 +512,11 @@ impl RocketBotPlugin for CheckDigitPlugin {
 
 #[cfg(test)]
 mod tests {
-    use super::{check_digit_atsvnr, check_digit_czrodc, check_digit_iban, check_digit_luhn, Error};
+    use super::{
+        check_digit_atsvnr, check_digit_czrodc, check_digit_ean, check_digit_iban,
+        check_digit_isbn10, check_digit_luhn,
+        Error,
+    };
 
     #[test]
     fn test_check_digit_luhn() {
@@ -470,5 +568,22 @@ mod tests {
         // Austrian Anti-Fraud Office
         assert_eq!(&check_digit_iban("AT## 0100 0000 0550 4374").unwrap(), "09");
         assert_eq!(&check_digit_iban("AT##0100000005504374").unwrap(), "09");
+    }
+
+    #[test]
+    fn test_check_digit_ean() {
+        // Wikipedia examples
+        assert_eq!(&check_digit_ean("4 006381 33393#").unwrap(), "1");
+        assert_eq!(&check_digit_ean("400638133393#").unwrap(), "1");
+
+        assert_eq!(&check_digit_ean("7351 353#").unwrap(), "7");
+        assert_eq!(&check_digit_ean("7351353#").unwrap(), "7");
+    }
+
+    #[test]
+    fn test_check_digit_isbn10() {
+        // numerically first ISBNs
+        assert_eq!(&check_digit_isbn10("000000001#").unwrap(), "9");
+        assert_eq!(&check_digit_isbn10("000000002#").unwrap(), "7");
     }
 }

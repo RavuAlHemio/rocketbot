@@ -10,6 +10,8 @@ Supported `TYPE`s are:
 * `atsvnr`: Austrian social security number (Sozialversicherungsnummer)
 * `czrodc`: Czech birth number (rodné číslo)
 * `iban`: International Bank Account Number
+* `ean` or `isbn13`: European Article Number, including 13-digit International Standard Book Numbers (ISBN-13)
+* `isbn10`: 10-digit International Standard Book Number (ISBN-10)
 
 Examples:
 
