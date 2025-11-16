@@ -1,3 +1,5 @@
+CREATE SCHEMA aviate;
+
 CREATE TABLE aviate.airlines
 ( iata_code character varying(2) NOT NULL
 , name character varying(255) NOT NULL
