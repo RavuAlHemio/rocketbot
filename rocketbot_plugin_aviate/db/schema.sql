@@ -10,7 +10,7 @@ CREATE SEQUENCE aviate.alliance_id AS bigint;
 CREATE TABLE aviate.alliances
 ( id bigint NOT NULL DEFAULT nextval('aviate.alliance_id')
 , name character varying(255) NOT NULL
-, CONSTRAINT pk_alliances PRIMARY KEY (alliance_id)
+, CONSTRAINT pk_alliances PRIMARY KEY (id)
 );
 
 CREATE TABLE aviate.alliances_airlines
