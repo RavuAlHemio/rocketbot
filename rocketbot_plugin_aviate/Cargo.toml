@@ -1,0 +1,18 @@
+[package]
+name = "rocketbot_plugin_aviate"
+version = "0.1.0"
+edition = "2021"
+
+[dependencies]
+async-trait = { version = "0.1" }
+rocketbot_interface = { path = "../rocketbot_interface" }
+serde = { version = "1.0", features = ["derive"] }
+serde_json = { version = "1.0" }
+tokio = { version = "1.47", features = ["rt"] }
+tokio-postgres = { version = "0.7" }
+tracing = { version = "0.1" }
+
+[dev-dependencies]
+regex = { version = "1.11" }
+tokio = { version = "1.47", features = ["macros", "rt-multi-thread"] }
+toml = { version = "0.9" }

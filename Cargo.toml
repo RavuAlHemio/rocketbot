@@ -10,6 +10,7 @@ members = [
     "rocketbot_makepdf",
     "rocketbot_mediawiki_parsing",
     "rocketbot_plugin_allograph",
+    "rocketbot_plugin_aviate",
     "rocketbot_plugin_barcode",
     "rocketbot_plugin_belch",
     "rocketbot_plugin_bim",

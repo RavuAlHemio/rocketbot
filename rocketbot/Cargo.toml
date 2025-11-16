@@ -18,6 +18,7 @@ rand = { version = "0.8" }
 regex = { version = "1.11" }
 rocketbot_interface = { path = "../rocketbot_interface" }
 rocketbot_plugin_allograph = { path = "../rocketbot_plugin_allograph" }
+rocketbot_plugin_aviate = { path = "../rocketbot_plugin_aviate" }
 rocketbot_plugin_barcode = { path = "../rocketbot_plugin_barcode" }
 rocketbot_plugin_belch = { path = "../rocketbot_plugin_belch" }
 rocketbot_plugin_bim = { path = "../rocketbot_plugin_bim" }

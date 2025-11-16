@@ -3233,6 +3233,7 @@ dependencies = [
  "regex",
  "rocketbot_interface",
  "rocketbot_plugin_allograph",
+ "rocketbot_plugin_aviate",
  "rocketbot_plugin_barcode",
  "rocketbot_plugin_belch",
  "rocketbot_plugin_bim",
@@ -3397,6 +3398,21 @@ dependencies = [
  "rocketbot_interface",
  "rocketbot_regex_replace",
  "serde_json",
+ "tracing",
+]
+
+[[package]]
+name = "rocketbot_plugin_aviate"
+version = "0.1.0"
+dependencies = [
+ "async-trait",
+ "regex",
+ "rocketbot_interface",
+ "serde",
+ "serde_json",
+ "tokio",
+ "tokio-postgres",
+ "toml",
  "tracing",
 ]
 
