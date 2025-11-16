@@ -55,3 +55,17 @@ CREATE TABLE aviate.route_equipment
 , CONSTRAINT fk_route_equipment_route FOREIGN KEY (route_id) REFERENCES aviate.routes (id)
 , CONSTRAINT fk_route_equipment_equipment FOREIGN KEY (equipment_code) REFERENCES aviate.equipment (code)
 );
+
+CREATE FUNCTION aviate.ensure_schema_version_one_row(
+) RETURNS trigger AS $$
+plpy.error("schema_version cannot be inserted into or deleted from")
+$$ LANGUAGE plpython3u;
+CREATE TABLE aviate.schema_version
+( ver bigint NOT NULL
+);
+INSERT INTO aviate.schema_version (ver) VALUES (1);
+CREATE TRIGGER tg_schema_version_one_row
+    BEFORE INSERT OR DELETE OR TRUNCATE
+    ON aviate.schema_version
+    FOR EACH STATEMENT
+    EXECUTE FUNCTION aviate.ensure_schema_version_one_row();
