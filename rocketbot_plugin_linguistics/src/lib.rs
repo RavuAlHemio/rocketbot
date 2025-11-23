@@ -24,6 +24,8 @@ struct GermanGender {
     pub masculine: bool,
     pub feminine: bool,
     pub neuter: bool,
+    pub singulare_tantum: bool,
+    pub plurale_tantum: bool,
 }
 
 
@@ -58,6 +60,8 @@ impl LinguisticsPlugin {
                     ,   masculine
                     ,   feminine
                     ,   neuter
+                    ,   singulare_tantum
+                    ,   plurale_tantum
                 FROM    linguistics.german_genders
                 WHERE   LOWER(word) = LOWER($1)
             ",
@@ -69,11 +73,15 @@ impl LinguisticsPlugin {
                 let masculine: bool = row.get(1);
                 let feminine: bool = row.get(2);
                 let neuter: bool = row.get(3);
+                let singulare_tantum: bool = row.get(4);
+                let plurale_tantum: bool = row.get(5);
                 GermanGender {
                     word,
                     masculine,
                     feminine,
                     neuter,
+                    singulare_tantum,
+                    plurale_tantum,
                 }
             });
         Ok(gender_opt)
@@ -97,6 +105,12 @@ impl LinguisticsPlugin {
                 }
                 if gender.neuter {
                     gender_words.push("neuter");
+                }
+                if gender.singulare_tantum {
+                    gender_words.push("singular-only");
+                }
+                if gender.plurale_tantum {
+                    gender_words.push("plural-only");
                 }
                 Cow::Owned(format!("_{}_ is {}", gender.word, phrase_join(&gender_words, ", ", " and ")))
             },

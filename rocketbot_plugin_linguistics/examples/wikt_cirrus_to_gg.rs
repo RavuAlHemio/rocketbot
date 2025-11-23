@@ -79,11 +79,15 @@ async fn main() -> ExitCode {
                 ,   masculine
                 ,   feminine
                 ,   neuter
+                ,   singulare_tantum
+                ,   plurale_tantum
                 ) VALUES
                 (   $1
                 ,   $2
                 ,   $3
                 ,   $4
+                ,   $5
+                ,   $6
                 )
         ",
     )
@@ -108,6 +112,8 @@ async fn main() -> ExitCode {
         if
                 !page.categories.contains("German nouns")
                 && !page.categories.contains("German proper nouns")
+                && !page.categories.contains("German singularia tantum")
+                && !page.categories.contains("German pluralia tantum")
                 && !page.categories.contains("German masculine nouns")
                 && !page.categories.contains("German feminine nouns")
                 && !page.categories.contains("German neuter nouns") {
@@ -118,6 +124,8 @@ async fn main() -> ExitCode {
             &page.categories.contains("German masculine nouns"),
             &page.categories.contains("German feminine nouns"),
             &page.categories.contains("German neuter nouns"),
+            &page.categories.contains("German singularia tantum"),
+            &page.categories.contains("German pluralia tantum"),
         ])
             .await.expect("failed to insert database row");
     }

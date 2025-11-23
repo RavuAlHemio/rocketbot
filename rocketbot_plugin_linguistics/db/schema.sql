@@ -3,4 +3,6 @@ CREATE TABLE linguistics.german_genders
 , masculine bool NOT NULL
 , feminine bool NOT NULL
 , neuter bool NOT NULL
+, singulare_tantum bool NOT NULL
+, plurale_tantum bool NOT NULL
 );
