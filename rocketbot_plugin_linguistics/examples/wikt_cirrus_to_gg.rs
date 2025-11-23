@@ -72,7 +72,21 @@ async fn main() -> ExitCode {
 
     let xact = conn.transaction()
         .await.expect("failed to start database transaction");
-    let insert_stmt = xact.prepare("INSERT INTO linguistics.german_genders (word, masculine, feminine, neuter) VALUES ($1, $2, $3, $4)")
+    let insert_stmt = xact.prepare(
+        "
+            INSERT INTO linguistics.german_genders
+                (   word
+                ,   masculine
+                ,   feminine
+                ,   neuter
+                ) VALUES
+                (   $1
+                ,   $2
+                ,   $3
+                ,   $4
+                )
+        ",
+    )
         .await.expect("failed to prepare insertion statement");
     if config.empty_first {
         xact.execute("DELETE FROM linguistics.german_genders", &[])
