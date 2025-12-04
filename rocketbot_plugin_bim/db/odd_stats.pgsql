@@ -190,3 +190,69 @@ for row in plpy.cursor('SELECT "timestamp", old_rider, new_rider FROM bim.ridden
 for (rider, (max_count, timestamp)) in sorted(rider_to_max.items()):
     yield (rider, max_count, timestamp)
 $$;
+
+CREATE OR REPLACE FUNCTION bim.last_rider_ranking_changes
+() RETURNS TABLE
+( id bigint
+, "timestamp" timestamp with time zone
+, rider_to_rank jsonb
+)
+LANGUAGE plpython3u
+STABLE STRICT
+AS $$
+from collections import defaultdict
+import json
+
+rider_to_count = defaultdict(lambda: 0)
+last_rider_to_rank = {}
+for row in plpy.cursor('SELECT id, "timestamp", old_rider, new_rider FROM bim.ridden_vehicles_between_riders(false)'):
+    if row["old_rider"] is not None:
+        rider_to_count[row["old_rider"]] -= 1
+    rider_to_count[row["new_rider"]] += 1
+
+    count_to_riders = defaultdict(set)
+    for (rider, count) in rider_to_count.items():
+        count_to_riders[count].add(rider)
+
+    counts = sorted(count_to_riders.keys())
+    counts.reverse()
+
+    rider_to_rank = {}
+    current_rank = 1
+    for count in counts:
+        this_count_riders = count_to_riders[count]
+        for rider in this_count_riders:
+            rider_to_rank[rider] = current_rank
+
+        current_rank += len(this_count_riders)
+
+    if last_rider_to_rank != rider_to_rank:
+        last_rider_to_rank = rider_to_rank
+        yield (row["id"], row["timestamp"], json.dumps(rider_to_rank))
+$$;
+
+CREATE OR REPLACE FUNCTION bim.last_rider_ranking_change_diffs
+() RETURNS TABLE
+( id bigint
+, "timestamp" timestamp with time zone
+, rider_to_difference jsonb
+)
+LANGUAGE plpython3u
+STABLE STRICT
+AS $$
+import json
+
+last_rider_to_rank = {}
+for row in plpy.cursor('SELECT id, "timestamp", rider_to_rank FROM bim.last_rider_ranking_changes()'):
+    rider_to_rank = json.loads(row["rider_to_rank"])
+    if last_rider_to_rank != rider_to_rank:
+        differences = {}
+        for rider, new_rank in rider_to_rank.items():
+            old_rank = last_rider_to_rank.get(rider, None)
+            if old_rank == new_rank:
+                continue
+            differences[rider] = (old_rank, new_rank)
+
+        last_rider_to_rank = rider_to_rank
+        yield (row["id"], row["timestamp"], json.dumps(differences))
+$$;
