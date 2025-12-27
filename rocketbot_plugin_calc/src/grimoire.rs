@@ -137,9 +137,8 @@ pub(crate) fn get_canonical_constants() -> HashMap<String, Constant> {
 pub(crate) fn get_canonical_functions() -> HashMap<String, Function> {
     let mut prepared: HashMap<&str, Function> = HashMap::new();
 
-    prepared.insert("sqrt", f64_f64(
-        "sqrt",
-        |f| f.sqrt(),
+    prepared.insert("sqrt", Function::new(
+        Box::new(sqrt),
         "`sqrt(x)` calculates the square root of a number, i.e. \\(y = \\sqrt{x}\\) such that \\(y^2 = x\\)",
     ));
 
@@ -646,6 +645,30 @@ fn ellipsoid_distance_deg(equator_radius: f64, inv_flattening: f64, lat1: f64, l
 }
 fn ellipsoid_distance_deg_array(operands: [f64; 6]) -> f64 {
     ellipsoid_distance_deg(operands[0], operands[1], operands[2], operands[3], operands[4], operands[5])
+}
+
+
+/// Calculates the square root of its single operand, affecting the units' powers as well.
+fn sqrt(_state: &SimplificationState, operands: &[AstNodeAtLocation]) -> BuiltInFuncResult {
+    check_arg_count("sqrt", 1, operands.len())?;
+
+    let arg = match &operands[0].node {
+        AstNode::Number(n) => n,
+        other => return Err(SimplificationError::UnexpectedOperandType(format!("{:?}", other))),
+    };
+
+    let sqrt_val = arg.value.to_f64().sqrt();
+    let mut new_units = arg.units.clone();
+    for (unit_name, unit_power) in new_units.iter_mut() {
+        if &*unit_power % 2 != BigInt::ZERO {
+            return Err(SimplificationError::NonIntegralUnitPower(unit_name.clone()));
+        }
+        *unit_power /= 2;
+    }
+    Ok(AstNode::Number(Number::new(
+        NumberValue::Float(sqrt_val),
+        new_units,
+    )))
 }
 
 

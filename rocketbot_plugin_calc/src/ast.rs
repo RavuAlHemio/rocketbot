@@ -83,6 +83,7 @@ pub(crate) enum SimplificationError {
     LeftOperandUnitsRightOperandFloat,
     OperandHasUnits,
     UnitReconciliation,
+    NonIntegralUnitPower(String),
 }
 impl SimplificationError {
     pub fn at_location(self, start_end: Option<(usize, usize)>) -> SimplificationErrorAtLocation {
@@ -123,6 +124,8 @@ impl fmt::Display for SimplificationError {
                 => write!(f, "operand has units; it mustn't"),
             SimplificationError::UnitReconciliation
                 => write!(f, "failed to reconcile operand units"),
+            SimplificationError::NonIntegralUnitPower(u)
+                => write!(f, "operation would create a non-integral power for unit {}", u),
         }
     }
 }
