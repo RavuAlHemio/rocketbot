@@ -55,7 +55,7 @@ pub(crate) fn get_canonical_constants() -> HashMap<String, Constant> {
 
     prepared.insert("pi", Constant::new(
         std::f64::consts::PI,
-        "The ratio between a circle's circumference to its diameter.",
+        "The ratio of a circle's circumference to its diameter.",
     ));
     prepared.insert("e", Constant::new(
         std::f64::consts::E,
