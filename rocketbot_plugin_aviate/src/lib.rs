@@ -311,9 +311,9 @@ impl RocketBotPlugin for AviatePlugin {
         if command.name == "fly" {
             self.channel_command_fly(channel_message, command).await
         } else if command.name == "flyfrom" {
-            self.channel_command_flyfrom_flyto(channel_message, command, false).await
-        } else if command.name == "flyto" {
             self.channel_command_flyfrom_flyto(channel_message, command, true).await
+        } else if command.name == "flyto" {
+            self.channel_command_flyfrom_flyto(channel_message, command, false).await
         }
     }
 
