@@ -1,7 +1,7 @@
 //! Populates the database from Airline Route Mapper data files.
 
 
-use std::collections::BTreeSet;
+use std::collections::{BTreeMap, BTreeSet};
 use std::ffi::OsString;
 use std::fs::File;
 use std::io::{BufRead, BufReader};
@@ -303,8 +303,8 @@ async fn run() {
                 , name
                 )
             VALUES
-                ( ?
-                , ?
+                ( $1
+                , $2
                 )
         "
     ).await.expect("failed to compile insert-airline statement");
@@ -314,7 +314,7 @@ async fn run() {
                 ( name
                 )
             VALUES
-                ( ?
+                ( $1
                 )
             RETURNING   id
         "
@@ -326,8 +326,8 @@ async fn run() {
                 , airline_iata_code
                 )
             VALUES
-                ( ?
-                , ?
+                ( $1
+                , $2
                 )
         "
     ).await.expect("failed to compile insert-alliance-airline statement");
@@ -338,8 +338,8 @@ async fn run() {
                 , description
                 )
             VALUES
-                ( ?
-                , ?
+                ( $1
+                , $2
                 )
         "
     ).await.expect("failed to compile insert-equipment statement");
@@ -352,10 +352,10 @@ async fn run() {
                 , name
                 )
             VALUES
-                ( ?
-                , CAST(? AS numeric(7, 4))
-                , CAST(? AS numeric(7, 4))
-                , ?
+                ( $1
+                , CAST(CAST($2 AS character varying) AS numeric(7, 4))
+                , CAST(CAST($3 AS character varying) AS numeric(7, 4))
+                , $4
                 )
         "
     ).await.expect("failed to compile insert-airport statement");
@@ -368,10 +368,10 @@ async fn run() {
                 , codeshare
                 )
             VALUES
-                ( ?
-                , ?
-                , ?
-                , ?
+                ( $1
+                , $2
+                , $3
+                , $4
                 )
             RETURNING   id
         "
@@ -383,20 +383,28 @@ async fn run() {
                 , equipment_code
                 )
             VALUES
-                ( ?
-                , ?
+                ( $1
+                , $2
                 )
         "
     ).await.expect("failed to compile insert-route-equipment statement");
 
     // load the CSV files
+    eprintln!("inserting airlines");
     let airline_lines = read_csv(&config.airlines_path);
+    let mut airline_iata_codes = BTreeSet::new();
     for airline_line in &airline_lines {
         let Some(airline) = Airline::from_csv_cols(&airline_line)
             else { continue };
+        let is_unique = airline_iata_codes.insert(airline.iata_code.clone());
+        if !is_unique {
+            eprintln!("duplicate airline IATA code {:?}", airline.iata_code);
+            continue;
+        }
         txn.execute(&insert_airline_stmt, &[&airline.iata_code, &airline.name])
             .await.expect("failed to insert airline");
     }
+    eprintln!("inserting alliances");
     let alliance_lines = read_csv(&config.alliances_path);
     for alliance_line in &alliance_lines {
         let Some(alliance) = Alliance::from_csv_cols(&alliance_line)
@@ -405,45 +413,128 @@ async fn run() {
             .await.expect("failed to insert alliance");
         let alliance_id: i64 = alliance_id_row.get(0);
         for airline in &alliance.airline_iata_codes {
+            if !airline_iata_codes.contains(airline) {
+                eprintln!("unknown airline {:?} in alliance {:?}", airline, alliance.name);
+                continue;
+            }
             txn.execute(&insert_alliance_airline_stmt, &[&alliance_id, airline])
                 .await.expect("failed to insert airline into alliance");
         }
     }
+    eprintln!("inserting equipment");
     let equipment_lines = read_csv(&config.equipment_path);
+    let mut equipment_codes = BTreeSet::new();
     for equipment_line in &equipment_lines {
         let Some(equipment) = Equipment::from_csv_cols(equipment_line)
             else { continue };
+        let is_unique = equipment_codes.insert(equipment.code.clone());
+        if !is_unique {
+            eprintln!("duplicate equipment code {:?}", equipment.code);
+            continue;
+        }
         txn.execute(&insert_equipment_stmt, &[&equipment.code, &equipment.name])
             .await.expect("failed to insert equipment");
     }
+    eprintln!("inserting airports");
     let airport_lines = read_csv(&config.airports_path);
+    let mut airport_iata_codes = BTreeSet::new();
     for airport_line in &airport_lines {
         let Some(airport) = Airport::from_csv_cols(airport_line)
             else { continue };
+        let is_unique = airport_iata_codes.insert(airport.iata_code.clone());
+        if !is_unique {
+            eprintln!("duplicate airport IATA code {:?}", airport.iata_code);
+            continue;
+        }
         txn.execute(&insert_airport_stmt, &[&airport.iata_code, &airport.latitude, &airport.longitude, &airport.name])
             .await.expect("failed to insert airport");
     }
+    eprintln!("inserting routes");
     let route_lines = read_csv(&config.routes_path);
+    let mut route_to_id: BTreeMap<(String, String, String), i64> = BTreeMap::new();
+    let mut route_to_equipment: BTreeMap<(String, String, String), BTreeSet<String>> = BTreeMap::new();
     for route_line in &route_lines {
         let Some(route) = Route::from_csv_cols(route_line)
             else { continue };
-        let route_id_row = txn.query_one(
-            &insert_route_stmt,
-            &[
-                &route.airline_iata_code,
-                &route.from_airport_iata_code,
-                &route.to_airport_iata_code,
-                &route.codeshare,
-            ],
-        )
-            .await.expect("failed to insert route");
-        let route_id: i64 = route_id_row.get(0);
+        if !airline_iata_codes.contains(&route.airline_iata_code) {
+            continue;
+        }
+        if !airport_iata_codes.contains(&route.from_airport_iata_code) {
+            continue;
+        }
+        if !airport_iata_codes.contains(&route.to_airport_iata_code) {
+            continue;
+        }
+        let known_route_id_opt = route_to_id.get(&(
+            route.airline_iata_code.clone(),
+            route.from_airport_iata_code.clone(),
+            route.to_airport_iata_code.clone(),
+        )).map(|r| *r);
+        let known_route_id = if let Some(kid) = known_route_id_opt {
+            eprintln!(
+                "duplicate route {}-{} served by {}; merging",
+                route.from_airport_iata_code,
+                route.to_airport_iata_code,
+                route.airline_iata_code,
+            );
+            kid
+        } else {
+            let route_id_row = txn.query_one(
+                &insert_route_stmt,
+                &[
+                    &route.airline_iata_code,
+                    &route.from_airport_iata_code,
+                    &route.to_airport_iata_code,
+                    &route.codeshare,
+                ],
+            )
+                .await.expect("failed to insert route");
+            let route_id: i64 = route_id_row.get(0);
+            route_to_id.insert(
+                (
+                    route.airline_iata_code.clone(),
+                    route.from_airport_iata_code.clone(),
+                    route.to_airport_iata_code.clone(),
+                ),
+                route_id,
+            );
+            route_id
+        };
+        let known_route_equipment = route_to_equipment
+            .entry((
+                route.airline_iata_code.clone(),
+                route.from_airport_iata_code.clone(),
+                route.to_airport_iata_code.clone(),
+            ))
+            .or_insert_with(|| BTreeSet::new());
         for equipment in &route.equipment_codes {
-            txn.execute(&insert_route_equipment_stmt, &[&route_id, equipment])
+            if known_route_equipment.contains(equipment) {
+                eprintln!(
+                    "duplicate equipment code {} on route {}-{} served by {}; skipping equipment",
+                    equipment,
+                    route.from_airport_iata_code,
+                    route.to_airport_iata_code,
+                    route.airline_iata_code,
+                );
+                continue;
+            }
+            if !equipment_codes.contains(equipment) {
+                eprintln!(
+                    "unknown equipment code {} on route {}-{} served by {}; skipping equipment",
+                    equipment,
+                    route.from_airport_iata_code,
+                    route.to_airport_iata_code,
+                    route.airline_iata_code,
+                );
+                continue;
+            }
+            known_route_equipment.insert(equipment.clone());
+            txn.execute(&insert_route_equipment_stmt, &[&known_route_id, equipment])
                 .await.expect("failed to insert equipment into route");
         }
     }
 
+    eprintln!("committing");
     txn.commit()
         .await.expect("committing transaction failed");
 }
