@@ -862,35 +862,39 @@ impl RocketBotInterface for ServerConnection {
     }
 
     async fn add_reaction(&self, message_id: &str, emoji_short_name: &str) {
-        debug!("reacting to message {:?} with emoji {:?}", message_id, emoji_short_name);
-        let message_body = serde_json::json!({
-            "msg": "method",
-            "method": "setReaction",
-            "id": "nvm",
-            "params": [
-                format!(":{}:", emoji_short_name),
-                message_id,
-                true,
-            ],
-        });
-        self.shared_state.outgoing_sender.send(message_body)
-            .expect("failed to enqueue add-reaction message");
+        debug!("reacting with emoji {emoji_short_name:?} to message {message_id:?}");
+        let no_query_options: [(&str, Option<&str>); 0] = [];
+        let res = post_api_json(
+            &self.shared_state,
+            "api/v1/chat.react",
+            serde_json::json!({
+                "messageId": message_id,
+                "emoji": emoji_short_name,
+                "shouldReact": true,
+            }),
+            no_query_options,
+        ).await;
+        if let Err(e) = res {
+            error!("failed to react with emoji {emoji_short_name:?} to message {message_id:?}: {e}");
+        }
     }
 
     async fn remove_reaction(&self, message_id: &str, emoji_short_name: &str) {
-        debug!("removing reaction from message {:?} with emoji {:?}", message_id, emoji_short_name);
-        let message_body = serde_json::json!({
-            "msg": "method",
-            "method": "setReaction",
-            "id": "nvm",
-            "params": [
-                format!(":{}:", emoji_short_name),
-                message_id,
-                false,
-            ],
-        });
-        self.shared_state.outgoing_sender.send(message_body)
-            .expect("failed to enqueue remove-reaction message");
+        debug!("removing reaction with emoji {emoji_short_name:?} from message {message_id:?}");
+        let no_query_options: [(&str, Option<&str>); 0] = [];
+        let res = post_api_json(
+            &self.shared_state,
+            "api/v1/chat.react",
+            serde_json::json!({
+                "messageId": message_id,
+                "emoji": emoji_short_name,
+                "shouldReact": false,
+            }),
+            no_query_options,
+        ).await;
+        if let Err(e) = res {
+            error!("failed to remove reaction with emoji {emoji_short_name:?} from message {message_id:?}: {e}");
+        }
     }
 
     async fn obtain_http_resource(&self, path: &str) -> Result<hyper::Response<hyper::body::Incoming>, HttpError> {
@@ -1908,7 +1912,6 @@ async fn handle_received(body: &serde_json::Value, mut state: &mut ConnectionSta
             .expect("failed to enqueue room list message");
 
         // get the list of custom emoji
-        // (via the REST API, since listEmojiCustom in the realtime API is deprecated)
         let mut custom_emoji = obtain_custom_emoji(&state.shared_state).await;
 
         {
@@ -1925,7 +1928,7 @@ async fn handle_received(body: &serde_json::Value, mut state: &mut ConnectionSta
         debug!("populating bot list");
         update_bot_list(&state.shared_state).await;
 
-        // set our status (via the REST API, since this is apparently broken with the realtime API)
+        // set our status
         debug!("setting status");
         let no_query_options: [(&str, Option<&str>); 0] = [];
         post_api_json(
