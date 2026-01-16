@@ -21,6 +21,7 @@ use std::path::PathBuf;
 use std::process::ExitCode;
 
 use flate2::read::GzDecoder;
+use rocketbot_plugin_linguistics::GenderFlags;
 use serde::{Deserialize, Serialize};
 use tokio_postgres::NoTls;
 use toml;
@@ -76,18 +77,10 @@ async fn main() -> ExitCode {
         "
             INSERT INTO linguistics.german_genders
                 (   word
-                ,   masculine
-                ,   feminine
-                ,   neuter
-                ,   singulare_tantum
-                ,   plurale_tantum
+                ,   gender_flags
                 ) VALUES
                 (   $1
                 ,   $2
-                ,   $3
-                ,   $4
-                ,   $5
-                ,   $6
                 )
         ",
     )
@@ -119,13 +112,36 @@ async fn main() -> ExitCode {
                 && !page.categories.contains("German neuter nouns") {
             continue;
         }
+
+        let mut gender_flags = GenderFlags::empty();
+        if page.categories.contains("German masculine nouns") {
+            gender_flags |= GenderFlags::MASCULINE;
+        }
+        if page.categories.contains("German feminine nouns") {
+            gender_flags |= GenderFlags::FEMININE;
+        }
+        if page.categories.contains("German neuter nouns") {
+            gender_flags |= GenderFlags::NEUTER;
+        }
+        if page.categories.contains("German singularia tantum") {
+            gender_flags |= GenderFlags::SINGULARE_TANTUM;
+        }
+        if page.categories.contains("German pluralia tantum") {
+            gender_flags |= GenderFlags::PLURALE_TANTUM;
+        }
+        if page.categories.contains("German male given names") {
+            gender_flags |= GenderFlags::MALE_GIVEN;
+        }
+        if page.categories.contains("German female given names") {
+            gender_flags |= GenderFlags::FEMALE_GIVEN;
+        }
+        if page.categories.contains("German unisex given names") {
+            gender_flags |= GenderFlags::UNISEX_GIVEN;
+        }
+
         xact.execute(&insert_stmt, &[
             &page.title,
-            &page.categories.contains("German masculine nouns"),
-            &page.categories.contains("German feminine nouns"),
-            &page.categories.contains("German neuter nouns"),
-            &page.categories.contains("German singularia tantum"),
-            &page.categories.contains("German pluralia tantum"),
+            &gender_flags.bits(),
         ])
             .await.expect("failed to insert database row");
     }

@@ -2,6 +2,7 @@ use std::borrow::Cow;
 use std::sync::Weak;
 
 use async_trait::async_trait;
+use bitflags::bitflags;
 use rocketbot_interface::{phrase_join, send_channel_message};
 use rocketbot_interface::commands::{CommandDefinitionBuilder, CommandInstance};
 use rocketbot_interface::interfaces::{RocketBotInterface, RocketBotPlugin};
@@ -18,14 +19,24 @@ struct Config {
     pub db_conn_string: String,
 }
 
+bitflags! {
+    #[derive(Clone, Copy, Debug, Default, Eq, Hash, Ord, PartialEq, PartialOrd)]
+    pub struct GenderFlags : i64 {
+        const MASCULINE = (1 << 0);
+        const FEMININE = (1 << 1);
+        const NEUTER = (1 << 2);
+        const SINGULARE_TANTUM = (1 << 3);
+        const PLURALE_TANTUM = (1 << 4);
+        const MALE_GIVEN = (1 << 5);
+        const FEMALE_GIVEN = (1 << 6);
+        const UNISEX_GIVEN = (1 << 7);
+    }
+}
+
 #[derive(Clone, Debug, Eq, Hash, Ord, PartialEq, PartialOrd)]
-struct GermanGender {
+pub struct GermanGender {
     pub word: String,
-    pub masculine: bool,
-    pub feminine: bool,
-    pub neuter: bool,
-    pub singulare_tantum: bool,
-    pub plurale_tantum: bool,
+    pub gender_flags: GenderFlags,
 }
 
 
@@ -57,11 +68,7 @@ impl LinguisticsPlugin {
         let row_opt = db_client.query_opt(
             "
                 SELECT  word
-                    ,   masculine
-                    ,   feminine
-                    ,   neuter
-                    ,   singulare_tantum
-                    ,   plurale_tantum
+                    ,   gender_flags
                 FROM    linguistics.german_genders
                 WHERE   LOWER(word) = LOWER($1)
             ",
@@ -70,18 +77,13 @@ impl LinguisticsPlugin {
         let gender_opt = row_opt
             .map(|row| {
                 let word: String = row.get(0);
-                let masculine: bool = row.get(1);
-                let feminine: bool = row.get(2);
-                let neuter: bool = row.get(3);
-                let singulare_tantum: bool = row.get(4);
-                let plurale_tantum: bool = row.get(5);
+                let flags_i64: i64 = row.get(1);
+
+                let gender_flags = GenderFlags::from_bits_truncate(flags_i64);
+
                 GermanGender {
                     word,
-                    masculine,
-                    feminine,
-                    neuter,
-                    singulare_tantum,
-                    plurale_tantum,
+                    gender_flags,
                 }
             });
         Ok(gender_opt)
@@ -97,22 +99,36 @@ impl LinguisticsPlugin {
         let message: Cow<'static, str> = match self.get_german_gender(&*config_guard, word).await {
             Ok(Some(gender)) => {
                 let mut gender_words = Vec::with_capacity(3);
-                if gender.masculine {
+                if gender.gender_flags.contains(GenderFlags::MASCULINE) {
                     gender_words.push("masculine");
                 }
-                if gender.feminine {
+                if gender.gender_flags.contains(GenderFlags::FEMININE) {
                     gender_words.push("feminine");
                 }
-                if gender.neuter {
+                if gender.gender_flags.contains(GenderFlags::NEUTER) {
                     gender_words.push("neuter");
                 }
-                if gender.singulare_tantum {
+                if gender.gender_flags.contains(GenderFlags::SINGULARE_TANTUM) {
                     gender_words.push("singular-only");
                 }
-                if gender.plurale_tantum {
+                if gender.gender_flags.contains(GenderFlags::PLURALE_TANTUM) {
                     gender_words.push("plural-only");
                 }
-                Cow::Owned(format!("_{}_ is {}", gender.word, phrase_join(&gender_words, ", ", " and ")))
+                if gender.gender_flags.contains(GenderFlags::MALE_GIVEN) {
+                    gender_words.push("a male given name");
+                }
+                if gender.gender_flags.contains(GenderFlags::FEMALE_GIVEN) {
+                    gender_words.push("a female given name");
+                }
+                if gender.gender_flags.contains(GenderFlags::UNISEX_GIVEN) {
+                    gender_words.push("a unisex given name");
+                }
+
+                if gender_words.is_empty() {
+                    Cow::Owned(format!("_{}_ is a German noun, but not much more is known", gender.word))
+                } else {
+                    Cow::Owned(format!("_{}_ is {}", gender.word, phrase_join(&gender_words, ", ", " and ")))
+                }
             },
             Ok(None) => Cow::Borrowed("Wiktionary does not know this word. :disappointed:"),
             Err(e) => {
