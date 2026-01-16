@@ -518,6 +518,16 @@ dependencies = [
 ]
 
 [[package]]
+name = "bzip2-rs"
+version = "0.1.2"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "beeb59e7e4c811ab37cc73680c798c7a5da77fc9989c62b09138e31ee740f735"
+dependencies = [
+ "crc32fast",
+ "tinyvec",
+]
+
+[[package]]
 name = "castaway"
 version = "0.2.4"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -3748,7 +3758,7 @@ version = "0.1.0"
 dependencies = [
  "async-trait",
  "bitflags 2.9.1",
- "flate2",
+ "bzip2-rs",
  "rocketbot_interface",
  "serde",
  "serde_json",
