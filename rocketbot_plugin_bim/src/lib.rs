@@ -2912,7 +2912,12 @@ impl BimPlugin {
                         fixed_coupling_position,
                         coupling_mode
                     FROM
-                        bim.ride_vehicles WHERE ride_id = $1
+                        bim.ride_vehicles
+                    WHERE
+                        ride_id = $1
+                    ORDER BY
+                        spec_position,
+                        fixed_coupling_position 
                 ",
                 &[&ride_id],
             ).await;
