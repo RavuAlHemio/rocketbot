@@ -63,18 +63,32 @@ impl LinguisticsPlugin {
         &self,
         config: &Config,
         word: &str,
-    ) -> Result<Option<GermanGender>, tokio_postgres::Error> {
+    ) -> Result<Vec<GermanGender>, tokio_postgres::Error> {
         let db_client = self.connect_db(config).await?;
-        let row_opt = db_client.query_opt(
+        let rows = db_client.query(
             "
-                SELECT  word
-                    ,   gender_flags
-                FROM    linguistics.german_genders
-                WHERE   LOWER(word) = LOWER($1)
+                -- try a case-sensitive match, then a case-insensitive match
+                SELECT  cs.word
+                    ,   cs.gender_flags
+                FROM    linguistics.german_genders cs
+                WHERE   cs.word = $1
+
+                UNION ALL
+
+                SELECT  ci.word
+                    ,   ci.gender_falgs
+                FROM    linguistics.german_genders ci
+                WHERE   LOWER(ci.word) = LOWER($1)
+                AND     NOT EXISTS (
+                    SELECT 1
+                    FROM linguistics.german_genders cics
+                    WHERE cics.word = ci.word
+                )
             ",
             &[&word],
         ).await?;
-        let gender_opt = row_opt
+        let genders = rows
+            .into_iter()
             .map(|row| {
                 let word: String = row.get(0);
                 let flags_i64: i64 = row.get(1);
@@ -85,8 +99,9 @@ impl LinguisticsPlugin {
                     word,
                     gender_flags,
                 }
-            });
-        Ok(gender_opt)
+            })
+            .collect();
+        Ok(genders)
     }
 
     async fn handle_gg(&self, channel_message: &ChannelMessage, command: &CommandInstance) {
@@ -97,40 +112,46 @@ impl LinguisticsPlugin {
         let config_guard = self.config.read().await;
         let word = command.rest.trim();
         let message: Cow<'static, str> = match self.get_german_gender(&*config_guard, word).await {
-            Ok(Some(gender)) => {
-                let mut gender_words = Vec::with_capacity(3);
-                if gender.gender_flags.contains(GenderFlags::MASCULINE) {
-                    gender_words.push("masculine");
-                }
-                if gender.gender_flags.contains(GenderFlags::FEMININE) {
-                    gender_words.push("feminine");
-                }
-                if gender.gender_flags.contains(GenderFlags::NEUTER) {
-                    gender_words.push("neuter");
-                }
-                if gender.gender_flags.contains(GenderFlags::SINGULARE_TANTUM) {
-                    gender_words.push("singular-only");
-                }
-                if gender.gender_flags.contains(GenderFlags::PLURALE_TANTUM) {
-                    gender_words.push("plural-only");
-                }
-                if gender.gender_flags.contains(GenderFlags::MALE_GIVEN) {
-                    gender_words.push("a male given name");
-                }
-                if gender.gender_flags.contains(GenderFlags::FEMALE_GIVEN) {
-                    gender_words.push("a female given name");
-                }
-                if gender.gender_flags.contains(GenderFlags::UNISEX_GIVEN) {
-                    gender_words.push("a unisex given name");
-                }
-
-                if gender_words.is_empty() {
-                    Cow::Owned(format!("_{}_ is a German noun, but not much more is known", gender.word))
-                } else {
-                    Cow::Owned(format!("_{}_ is {}", gender.word, phrase_join(&gender_words, ", ", " and ")))
-                }
+            Ok(genders) if genders.len() == 0 => {
+                Cow::Borrowed("Wiktionary does not know this word. :disappointed:")
             },
-            Ok(None) => Cow::Borrowed("Wiktionary does not know this word. :disappointed:"),
+            Ok(genders) => {
+                let mut pieces = Vec::with_capacity(1);
+                for gender in genders {
+                    let mut gender_words = Vec::with_capacity(3);
+                    if gender.gender_flags.contains(GenderFlags::MASCULINE) {
+                        gender_words.push("masculine");
+                    }
+                    if gender.gender_flags.contains(GenderFlags::FEMININE) {
+                        gender_words.push("feminine");
+                    }
+                    if gender.gender_flags.contains(GenderFlags::NEUTER) {
+                        gender_words.push("neuter");
+                    }
+                    if gender.gender_flags.contains(GenderFlags::SINGULARE_TANTUM) {
+                        gender_words.push("singular-only");
+                    }
+                    if gender.gender_flags.contains(GenderFlags::PLURALE_TANTUM) {
+                        gender_words.push("plural-only");
+                    }
+                    if gender.gender_flags.contains(GenderFlags::MALE_GIVEN) {
+                        gender_words.push("a male given name");
+                    }
+                    if gender.gender_flags.contains(GenderFlags::FEMALE_GIVEN) {
+                        gender_words.push("a female given name");
+                    }
+                    if gender.gender_flags.contains(GenderFlags::UNISEX_GIVEN) {
+                        gender_words.push("a unisex given name");
+                    }
+
+                    if gender_words.is_empty() {
+                        pieces.push(format!("_{}_ is a German noun, but not much more is known", gender.word))
+                    } else {
+                        pieces.push(format!("_{}_ is {}", gender.word, phrase_join(&gender_words, ", ", " and ")))
+                    }
+                }
+                Cow::Owned(pieces.join("\n"))
+            },
             Err(e) => {
                 error!("error querying German gender of {:?}: {}", word, e);
                 Cow::Borrowed("A database error occurred. :disappointed:")
