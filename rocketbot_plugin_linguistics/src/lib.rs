@@ -76,7 +76,7 @@ impl LinguisticsPlugin {
                 UNION ALL
 
                 SELECT  ci.word
-                    ,   ci.gender_falgs
+                    ,   ci.gender_flags
                 FROM    linguistics.german_genders ci
                 WHERE   LOWER(ci.word) = LOWER($1)
                 AND     NOT EXISTS (
