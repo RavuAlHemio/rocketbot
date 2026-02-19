@@ -82,7 +82,7 @@ impl LinguisticsPlugin {
                 AND     NOT EXISTS (
                     SELECT 1
                     FROM linguistics.german_genders cics
-                    WHERE cics.word = ci.word
+                    WHERE cics.word = $1
                 )
             ",
             &[&word],
