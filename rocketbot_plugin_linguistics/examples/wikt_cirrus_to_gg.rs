@@ -5,7 +5,10 @@
 //!
 //! 2. Create a TOML configuration file:
 //! ```toml
-//! cirrus_json_gz_path = "..."
+//! cirrus_json_bz2_paths = [
+//!     "...",
+//!     "..."
+//! ]
 //! db_conn_string = "..."
 //! ```
 //!
