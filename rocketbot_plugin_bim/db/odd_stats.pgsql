@@ -1,5 +1,5 @@
 CREATE OR REPLACE FUNCTION bim.ride_chains
-( within_time interval
+( within_minutes bigint
 ) RETURNS TABLE
 ( rider_username character varying(256)
 , company character varying(256)
@@ -7,73 +7,82 @@ CREATE OR REPLACE FUNCTION bim.ride_chains
 , earliest_timestamp timestamp with time zone
 , rides bigint[]
 )
-LANGUAGE plpgsql
+LANGUAGE plpython3u
 STABLE STRICT
 AS $$
-    DECLARE
-        visited_rides jsonb;
-        r_uname character varying;
-        r_company character varying;
-        r_vehnum character varying;
-        r_timestamp timestamp with time zone;
-        r_next_timestamp timestamp with time zone;
-        r_id bigint;
-        r_id_char character varying;
-        run_again boolean;
-    BEGIN
-        visited_rides := JSONB_BUILD_OBJECT();
+global within_minutes
 
-        -- for each ride
-        FOR r_uname, r_company, r_vehnum, r_id, r_timestamp IN
-            SELECT rarv.rider_username, rarv.company, rarv.vehicle_number, rarv.id, rarv."timestamp"
-            FROM bim.rides_and_ridden_vehicles rarv
-            WHERE EXISTS (
-                SELECT 1
-                FROM bim.rides_and_ridden_vehicles rarv2
-                WHERE rarv2.rider_username = rarv.rider_username
-                AND rarv2.company = rarv.company
-                AND rarv2.vehicle_number = rarv.vehicle_number
-                AND rarv2."timestamp" > rarv."timestamp"
-                AND rarv2."timestamp" < rarv."timestamp" + within_time
-            )
-            ORDER BY rarv."timestamp"
-        LOOP
-            r_id_char := CAST(r_id AS character varying);
-            CONTINUE WHEN visited_rides ? r_id_char;
+if within_minutes is None:
+    return
 
-            -- assemble the chain
-            rides := ARRAY[r_id];
-            rider_username := r_uname;
-            company := r_company;
-            vehicle_number := r_vehnum;
-            earliest_timestamp := r_timestamp;
+visited_rides = set()
 
-            LOOP
-                run_again := FALSE;
-                FOR r_id, r_next_timestamp IN
-                    SELECT rarv3.id, rarv3."timestamp"
-                    FROM bim.rides_and_ridden_vehicles rarv3
-                    WHERE rarv3.rider_username = r_uname
-                    AND rarv3.company = r_company
-                    AND rarv3.vehicle_number = r_vehnum
-                    AND rarv3."timestamp" > r_timestamp
-                    AND rarv3."timestamp" < r_timestamp + within_time
-                    ORDER BY rarv3."timestamp"
-                    LIMIT 1
-                LOOP
-                    r_id_char := CAST(r_id AS character varying);
-                    r_timestamp := r_next_timestamp;
-                    rides := rides || r_id;
-                    visited_rides := visited_rides || JSONB_BUILD_OBJECT(r_id_char, TRUE);
-                    run_again := TRUE;
-                END LOOP;
-                EXIT WHEN NOT run_again;
-            END LOOP;
+rides_query = plpy.prepare(
+    """
+        SELECT rarv.rider_username, rarv.company, rarv.vehicle_number, rarv.id, rarv."timestamp"
+        FROM bim.rides_and_ridden_vehicles rarv
+        WHERE EXISTS (
+            SELECT 1
+            FROM bim.rides_and_ridden_vehicles rarv2
+            WHERE rarv2.rider_username = rarv.rider_username
+            AND rarv2.company = rarv.company
+            AND rarv2.vehicle_number = rarv.vehicle_number
+            AND rarv2."timestamp" > rarv."timestamp"
+            AND rarv2."timestamp" < rarv."timestamp" + CAST('PT' || $1 || 'M' AS interval)
+        )
+        ORDER BY rarv."timestamp"
+    """,
+    ["bigint"],
+)
+next_ride_query = plpy.prepare(
+    """
+        SELECT rarv3.id, rarv3."timestamp"
+        FROM bim.rides_and_ridden_vehicles rarv3
+        WHERE rarv3.rider_username = $1
+        AND rarv3.company = $2
+        AND rarv3.vehicle_number = $3
+        AND rarv3."timestamp" > $4
+        AND rarv3."timestamp" < ($4 + CAST('PT' || $5 || 'M' AS interval))
+        ORDER BY rarv3."timestamp"
+        LIMIT 1
+    """,
+    ["character varying", "character varying", "character varying", "timestamp with time zone", "bigint"],
+)
 
-            -- output the longest chain we found
-            RETURN NEXT;
-        END LOOP;
-    END;
+for ride in plpy.cursor(rides_query, [within_minutes]):
+    if ride["id"] in visited_rides:
+        continue
+
+    # assemble the chain
+    rides = [ride["id"]]
+    prev_timestamp = ride["timestamp"]
+
+    run_again = True
+    while run_again:
+        run_again = False
+        next_rides = plpy.cursor(
+            next_ride_query,
+            [
+                ride["rider_username"],
+                ride["company"],
+                ride["vehicle_number"],
+                prev_timestamp,
+                within_minutes,
+            ],
+        )
+        for next_ride in next_rides:
+            rides.append(next_ride["id"])
+            prev_timestamp = next_ride["timestamp"]
+            visited_rides.add(next_ride["id"])
+            run_again = True
+
+    yield (
+        ride["rider_username"],
+        ride["company"],
+        ride["vehicle_number"],
+        ride["timestamp"],
+        rides,
+    )
 $$;
 
 CREATE OR REPLACE FUNCTION bim.last_rider_count_reached
