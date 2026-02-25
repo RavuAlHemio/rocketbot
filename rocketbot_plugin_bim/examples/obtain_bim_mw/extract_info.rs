@@ -135,11 +135,24 @@ pub(crate) fn row_data_to_trams(page_config: &PageConfig, row_data: Vec<(String,
 
         if !is_matched {
             if let Some(nm) = &page_config.number_matcher {
-                if let Some(number_text) = value_match(&nm, &key, &val) {
+                if let Some(mut number_text) = value_match(&nm, &key, &val) {
                     is_matched = true;
+
+                    let mut this_type_code = type_code.clone();
+                    if let Some(suffix_regex) = page_config.vehicle_number_suffix_to_type_suffix_regex.as_ref() {
+                        if let Some(m) = suffix_regex.find(&number_text) {
+                            // must match at the end
+                            if m.end() == number_text.len() {
+                                // ("A1", "8192 (II)") => ("A1 (II)", "8192")
+                                this_type_code.push_str(m.as_str());
+                                number_text.drain(m.start()..);
+                            }
+                        }
+                    }
+
                     let vehicle_numbers = parse_vehicle_numbers(&number_text, &page_config.number_separator_regex);
                     for vehicle_number in vehicle_numbers {
-                        numbers_types_powersources.push((vehicle_number, type_code.clone(), page_config.power_sources.clone()));
+                        numbers_types_powersources.push((vehicle_number, this_type_code.clone(), page_config.power_sources.clone()));
                     }
                 }
             }

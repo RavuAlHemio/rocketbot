@@ -58,6 +58,7 @@ pub(crate) struct PageConfig {
     #[serde(default)] pub specific_type_code_property: Option<String>,
     #[serde(default)] pub type_code_matcher: Option<MatcherTransformerConfig>,
     #[serde(default)] pub section_stack_regexes: Vec<Vec<String>>,
+    #[serde(default, with = "serde_opt_regex")] pub vehicle_number_suffix_to_type_suffix_regex: Option<Regex>,
 }
 
 #[derive(Clone, Debug, Deserialize, Serialize)]
