@@ -56,7 +56,7 @@ fn name_matches(name: QName, ns_uri: &str, local_name: &str) -> bool {
     name.namespace_uri() == Some(ns_uri) && name.local_part() == local_name
 }
 
-fn get_doc_elem(package: &Package) -> Option<Element> {
+fn get_doc_elem<'d>(package: &'d Package) -> Option<Element<'d>> {
     package
         .as_document()
         .root()

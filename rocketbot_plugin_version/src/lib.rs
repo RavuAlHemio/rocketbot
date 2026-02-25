@@ -44,7 +44,7 @@ fn operating_system_version() -> Option<String> {
     use std::ffi::{c_char, CStr};
     use libc::{uname, utsname};
 
-    fn stringify(buf: &[c_char]) -> Cow<str> {
+    fn stringify<'a>(buf: &'a [c_char]) -> Cow<'a, str> {
         unsafe { CStr::from_ptr(buf.as_ptr()) }.to_string_lossy()
     }
 
