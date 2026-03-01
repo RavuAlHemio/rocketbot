@@ -1,6 +1,8 @@
-*Usage:* `{cpfx}topriders [{sopfx}y|{lopfx}last-year|{sopfx}m|{lopfx}last-month|{sopfx}w|{lopfx}last-week|{sopfx}d|{lopfx}last-day]`
+*Usage:* `{cpfx}topriders [{sopfx}y|{lopfx}last-year|{sopfx}m|{lopfx}last-month|{sopfx}w|{lopfx}last-week|{sopfx}d|{lopfx}last-day] [{sopfx}c COMPANY|{lopfx}company=COMPANY] [VEHICLE]`
 
 Returns the most active riders.
+
+With `{sopfx}c COMPANY` or `{lopfx}company=COMPANY`, only counts vehicles of a given company. With `VEHICLE`, shows the riders with the most rides of a specific vehicle.
 
 When calculating the number of unique vehicles, only the first vehicle in the ride is considered. This ensures that the uniqueness percentage does not go beyond 100% and allows some comparability between rides with coupled vehicles.
 

@@ -4466,9 +4466,11 @@ impl RocketBotPlugin for BimPlugin {
             &CommandDefinitionBuilder::new(
                 "topriders",
                 "bim",
-                "{cpfx}topriders",
-                "Returns the most active rider(s).",
+                "{cpfx}topriders [VEHICLE]",
+                "Returns the most active rider(s), globally or per vehicle.",
             )
+                .add_option("company", CommandValueType::String)
+                .add_option("c", CommandValueType::String)
                 .add_lookback_flags()
                 .build()
         ).await;
