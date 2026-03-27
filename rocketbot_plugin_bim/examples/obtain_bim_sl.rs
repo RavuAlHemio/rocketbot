@@ -6,6 +6,7 @@ use std::env::args_os;
 use std::fs::File;
 use std::io::{Cursor, Read};
 use std::path::PathBuf;
+use std::str::FromStr;
 use std::time::Duration;
 
 use ciborium;
@@ -31,6 +32,7 @@ struct PageInfo {
     #[serde(default)] pub pool_regexes: Option<BTreeSet<EnjoyableRegex>>,
     pub timeout_ms: Option<u64>,
     pub class_to_export_class: HashMap<String, ExportClass>,
+    #[serde(default)] pub row_transform_script: Option<String>,
 }
 
 #[derive(Clone, Debug, Deserialize, Eq, Serialize, PartialEq)]
@@ -105,6 +107,8 @@ async fn main() {
             .expect("failed to parse config file")
     };
 
+    let compiler = rhai::Engine::new();
+
     let mut vehicles: Vec<VehicleInfo> = Vec::new();
     for page in &config.pages {
         eprintln!("fetching {}", page.csv_url);
@@ -131,6 +135,15 @@ async fn main() {
             .escape(None)
             .from_reader(page_bytes_cursor);
 
+        let row_transform_script = if let Some(rts) = page.row_transform_script.as_ref() {
+            match compiler.compile(rts) {
+                Ok(ast) => Some(ast),
+                Err(e) => panic!("failed to compile evaluator script for {}: {}", page.csv_url, e),
+            }
+        } else {
+            None
+        };
+
         let headers: Vec<String> = csv_reader.headers()
             .expect("failed to read headers")
             .iter()
@@ -138,11 +151,63 @@ async fn main() {
             .collect();
         for record_res in csv_reader.records() {
             let record = record_res.expect("invalid CSV record");
-            let map: IndexMap<String, String> = headers
+            let mut map: IndexMap<String, String> = headers
                 .iter()
                 .zip(record.iter())
                 .map(|(k, v)| (k.clone(), v.to_owned()))
                 .collect();
+
+            if let Some(rts) = row_transform_script.as_ref() {
+                let engine = rhai::Engine::new();
+                let mut scope = rhai::Scope::new();
+                let rhai_map: rhai::Map = map
+                    .iter()
+                    .map(|(k, v)| (k.into(), rhai::Dynamic::from_str(v).unwrap()))
+                    .collect();
+                scope.set_value("row", rhai_map);
+                engine.run_ast_with_scope(&mut scope, rts)
+                    .expect("failed to evaluate row transform script");
+                let row_val = scope
+                    .get("row")
+                    .expect("\"row\" missing from scope");
+                if row_val.is_unit() {
+                    // rhai's null value, skip this row
+                    continue;
+                }
+                let row_values_smart = row_val
+                    .as_map_ref()
+                    .expect("\"row\" is neither () nor a map");
+                let row_values: BTreeMap<String, rhai::Dynamic> = row_values_smart
+                    .iter()
+                    .map(|(key, val)| (key.to_string(), val.clone()))
+                    .collect();
+
+                // update row
+                let mut remove_keys = BTreeSet::new();
+                for (key, value) in &mut map {
+                    match row_values.get(key) {
+                        Some(new_value_dyn) => {
+                            // both maps have such a value; transfer it rhai -> map
+                            *value = new_value_dyn.to_string();
+                        },
+                        None => {
+                            // rhai does not have it; queue it for removal from map
+                            remove_keys.insert(key.clone());
+                            continue;
+                        },
+                    };
+                }
+                for delete_me in &remove_keys {
+                    // remove the value with this key
+                    map.shift_remove(delete_me);
+                }
+                for (key, value) in &row_values {
+                    // new value, hitherto unseen
+                    map
+                        .entry(key.clone())
+                        .or_insert_with(|| value.to_string());
+                }
+            }
 
             if !map.get("Subset").map(|s| page.subsets.contains(s)).unwrap_or(true) {
                 // wrong subset
