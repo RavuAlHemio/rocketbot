@@ -361,6 +361,7 @@ enum EmojiReaction {
     VehicleChangedHands,
     FirstRideInVehicle,
     Divisible,
+    Equal,
     Prime,
 }
 
@@ -377,6 +378,14 @@ struct VehicleEmojiReaction {
 struct PlusMinus {
     pub plus: i64,
     pub minus: i64,
+}
+
+#[derive(Clone, Copy, Debug, Eq, Hash, Ord, PartialEq, PartialOrd)]
+enum DivisibilityKind {
+    PrerequisiteViolated,
+    Indivisible,
+    Divisible,
+    Equal,
 }
 
 
@@ -991,11 +1000,22 @@ impl BimPlugin {
                 }
 
                 if let Some(divisible_emoji) = config_guard.emoji_reactions.get(&EmojiReaction::Divisible) {
-                    if do_vehicle_number_digits_divide_line_digits(
+                    let divisibility = how_do_vehicle_number_digits_divide_line_digits(
                         &vehicle.vehicle_number,
                         ride_table.line.as_ref(),
-                    ) {
-                        vehicle_reaction_emoji.push(divisible_emoji.clone());
+                    );
+                    match divisibility {
+                        DivisibilityKind::Equal => {
+                            if let Some(equal_emoji) = config_guard.emoji_reactions.get(&EmojiReaction::Equal) {
+                                vehicle_reaction_emoji.push(equal_emoji.clone());
+                            } else {
+                                vehicle_reaction_emoji.push(divisible_emoji.clone());
+                            }
+                        },
+                        DivisibilityKind::Divisible => {
+                            vehicle_reaction_emoji.push(divisible_emoji.clone());
+                        },
+                        _ => {},
                     }
                 }
 
@@ -5697,31 +5717,61 @@ fn try_parse_timestamp(timestamp_str: &str) -> Option<NaiveDateTime> {
 /// Returns whether the sole digit block in the given vehicle number is divisible by the sole digit
 /// block in the given line number.
 ///
-/// Returns `false` if there are zero or multiple digit blocks in the vehicle number or line number,
-/// or if no line is given.
-fn do_vehicle_number_digits_divide_line_digits(
+/// Returns [`DivisibilityKind::PrerequisiteViolated`] if one or more of these conditions is true:
+/// * `line_opt` is `None`
+/// * there are no digit blocks in the vehicle number
+/// * there are no digit blocks in the line number
+/// * there is more than one digit block in the vehicle number
+/// * there is more than one digit block in the line number
+/// * the vehicle number cannot be parsed as a `u64`
+/// * the line number cannot be parsed as a `u64`
+///
+/// Returns [`DivisibilityKind::Equal`] if the digit block in the vehicle number and the digit block
+/// in the line number are equal.
+///
+/// Returns [`DivisibilityKind::Divisible`] if the digit block in the vehicle number is divisible by
+/// the digit block in the line number.
+///
+/// Otherwise, returns [`DivisibilityKind::Indivisible`].
+///
+/// If the digit block in the line number is zero, the returned value depends on the digit block in
+/// the vehicle number:
+/// * if the digit block in the vehicle number is also zero, returns [`DivisibilityKind::Equal`]
+/// * if the digit block in the vehicle number is not zero, returns
+///   [`DivisibilityKind::Indivisible`]
+fn how_do_vehicle_number_digits_divide_line_digits(
     vehicle_number: &String,
     line_opt: Option<&String>,
-) -> bool {
-    let Some(line) = line_opt else { return false };
+) -> DivisibilityKind {
+    let Some(line) = line_opt
+        else { return DivisibilityKind::PrerequisiteViolated };
     let vehicle_digit_blocks: Vec<regex::Match> = DIGITS_RE.find_iter(vehicle_number)
         .collect();
     if vehicle_digit_blocks.len() != 1 {
-        return false;
+        return DivisibilityKind::PrerequisiteViolated;
     }
     let line_digit_blocks: Vec<regex::Match> = DIGITS_RE.find_iter(line)
         .collect();
     if line_digit_blocks.len() != 1 {
-        return false;
+        return DivisibilityKind::PrerequisiteViolated;
     }
 
-    let Ok(vehicle_number) = vehicle_digit_blocks[0].as_str().parse::<u64>() else { return false };
-    let Ok(line_number) = line_digit_blocks[0].as_str().parse::<u64>() else { return false };
+    let Ok(vehicle_number) = vehicle_digit_blocks[0].as_str().parse::<u64>()
+        else { return DivisibilityKind::PrerequisiteViolated };
+    let Ok(line_number) = line_digit_blocks[0].as_str().parse::<u64>()
+        else { return DivisibilityKind::PrerequisiteViolated };
+    if vehicle_number == line_number {
+        return DivisibilityKind::Equal;
+    }
     if line_number == 0 {
-        return false;
+        return DivisibilityKind::Indivisible;
     }
 
-    vehicle_number % line_number == 0
+    if vehicle_number % line_number == 0 {
+        DivisibilityKind::Divisible
+    } else {
+        DivisibilityKind::Indivisible
+    }
 }
 
 /// Returns whether the sole digit block in the given number is prime.
