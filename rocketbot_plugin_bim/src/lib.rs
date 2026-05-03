@@ -4411,6 +4411,15 @@ impl RocketBotPlugin for BimPlugin {
         ).await;
         my_interface.register_channel_command(
             &CommandDefinitionBuilder::new(
+                "bimcompany",
+                "bim",
+                "{cpfx}bimcompany COMPANY",
+                "Returns details about a known public-transport operator.",
+            )
+                .build()
+        ).await;
+        my_interface.register_channel_command(
+            &CommandDefinitionBuilder::new(
                 "favbims",
                 "bim",
                 "{cpfx}favbims",
@@ -4714,6 +4723,8 @@ impl RocketBotPlugin for BimPlugin {
             self.channel_command_topriders(channel_message, command).await
         } else if command.name == "bimcompanies" {
             self.channel_command_bimcompanies(channel_message, command).await
+        } else if command.name == "bimcompany" {
+            self.channel_command_bimcompany(channel_message, command).await
         } else if command.name == "favbims" {
             self.channel_command_favbims(channel_message, command).await
         } else if command.name == "topbimdays" {
@@ -4785,6 +4796,8 @@ impl RocketBotPlugin for BimPlugin {
             Some(include_str!("../help/topriders.md").to_owned())
         } else if command_name == "bimcompanies" {
             Some(include_str!("../help/bimcompanies.md").to_owned())
+        } else if command_name == "bimcompany" {
+            Some(include_str!("../help/bimcompany.md").to_owned())
         } else if command_name == "favbims" {
             Some(include_str!("../help/favbims.md").to_owned())
         } else if command_name == "topbimdays" {
@@ -4848,7 +4861,7 @@ impl RocketBotPlugin for BimPlugin {
 }
 
 
-async fn connect_ride_db(config: &Config) -> Result<tokio_postgres::Client, tokio_postgres::Error> {
+pub(crate) async fn connect_ride_db(config: &Config) -> Result<tokio_postgres::Client, tokio_postgres::Error> {
     let (client, connection) = match tokio_postgres::connect(&config.ride_db_conn_string, NoTls).await {
         Ok(cc) => cc,
         Err(e) => {
