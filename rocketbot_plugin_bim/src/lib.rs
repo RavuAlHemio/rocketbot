@@ -27,7 +27,7 @@ use regex::{Captures, Regex};
 use rocketbot_bim_common::{CouplingMode, LastRider, LineOperatorRegion, VehicleInfo, VehicleNumber};
 use rocketbot_bim_common::achievements::ACHIEVEMENT_DEFINITIONS;
 use rocketbot_bim_common::ride_table::{Ride, RideTableData, RideTableVehicle, UserRide};
-use rocketbot_interface::{phrase_join, send_channel_message};
+use rocketbot_interface::{phrase_join, send_channel_message, write_expect};
 use rocketbot_interface::commands::{CommandDefinitionBuilder, CommandInstance, CommandValueType};
 use rocketbot_interface::interfaces::{RocketBotInterface, RocketBotPlugin};
 use rocketbot_interface::model::{Attachment, ChannelMessage, OutgoingMessageWithAttachmentBuilder};
@@ -124,12 +124,6 @@ impl AddLookbackFlags for CommandDefinitionBuilder {
     }
 }
 
-
-macro_rules! write_expect {
-    ($dst:expr, $($arg:tt)*) => {
-        write!($dst, $($arg)*).expect("write failed")
-    };
-}
 
 macro_rules! implies {
     ($a:expr, $b:expr $(,)?) => {

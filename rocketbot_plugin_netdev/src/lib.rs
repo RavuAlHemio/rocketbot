@@ -5,7 +5,9 @@ use std::sync::Weak;
 use std::time::Duration;
 
 use async_trait::async_trait;
-use rocketbot_interface::{JsonValueExtensions, send_channel_message, send_private_message};
+use rocketbot_interface::{
+    JsonValueExtensions, send_channel_message, send_private_message, write_expect,
+};
 use rocketbot_interface::commands::{CommandDefinitionBuilder, CommandInstance};
 use rocketbot_interface::interfaces::{RocketBotInterface, RocketBotPlugin};
 use rocketbot_interface::model::{ChannelMessage, Message, PrivateMessage, User};
@@ -60,12 +62,6 @@ impl AnyMessage {
     }
 }
 
-
-macro_rules! write_expect {
-    ($dst:expr, $($arg:tt)*) => {
-        write!($dst, $($arg)*).expect("write failed")
-    };
-}
 
 /// Returns a string representation of the given JSON value.
 ///

@@ -57,3 +57,10 @@ macro_rules! send_private_message_to_user_advanced {
         }
     };
 }
+
+#[macro_export]
+macro_rules! write_expect {
+    ($dst:expr, $($arg:tt)*) => {
+        write!($dst, $($arg)*).expect("write failed")
+    };
+}
