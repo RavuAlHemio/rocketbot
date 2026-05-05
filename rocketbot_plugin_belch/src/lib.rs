@@ -27,7 +27,7 @@ impl RocketBotPlugin for BelchPlugin {
             Some(m) => m,
             None => return,
         };
-        if raw_message == "!burp" {
+        if raw_message == "!burp" || raw_message == "!belch" {
             let interface = match self.interface.upgrade() {
                 None => return,
                 Some(i) => i,
