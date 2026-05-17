@@ -69,9 +69,32 @@ static DATE_RE: Lazy<Regex> = Lazy::new(|| Regex::new(concat!(
 #[derive(Clone, Debug, Deserialize, Eq, Serialize, PartialEq)]
 struct Config {
     pub pages: Vec<String>,
-    pub multiline_tables: bool,
+    pub structure_profile: StructureProfile,
     pub output_path: String,
     #[serde(default)] pub type_mapping: HashMap<String, TypeInfo>,
+}
+
+#[derive(Clone, Copy, Debug, Default, Deserialize, Hash, Eq, Ord, Serialize, PartialEq, PartialOrd)]
+#[serde(rename_all = "kebab-case")]
+enum StructureProfile {
+    /// seznam-autobusu.cz
+    #[default]
+    SeznamAutobusu,
+
+    /// evidencia-dopravcov.eu
+    EvidenciaDopravcov,
+
+    /// bmhd.cz/evidence-dpmb
+    BmhdEvidenceDpmb,
+}
+impl StructureProfile {
+    pub fn has_multiline_tables(&self) -> bool {
+        match self {
+            Self::SeznamAutobusu => true,
+            Self::EvidenciaDopravcov => false,
+            Self::BmhdEvidenceDpmb => false,
+        }
+    }
 }
 
 #[derive(Clone, Debug, Deserialize, Eq, Serialize, PartialEq)]
@@ -318,6 +341,15 @@ fn compare_age(left: &VehicleInfo, right: &VehicleInfo) -> Ordering {
 }
 
 
+fn last_non_empty_text_child_text(element: ElementRef<'_>) -> Option<String> {
+    element.children()
+        .filter_map(|c| c.value().as_text())
+        .map(|t| trim_text(&*t))
+        .filter(|t| t.len() > 0)
+        .last()
+}
+
+
 #[tokio::main]
 async fn main() {
     // load config
@@ -362,181 +394,266 @@ async fn main() {
             let empty_vehicle = VehicleInfoBuilder::new();
             let mut current_vehicle = VehicleInfoBuilder::new();
             for car_line in html.root_element().select(&car_line_sel) {
-                if config.multiline_tables {
-                    let tr_classes: HashSet<&str> = car_line.value().classes().collect();
-                    if tr_classes.contains("first-line") {
-                        // new vehicle!
+                match config.structure_profile {
+                    StructureProfile::SeznamAutobusu => {
+                        // entries are spread over multiple table rows
+                        let tr_classes: HashSet<&str> = car_line.value().classes().collect();
+                        if tr_classes.contains("first-line") {
+                            // new vehicle!
+                            current_vehicle.modify_with_type_mapping(&config.type_mapping);
+                            match current_vehicle.try_build() {
+                                Ok(veh) => {
+                                    vehicles.push(veh);
+                                },
+                                Err(e) => {
+                                    if e != empty_vehicle {
+                                        eprintln!("failed to assemble vehicle {:?}", e);
+                                    }
+                                },
+                            }
+                            current_vehicle = VehicleInfoBuilder::new();
+                        }
+
+                        for td in car_line.select(&td_sel) {
+                            let td_classes: HashSet<&str> = td.value().classes().collect();
+                            if td_classes.contains("manufacturer-type") {
+                                // first text child is the manufacturer
+                                let manuf = text_of_first_text_child(&td);
+                                if let Some(m) = manuf {
+                                    current_vehicle.manufacturer(trim_text(&m));
+                                }
+
+                                // last <b> child's text is the current type code
+                                let last_b_child = td.select(&b_sel).last();
+                                if let Some(lbc) = last_b_child {
+                                    let text: String = lbc.text().collect();
+                                    current_vehicle.type_code(text);
+                                }
+
+                                // next two columns are date built and date scrapped; skip these
+                                // as we are more interested in "entered service" and "left service" with company
+                            } else if td_classes.contains("note") {
+                                let mut note: String = td.text().collect();
+                                // do we have a fixed-coupling specification in the note?
+                                if let Some(caps) = FIXED_COUPLING_RE.captures(&note) {
+                                    let mut fixed_coupling = IndexSet::new();
+                                    let couple_strs = caps
+                                        .name("coupling").expect("coupling not captured")
+                                        .as_str()
+                                        .split("+");
+                                    for couple_str in couple_strs {
+                                        let couple_str_no_asterisk = couple_str.trim_end_matches([' ', '*', '\t']);
+                                        let couple = VehicleNumber::from_string(couple_str_no_asterisk.to_owned());
+                                        fixed_coupling.insert(couple);
+                                    }
+                                    current_vehicle.fixed_coupling(fixed_coupling);
+
+                                    // remove the fixed coupling info from the note
+                                    let caps_range = caps.get(0).unwrap().range();
+                                    std::mem::drop(caps);
+                                    note.replace_range(caps_range, "");
+                                }
+                                current_vehicle.other_data("Anmerkung", trim_text(&note));
+                            } else if td_classes.contains("plates") {
+                                let latest_plate_span = td.select(&last_plate_span_sel).nth(0);
+                                if let Some(lps) = latest_plate_span {
+                                    let lps_text = text_of_first_text_child(&lps);
+                                    if let Some(t) = lps_text {
+                                        current_vehicle.other_data("Kennzeichen", t);
+                                    }
+                                }
+                            } else if td_classes.contains("numbers") {
+                                let latest_num_span = td.select(&last_number_span_sel).nth(0);
+                                if let Some(lns) = latest_num_span {
+                                    // take text from first text child
+                                    // (this ignores Roman numerals in <sup> tags)
+                                    let lns_text = text_of_first_text_child(&lns);
+                                    if let Some(t) = lns_text {
+                                        let lns_number = VehicleNumber::from_string(t);
+                                        current_vehicle.number(lns_number);
+                                    }
+                                }
+                            } else if td_classes.contains("current-operator") {
+                                let dates_span = td.select(&dates_span_sel).nth(0);
+                                if let Some(ds) = dates_span {
+                                    let ds_text: String = ds.text().collect();
+                                    if let Some(caps) = DATE_RANGE_RE.captures(&ds_text) {
+                                        if let Some(df) = caps.name("date_from") {
+                                            current_vehicle.in_service_since(df.as_str());
+                                        } else if let Some(rf) = caps.name("range_from") {
+                                            let range_to = caps.name("range_to").expect("captured range_from but not range_to");
+                                            current_vehicle.in_service_since(rf.as_str());
+                                            current_vehicle.out_of_service_since(range_to.as_str());
+                                        }
+                                        // there doesn't appear to be a "until only" format
+                                    }
+                                }
+                            } else if td_classes.contains("depots") {
+                                // first <b> child's text is the depot abbreviation
+                                let depot_b = td.select(&b_sel).nth(0);
+                                if let Some(db) = depot_b {
+                                    let db_text: String = db.text().collect();
+                                    current_vehicle.depot(db_text);
+                                }
+                            }
+                        }
+                    },
+                    StructureProfile::EvidenciaDopravcov => {
+                        // single-line tables -- much easier
+                        // (less consistent use of CSS classes though)
+                        let mut current_vehicle = VehicleInfoBuilder::new();
+
+                        for (i, td) in car_line.select(&td_sel).enumerate() {
+                            let td_classes: HashSet<&str> = td.value().classes().collect();
+                            if td_classes.contains("plates") {
+                                let plate: String = trim_text(&td.text().collect::<String>());
+                                if plate.len() > 0 {
+                                    current_vehicle.other_data("Kennzeichen", trim_text(&plate));
+                                }
+                            } else if td_classes.contains("numbers") {
+                                // last non-empty text child is the number
+                                // (ignore superscripted Roman numerals)
+                                let number_string_opt = td.children()
+                                    .filter_map(|c| c.value().as_text())
+                                    .map(|t| trim_text(&*t))
+                                    .filter(|t| t.len() > 0)
+                                    .last();
+                                if let Some(number_string) = number_string_opt {
+                                    let num: VehicleNumber = trim_text(&number_string).into();
+                                    if &*num != "-" {
+                                        current_vehicle.number(num);
+                                    }
+                                }
+                            // no CSS classes beyond this point :-(
+                            } else if i == 4 {
+                                // type
+                                let type_string: String = trim_text(&td.text().collect::<String>());
+                                current_vehicle.type_code(type_string);
+                            } else if i == 5 {
+                                // dates of entry: construction, (delivery), [in service]
+                                let mut texts = Vec::with_capacity(3);
+                                for child in td.children() {
+                                    if let Some(t) = child.value().as_text() {
+                                        texts.push(trim_text(t));
+                                    }
+                                }
+                                for text in texts {
+                                    if let Some(unpfx) = text.strip_prefix('[') {
+                                        if let Some(infix) = unpfx.strip_suffix(']') {
+                                            current_vehicle.in_service_since(infix);
+                                        }
+                                    }
+                                }
+                            } else if i == 6 {
+                                // dates of exit: (inactivation), out of service, [liquidation]
+                                let mut texts = Vec::with_capacity(3);
+                                for child in td.children() {
+                                    if let Some(t) = child.value().as_text() {
+                                        texts.push(trim_text(t));
+                                    }
+                                }
+                                for text in texts {
+                                    if !text.starts_with('(') && !text.starts_with('[') && text.len() > 0 {
+                                        current_vehicle.out_of_service_since(text);
+                                    }
+                                }
+                            }
+                        }
+
                         current_vehicle.modify_with_type_mapping(&config.type_mapping);
                         match current_vehicle.try_build() {
                             Ok(veh) => {
                                 vehicles.push(veh);
                             },
-                            Err(e) => {
-                                if e != empty_vehicle {
-                                    eprintln!("failed to assemble vehicle {:?}", e);
-                                }
+                            Err(veh_builder) => {
+                                eprintln!("incomplete vehicle: {:?}", veh_builder);
                             },
                         }
-                        current_vehicle = VehicleInfoBuilder::new();
-                    }
+                    },
+                    StructureProfile::BmhdEvidenceDpmb => {
+                        // single-line tables and CSS classes
+                        let mut current_vehicle = VehicleInfoBuilder::new();
 
-                    for td in car_line.select(&td_sel) {
-                        let td_classes: HashSet<&str> = td.value().classes().collect();
-                        if td_classes.contains("manufacturer-type") {
-                            // first text child is the manufacturer
-                            let manuf = text_of_first_text_child(&td);
-                            if let Some(m) = manuf {
-                                current_vehicle.manufacturer(trim_text(&m));
-                            }
-
-                            // last <b> child's text is the current type code
-                            let last_b_child = td.select(&b_sel).last();
-                            if let Some(lbc) = last_b_child {
-                                let text: String = lbc.text().collect();
-                                current_vehicle.type_code(text);
-                            }
-
-                            // next two columns are date built and date scrapped; skip these
-                            // as we are more interested in "entered service" and "left service" with company
-                        } else if td_classes.contains("note") {
-                            let mut note: String = td.text().collect();
-                            // do we have a fixed-coupling specification in the note?
-                            if let Some(caps) = FIXED_COUPLING_RE.captures(&note) {
-                                let mut fixed_coupling = IndexSet::new();
-                                let couple_strs = caps
-                                    .name("coupling").expect("coupling not captured")
-                                    .as_str()
-                                    .split("+");
-                                for couple_str in couple_strs {
-                                    let couple_str_no_asterisk = couple_str.trim_end_matches([' ', '*', '\t']);
-                                    let couple = VehicleNumber::from_string(couple_str_no_asterisk.to_owned());
-                                    fixed_coupling.insert(couple);
-                                }
-                                current_vehicle.fixed_coupling(fixed_coupling);
-
-                                // remove the fixed coupling info from the note
-                                let caps_range = caps.get(0).unwrap().range();
-                                std::mem::drop(caps);
-                                note.replace_range(caps_range, "");
-                            }
-                            current_vehicle.other_data("Anmerkung", trim_text(&note));
-                        } else if td_classes.contains("plates") {
-                            let latest_plate_span = td.select(&last_plate_span_sel).nth(0);
-                            if let Some(lps) = latest_plate_span {
-                                let lps_text = text_of_first_text_child(&lps);
-                                if let Some(t) = lps_text {
-                                    current_vehicle.other_data("Kennzeichen", t);
-                                }
-                            }
-                        } else if td_classes.contains("numbers") {
-                            let latest_num_span = td.select(&last_number_span_sel).nth(0);
-                            if let Some(lns) = latest_num_span {
-                                // take text from first text child
-                                // (this ignores Roman numerals in <sup> tags)
-                                let lns_text = text_of_first_text_child(&lns);
-                                if let Some(t) = lns_text {
-                                    let lns_number = VehicleNumber::from_string(t);
-                                    current_vehicle.number(lns_number);
-                                }
-                            }
-                        } else if td_classes.contains("current-operator") {
-                            let dates_span = td.select(&dates_span_sel).nth(0);
-                            if let Some(ds) = dates_span {
-                                let ds_text: String = ds.text().collect();
-                                if let Some(caps) = DATE_RANGE_RE.captures(&ds_text) {
-                                    if let Some(df) = caps.name("date_from") {
-                                        current_vehicle.in_service_since(df.as_str());
-                                    } else if let Some(rf) = caps.name("range_from") {
-                                        let range_to = caps.name("range_to").expect("captured range_from but not range_to");
-                                        current_vehicle.in_service_since(rf.as_str());
-                                        current_vehicle.out_of_service_since(range_to.as_str());
-                                    }
-                                    // there doesn't appear to be a "until only" format
-                                }
-                            }
-                        } else if td_classes.contains("depots") {
-                            // first <b> child's text is the depot abbreviation
-                            let depot_b = td.select(&b_sel).nth(0);
-                            if let Some(db) = depot_b {
-                                let db_text: String = db.text().collect();
-                                current_vehicle.depot(db_text);
-                            }
-                        }
-                    }
-                } else {
-                    // single-line tables -- much easier
-                    let mut current_vehicle = VehicleInfoBuilder::new();
-
-                    for (i, td) in car_line.select(&td_sel).enumerate() {
-                        let td_classes: HashSet<&str> = td.value().classes().collect();
-                        if td_classes.contains("plates") {
-                            let plate: String = trim_text(&td.text().collect::<String>());
-                            if plate.len() > 0 {
-                                current_vehicle.other_data("Kennzeichen", trim_text(&plate));
-                            }
-                        } else if td_classes.contains("numbers") {
-                            // last non-empty text child is the number
-                            // (ignore superscripted Roman numerals)
-                            let number_string_opt = td.children()
-                                .filter_map(|c| c.value().as_text())
-                                .map(|t| trim_text(&*t))
-                                .filter(|t| t.len() > 0)
-                                .last();
-                            if let Some(number_string) = number_string_opt {
-                                let num: VehicleNumber = trim_text(&number_string).into();
-                                if &*num != "-" {
-                                    current_vehicle.number(num);
-                                }
-                            }
-                        // no CSS classes beyond this point :-(
-                        } else if i == 4 {
-                            // type
-                            let type_string: String = trim_text(&td.text().collect::<String>());
-                            current_vehicle.type_code(type_string);
-                        } else if i == 5 {
-                            // dates of entry: construction, (delivery), [in service]
-                            let mut texts = Vec::with_capacity(3);
-                            for child in td.children() {
-                                if let Some(t) = child.value().as_text() {
-                                    texts.push(trim_text(t));
-                                }
-                            }
-                            for text in texts {
-                                if let Some(unpfx) = text.strip_prefix('[') {
-                                    if let Some(infix) = unpfx.strip_suffix(']') {
-                                        current_vehicle.in_service_since(infix);
+                        for td in car_line.select(&td_sel) {
+                            let td_classes: HashSet<&str> = td.value().classes().collect();
+                            if td_classes.contains("numbers") {
+                                // child span "number" contains the number
+                                for td_child in td.child_elements() {
+                                    let td_child_classes: HashSet<&str> = td_child.value().classes().collect();
+                                    if td_child_classes.contains("number") {
+                                        // last non-empty text child is the number
+                                        // (ignore superscripted Roman numerals)
+                                        if let Some(number_string) = last_non_empty_text_child_text(td_child) {
+                                            let num: VehicleNumber = number_string.into();
+                                            if &*num != "-" {
+                                                current_vehicle.number(num);
+                                            }
+                                        }
+                                    } else if td_child_classes.contains("numberPlate") {
+                                        // last non-empty text child is number on number plate
+                                        if let Some(number_string) = last_non_empty_text_child_text(td_child) {
+                                            if &*number_string != "-" {
+                                                current_vehicle.other_data("Kennzeichen", number_string);
+                                            }
+                                        }
                                     }
                                 }
-                            }
-                        } else if i == 6 {
-                            // dates of exit: (inactivation), out of service, [liquidation]
-                            let mut texts = Vec::with_capacity(3);
-                            for child in td.children() {
-                                if let Some(t) = child.value().as_text() {
-                                    texts.push(trim_text(t));
+                            } else if td_classes.contains("manufacturer-type") {
+                                // type
+                                // pick out the active type span
+                                for td_child in td.child_elements() {
+                                    let td_child_classes: HashSet<&str> = td_child.value().classes().collect();
+                                    if td_child_classes.contains("type") && td_child_classes.contains("active") {
+                                        if let Some(type_string) = last_non_empty_text_child_text(td_child) {
+                                            current_vehicle.type_code(type_string);
+                                        }
+                                    }
                                 }
-                            }
-                            for text in texts {
-                                if !text.starts_with('(') && !text.starts_with('[') && text.len() > 0 {
-                                    current_vehicle.out_of_service_since(text);
+                            } else if td_classes.contains("operator-dates") {
+                                if td_classes.contains("out-of-service") {
+                                    // last non-empty text child is the date placed out of service
+                                    if let Some(number_string) = last_non_empty_text_child_text(td) {
+                                        if &*number_string != "-" {
+                                            current_vehicle.out_of_service_since(&number_string);
+                                        }
+                                    }
+                                } else if td_classes.contains("scrapped") {
+                                    // we ignore this one
+                                } else {
+                                    // last non-empty text child is the date placed in service
+                                    if let Some(number_string) = last_non_empty_text_child_text(td) {
+                                        if &*number_string != "-" {
+                                            current_vehicle.in_service_since(&number_string);
+                                        }
+                                    }
+                                }
+                            } else if td_classes.contains("depots") {
+                                let depot_string = trim_text(&td.text().collect::<String>());
+                                if depot_string.len() > 0 && depot_string != "-" {
+                                    current_vehicle.depot(&depot_string);
+                                }
+                            } else if td_classes.contains("note") {
+                                let note_string = trim_text(&td.text().collect::<String>());
+                                if note_string.len() > 0 && note_string != "-" {
+                                    current_vehicle.other_data("Anmerkung", &note_string);
                                 }
                             }
                         }
-                    }
 
-                    current_vehicle.modify_with_type_mapping(&config.type_mapping);
-                    match current_vehicle.try_build() {
-                        Ok(veh) => {
-                            vehicles.push(veh);
-                        },
-                        Err(veh_builder) => {
-                            eprintln!("incomplete vehicle: {:?}", veh_builder);
-                        },
-                    }
+                        current_vehicle.modify_with_type_mapping(&config.type_mapping);
+                        match current_vehicle.try_build() {
+                            Ok(veh) => {
+                                vehicles.push(veh);
+                            },
+                            Err(veh_builder) => {
+                                eprintln!("incomplete vehicle: {:?}", veh_builder);
+                            },
+                        }
+                    },
                 }
             }
 
-            if config.multiline_tables {
+            if config.structure_profile.has_multiline_tables() {
                 // construct final vehicle
                 current_vehicle.modify_with_type_mapping(&config.type_mapping);
                 if let Ok(veh) = current_vehicle.try_build() {
