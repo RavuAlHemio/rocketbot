@@ -11,12 +11,13 @@ namespace Sedify {
     }
 
     type ReplacementPiece = ConstString | OriginalReference;
+    type CharacterFrequencyMap = { [character: string]: number };
 
     class Sedifier {
         public dotsExceptMostCommon: boolean = true;
 
-        private getCharacterFrequencies(str: string): object {
-            const ret = {};
+        private getCharacterFrequencies(str: string): CharacterFrequencyMap {
+            const ret: CharacterFrequencyMap = {};
             for (let i = 0; i < str.length; i++) {
                 const c = str.charAt(i);
                 if (ret[c] === undefined) {
