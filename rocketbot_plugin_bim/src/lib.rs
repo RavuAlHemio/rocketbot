@@ -24,7 +24,10 @@ use chrono::{
 use once_cell::sync::{Lazy, OnceCell};
 use rand::{Rng, thread_rng};
 use regex::{Captures, Regex};
-use rocketbot_bim_common::{CouplingMode, LastRider, LineOperatorRegion, VehicleInfo, VehicleNumber};
+use rocketbot_bim_common::{
+    CouplingMode, EMOJI_AIR_CONDITIONED, EMOJI_NOT_AIR_CONDITIONED, LastRider, LineOperatorRegion,
+    VehicleInfo, VehicleNumber,
+};
 use rocketbot_bim_common::achievements::ACHIEVEMENT_DEFINITIONS;
 use rocketbot_bim_common::ride_table::{Ride, RideTableData, RideTableVehicle, UserRide};
 use rocketbot_interface::{phrase_join, send_channel_message, write_expect};
@@ -539,8 +542,8 @@ impl BimPlugin {
                             vehicle.number, vehicle.type_code,
                         );
                         match vehicle.air_conditioned {
-                            Some(true) => write_expect!(db_response, " \u{2744}"), // snowflake
-                            Some(false) => write_expect!(db_response, " \u{1F975}"), // overheated face
+                            Some(true) => write_expect!(db_response, " {}", EMOJI_AIR_CONDITIONED),
+                            Some(false) => write_expect!(db_response, " {}", EMOJI_NOT_AIR_CONDITIONED),
                             None => {},
                         }
                         match (&vehicle.in_service_since, &vehicle.out_of_service_since) {

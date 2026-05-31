@@ -14,6 +14,11 @@ use serde::{Deserialize, Serialize};
 pub type VehicleNumber = NatSortedString;
 
 
+// for consistent UX spanning bot and web:
+pub const EMOJI_AIR_CONDITIONED: &str = "\u{2744}"; // snowflake
+pub const EMOJI_NOT_AIR_CONDITIONED: &str = "\u{1F975}"; // overheated face
+
+
 #[derive(Clone, Copy, Debug, Deserialize, Eq, Hash, Ord, PartialEq, PartialOrd, Serialize)]
 #[serde(rename_all = "kebab-case")]
 pub enum VehicleClass {
