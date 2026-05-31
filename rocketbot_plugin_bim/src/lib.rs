@@ -538,6 +538,11 @@ impl BimPlugin {
                             "*{}*: type *{}*",
                             vehicle.number, vehicle.type_code,
                         );
+                        match vehicle.air_conditioned {
+                            Some(true) => write_expect!(db_response, " \u{2744}"), // snowflake
+                            Some(false) => write_expect!(db_response, " \u{1F975}"), // overheated face
+                            None => {},
+                        }
                         match (&vehicle.in_service_since, &vehicle.out_of_service_since) {
                             (Some(service_from), Some(service_to)) => {
                                 write_expect!(db_response, ", in service from {} to {}", service_from, service_to);
