@@ -147,10 +147,10 @@ export namespace VehicleStatus {
                 airConSpan.classList.add("air-conditioning");
                 if (vehicle.air_conditioned) {
                     airConSpan.classList.add("air-conditioned");
-                    airConSpan.textContent = data.air_conditioned_emoji;
+                    airConSpan.textContent = data.air_conditioned_emoji + "\uFE0F";
                 } else {
                     airConSpan.classList.add("not-air-conditioned");
-                    airConSpan.textContent = data.not_air_conditioned_emoji;
+                    airConSpan.textContent = data.not_air_conditioned_emoji + "\uFE0F";
                 }
             }
 
