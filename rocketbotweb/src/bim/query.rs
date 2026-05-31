@@ -7,7 +7,7 @@ use chrono::{DateTime, Duration, Local, NaiveDate, Utc};
 use http_body_util::Full;
 use hyper::{Method, Request, Response};
 use hyper::body::{Bytes, Incoming};
-use rocketbot_bim_common::VehicleNumber;
+use rocketbot_bim_common::{EMOJI_AIR_CONDITIONED, EMOJI_NOT_AIR_CONDITIONED, VehicleNumber};
 use rocketbot_interface::clown::ClownExt;
 use serde::Serialize;
 use tokio_postgres::types::ToSql;
@@ -103,14 +103,18 @@ struct VehicleStatusSetupTemplate {
 struct VehicleStatusTemplate {
     pub vehicles: BTreeMap<VehicleNumber, VehicleStatusEntry>,
     pub timestamp: DateTime<Utc>,
+    pub air_conditioned_emoji: &'static str,
+    pub not_air_conditioned_emoji: &'static str,
 }
 
+// keep in sync with bim/vehicle-status.ts:VehicleStatus.VehicleEntry in TypeScript code
 #[derive(Clone, Debug, Eq, Hash, Ord, PartialEq, PartialOrd, Serialize)]
 struct VehicleStatusEntry {
     pub state: LastRideState,
     pub my_last_ride_opt: Option<RiderAndUtcTime>,
     pub other_last_ride_opt: Option<RiderAndUtcTime>,
     pub fixed_coupling: Vec<VehicleNumber>,
+    pub air_conditioned: Option<bool>,
 }
 
 #[derive(Clone, Debug, Eq, Hash, Ord, PartialEq, PartialOrd, Serialize)]
@@ -617,9 +621,16 @@ pub(crate) async fn handle_bim_vehicle_status(request: &Request<Incoming>) -> Re
                         }
                     },
                 };
-                let fixed_coupling: Vec<VehicleNumber> = bim_database.get(&vehicle_number)
-                    .map(|fc| fc.fixed_coupling.iter().map(|v| v.clone()).collect())
-                    .unwrap_or_else(|| Vec::with_capacity(0));
+                let db_vehicle_opt = bim_database.get(&vehicle_number);
+                let (fixed_coupling, air_conditioned): (Vec<VehicleNumber>, Option<bool>) = if let Some(db_vehicle) = db_vehicle_opt {
+                    let fc = db_vehicle.fixed_coupling
+                        .iter()
+                        .map(|v| v.clone())
+                        .collect();
+                    (fc, db_vehicle.air_conditioned)
+                } else {
+                    (Vec::with_capacity(0), None)
+                };
 
                 vehicles.insert(
                     vehicle_number,
@@ -628,6 +639,7 @@ pub(crate) async fn handle_bim_vehicle_status(request: &Request<Incoming>) -> Re
                         my_last_ride_opt,
                         other_last_ride_opt,
                         fixed_coupling,
+                        air_conditioned,
                     },
                 );
             }
@@ -646,6 +658,7 @@ pub(crate) async fn handle_bim_vehicle_status(request: &Request<Incoming>) -> Re
                         my_last_ride_opt: None,
                         other_last_ride_opt: None,
                         fixed_coupling,
+                        air_conditioned: vehicle_entry.air_conditioned,
                     },
                 );
             }
@@ -653,6 +666,8 @@ pub(crate) async fn handle_bim_vehicle_status(request: &Request<Incoming>) -> Re
             let template = VehicleStatusTemplate {
                 vehicles,
                 timestamp,
+                air_conditioned_emoji: EMOJI_AIR_CONDITIONED,
+                not_air_conditioned_emoji: EMOJI_NOT_AIR_CONDITIONED,
             };
             match render_response(&template, &query_pairs, 200, vec![]).await {
                 Some(r) => Ok(r),

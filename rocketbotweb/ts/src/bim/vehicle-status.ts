@@ -6,13 +6,17 @@ export namespace VehicleStatus {
         vehicles: {
             [vehicleNumber: string]: VehicleEntry|undefined;
         };
+        air_conditioned_emoji: string;
+        not_air_conditioned_emoji: string;
     }
 
+    // keep in sync with rocketbotweb::bim::query::VehicleStatusEntry in Rust code
     interface VehicleEntry {
         state: "unridden"|"other-only"|"other-last"|"you-only"|"you-last"|"you-only-recently"|"you-last-recently";
         my_last_ride_opt: RiderAndTime|null;
         other_last_ride_opt: RiderAndTime|null;
         fixed_coupling: string[];
+        air_conditioned: boolean|null;
     }
 
     interface RiderAndTime {
@@ -135,6 +139,20 @@ export namespace VehicleStatus {
             const numberSpan = createSpanChild(vehicleDiv);
             numberSpan.classList.add("number");
             numberSpan.textContent = vehicleNumber;
+
+            if (vehicle.air_conditioned !== null) {
+                createTextChild(vehicleDiv, " ");
+
+                const airConSpan = createSpanChild(vehicleDiv);
+                airConSpan.classList.add("air-conditioning");
+                if (vehicle.air_conditioned) {
+                    airConSpan.classList.add("air-conditioned");
+                    airConSpan.textContent = data.air_conditioned_emoji;
+                } else {
+                    airConSpan.classList.add("not-air-conditioned");
+                    airConSpan.textContent = data.not_air_conditioned_emoji;
+                }
+            }
 
             if (vehicle.my_last_ride_opt !== null) {
                 const myTime = parseRustChronoUtcTimestamp(vehicle.my_last_ride_opt.time);

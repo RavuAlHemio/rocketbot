@@ -20,6 +20,8 @@
 RocketBotWeb.Bim.VehicleStatus.setUp({
   vehicles: {{ vehicles|html_inline_json|safe }},
   timestamp: {{ timestamp|html_inline_json|safe }},
+  air_conditioned_emoji: {{ air_conditioned_emoji|html_inline_json|safe }},
+  not_air_conditioned_emoji: {{ not_air_conditioned_emoji|html_inline_json|safe }},
 });
 </script>
 {% endblock %}
