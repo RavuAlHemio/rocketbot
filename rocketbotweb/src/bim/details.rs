@@ -7,7 +7,9 @@ use chrono::{DateTime, Local};
 use http_body_util::Full;
 use hyper::{Method, Request, Response};
 use hyper::body::{Bytes, Incoming};
-use rocketbot_bim_common::{CouplingMode, VehicleInfo, VehicleNumber};
+use rocketbot_bim_common::{
+    CouplingMode, EMOJI_AIR_CONDITIONED, EMOJI_NOT_AIR_CONDITIONED, VehicleInfo, VehicleNumber,
+};
 use rocketbot_date_time::DateTimeLocalWithWeekday;
 use rocketbot_interface::clown::ClownExt;
 use serde::Serialize;
@@ -67,6 +69,8 @@ struct BimDetailsTemplate {
     pub company: String,
     pub vehicle: Option<VehicleInfo>,
     pub rides: Vec<BimDetailsRidePart>,
+    pub air_conditioned_emoji: &'static str,
+    pub not_air_conditioned_emoji: &'static str,
 }
 
 #[derive(Clone, Debug, Eq, PartialEq, Serialize, Template)]
@@ -184,6 +188,8 @@ pub(crate) async fn handle_bim_detail(request: &Request<Incoming>) -> Result<Res
         company,
         vehicle,
         rides,
+        air_conditioned_emoji: EMOJI_AIR_CONDITIONED,
+        not_air_conditioned_emoji: EMOJI_NOT_AIR_CONDITIONED,
     };
     match render_response(&template, &query_pairs, 200, vec![]).await {
         Some(r) => Ok(r),
