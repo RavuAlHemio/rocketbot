@@ -44,6 +44,7 @@ struct VehicleTypeConfig {
     pub manufacturer: Option<String>,
     #[serde(default)] pub power_sources: BTreeSet<PowerSource>,
     #[serde(default)] pub number_evaluator_key: Option<String>,
+    #[serde(default)] pub air_conditioned: Option<bool>,
     #[serde(default)] pub common_other_data: BTreeMap<String, String>,
 }
 
@@ -292,6 +293,7 @@ async fn obtain_vehicles(
                     out_of_service_since: out_of_service_since.clone(),
                     manufacturer: type_info.manufacturer.clone(),
                     depot: depot.clone(),
+                    air_conditioned: type_info.air_conditioned,
                     other_data: other_data.clone(),
                     fixed_coupling,
                 };

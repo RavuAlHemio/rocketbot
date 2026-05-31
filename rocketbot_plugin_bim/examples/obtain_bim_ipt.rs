@@ -37,6 +37,7 @@ struct VehiclePageConfig {
     pub vehicle_class: VehicleClass,
     #[serde(default)] pub power_sources: BTreeSet<PowerSource>,
     #[serde(default)] pub manufacturer: Option<String>,
+    #[serde(default)] pub air_conditioned: Option<bool>,
     #[serde(default)] pub other_data: BTreeMap<String, String>,
 }
 
@@ -378,6 +379,7 @@ async fn main() -> ExitCode {
                     out_of_service_since: out_of_service_since.clone(),
                     manufacturer: vehicle_page_config.manufacturer.clone(),
                     depot: None,
+                    air_conditioned: vehicle_page_config.air_conditioned,
                     other_data,
                     fixed_coupling: fixed_coupling.clone(),
                 };

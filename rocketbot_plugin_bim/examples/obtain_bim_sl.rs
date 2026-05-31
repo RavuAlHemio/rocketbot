@@ -41,6 +41,7 @@ struct ExportClass {
     pub vehicle_class: VehicleClass,
     #[serde(default)] pub manufacturer: Option<String>,
     #[serde(default)] pub power_sources: BTreeSet<PowerSource>,
+    #[serde(default)] pub air_conditioned: Option<bool>,
     #[serde(default)] pub other_data: BTreeMap<String, String>,
     #[serde(default)] pub include_deleted: bool,
     #[serde(default)] pub formation_number_key: Option<String>,
@@ -335,6 +336,7 @@ async fn main() {
                     out_of_service_since: out_of_service_since.clone(),
                     manufacturer: class_def.manufacturer.clone(),
                     depot: depot.clone(),
+                    air_conditioned: class_def.air_conditioned,
                     other_data: other_data.clone(),
                     fixed_coupling: fixed_coupling.clone(),
                 };

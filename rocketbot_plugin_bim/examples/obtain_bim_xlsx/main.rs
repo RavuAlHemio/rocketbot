@@ -144,6 +144,7 @@ struct CodeConversion {
     pub vehicle_class: VehicleClass,
     #[serde(default)] pub power_sources: BTreeSet<PowerSource>,
     pub overridden_type: Option<String>,
+    #[serde(default)] pub air_conditioned: Option<bool>,
     #[serde(default)] pub common_props: BTreeMap<String, String>,
 }
 

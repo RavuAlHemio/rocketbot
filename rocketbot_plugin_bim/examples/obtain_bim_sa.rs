@@ -103,6 +103,7 @@ struct TypeInfo {
     pub manufacturer: Option<String>,
     pub vehicle_class: VehicleClass,
     #[serde(default)] pub power_sources: BTreeSet<PowerSource>,
+    #[serde(default)] pub air_conditioned: Option<bool>,
     #[serde(default)] pub other_data: BTreeMap<String, String>,
 }
 
@@ -116,6 +117,7 @@ struct VehicleInfoBuilder {
     out_of_service_since: Option<String>,
     manufacturer: Option<String>,
     depot: Option<String>,
+    air_conditioned: Option<bool>,
     other_data: BTreeMap<String, String>,
     fixed_coupling: IndexSet<VehicleNumber>,
 }
@@ -130,6 +132,7 @@ impl VehicleInfoBuilder {
             out_of_service_since: None,
             manufacturer: None,
             depot: None,
+            air_conditioned: None,
             other_data: BTreeMap::new(),
             fixed_coupling: IndexSet::new(),
         }
@@ -176,6 +179,11 @@ impl VehicleInfoBuilder {
         self
     }
 
+    pub fn air_conditioned(&mut self, air_conditioned: bool) -> &mut Self {
+        self.air_conditioned = Some(air_conditioned);
+        self
+    }
+
     pub fn other_data<K: Into<String>, V: Into<String>>(&mut self, key: K, value: V) -> &mut Self {
         self.other_data.insert(key.into(), value.into());
         self
@@ -193,6 +201,9 @@ impl VehicleInfoBuilder {
                 self.type_code = Some(tc.type_code.clone());
                 self.power_sources = tc.power_sources.clone();
                 self.vehicle_class(tc.vehicle_class);
+                if let Some(air_conditioned) = tc.air_conditioned {
+                    self.air_conditioned(air_conditioned);
+                }
                 for (k, v) in &tc.other_data {
                     self.other_data
                         .entry(k.clone())
@@ -224,6 +235,7 @@ impl VehicleInfoBuilder {
             out_of_service_since: self.out_of_service_since,
             manufacturer: self.manufacturer,
             depot: self.depot,
+            air_conditioned: self.air_conditioned,
             other_data: self.other_data,
             fixed_coupling: self.fixed_coupling,
         })

@@ -188,6 +188,7 @@ pub struct VehicleInfo {
     pub out_of_service_since: Option<String>,
     pub manufacturer: Option<String>,
     #[serde(default)] pub depot: Option<String>,
+    #[serde(default)] pub air_conditioned: Option<bool>,
     pub other_data: BTreeMap<String, String>,
     pub fixed_coupling: IndexSet<VehicleNumber>,
 }
@@ -202,6 +203,7 @@ impl VehicleInfo {
             out_of_service_since: None,
             manufacturer: None,
             depot: None,
+            air_conditioned: None,
             other_data: BTreeMap::new(),
             fixed_coupling: IndexSet::new(),
         }

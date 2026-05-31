@@ -671,6 +671,7 @@ fn process_sheet<F: Read + Seek>(
                             out_of_service_since: if out_of_order { Some("?".to_owned()) } else { None },
                             manufacturer: None,
                             depot: depot_opt.clone(),
+                            air_conditioned: conversion.air_conditioned,
                             other_data: my_other_fields.clone(),
                             fixed_coupling: fixed_coupling.clone(),
                         };
