@@ -366,12 +366,52 @@ pub(crate) fn get_canonical_functions() -> HashMap<String, Function> {
     prepared.insert("c2f", f64_f64(
         "c2f",
         |f| f * 9.0/5.0 + 32.0,
-        "`c2f(t)` converts the temperature `t` from Celsius to Fahrenheit.",
+        "`c2f(t)` converts the temperature `t` from degrees Celsius to degrees Fahrenheit.",
     ));
     prepared.insert("f2c", f64_f64(
         "f2c",
         |f| (f - 32.0) * 5.0/9.0,
-        "`f2c(t)` converts the temperature `t` from Fahrenheit to Celsius.",
+        "`f2c(t)` converts the temperature `t` from degrees Fahrenheit to degrees Celsius.",
+    ));
+    prepared.insert("c2k", f64_f64(
+        "c2k",
+        |f| f + 273.15,
+        "`c2k(t)` converts the temperature `t` from degrees Celsius to Kelvins.",
+    ));
+    prepared.insert("k2c", f64_f64(
+        "k2c",
+        |f| f - 273.15,
+        "`k2c(t)` converts the temperature `t` from Kelvins to degrees Celsius.",
+    ));
+    prepared.insert("c2ra", f64_f64(
+        "c2ra",
+        |f| (f + 273.15) * 9.0/5.0,
+        "`c2ra(t)` converts the temperature `t` from degrees Celsius to degrees Rankine.",
+    ));
+    prepared.insert("ra2c", f64_f64(
+        "ra2c",
+        |f| f * 5.0/9.0 - 273.15,
+        "`ra2c(t)` converts the temperature `t` from degrees Rankine to degrees Celsius.",
+    ));
+    prepared.insert("c2ro", f64_f64(
+        "c2ro",
+        |f| f * 21.0/40.0 + 7.5,
+        "`c2ro(t)` converts the temperature `t` from degrees Celsius to degrees Rømer.",
+    ));
+    prepared.insert("ro2c", f64_f64(
+        "ro2c",
+        |f| (f - 7.5) * 40.0/21.0,
+        "`ro2c(t)` converts the temperature `t` from degrees Rømer to degrees Celsius.",
+    ));
+    prepared.insert("c2re", f64_f64(
+        "c2re",
+        |f| f * 4.0/5.0,
+        "`c2re(t)` converts the temperature `t` from degrees Celsius to degrees Réaumur.",
+    ));
+    prepared.insert("re2c", f64_f64(
+        "re2c",
+        |f| f * 5.0/4.0,
+        "`re2c(t)` converts the temperature `t` from degrees Réaumur to degrees Celsius.",
     ));
 
     prepared.drain()
