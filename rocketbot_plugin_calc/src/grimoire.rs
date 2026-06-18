@@ -289,7 +289,7 @@ pub(crate) fn get_canonical_functions() -> HashMap<String, Function> {
             "`havsin(r, lat1, lon1, lat2, lon2)` calculates the distance between points",
             " `(lat1, lon1)` and `(lat2, lon2)` on a sphere with radius `r` using the haversine",
             " formula. The latitudes and longitudes must be in degrees; see `havsinrad` for a",
-            " degrees-based version. You may also be interested in the constant `earthR`.",
+            " radians-based version. You may also be interested in the constant `earthR`.",
         ),
     ));
     prepared.insert("elldisrad", f64_multi_f64(
