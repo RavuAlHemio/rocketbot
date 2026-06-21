@@ -24,6 +24,7 @@ tokio-postgres = { version = "0.7", features = ["with-chrono-0_4"] }
 tracing = { version = "0.1" }
 
 [dev-dependencies]
+boa_engine = { version = "0.21" }
 clap = { version = "4.5", features = ["derive"] }
 csv = { version = "1.2" }
 ego-tree = { version = "0.10" }
