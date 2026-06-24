@@ -250,13 +250,14 @@ impl WienerLinienPlugin {
                         None => continue,
                     };
 
-                    let (line_and_target, target_full, barrier_free, realtime, traffic_jam) = if let Some(vehicle) = &departure.vehicle {
+                    let (line_and_target, target_full, barrier_free, realtime, traffic_jam, cooling) = if let Some(vehicle) = &departure.vehicle {
                         (
                             (vehicle.name.clone(), vehicle.towards.to_lowercase()),
                             vehicle.towards.clone(),
                             vehicle.barrier_free,
                             vehicle.realtime_supported,
                             vehicle.traffic_jam,
+                            vehicle.cooling,
                         )
                     } else {
                         (
@@ -265,6 +266,7 @@ impl WienerLinienPlugin {
                             line.barrier_free,
                             line.realtime_supported,
                             line.traffic_jam,
+                            line.cooling,
                         )
                     };
 
@@ -280,6 +282,7 @@ impl WienerLinienPlugin {
                         barrier_free,
                         realtime,
                         traffic_jam,
+                        cooling,
                     ))
                 }
             }
@@ -380,6 +383,10 @@ impl WienerLinienPlugin {
                             write!(&mut ds, " | {}", departure.countdown).unwrap();
                         }
 
+                        if departure.cooling {
+                            // cooling: degree sign
+                            ds.push_str(" \u{B0}");
+                        }
                         if departure.traffic_jam {
                             // jammed: police siren
                             ds.push_str(" \u{1F6A8}");

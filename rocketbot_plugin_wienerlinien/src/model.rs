@@ -48,6 +48,7 @@ pub(crate) struct Line {
     #[serde(rename = "barrierFree")] pub barrier_free: bool,
     #[serde(rename = "realtimeSupported")] pub realtime_supported: bool,
     #[serde(rename = "trafficjam")] pub traffic_jam: bool,
+    #[serde(default)] pub cooling: bool,
     #[serde(rename = "departures")] pub departure_data: DepartureData,
 }
 
@@ -76,6 +77,7 @@ pub(crate) struct Vehicle {
     #[serde(rename = "barrierFree")] pub barrier_free: bool,
     #[serde(rename = "realtimeSupported")] pub realtime_supported: bool,
     #[serde(rename = "trafficjam")] pub traffic_jam: bool,
+    #[serde(default)] pub cooling: bool,
 }
 
 #[derive(Clone, Debug, Deserialize, Eq, Hash, PartialEq, Serialize)]
@@ -104,6 +106,7 @@ pub(crate) struct DepartureTimeEntry {
     pub accessible: bool,
     pub realtime: bool,
     pub traffic_jam: bool,
+    pub cooling: bool,
 }
 impl DepartureTimeEntry {
     pub fn new(
@@ -111,12 +114,14 @@ impl DepartureTimeEntry {
         accessible: bool,
         realtime: bool,
         traffic_jam: bool,
+        cooling: bool,
     ) -> Self {
         Self {
             countdown,
             accessible,
             realtime,
             traffic_jam,
+            cooling,
         }
     }
 }
