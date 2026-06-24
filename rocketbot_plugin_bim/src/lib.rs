@@ -729,14 +729,6 @@ impl BimPlugin {
             ).await;
             return;
         }
-        if alternate_timestamp_string.is_some() && backdate.is_some() {
-            send_channel_message!(
-                interface,
-                &channel_message.channel.name,
-                "-b/--backdate and -t/--timestamp cannot be specified at the same time!",
-            ).await;
-            return;
-        }
         let mut backdate_min = 0;
         if let Some(backdate_value) = backdate {
             backdate_min = backdate_value.as_i64().expect("--backdate value not an i64");
@@ -779,7 +771,7 @@ impl BimPlugin {
             }
         };
 
-        let ride_timestamp = if let Some(ats) = alternate_timestamp_string {
+        let ride_original_timestamp = if let Some(ats) = alternate_timestamp_string {
             let timestamp_opt = self.parse_user_timestamp(
                 ats.as_str().expect("timestamp string not a string?!"),
                 utc_timestamp,
@@ -790,8 +782,9 @@ impl BimPlugin {
                 None => return, // error message already output
             }
         } else {
-            channel_message.message.timestamp.with_timezone(&Local) - Duration::minutes(backdate_min)
+            channel_message.message.timestamp.with_timezone(&Local)
         };
+        let ride_timestamp = ride_original_timestamp - Duration::minutes(backdate_min);
 
         let rider_username = if let Some(ar) = alternate_rider {
             let ar_str = ar.as_str().expect("explicit rider not a string?!");

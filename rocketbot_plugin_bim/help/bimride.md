@@ -6,9 +6,9 @@ The following options are supported:
 
 * `{sopfx}c COMPANY` or `{lopfx}company COMPANY` specifies the company operating that vehicle. A default company chosen by the bot operator is used if none is supplied explicitly.
 * `{sopfx}r RIDER` or `{lopfx}rider RIDER` specifies the rider riding the vehicle. This option can only be used by `bim` administrators. By default, the user issuing the command is considered the rider.
-* `{sopfx}t TIMESTAMP` or `{lopfx}timestamp TIMESTAMP` specifies a timestamp for this ride. This option can only be used by `bim` administrators. By default, the current timestamp is taken, optionally adjusted by the value of `{sopfx}b`/`{lopfx}backdate` (which cannot be used simultaneously with `{sopfx}t`/`{lopfx}timestamp`).
+* `{sopfx}t TIMESTAMP` or `{lopfx}timestamp TIMESTAMP` specifies a timestamp for this ride. This option can only be used by `bim` administrators. By default, the current timestamp is taken; adjustments can be made using `{sopfx}b`/`{lopfx}backdate`.
 * `{sopfx}u` or `{lopfx}utc` interprets timestamps as UTC. The default assumes local time. This option is useful if the local timestamp is ambiguous (e.g. during daylight saving time adjustments).
-* `{sopfx}b MINUTES` or `{lopfx}backdate MINUTES` backdates the ride by the given amount of minutes. Cannot be used simultaneously with `{sopfx}t`/`{lopfx}timestamp`. Users who are not `bim` administrators might be limited in how far they may backdate their rides.
+* `{sopfx}b MINUTES` or `{lopfx}backdate MINUTES` backdates the ride by the given amount of minutes. By default, it subtracts the given number of minutes from the current time; if used simultaneously with `{sopfx}t`/`{lopfx}timestamp` by a `bim` administrator, subtracts the minutes from that timestamp instead. Users who are not `bim` administrators might also be limited in how far they may backdate their rides.
 * `{sopfx}s` or `{lopfx}sandbox` skips storing the ride in the database, but produces the expected output.
 
 The following options concern long-term ticket amortization calculation (see also `{cpfx}bimcost`):
