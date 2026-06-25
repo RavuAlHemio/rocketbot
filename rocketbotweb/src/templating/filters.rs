@@ -257,6 +257,43 @@ pub(crate) fn html_inline_json<V: serde::Serialize>(value: &V, _values: &dyn ask
     Ok(ret)
 }
 
+/// Converts a country code into a flag, if that country code allows for it.
+///
+/// This filter is generally called as such:
+///
+/// ```jinja
+/// {{ country_code|flagify(prefix, suffix) }}
+/// ```
+///
+/// A country code is the two-letter ISO 3166 country code, either as two capital letters (U+0041 to
+/// U+005A) or as two lowercase letters (U+0061 to U+007A). If such a country code is passed to this
+/// filter function, it is mapped to the respective points the Regional Indicator range (U+1F1E6 to
+/// U+1F1FF) with `prefix` prepended and `suffix` appended. If the passed country code does not
+/// fulfil these criteria, an empty string is returned instead, without `prefix` or `suffix`.
+///
+/// This allows augmenting a selection list of countries with flags for those countries where a flag
+/// is known, while leaving simple country codes for those where it is not.
+pub(crate) fn flagify(country_code: &str, _values: &dyn askama::Values, prefix: &str, suffix: &str) -> askama::Result<String> {
+    if country_code.len() != 2 {
+        return Ok(String::with_capacity(0));
+    }
+
+    let base_offset = if country_code.chars().all(|c| c >= 'a' && c <= 'z') {
+        'a' as u32
+    } else if country_code.chars().all(|c| c >= 'A' && c <= 'Z') {
+        'A' as u32
+    } else {
+        return Ok(String::with_capacity(0));
+    };
+
+    let mut flag_string: String = country_code.chars()
+        .map(|c| char::from_u32((c as u32) + 0x1F1E6 - base_offset).unwrap())
+        .collect();
+    flag_string.insert_str(0, prefix);
+    flag_string.push_str(suffix);
+    Ok(flag_string)
+}
+
 
 #[cfg(test)]
 mod tests {

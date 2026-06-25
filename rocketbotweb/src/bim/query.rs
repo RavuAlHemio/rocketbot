@@ -1,9 +1,10 @@
 use std::borrow::Cow;
-use std::collections::{BTreeMap, HashSet};
+use std::collections::{BTreeMap, BTreeSet, HashSet};
 use std::convert::Infallible;
 
 use askama::Template;
 use chrono::{DateTime, Duration, Local, NaiveDate, Utc};
+use form_urlencoded;
 use http_body_util::Full;
 use hyper::{Method, Request, Response};
 use hyper::body::{Bytes, Incoming};
@@ -87,6 +88,12 @@ struct QueryTemplate {
     pub next_page: Option<i64>,
     pub filter_query_and: String,
     pub total_ride_count: i64,
+}
+
+#[derive(Clone, Debug, Default, Eq, Hash, Ord, PartialEq, PartialOrd, Serialize, Template)]
+#[template(path = "bim-query-country.html")]
+struct QueryCountryTemplate {
+    pub countries: BTreeSet<String>,
 }
 
 
@@ -720,5 +727,82 @@ pub(crate) async fn handle_bim_vehicle_status(request: &Request<Incoming>) -> Re
                 None => return_500(),
             }
         },
+    }
+}
+
+pub(crate) async fn handle_bim_query_country(request: &Request<Incoming>) -> Result<Response<Full<Bytes>>, Infallible> {
+    let query_pairs = get_query_pairs(request);
+    if request.method() != Method::GET {
+        return return_405(&query_pairs).await;
+    }
+
+    // we will need the company definitions in any case
+    let Some(company_to_definition) = obtain_company_to_definition().await else {
+        return return_500();
+    };
+
+    let query_pairs_multiset = get_query_pairs_multiset(request);
+    if query_pairs.get("do").map(|val| val == "query").unwrap_or(false) {
+        // redirect to the query page with companies based in the given countries
+        let Some(countries_vec) = query_pairs_multiset.get("country") else {
+            return return_400("missing \"country\" parameter", &query_pairs).await;
+        };
+        let countries_set: HashSet<&str> = countries_vec
+            .iter()
+            .map(|country| country.as_ref())
+            .collect();
+        let mut companies = Vec::new();
+
+        for (company, definition) in &company_to_definition {
+            let Some(country) = definition["country"].as_str() else {
+                continue;
+            };
+            if countries_set.contains(country) {
+                companies.push(company);
+            }
+        }
+
+        // sort the company list before constructing the URL; we aren't cavemen
+        companies.sort_unstable();
+
+        let mut redirect_url = "bim-query".to_owned();
+        let mut first_company = true;
+        for company in &companies {
+            if first_company {
+                redirect_url.push('?');
+                first_company = false;
+            } else {
+                redirect_url.push('&');
+            }
+            redirect_url.push_str("company=");
+            for company_piece in form_urlencoded::byte_serialize(company.as_bytes()) {
+                redirect_url.push_str(company_piece);
+            }
+        }
+
+        let builder = Response::builder()
+            .status(302)
+            .header("Location", &redirect_url);
+        match builder.body(Full::new(Bytes::new())) {
+            Ok(r) => return Ok(r),
+            Err(e) => {
+                error!("failed to assemble response: {}", e);
+                return return_500();
+            },
+        }
+    }
+
+    let mut countries = BTreeSet::new();
+    for definition in company_to_definition.values() {
+        let Some(country) = definition["country"].as_str() else { continue };
+        countries.insert(country.to_owned());
+    }
+
+    let template = QueryCountryTemplate {
+        countries,
+    };
+    match render_response(&template, &query_pairs, 200, vec![]).await {
+        Some(r) => Ok(r),
+        None => return_500(),
     }
 }

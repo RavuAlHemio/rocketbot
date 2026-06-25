@@ -1,0 +1,23 @@
+{% extends "base.html" %}
+
+{% block title %}Public Transport Query by Country{% endblock %}
+
+{% block content %}
+<h1>Public Transport Query by Country</h1>
+
+<form method="get">
+  <input id="bimquerycountry-do" type="hidden" name="do" value="query" />
+
+  <p><label for="bimquerycountry-country">Pick a country!</label></p>
+  <p>
+    <select id="bimquerycountry-country" name="country" required="required" multiple="multiple">
+      {% for country in countries %}
+        <option value="{{ country|escape }}">{{ country|escape }}{{ country|flagify(" ", "") }}</option>
+      {% endfor %}
+    </select>
+  </p>
+
+  <p><input type="submit" value="query" /></p>
+</form>
+
+{% endblock %}

@@ -50,7 +50,7 @@ use crate::bim::coverage::{
 };
 use crate::bim::details::{handle_bim_detail, handle_bim_line_detail, handle_bim_ride_by_id};
 use crate::bim::drilldown::handle_bim_drilldown;
-use crate::bim::query::{handle_bim_query, handle_bim_vehicle_status};
+use crate::bim::query::{handle_bim_query, handle_bim_query_country, handle_bim_vehicle_status};
 use crate::bim::tables::{
     handle_bim_odds_ends, handle_bim_rides, handle_bim_types, handle_bim_vehicles,
 };
@@ -353,6 +353,7 @@ async fn handle_request(request: Request<Incoming>) -> Result<Response<Full<Byte
         "/bim-histogram-vehicle-ride-count-group" => handle_bim_histogram_by_vehicle_ride_count_group(&request).await,
         "/bim-histogram-line-ride-count-group" => handle_bim_histogram_by_line_ride_count_group(&request).await,
         "/bim-query" => handle_bim_query(&request).await,
+        "/bim-query-country" => handle_bim_query_country(&request).await,
         "/bim-last-rider-pie" => handle_bim_last_rider_pie(&request).await,
         "/bim-histogram-fixed-coupling" => handle_bim_histogram_fixed_coupling(&request).await,
         "/bim-global-stats" => handle_bim_global_stats(&request).await,
