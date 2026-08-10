@@ -3,9 +3,9 @@ use std::sync::Weak;
 
 use async_trait::async_trait;
 use chrono::Local;
+use fancy_regex::Regex;
 use rand::{Rng, SeedableRng};
 use rand::rngs::StdRng;
-use regex::Regex;
 use rocketbot_interface::{
     JsonValueExtensions, ResultExtensions, send_channel_message, send_private_message,
 };
@@ -13,7 +13,7 @@ use rocketbot_interface::commands::{CommandDefinitionBuilder, CommandInstance};
 use rocketbot_interface::interfaces::{RocketBotInterface, RocketBotPlugin};
 use rocketbot_interface::model::{ChannelMessage, PrivateMessage};
 use rocketbot_interface::sync::{Mutex, RwLock};
-use rocketbot_regex_replace::ReplacerRegex;
+use rocketbot_regex_replace::fancy::ReplacerRegex;
 use serde_json;
 use tracing::{debug, error};
 

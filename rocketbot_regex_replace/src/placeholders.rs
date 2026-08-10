@@ -1,25 +1,83 @@
 use std::collections::HashMap;
 
-use regex::{Captures, Regex};
+pub trait AnyCaptures {
+    fn get_entire_match(&self) -> &str;
+    fn get_entire_match_start_pos(&self) -> usize;
+    fn get_entire_match_end_pos(&self) -> usize;
+    fn get_numbered_group(&self, group_index: usize) -> Option<&str>;
+    fn get_named_group(&self, name: &str) -> Option<&str>;
+    fn get_group_count(&self) -> usize;
+}
+
+impl<'a> AnyCaptures for regex::Captures<'a> {
+    fn get_entire_match(&self) -> &str {
+        self.get(0).unwrap().as_str()
+    }
+
+    fn get_entire_match_start_pos(&self) -> usize {
+        self.get(0).unwrap().start()
+    }
+
+    fn get_entire_match_end_pos(&self) -> usize {
+        self.get(0).unwrap().end()
+    }
+
+    fn get_numbered_group(&self, group_index: usize) -> Option<&str> {
+        self.get(group_index).map(|g| g.as_str())
+    }
+
+    fn get_named_group(&self, name: &str) -> Option<&str> {
+        self.name(name).map(|g| g.as_str())
+    }
+
+    fn get_group_count(&self) -> usize {
+        self.len()
+    }
+}
+
+#[cfg(feature = "fancy")]
+impl<'a> AnyCaptures for fancy_regex::Captures<'a, str> {
+    fn get_entire_match(&self) -> &str {
+        self.get(0).unwrap().as_str()
+    }
+
+    fn get_entire_match_start_pos(&self) -> usize {
+        self.get(0).unwrap().start()
+    }
+
+    fn get_entire_match_end_pos(&self) -> usize {
+        self.get(0).unwrap().end()
+    }
+
+    fn get_numbered_group(&self, group_index: usize) -> Option<&str> {
+        self.get(group_index).map(|g| g.as_str())
+    }
+
+    fn get_named_group(&self, name: &str) -> Option<&str> {
+        self.name(name).map(|g| g.as_str())
+    }
+
+    fn get_group_count(&self) -> usize {
+        self.len()
+    }
+}
+
 
 
 #[derive(Clone, Debug)]
-pub(crate) struct ReplacementState<'a> {
+pub(crate) struct ReplacementState<'a, C: AnyCaptures> {
     input_string: &'a str,
-    #[allow(unused)] regex: &'a Regex,
-    regex_match: &'a Captures<'a>,
+    regex_match: &'a C,
     lookups: &'a HashMap<String, String>,
 }
-impl<'a> ReplacementState<'a> {
+impl<'a, C: AnyCaptures> ReplacementState<'a, C> {
     pub fn new(
         input_string: &'a str,
-        regex: &'a Regex,
-        regex_match: &'a Captures<'a>,
+        regex_match: &'a C,
         lookups: &'a HashMap<String, String>,
-    ) -> ReplacementState<'a> {
+    ) -> ReplacementState<'a, C> {
         ReplacementState {
             input_string,
-            regex,
             regex_match,
             lookups,
         }
@@ -43,26 +101,26 @@ pub(crate) enum Placeholder {
     Shorten(String, usize),
 }
 impl Placeholder {
-    pub fn replace(&self, state: &ReplacementState) -> String {
+    pub fn replace<C: AnyCaptures>(&self, state: &ReplacementState<'_, C>) -> String {
         match self {
             Placeholder::ConstantString(s)
                 => s.clone(),
             Placeholder::EntireInputString
                 => state.input_string.to_owned(),
             Placeholder::EntireMatch
-                => state.regex_match.get(0).unwrap().as_str().to_owned(),
+                => state.regex_match.get_entire_match().to_owned(),
             Placeholder::TextBeforeMatch
-                => state.input_string[0..state.regex_match.get(0).unwrap().start()].to_owned(),
+                => state.input_string[0..state.regex_match.get_entire_match_start_pos()].to_owned(),
             Placeholder::TextAfterMatch
-                => state.input_string[state.regex_match.get(0).unwrap().end()..].to_owned(),
+                => state.input_string[state.regex_match.get_entire_match_end_pos()..].to_owned(),
             Placeholder::Lookup(key)
                 => state.lookups[key].clone(),
             Placeholder::NamedMatchGroup(name)
-                => state.regex_match.name(name).unwrap().as_str().to_owned(),
+                => state.regex_match.get_named_group(name).unwrap().to_owned(),
             Placeholder::NumberedMatchGroup(number)
-                => state.regex_match.get(*number).unwrap().as_str().to_owned(),
+                => state.regex_match.get_numbered_group(*number).unwrap().to_owned(),
             Placeholder::LastMatchGroup
-                => state.regex_match.get(state.regex_match.len()-1).unwrap().as_str().to_owned(),
+                => state.regex_match.get_numbered_group(state.regex_match.get_group_count()-1).unwrap().to_owned(),
             Placeholder::CasingNamedMatchGroup(string_to_case, case_template_group)
                 => case_string_named(string_to_case, case_template_group, &state),
             Placeholder::CasingNumberedMatchGroup(string_to_case, case_template_group)
@@ -73,17 +131,17 @@ impl Placeholder {
     }
 }
 
-fn case_string_named(string_to_case: &str, case_template_group: &str, state: &ReplacementState) -> String {
-    let case_template = state.regex_match.name(case_template_group).unwrap().as_str();
+fn case_string_named<C: AnyCaptures>(string_to_case: &str, case_template_group: &str, state: &ReplacementState<'_, C>) -> String {
+    let case_template = state.regex_match.get_named_group(case_template_group).unwrap();
     case_string(string_to_case, case_template, state)
 }
 
-fn case_string_numbered(string_to_case: &str, case_template_group: usize, state: &ReplacementState) -> String {
-    let case_template = state.regex_match.get(case_template_group).unwrap().as_str();
+fn case_string_numbered<C: AnyCaptures>(string_to_case: &str, case_template_group: usize, state: &ReplacementState<'_, C>) -> String {
+    let case_template = state.regex_match.get_numbered_group(case_template_group).unwrap();
     case_string(string_to_case, case_template, state)
 }
 
-fn case_string(string_to_case: &str, case_template: &str, _state: &ReplacementState) -> String {
+fn case_string<C: AnyCaptures>(string_to_case: &str, case_template: &str, _state: &ReplacementState<'_, C>) -> String {
     let chars_to_case: Vec<char> = string_to_case.chars().collect();
     let case_template_chars: Vec<char> = case_template.chars().collect();
 
@@ -176,7 +234,7 @@ fn best_guess_case(chars_to_case: &[char], case_template_chars: &[char]) -> Stri
     }
 }
 
-fn shorten(group_name: &str, length: usize, state: &ReplacementState) -> String {
-    let match_str = state.regex_match.name(group_name).unwrap().as_str();
+fn shorten<C: AnyCaptures>(group_name: &str, length: usize, state: &ReplacementState<'_, C>) -> String {
+    let match_str = state.regex_match.get_named_group(group_name).unwrap();
     match_str.chars().take(length).collect()
 }

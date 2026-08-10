@@ -17,6 +17,36 @@ static SHORTEN_REGEX: Lazy<Regex> = Lazy::new(|| Regex::new(
 ).expect("failed to compile shorten regex"));
 
 
+pub(crate) trait AnyRegex {
+    fn has_capture_named(&self, name: &str) -> bool;
+    fn has_capture_numbered(&self, index: usize) -> bool;
+}
+impl AnyRegex for regex::Regex {
+    fn has_capture_named(&self, name: &str) -> bool {
+        self.capture_names()
+            .filter_map(|cn| cn)
+            .any(|cn| cn == name)
+    }
+
+    fn has_capture_numbered(&self, index: usize) -> bool {
+        index < self.captures_len()
+    }
+}
+
+#[cfg(feature = "fancy")]
+impl AnyRegex for fancy_regex::Regex {
+    fn has_capture_named(&self, name: &str) -> bool {
+        self.capture_names()
+            .filter_map(|cn| cn)
+            .any(|cn| cn == name)
+    }
+
+    fn has_capture_numbered(&self, index: usize) -> bool {
+        index < self.captures_len()
+    }
+}
+
+
 #[derive(Clone, Copy, Debug, Eq, Hash, PartialEq)]
 enum State {
     Text,
@@ -57,7 +87,7 @@ impl std::error::Error for CompilationError {
 }
 
 
-pub(crate) fn compile(regex: &Regex, replacement_string: &str) -> Result<Vec<Placeholder>, CompilationError> {
+pub(crate) fn compile<R: AnyRegex>(regex: &R, replacement_string: &str) -> Result<Vec<Placeholder>, CompilationError> {
     let mut state = State::Text;
     let mut sb = String::new();
     let mut placeholders: Vec<Placeholder> = Vec::new();
@@ -148,16 +178,12 @@ pub(crate) fn compile(regex: &Regex, replacement_string: &str) -> Result<Vec<Pla
     Ok(optimize(&placeholders))
 }
 
-fn process_named_group(group_name: &str, regex: &Regex, placeholders: &mut Vec<Placeholder>) -> Result<(), CompilationError> {
+fn process_named_group<R: AnyRegex>(group_name: &str, regex: &R, placeholders: &mut Vec<Placeholder>) -> Result<(), CompilationError> {
     if let Some(casing_match) = CASING_REGEX.captures(group_name) {
         let template_group_name = casing_match.name("template_group").unwrap().as_str();
         let string_to_case = casing_match.name("string_to_case").unwrap().as_str();
 
-        let any_such_named_capture = regex
-            .capture_names()
-            .filter_map(|cn| cn)
-            .any(|cn| cn == template_group_name);
-        if any_such_named_capture {
+        if regex.has_capture_named(template_group_name) {
             placeholders.push(Placeholder::CasingNamedMatchGroup(
                 string_to_case.to_owned(),
                 template_group_name.to_owned(),
@@ -167,7 +193,7 @@ fn process_named_group(group_name: &str, regex: &Regex, placeholders: &mut Vec<P
 
         // try parsing as a number
         if let Ok(u) = template_group_name.parse::<usize>() {
-            if u < regex.captures_len() {
+            if regex.has_capture_numbered(u) {
                 placeholders.push(Placeholder::CasingNumberedMatchGroup(
                     string_to_case.to_owned(),
                     u,
@@ -195,11 +221,7 @@ fn process_named_group(group_name: &str, regex: &Regex, placeholders: &mut Vec<P
             Err(_e) => return Err(CompilationError::ShortenTooLong),
         };
 
-        let any_such_named_capture = regex
-            .capture_names()
-            .filter_map(|cn| cn)
-            .any(|cn| cn == group_name);
-        if !any_such_named_capture {
+        if !regex.has_capture_named(group_name) {
             return Err(CompilationError::UnknownCapturingGroup(group_name.to_owned()));
         }
 
@@ -210,11 +232,7 @@ fn process_named_group(group_name: &str, regex: &Regex, placeholders: &mut Vec<P
         return Ok(());
     }
 
-    let any_such_named_capture = regex
-        .capture_names()
-        .filter_map(|cn| cn)
-        .any(|cn| cn == group_name);
-    if any_such_named_capture {
+    if regex.has_capture_named(group_name) {
         placeholders.push(Placeholder::NamedMatchGroup(
             group_name.to_owned(),
         ));
@@ -223,7 +241,7 @@ fn process_named_group(group_name: &str, regex: &Regex, placeholders: &mut Vec<P
 
     // try parsing as a number
     if let Ok(u) = group_name.parse::<usize>() {
-        if u < regex.captures_len() {
+        if regex.has_capture_numbered(u) {
             placeholders.push(Placeholder::NumberedMatchGroup(u));
             return Ok(());
         }
@@ -232,12 +250,8 @@ fn process_named_group(group_name: &str, regex: &Regex, placeholders: &mut Vec<P
     Err(CompilationError::UnknownCapturingGroup(group_name.to_owned()))
 }
 
-fn process_number_group(group_name: &str, regex: &Regex, placeholders: &mut Vec<Placeholder>) -> Result<(), CompilationError> {
-    let any_such_named_capture = regex
-        .capture_names()
-        .filter_map(|cn| cn)
-        .any(|cn| cn == group_name);
-    if any_such_named_capture {
+fn process_number_group<R: AnyRegex>(group_name: &str, regex: &R, placeholders: &mut Vec<Placeholder>) -> Result<(), CompilationError> {
+    if regex.has_capture_named(group_name) {
         placeholders.push(Placeholder::NamedMatchGroup(
             group_name.to_owned(),
         ));
@@ -246,7 +260,7 @@ fn process_number_group(group_name: &str, regex: &Regex, placeholders: &mut Vec<
 
     // try parsing as a number
     if let Ok(u) = group_name.parse::<usize>() {
-        if u < regex.captures_len() {
+        if regex.has_capture_numbered(u) {
             placeholders.push(Placeholder::NumberedMatchGroup(u));
             return Ok(());
         }

@@ -2,15 +2,15 @@ use std::collections::HashMap;
 use std::sync::Weak;
 
 use async_trait::async_trait;
+use fancy_regex::{Match, Regex};
 use rand::{Rng, SeedableRng};
 use rand::rngs::StdRng;
-use regex::{Match, Regex};
 use rocketbot_interface::{JsonValueExtensions, ResultExtensions, send_channel_message};
 use rocketbot_interface::commands::{CommandDefinitionBuilder, CommandInstance};
 use rocketbot_interface::interfaces::{RocketBotInterface, RocketBotPlugin};
 use rocketbot_interface::model::ChannelMessage;
 use rocketbot_interface::sync::{Mutex, RwLock};
-use rocketbot_regex_replace::ReplacerRegex;
+use rocketbot_regex_replace::fancy::ReplacerRegex;
 use serde_json;
 use tracing::{debug, error};
 

@@ -4,5 +4,9 @@ version = "0.1.0"
 edition = "2021"
 
 [dependencies]
+fancy-regex = { version = "0.19", optional = true }
 once_cell = { version = "1.21" }
 regex = { version = "1.11" }
+
+[features]
+fancy = ["fancy-regex"]

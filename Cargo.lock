@@ -1280,7 +1280,18 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "bf04c5ec15464ace8355a7b440a33aece288993475556d461154d7a62ad9947c"
 dependencies = [
  "bit-set",
- "regex-automata 0.4.9",
+ "regex-automata 0.4.18",
+ "regex-syntax 0.8.5",
+]
+
+[[package]]
+name = "fancy-regex"
+version = "0.19.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "476de73bddf2ef8490aa4ee8f1cf40b430bf1d56c48c22080e5186952cd580e6"
+dependencies = [
+ "bit-set",
+ "regex-automata 0.4.18",
  "regex-syntax 0.8.5",
 ]
 
@@ -3513,7 +3524,7 @@ checksum = "b544ef1b4eac5dc2db33ea63606ae9ffcfac26c1416a2806ae0bf5f56b201191"
 dependencies = [
  "aho-corasick",
  "memchr",
- "regex-automata 0.4.9",
+ "regex-automata 0.4.18",
  "regex-syntax 0.8.5",
 ]
 
@@ -3528,9 +3539,9 @@ dependencies = [
 
 [[package]]
 name = "regex-automata"
-version = "0.4.9"
+version = "0.4.18"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "809e8dc61f6de73b46c85f4c96486310fe304c434cfa43669d7b40f711150908"
+checksum = "ad8553b9b26413251cbf30e620595c7a41b3887f03da04579c0e6b0d6a06b4b2"
 dependencies = [
  "aho-corasick",
  "memchr",
@@ -3849,8 +3860,8 @@ version = "0.1.0"
 dependencies = [
  "async-trait",
  "chrono",
+ "fancy-regex 0.19.0",
  "rand 0.8.5",
- "regex",
  "rocketbot_interface",
  "rocketbot_regex_replace",
  "serde_json",
@@ -3985,8 +3996,8 @@ name = "rocketbot_plugin_catchword"
 version = "0.1.0"
 dependencies = [
  "async-trait",
+ "fancy-regex 0.19.0",
  "rand 0.8.5",
- "regex",
  "rocketbot_interface",
  "rocketbot_regex_replace",
  "serde_json",
@@ -4362,7 +4373,7 @@ name = "rocketbot_plugin_sed"
 version = "0.1.0"
 dependencies = [
  "async-trait",
- "fancy-regex",
+ "fancy-regex 0.16.1",
  "once_cell",
  "rocketbot_interface",
  "serde_json",
@@ -4644,6 +4655,7 @@ version = "0.1.0"
 name = "rocketbot_regex_replace"
 version = "0.1.0"
 dependencies = [
+ "fancy-regex 0.19.0",
  "once_cell",
  "regex",
 ]
