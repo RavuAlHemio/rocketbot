@@ -143,8 +143,7 @@ pub(crate) fn or_empty<'a>(string: &'a Option<String>, _values: &dyn askama::Val
     )
 }
 
-#[askama::filter_fn]
-pub(crate) fn slugify(string: &str, _values: &dyn askama::Values) -> askama::Result<String> {
+pub(crate) fn slugify_fn(string: &str) -> askama::Result<String> {
     let mut ret = String::new();
     for c in string.chars() {
         if c.is_alphanumeric() {
@@ -158,6 +157,11 @@ pub(crate) fn slugify(string: &str, _values: &dyn askama::Values) -> askama::Res
         }
     }
     Ok(ret)
+}
+
+#[askama::filter_fn]
+pub(crate) fn slugify(string: &str, _values: &dyn askama::Values) -> askama::Result<String> {
+    slugify_fn(string)
 }
 
 pub(crate) fn encode_query_parameter_fn(string: &str) -> askama::Result<String> {
@@ -316,7 +320,7 @@ mod tests {
     use super::*;
 
     fn ts(input: &str, slug: &str) {
-        let slugified = slugify(input, askama::NO_VALUES).unwrap();
+        let slugified = slugify_fn(input).unwrap();
         assert_eq!(&slugified, slug);
     }
 
