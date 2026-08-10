@@ -7,7 +7,7 @@ use std::ops::DerefMut;
 use std::sync::{Arc, Weak};
 
 use async_trait::async_trait;
-use rand::{RngCore, Rng, SeedableRng};
+use rand::{Rng, RngExt};
 use rand::rngs::StdRng;
 use rocketbot_interface::{ResultExtensions, send_channel_message};
 use rocketbot_interface::commands::{CommandDefinitionBuilder, CommandInstance};
@@ -33,7 +33,7 @@ pub struct TransliteratePlugin {
     rng: Mutex<StdRng>,
 }
 impl TransliteratePlugin {
-    fn transliterate<R: RngCore>(
+    fn transliterate<R: Rng>(
         rng: &mut R,
         transformations: &[Transformation],
         base_string: &str,
@@ -64,7 +64,7 @@ impl TransliteratePlugin {
                 let total_weight = xform.replacements.iter()
                     .map(|r| r.weight)
                     .sum();
-                let mut my_weight = rng.gen_range(0..total_weight);
+                let mut my_weight = rng.random_range(0..total_weight);
                 for replacement in &xform.replacements {
                     if my_weight >= replacement.weight {
                         my_weight -= replacement.weight;
@@ -364,7 +364,7 @@ impl RocketBotPlugin for TransliteratePlugin {
 
         let rng = Mutex::new(
             "TransliteratePlugin::rng",
-            StdRng::from_entropy(),
+            rand::make_rng(),
         );
 
         Self {

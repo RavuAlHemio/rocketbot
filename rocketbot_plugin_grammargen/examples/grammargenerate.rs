@@ -4,7 +4,7 @@ use std::io::Read;
 use std::path::PathBuf;
 
 use clap::Parser;
-use rand::{Rng, SeedableRng};
+use rand::{RngExt, SeedableRng};
 use rand::rngs::StdRng;
 use rocketbot_plugin_grammargen::grammar::{GeneratorState, Metacommand};
 use rocketbot_plugin_grammargen::parsing::parse_grammar;
@@ -72,7 +72,7 @@ fn main() {
     let mut rng = if let Some(seed) = opts.seed {
         StdRng::seed_from_u64(seed)
     } else {
-        StdRng::from_entropy()
+        rand::make_rng()
     };
     let mut conditions = HashSet::new();
 
@@ -80,7 +80,7 @@ fn main() {
     for mcmd in &rulebook.metacommands {
         match mcmd {
             Metacommand::RandomizeCondition(flag) => {
-                let activate_flag: bool = rng.gen();
+                let activate_flag: bool = rng.random();
                 if activate_flag {
                     conditions.insert(flag.clone());
                 }

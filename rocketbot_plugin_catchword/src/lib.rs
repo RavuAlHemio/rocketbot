@@ -3,7 +3,7 @@ use std::sync::Weak;
 
 use async_trait::async_trait;
 use fancy_regex::{Match, Regex};
-use rand::{Rng, SeedableRng};
+use rand::RngExt;
 use rand::rngs::StdRng;
 use rocketbot_interface::{JsonValueExtensions, ResultExtensions, send_channel_message};
 use rocketbot_interface::commands::{CommandDefinitionBuilder, CommandInstance};
@@ -119,7 +119,7 @@ impl RocketBotPlugin for CatchwordPlugin {
 
         let rng = Mutex::new(
             "CatchwordPlugin::rng",
-            StdRng::from_entropy(),
+            rand::make_rng(),
         );
 
         CatchwordPlugin {
@@ -164,7 +164,7 @@ impl RocketBotPlugin for CatchwordPlugin {
                 // RNG skippage
                 if repl.skip_chance_percent > 0 {
                     let mut rng_guard = self.rng.lock().await;
-                    let skip_value = rng_guard.gen_range(0..100u8);
+                    let skip_value = rng_guard.random_range(0..100u8);
                     if skip_value < repl.skip_chance_percent {
                         continue;
                     }

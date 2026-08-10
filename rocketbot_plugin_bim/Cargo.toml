@@ -9,8 +9,8 @@ bigdecimal = { version = "0.4" }
 chrono = { version = "0.4", features = ["serde"] }
 ciborium = { version = "0.2" }
 once_cell = { version = "1.21" }
-png = { version = "0.17" }
-rand = { version = "0.8" }
+png = { version = "0.18" }
+rand = { version = "0.10" }
 regex = { version = "1.11" }
 rocketbot_bim_common = { path = "../rocketbot_bim_common" }
 rocketbot_interface = { path = "../rocketbot_interface" }
@@ -27,16 +27,16 @@ tracing = { version = "0.1" }
 boa_engine = { version = "0.21" }
 clap = { version = "4.5", features = ["derive"] }
 csv = { version = "1.2" }
-ego-tree = { version = "0.10" }
+ego-tree = { version = "0.11" }
 form_urlencoded = { version = "1.2" }
 futures-util = { version = "0.3" }
 indexmap = { version = "2.10", features = ["serde"] }
-reqwest = { version = "0.12", features = ["rustls-tls"] }
+reqwest = { version = "0.13", features = ["rustls"] }
 rhai = { version = "1.22", features = ["serde"] }
 rocketbot_mediawiki_parsing = { path = "../rocketbot_mediawiki_parsing" }
-scraper = { version = "0.23" }
+scraper = { version = "0.27" }
 sxd-document = { version = "0.3" }
 sxd-xpath = { version = "0.4" }
 tokio = { version = "1.47", features = ["macros", "rt-multi-thread"] }
 url = { version = "2.5" }
-zip = { version = "4.3" }
+zip = { version = "8.6" }

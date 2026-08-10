@@ -8,9 +8,9 @@ async-trait = { version = "0.1" }
 bytes = { version = "1.10" }
 chrono = { version = "0.4" }
 once_cell = { version = "1.21" }
-rand = { version = "0.8" }
+rand = { version = "0.10" }
 regex = { version = "1.11" }
-reqwest = { version = "0.12", features = ["rustls-tls"] }
+reqwest = { version = "0.13", features = ["rustls"] }
 rocketbot_geocoding = { path = "../rocketbot_geocoding" }
 rocketbot_interface = { path = "../rocketbot_interface" }
 serde = { version = "1.0" }

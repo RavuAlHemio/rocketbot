@@ -3,9 +3,9 @@ use std::sync::{Arc, Weak};
 
 use async_trait::async_trait;
 use chrono::Local;
-use rand::{Rng, RngCore, SeedableRng};
+use rand::{Rng, RngExt};
 use rand::rngs::StdRng;
-use rand::seq::SliceRandom;
+use rand::seq::IndexedRandom;
 use rocketbot_interface::interfaces::{RocketBotInterface, RocketBotPlugin};
 use rocketbot_interface::model::ChannelMessage;
 use rocketbot_interface::sync::{Mutex, RwLock};
@@ -21,7 +21,7 @@ struct Config {
 
 pub struct RandReactPlugin {
     interface: Weak<dyn RocketBotInterface>,
-    rng: Arc<Mutex<Box<dyn RngCore + Send>>>,
+    rng: Arc<Mutex<Box<dyn Rng + Send>>>,
     config: RwLock<Config>,
 }
 impl RandReactPlugin {
@@ -52,7 +52,8 @@ impl RocketBotPlugin for RandReactPlugin {
             config_object,
         );
 
-        let rng_box: Box<dyn RngCore + Send> = Box::new(StdRng::from_entropy());
+        let inner_rng: StdRng = rand::make_rng();
+        let rng_box: Box<dyn Rng + Send> = Box::new(inner_rng);
         let rng = Arc::new(Mutex::new(
             "RandReactPlugin::rng",
             rng_box,
@@ -89,7 +90,7 @@ impl RocketBotPlugin for RandReactPlugin {
             let mut rng_guard = self.rng.lock().await;
 
             // become active?
-            let f: f64 = rng_guard.gen();
+            let f: f64 = rng_guard.random();
             if f >= config_guard.probability {
                 return;
             }

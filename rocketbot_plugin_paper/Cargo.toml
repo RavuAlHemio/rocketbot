@@ -6,7 +6,7 @@ edition = "2021"
 [dependencies]
 async-trait = { version = "0.1" }
 bigdecimal = { version = "0.4" }
-num-bigint = { version = "0.4" }
+num-bigint = { version = "0.5" }
 num-traits = { version = "0.2" }
 once_cell = { version = "1.21" }
 regex = { version = "1.11" }

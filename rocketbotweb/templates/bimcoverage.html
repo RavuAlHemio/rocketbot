@@ -68,7 +68,7 @@
 {% endif %}
 
 {% for vehicle in vehicles -%}
-  {% call output_vehicle(company_name, vehicle) %}
+  {% call output_vehicle(company_name, vehicle) %}{% endcall %}
 {%- endfor %}
 
 </div>
@@ -89,7 +89,7 @@
 
 <div class="coupled-sequence">
   {% for vehicle in coupled_sequence -%}
-    {% call output_vehicle(company_name, vehicle) %}
+    {% call output_vehicle(company_name, vehicle) %}{% endcall %}
   {%- endfor %}{# vehicle #}
 </div>
 

@@ -16,4 +16,4 @@ tracing = { version = "0.1" }
 [dev-dependencies]
 bzip2-rs = { version = "0.1" }
 tokio = { version = "1.47", features = ["macros", "rt", "rt-multi-thread"] }
-toml = { version = "0.9" }
+toml = { version = "1.1" }

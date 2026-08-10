@@ -22,7 +22,8 @@ use chrono::{
     Datelike, DateTime, Duration, Local, LocalResult, NaiveDate, NaiveDateTime, Timelike, TimeZone,
 };
 use once_cell::sync::{Lazy, OnceCell};
-use rand::{Rng, thread_rng};
+use rand::RngExt;
+use rand::rngs::ThreadRng;
 use regex::{Captures, Regex};
 use rocketbot_bim_common::{
     CouplingMode, EMOJI_AIR_CONDITIONED, EMOJI_NOT_AIR_CONDITIONED, LastRider, LineOperatorRegion,
@@ -1417,13 +1418,13 @@ impl BimPlugin {
                 fav_vehicles.retain(|(_comp, _veh_no, rc)| *rc == max_ride_count);
             }
 
-            let mut rng = thread_rng();
+            let mut rng: ThreadRng = rand::rng();
             for (rider, fav_vehicles) in rider_to_fav_vehicles.iter() {
                 let fav_vehicles_count = fav_vehicles.len();
                 if fav_vehicles_count == 0 {
                     continue;
                 }
-                let index = rng.gen_range(0..fav_vehicles_count);
+                let index = rng.random_range(0..fav_vehicles_count);
                 let (fav_comp, fav_vehicle, ride_count) = fav_vehicles.iter().nth(index).unwrap();
                 fav_vehicle_strings.push(format!(
                     "{}: {} ({} {})",

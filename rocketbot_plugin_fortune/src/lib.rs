@@ -5,7 +5,7 @@ use std::path::Path;
 use std::sync::Weak;
 
 use async_trait::async_trait;
-use rand::{Rng, SeedableRng};
+use rand::RngExt;
 use rand::rngs::StdRng;
 use rocketbot_interface::{JsonValueExtensions, ResultExtensions, send_channel_message};
 use rocketbot_interface::commands::{CommandDefinitionBuilder, CommandInstance};
@@ -87,7 +87,7 @@ impl RocketBotPlugin for FortunePlugin {
 
         let rng = Mutex::new(
             "FortunePlugin::rng",
-            StdRng::from_entropy(),
+            rand::make_rng(),
         );
 
         FortunePlugin {
@@ -143,7 +143,7 @@ impl RocketBotPlugin for FortunePlugin {
                     if fortunes.len() > 0 {
                         let mut rng_guard = self.rng
                             .lock().await;
-                        let index = rng_guard.gen_range(0..fortunes.len());
+                        let index = rng_guard.random_range(0..fortunes.len());
                         let fortune = &fortunes[index];
                         let fortune_as_quote = format!(">{}", fortune.replace("\n", "\n>"));
                         send_channel_message!(
@@ -162,7 +162,7 @@ impl RocketBotPlugin for FortunePlugin {
             if total_count > 0 {
                 let mut rng_guard = self.rng
                     .lock().await;
-                let mut index = rng_guard.gen_range(0..total_count);
+                let mut index = rng_guard.random_range(0..total_count);
                 for fortunes in config_guard.name_to_fortunes.values() {
                     if index >= fortunes.len() {
                         index -= fortunes.len();

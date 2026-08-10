@@ -1,4 +1,4 @@
-use rand::{Rng, RngCore, SeedableRng};
+use rand::{Rng, RngExt};
 use rand::rngs::StdRng;
 use regex::Regex;
 use rocketbot_interface::ResultExtensions;
@@ -67,7 +67,7 @@ impl Confuser {
         })
     }
 
-    pub(crate) fn confuse_with_rng<R: RngCore>(&self, place: &str, mut rng: R) -> String {
+    pub(crate) fn confuse_with_rng<R: Rng>(&self, place: &str, mut rng: R) -> String {
         let stripped_place: String = place.nfd()
             .filter(|c| !is_combining_mark(*c))
             .collect();
@@ -81,7 +81,7 @@ impl Confuser {
 
             if confusion.detect_regex.is_match(my_place) {
                 // perform replacement?
-                let replace_value: f64 = rng.gen();
+                let replace_value: f64 = rng.random();
                 if replace_value >= confusion.probability {
                     // no
                     continue;
@@ -97,7 +97,7 @@ impl Confuser {
     }
 
     pub(crate) fn confuse(&self, place: &str) -> String {
-        let rng = StdRng::from_entropy();
+        let rng: StdRng = rand::make_rng();
         self.confuse_with_rng(place, rng)
     }
 }

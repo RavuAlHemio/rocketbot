@@ -14,7 +14,7 @@ hyper = { version = "1.6", features = ["client", "http1", "http2"] }
 hyper-rustls = { version = "0.27", features = ["http2"] }
 hyper-util = { version = "0.1", features = ["client", "http1", "http2"] }
 once_cell = { version = "1.21" }
-rand = { version = "0.8" }
+rand = { version = "0.10" }
 regex = { version = "1.11" }
 rocketbot_interface = { path = "../rocketbot_interface" }
 rocketbot_plugin_allograph = { path = "../rocketbot_plugin_allograph" }
@@ -76,9 +76,9 @@ rocketbot_string = { path = "../rocketbot_string", features = ["regex"] }
 rustls = { version = "0.23" }
 serde = { version = "1.0", features = ["derive"] }
 serde_json = { version = "1.0" }
-sha2 = { version = "0.10" }
+sha2 = { version = "0.11" }
 tokio = { version = "1.47", features = ["macros", "net", "rt-multi-thread", "sync", "time"] }
-tokio-tungstenite = { version = "0.27", features = ["rustls-tls-native-roots"] }
+tokio-tungstenite = { version = "0.30", features = ["rustls-tls-native-roots"] }
 tracing = { version = "0.1" }
 tracing-appender = { version = "0.2" }
 tracing-subscriber = { version = "0.3", features = ["env-filter"] }

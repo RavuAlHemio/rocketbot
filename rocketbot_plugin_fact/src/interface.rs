@@ -2,7 +2,7 @@ use std::fmt;
 use std::sync::Arc;
 
 use async_trait::async_trait;
-use rand::RngCore;
+use rand::Rng;
 use rocketbot_interface::sync::Mutex;
 use serde_json;
 
@@ -32,5 +32,5 @@ impl std::error::Error for FactError {
 #[async_trait]
 pub trait FactProvider : Send + Sync {
     async fn new(config: serde_json::Value) -> Self where Self: Sized;
-    async fn get_random_fact(&self, rng: Arc<Mutex<Box<dyn RngCore + Send>>>) -> Result<String, FactError>;
+    async fn get_random_fact(&self, rng: Arc<Mutex<Box<dyn Rng + Send>>>) -> Result<String, FactError>;
 }

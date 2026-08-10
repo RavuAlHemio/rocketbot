@@ -2,7 +2,8 @@ use std::fmt::Write;
 
 use async_trait::async_trait;
 use chrono::{Datelike, Local, Weekday};
-use rand::{Rng, thread_rng};
+use rand::RngExt;
+use rand::rngs::ThreadRng;
 
 use crate::interface::WeatherProvider;
 
@@ -12,9 +13,9 @@ impl AlwaysSnowingProvider {
     fn generate_believable_temperature_value() -> (i8, u8) {
         // before decimal point: -10..4 (0..14 - 10)
         // after decimal point: 0..10
-        let mut rng = thread_rng();
-        let before_decimal = rng.gen_range(0..14) - 10;
-        let after_decimal = rng.gen_range(0..10);
+        let mut rng: ThreadRng = rand::rng();
+        let before_decimal = rng.random_range(0..14) - 10;
+        let after_decimal = rng.random_range(0..10);
         (before_decimal, after_decimal)
     }
 
@@ -25,8 +26,8 @@ impl AlwaysSnowingProvider {
 
     fn generate_believable_humidity() -> String {
         // 76..96
-        let mut rng = thread_rng();
-        let percent = rng.gen_range(76..96);
+        let mut rng: ThreadRng = rand::rng();
+        let percent = rng.random_range(76..96);
         format!("{}", percent)
     }
 

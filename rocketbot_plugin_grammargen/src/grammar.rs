@@ -3,9 +3,9 @@ use std::collections::hash_map::Entry as HashMapEntry;
 use std::fmt::{self, Debug};
 use std::io::BufRead;
 
-use num_bigint::{BigUint, RandBigInt};
+use num_bigint::{BigRng010, BigUint};
 use once_cell::sync::Lazy;
-use rand::Rng;
+use rand::RngExt;
 use rand::rngs::StdRng;
 use regex::{Captures, Regex};
 
@@ -483,7 +483,7 @@ fn generate_one_prod(state: &mut GeneratorState, mut state_entry: StateStackEntr
                 let total_weight: BigUint = my_alternatives.iter()
                     .map(|(_i, alt)| &alt.weight)
                     .sum();
-                let mut random_weight = state.rng.gen_biguint_below(&total_weight);
+                let mut random_weight = state.rng.random_biguint_below(&total_weight);
                 for (i, alt) in my_alternatives {
                     if random_weight >= alt.weight {
                         random_weight -= &alt.weight;
@@ -507,7 +507,7 @@ fn generate_one_prod(state: &mut GeneratorState, mut state_entry: StateStackEntr
         },
         ProductionKind::Optional { weight, inner } => {
             let hundred = BigUint::from(100u8);
-            let rand_val = state.rng.gen_biguint_below(&hundred);
+            let rand_val = state.rng.random_biguint_below(&hundred);
             if &rand_val < weight {
                 // this is a self-replacing call; clear the return value
                 state.return_value = None;
@@ -532,7 +532,7 @@ fn generate_one_prod(state: &mut GeneratorState, mut state_entry: StateStackEntr
             let generate = if *at_least_one && state_entry.args.len() == 0 {
                 true
             } else {
-                state.rng.gen()
+                state.rng.random()
             };
 
             if generate {

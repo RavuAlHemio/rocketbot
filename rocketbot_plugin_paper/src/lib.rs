@@ -523,7 +523,7 @@ mod tests {
     #[test]
     fn test_to_decimal_string() {
         fn ttds(digits: i64, scale: i64, expected: &str) {
-            let decimal = BigDecimal::new(BigInt::from(digits), scale);
+            let decimal = BigDecimal::new(bigdecimal::num_bigint::BigInt::from(digits), scale);
             let string = to_decimal_string(&decimal);
             assert_eq!(&string, expected);
         }

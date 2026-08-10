@@ -82,7 +82,7 @@ impl Transformer for SubstituteCommand {
         };
 
         let mut match_index: isize = -1;
-        let replaced = self.pattern.replace_all(text, |caps: &Captures| {
+        let replaced = self.pattern.replace_all(text, |caps: &Captures<str>| {
             match_index += 1;
 
             if match_index < first_match {

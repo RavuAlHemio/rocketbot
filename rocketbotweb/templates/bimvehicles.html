@@ -61,8 +61,8 @@
             <td class="rider ride-count" data-rider-name="{{ rider|escape }}">{{ profile.ride_count_text_for_rider(rider) }}</td>
           {% endfor %}
         {% else %}
-          {% call output_ride(company, profile.first_ride, "first") %}
-          {% call output_ride(company, profile.latest_ride, "last") %}
+          {% call output_ride(company, profile.first_ride, "first") %}{% endcall %}
+          {% call output_ride(company, profile.latest_ride, "last") %}{% endcall %}
         {% endif %}
       </tr>
     {% endfor %}

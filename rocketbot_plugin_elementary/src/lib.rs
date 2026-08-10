@@ -4,7 +4,7 @@ use std::sync::Weak;
 use async_trait::async_trait;
 use chrono::Local;
 use once_cell::sync::Lazy;
-use rand::{Rng, SeedableRng};
+use rand::RngExt;
 use rand::rngs::StdRng;
 use regex::Regex;
 use rocketbot_interface::send_channel_message;
@@ -229,7 +229,7 @@ impl RocketBotPlugin for ElementaryPlugin {
                 .expect("failed to parse element data")
         };
 
-        let std_rng = StdRng::from_entropy();
+        let std_rng: StdRng = rand::make_rng();
         let rng = Mutex::new(
             "ElementaryPlugin::rng",
             std_rng,
@@ -363,7 +363,7 @@ impl RocketBotPlugin for ElementaryPlugin {
 
                 let random_value: f64 = {
                     let mut rng_lock = self.rng.lock().await;
-                    rng_lock.gen() // 0.0 <= x < 1.0
+                    rng_lock.random() // 0.0 <= x < 1.0
                 };
 
                 random_value < cutoff

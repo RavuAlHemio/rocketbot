@@ -9,7 +9,7 @@ use std::path::PathBuf;
 use std::sync::Weak;
 
 use async_trait::async_trait;
-use rand::{Rng, SeedableRng};
+use rand::RngExt;
 use rand::rngs::StdRng;
 use rocketbot_interface::{JsonValueExtensions, ResultExtensions, send_channel_message};
 use rocketbot_interface::commands::{CommandDefinitionBuilder, CommandInstance};
@@ -198,7 +198,7 @@ impl RocketBotPlugin for GrammarGenPlugin {
         let mut my_grammar = grammar.clone();
         my_grammar.add_builtins(&channel_nicks, chosen_nick_opt);
 
-        let mut rng = StdRng::from_entropy();
+        let mut rng: StdRng = rand::make_rng();
         let mut conditions = HashSet::new();
 
         // process metacommands
@@ -206,7 +206,7 @@ impl RocketBotPlugin for GrammarGenPlugin {
             for metacommand in &my_grammar.metacommands {
                 match metacommand {
                     Metacommand::RandomizeCondition(cond) => {
-                        let activate_condition: bool = rng.gen();
+                        let activate_condition: bool = rng.random();
                         if activate_condition {
                             conditions.insert(cond.clone());
                         }

@@ -1,5 +1,5 @@
 use async_trait::async_trait;
-use rand::{Rng, SeedableRng};
+use rand::RngExt;
 use rand::rngs::StdRng;
 use rocketbot_interface::JsonValueExtensions;
 use rocketbot_interface::sync::Mutex;
@@ -102,7 +102,7 @@ impl VitalsReader for RandomReader {
 
         let rng = Mutex::new(
             "RandomReader::rng",
-            StdRng::from_entropy(),
+            rand::make_rng(),
         );
 
         Self {
@@ -123,7 +123,7 @@ impl VitalsReader for RandomReader {
                 },
                 SingleValue::Random(rv) => {
                     let span = ((rv.max_value - rv.min_value) / rv.resolution) as i64;
-                    let add = rng_guard.gen_range(0..span);
+                    let add = rng_guard.random_range(0..span);
                     final_values[i] = rv.min_value + (add as f64 * rv.resolution);
                 },
             }

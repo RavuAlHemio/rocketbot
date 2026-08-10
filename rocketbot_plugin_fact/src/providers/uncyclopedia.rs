@@ -3,7 +3,7 @@ use std::time::Duration;
 
 use async_trait::async_trait;
 use bytes::Buf;
-use rand::{RngCore, Rng};
+use rand::{Rng, RngExt};
 use regex::Regex;
 use reqwest;
 use rocketbot_interface::serde::serde_regex;
@@ -257,14 +257,14 @@ impl FactProvider for UncyclopediaProvider {
         }
     }
 
-    async fn get_random_fact(&self, rng: Arc<Mutex<Box<dyn RngCore + Send>>>) -> Result<String, FactError> {
+    async fn get_random_fact(&self, rng: Arc<Mutex<Box<dyn Rng + Send>>>) -> Result<String, FactError> {
         if self.facts.len() == 0 {
             return Err(FactError::new("no facts available".to_owned()));
         }
 
         let rand_index = {
             let mut rng_guard = rng.lock().await;
-            rng_guard.gen_range(0..self.facts.len())
+            rng_guard.random_range(0..self.facts.len())
         };
 
         Ok(self.facts[rand_index].clone())

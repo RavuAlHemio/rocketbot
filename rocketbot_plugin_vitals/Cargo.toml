@@ -8,8 +8,8 @@ async-trait = { version = "0.1" }
 bytes = { version = "1.10" }
 chrono = { version = "0.4" }
 num-rational = { version = "0.4" }
-rand = { version = "0.8" }
-reqwest = { version = "0.12", features = ["rustls-tls"] }
+rand = { version = "0.10" }
+reqwest = { version = "0.13", features = ["rustls"] }
 rocketbot_interface = { path = "../rocketbot_interface" }
 serde = { version = "1.0", features = ["derive"] }
 serde_json = { version = "1.0" }

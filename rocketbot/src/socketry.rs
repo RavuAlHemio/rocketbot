@@ -19,8 +19,8 @@ use hyper_rustls::{HttpsConnector, HttpsConnectorBuilder};
 use hyper_util::client::legacy::Client as HttpClient;
 use hyper_util::client::legacy::connect::HttpConnector;
 use hyper_util::rt::TokioExecutor;
-use rand::{Rng, SeedableRng};
-use rand::distributions::{Distribution, Uniform};
+use rand::Rng;
+use rand::distr::{Distribution, Uniform};
 use rand::rngs::StdRng;
 use regex::Regex;
 use rocketbot_interface::{JsonValueExtensions, rocketchat_timestamp_to_datetime};
@@ -1002,7 +1002,8 @@ impl RocketBotInterface for ServerConnection {
 
 async fn generate_from_alphabet<R: Rng>(rng_lock: &Mutex<R>, alphabet: &str, output_length: usize) -> String {
     let alphabet_chars: Vec<char> = alphabet.chars().collect();
-    let distribution = Uniform::new(0, alphabet_chars.len());
+    let distribution = Uniform::new(0, alphabet_chars.len())
+        .unwrap();
     let mut message_id = String::with_capacity(output_length);
 
     {
@@ -1041,7 +1042,7 @@ pub(crate) async fn connect() -> Arc<ServerConnection> {
     );
     let rng = Mutex::new(
         "SharedConnectionState::rng",
-        StdRng::from_entropy(),
+        rand::make_rng(),
     );
     let command_config = {
         let config_guard = CONFIG

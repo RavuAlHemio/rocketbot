@@ -19,12 +19,17 @@ impl<T: Copy> Copifiable<T> for &&T {
 }
 
 
+#[askama::filter_fn]
 pub(crate) fn unref<T: Copy>(value: &&T, _values: &dyn askama::Values) -> askama::Result<T> {
     Ok(**value)
 }
+
+#[askama::filter_fn]
 pub(crate) fn percentify<V: Copifiable<f64>>(value: V, _values: &dyn askama::Values) -> askama::Result<String> {
     Ok(format!("{:.2}%", value.copify() * 100.0))
 }
+
+#[askama::filter_fn]
 pub(crate) fn refify<'a, 'b, T>(value: &'a T, _values: &'b dyn askama::Values) -> askama::Result<&'a T> {
     Ok(value)
 }
@@ -95,6 +100,7 @@ fn color_to_hex_color(mut rgb: (f64, f64, f64)) -> String {
     format!("#{:02X}{:02X}{:02X}", r_byte, g_byte, b_byte)
 }
 
+#[askama::filter_fn]
 pub(crate) fn mix_color<V: Copifiable<i64>, N: Copifiable<i64>, X: Copifiable<i64>>(value_c: V, _values: &dyn askama::Values, min_value_c: N, max_value_c: X, min_color: &str, max_color: &str) -> askama::Result<String> {
     let min_color = hex_color_to_color(min_color)
         .ok_or_else(|| ColorError::InvalidMinColor)?;
@@ -127,6 +133,7 @@ pub(crate) fn mix_color<V: Copifiable<i64>, N: Copifiable<i64>, X: Copifiable<i6
     Ok(color_to_hex_color(my_color))
 }
 
+#[askama::filter_fn]
 pub(crate) fn or_empty<'a>(string: &'a Option<String>, _values: &dyn askama::Values) -> askama::Result<&'a str> {
     Ok(
         string
@@ -136,6 +143,7 @@ pub(crate) fn or_empty<'a>(string: &'a Option<String>, _values: &dyn askama::Val
     )
 }
 
+#[askama::filter_fn]
 pub(crate) fn slugify(string: &str, _values: &dyn askama::Values) -> askama::Result<String> {
     let mut ret = String::new();
     for c in string.chars() {
@@ -152,7 +160,7 @@ pub(crate) fn slugify(string: &str, _values: &dyn askama::Values) -> askama::Res
     Ok(ret)
 }
 
-pub(crate) fn encode_query_parameter(string: &str, _values: &dyn askama::Values) -> askama::Result<String> {
+pub(crate) fn encode_query_parameter_fn(string: &str) -> askama::Result<String> {
     let mut ret = String::with_capacity(string.len());
     for b in string.bytes() {
         if b == b' ' {
@@ -177,10 +185,17 @@ pub(crate) fn encode_query_parameter(string: &str, _values: &dyn askama::Values)
     Ok(ret)
 }
 
+
+#[askama::filter_fn]
+pub(crate) fn encode_query_parameter(string: &str, _values: &dyn askama::Values) -> askama::Result<String> {
+    encode_query_parameter_fn(string)
+}
+
 /// Serializes a value as JSON in a format that can be used within HTML elements without running
 /// into escaping issues.
 ///
 /// Always follow this with the `safe` built-in filter, e.g. `{{ data|html_inline_json|safe }}`.
+#[askama::filter_fn]
 pub(crate) fn html_inline_json<V: serde::Serialize>(value: &V, _values: &dyn askama::Values) -> askama::Result<String> {
     let json_value = serde_json::to_value(value).expect("failed to serialize as JSON");
     let mut ret = String::new();
@@ -273,6 +288,7 @@ pub(crate) fn html_inline_json<V: serde::Serialize>(value: &V, _values: &dyn ask
 ///
 /// This allows augmenting a selection list of countries with flags for those countries where a flag
 /// is known, while leaving simple country codes for those where it is not.
+#[askama::filter_fn]
 pub(crate) fn flagify(country_code: &str, _values: &dyn askama::Values, prefix: &str, suffix: &str) -> askama::Result<String> {
     if country_code.len() != 2 {
         return Ok(String::with_capacity(0));

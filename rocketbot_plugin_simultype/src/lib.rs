@@ -3,7 +3,7 @@ use std::sync::Weak;
 
 use async_trait::async_trait;
 use chrono::Local;
-use rand::{Rng, SeedableRng};
+use rand::RngExt;
 use rand::rngs::StdRng;
 use rocketbot_interface::interfaces::{RocketBotInterface, RocketBotPlugin};
 use rocketbot_interface::model::{Channel, PrivateConversation, User};
@@ -12,7 +12,7 @@ use serde_json;
 use tracing::error;
 
 
-#[derive(Clone, Debug, Eq, PartialEq)]
+#[derive(Debug, Eq, PartialEq)]
 struct TypingStatus {
     rng: StdRng,
     users_typing_in_channels: HashMap<String, HashSet<String>>,
@@ -22,7 +22,7 @@ struct TypingStatus {
 }
 impl TypingStatus {
     pub fn new() -> Self {
-        let rng = StdRng::from_entropy();
+        let rng = rand::make_rng();
         let users_typing_in_channels = HashMap::new();
         let users_typing_in_convos = HashMap::new();
         let my_typing_channels = HashSet::new();
@@ -120,7 +120,7 @@ impl RocketBotPlugin for SimultypePlugin {
                         }
                     }
 
-                    let random_value: f64 = status_guard.rng.gen();
+                    let random_value: f64 = status_guard.rng.random();
                     if random_value < config_guard.probability {
                         // yes
                         interface.set_channel_typing_status(&channel.name, true).await;
@@ -161,7 +161,7 @@ impl RocketBotPlugin for SimultypePlugin {
             if typing {
                 typing_in_here.insert(user.username.clone());
                 if !status_guard.my_typing_convos.contains(&conversation.id) {
-                    let random_value: f64 = status_guard.rng.gen();
+                    let random_value: f64 = status_guard.rng.random();
                     if random_value < config_guard.probability {
                         interface.set_private_conversation_typing_status(&conversation.id, true).await;
                         status_guard.my_typing_convos.insert(conversation.id.clone());

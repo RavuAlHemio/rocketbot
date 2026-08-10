@@ -15,4 +15,4 @@ tracing = { version = "0.1" }
 [dev-dependencies]
 regex = { version = "1.11" }
 tokio = { version = "1.47", features = ["macros", "rt-multi-thread"] }
-toml = { version = "0.9" }
+toml = { version = "1.1" }

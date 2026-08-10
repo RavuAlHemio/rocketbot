@@ -7,7 +7,7 @@ use std::sync::Weak;
 
 use async_trait::async_trait;
 use chrono::{Duration, NaiveDate, TimeZone, Utc};
-use rand::{Rng, SeedableRng};
+use rand::RngExt;
 use rand::rngs::StdRng;
 use rocketbot_barcode::bitmap::{BitmapRenderOptions, LinearBitmap};
 use rocketbot_barcode::datamatrix::datamatrix_string_to_bitmap;
@@ -30,12 +30,12 @@ const CERT_ID_LENGTH: usize = 26;
 
 
 fn generate_cert_id(country: &str) -> String {
-    let mut rng = StdRng::from_entropy();
+    let mut rng: StdRng = rand::make_rng();
     let alphabet: Vec<char> = CERT_ID_ALPHABET.chars().collect();
 
     let mut letters = String::with_capacity(CERT_ID_LENGTH);
     for _ in 0..CERT_ID_LENGTH {
-        let index = rng.gen_range(0..alphabet.len());
+        let index = rng.random_range(0..alphabet.len());
         letters.push(alphabet[index]);
     }
 

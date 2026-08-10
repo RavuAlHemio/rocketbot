@@ -6,7 +6,7 @@ use std::sync::Weak;
 
 use async_trait::async_trait;
 use chrono::{DateTime, Utc};
-use rand::{Rng, SeedableRng};
+use rand::RngExt;
 use rand::rngs::StdRng;
 use rand::seq::SliceRandom;
 use rocketbot_interface::{send_channel_message, send_private_message, JsonValueExtensions};
@@ -324,7 +324,7 @@ GROUP BY q.quote_id, q.timestamp, q.channel, q.author, q.message_type, q.body
         if quote_count > 0 {
             let index: usize = self.quotes_state
                 .lock().await
-                .rng.gen_range(0..quote_count);
+                .rng.random_range(0..quote_count);
             let quote_and_vote_sum = &quotes_and_vote_sums[index];
             let mut state_guard = self.quotes_state.lock().await;
             self.post_quote(
@@ -823,7 +823,7 @@ impl RocketBotPlugin for QuotesPlugin {
             QuotesState::new(
                 HashMap::new(),
                 HashMap::new(),
-                StdRng::from_entropy(),
+                rand::make_rng(),
                 None,
                 None,
                 None,

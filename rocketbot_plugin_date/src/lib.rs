@@ -7,8 +7,9 @@ use chrono::{Datelike, Local, NaiveDate, Weekday};
 use julian;
 use once_cell::sync::Lazy;
 use ordered_float::NotNan;
-use rand::Rng;
-use rand::seq::SliceRandom;
+use rand::RngExt;
+use rand::rngs::ThreadRng;
+use rand::seq::IndexedRandom;
 use regex::Regex;
 use rocketbot_interface::send_channel_message;
 use rocketbot_interface::commands::{CommandDefinitionBuilder, CommandInstance};
@@ -192,7 +193,7 @@ impl DatePlugin {
                 config_guard.mess_up_date_probability
             };
             if *probability > 0.0 {
-                let wibble: f64 = rand::thread_rng().gen();
+                let wibble: f64 = rand::rng().random();
                 if wibble < *probability {
                     // mess up the date
                     let century = u32::try_from(date.year() / 100).unwrap();
@@ -243,7 +244,8 @@ impl DatePlugin {
                         .collect();
                     if valid_permutations.len() > 0 {
                         // pick one :-)
-                        date = *valid_permutations.choose(&mut rand::thread_rng()).unwrap();
+                        let mut thread_rng: ThreadRng = rand::rng();
+                        date = *valid_permutations.choose(&mut thread_rng).unwrap();
                     }
                 }
             }

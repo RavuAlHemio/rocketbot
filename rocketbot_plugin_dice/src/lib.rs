@@ -6,10 +6,10 @@ use async_trait::async_trait;
 use chrono::{Datelike, Local};
 use num_bigint::BigInt;
 use once_cell::sync::Lazy;
-use rand::{Rng, SeedableRng};
-use rand::distributions::Bernoulli;
-use rand::seq::SliceRandom;
+use rand::RngExt;
+use rand::distr::Bernoulli;
 use rand::rngs::StdRng;
+use rand::seq::{IndexedRandom, SliceRandom};
 use regex::{Captures, Regex};
 use rocketbot_interface::{ResultExtensions, send_channel_message};
 use rocketbot_interface::commands::{CommandDefinitionBuilder, CommandInstance,CommandValueType};
@@ -280,7 +280,7 @@ impl DicePlugin {
                             .choose(&mut *rng_guard).unwrap();
                         these_rolls.push(obstinate_answer.clone());
                     } else {
-                        let mut roll = BigInt::from(rng_guard.gen_range(0..dice_group.side_count));
+                        let mut roll = BigInt::from(rng_guard.random_range(0..dice_group.side_count));
                         roll += 1; // 6-sided dice are normally numbered 1..=6, not 0..=5
                         roll *= dice_group.multiply_value;
                         roll += dice_group.add_value;
@@ -413,7 +413,7 @@ impl DicePlugin {
 
         let mut rng_guard = self.rng.lock().await;
         if config_guard.special_decision_answers.len() > 0 {
-            let percent = rng_guard.gen_range(0..100);
+            let percent = rng_guard.random_range(0..100);
             if percent < config_guard.special_decision_answer_percent {
                 // special answer instead!
                 let special_answer = config_guard.special_decision_answers.choose(&mut *rng_guard);
@@ -512,7 +512,7 @@ impl DicePlugin {
 
         let mut rng_guard = self.rng.lock().await;
         let current_year = Local::now().year();
-        let year = rng_guard.gen_range(1..=current_year);
+        let year = rng_guard.random_range(1..=current_year);
         send_channel_message!(
             interface,
             channel_name,
@@ -560,7 +560,7 @@ impl DicePlugin {
             // start with a pretty shitty first guess
             let mut current_guess = vec![WordleRating::Wrong; square_count];
             while rng_guard.sample(&half_boolean) {
-                let square_index = rng_guard.gen_range(0..square_count);
+                let square_index = rng_guard.random_range(0..square_count);
                 let make_correct = rng_guard.sample(&quarter_boolean);
                 current_guess[square_index] = if make_correct { WordleRating::Correct } else { WordleRating::Misplaced };
             }
@@ -632,8 +632,8 @@ impl DicePlugin {
 
                 // shuffle some squares around
                 while rng_guard.sample(&half_boolean) {
-                    let from_square = rng_guard.gen_range(0..current_guess.len());
-                    let to_square = rng_guard.gen_range(0..current_guess.len());
+                    let from_square = rng_guard.random_range(0..current_guess.len());
+                    let to_square = rng_guard.random_range(0..current_guess.len());
                     if from_square != to_square {
                         current_guess.swap(from_square, to_square);
                     }
@@ -731,7 +731,7 @@ impl RocketBotPlugin for DicePlugin {
 
         let rng = Mutex::new(
             "DicePlugin::rng",
-            StdRng::from_entropy(),
+            rand::make_rng(),
         );
         let channel_name_to_cooldown_state = Mutex::new(
             "DicePlugin::channel_name_to_cooldown_state",

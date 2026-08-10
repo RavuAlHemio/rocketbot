@@ -5,7 +5,8 @@ use std::collections::HashMap;
 use std::fmt;
 
 use printpdf::{
-    Cmyk, Color, Greyscale, Line, LinePoint, Mm, Op, ParsedFont, PdfDocument, PdfPage, PdfSaveOptions, Point, Pt, RawImage, Rgb, TextItem, XObjectTransform
+    Cmyk, Color, Greyscale, Line, LinePoint, Mm, Op, ParsedFont, PdfDocument, PdfFontHandle,
+    PdfPage, PdfSaveOptions, Point, Pt, RawImage, Rgb, TextItem, XObjectTransform,
 };
 use rustybuzz::{Face, UnicodeBuffer};
 
@@ -196,9 +197,9 @@ pub fn render_description(description: &PdfDescription) -> Result<Vec<u8>, PdfDe
                     page_ops.push(Op::SetTextCursor {
                         pos: Point::new(Mm(txt.x + offset_mm), Mm(txt.y)),
                     });
-                    page_ops.push(Op::SetFontSize {
+                    page_ops.push(Op::SetFont {
                         size: Pt(txt.size_pt),
-                        font: font_ref.clone(),
+                        font: PdfFontHandle::External(font_ref),
                     });
                     page_ops.push(Op::SetFillColor {
                         col: Color::Greyscale(Greyscale {
@@ -207,11 +208,10 @@ pub fn render_description(description: &PdfDescription) -> Result<Vec<u8>, PdfDe
                         }),
                     });
 
-                    page_ops.push(Op::WriteText {
+                    page_ops.push(Op::ShowText {
                         items: vec![
                             TextItem::Text(txt.text.clone()),
                         ],
-                        font: font_ref.clone(),
                     });
 
                     page_ops.push(Op::EndTextSection);

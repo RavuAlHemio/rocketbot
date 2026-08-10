@@ -5,7 +5,7 @@ use std::sync::{Arc, Weak};
 
 use async_trait::async_trait;
 use chrono::Local;
-use rand::{Rng, RngCore, SeedableRng};
+use rand::{Rng, RngExt};
 use rand::rngs::StdRng;
 use rand::seq::SliceRandom;
 use regex::Regex;
@@ -40,7 +40,7 @@ struct ShuffleState {
 
 pub struct PicRespondPlugin {
     interface: Weak<dyn RocketBotInterface>,
-    rng: Arc<Mutex<Box<dyn RngCore + Send>>>,
+    rng: Arc<Mutex<Box<dyn Rng + Send>>>,
     config: RwLock<Config>,
     shuffle_states: Mutex<Vec<ShuffleState>>,
 }
@@ -99,7 +99,8 @@ impl PicRespondPlugin {
 #[async_trait]
 impl RocketBotPlugin for PicRespondPlugin {
     async fn new(interface: Weak<dyn RocketBotInterface>, config: serde_json::Value) -> Self {
-        let mut rng_box: Box<dyn RngCore + Send> = Box::new(StdRng::from_entropy());
+        let rng: StdRng = rand::make_rng();
+        let mut rng_box: Box<dyn Rng + Send> = Box::new(rng);
 
         let config_object = Self::try_get_config(config)
             .expect("failed to load config");
@@ -164,7 +165,7 @@ impl RocketBotPlugin for PicRespondPlugin {
                 let mut rng_guard = self.rng.lock().await;
 
                 // do we want to respond at all?
-                let my_ratio: f64 = rng_guard.gen();
+                let my_ratio: f64 = rng_guard.random();
                 if my_ratio * 100.0 >= response.percentage {
                     // no
                     return;

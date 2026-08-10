@@ -4,7 +4,7 @@ use std::sync::Weak;
 use async_trait::async_trait;
 use chrono::Local;
 use fancy_regex::Regex;
-use rand::{Rng, SeedableRng};
+use rand::RngExt;
 use rand::rngs::StdRng;
 use rocketbot_interface::{
     JsonValueExtensions, ResultExtensions, send_channel_message, send_private_message,
@@ -192,7 +192,7 @@ impl RocketBotPlugin for AllographPlugin {
             "AllographPlugin::inner_state",
             InnerState::new(
                 HashMap::new(),
-                StdRng::from_entropy(),
+                rand::make_rng(),
             ),
         );
 
@@ -255,7 +255,7 @@ impl RocketBotPlugin for AllographPlugin {
                     if channel_cooldowns[i] == 0 {
                         // cold, apply it!
                         if replacement.additional_probability_percent < 100 {
-                            let add_prob = inner_state.rng.gen_range(0..100);
+                            let add_prob = inner_state.rng.random_range(0..100);
                             if add_prob < replacement.additional_probability_percent {
                                 changing_body = replaced;
                             }
@@ -277,7 +277,7 @@ impl RocketBotPlugin for AllographPlugin {
             } else {
                 // no cooldowns
                 if replacement.additional_probability_percent < 100 {
-                    let add_prob = inner_state.rng.gen_range(0..100);
+                    let add_prob = inner_state.rng.random_range(0..100);
                     if add_prob < replacement.additional_probability_percent {
                         changing_body = replaced;
                     }
@@ -301,7 +301,7 @@ impl RocketBotPlugin for AllographPlugin {
             }
         }
 
-        let main_prob = inner_state.rng.gen_range(0..100);
+        let main_prob = inner_state.rng.random_range(0..100);
         if main_prob < config_guard.probability_percent {
             debug!("{} < {}; posting {:?}", main_prob, config_guard.probability_percent, changing_body);
             send_channel_message!(

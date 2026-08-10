@@ -10,17 +10,17 @@ currency = ["minidom", "reqwest"]
 [dependencies]
 async-trait = { version = "0.1" }
 chrono = { version = "0.4" }
-minidom = { version = "0.16", optional = true }
-num-bigint = { version = "0.4", features = ["rand", "serde"] }
+minidom = { version = "0.19", optional = true }
+num-bigint = { version = "0.5", features = ["rand_0_10", "serde"] }
 num-traits = { version = "0.2" }
 once_cell = { version = "1.21" }
 pest = { version = "2.8" }
 pest_derive = { version = "2.8" }
 regex = { version = "1.11" }
-reqwest = { version = "0.12", features = ["rustls-tls"], optional = true }
+reqwest = { version = "0.13", features = ["rustls"], optional = true }
 rocketbot_interface = { path = "../rocketbot_interface" }
 serde = { version = "1.0", features = ["derive"] }
 serde_json = { version = "1.0" }
 tokio = { version = "1.47", features = ["macros"] }
-toml = { version = "0.9" }
+toml = { version = "1.1" }
 tracing = { version = "0.1" }

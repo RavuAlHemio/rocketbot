@@ -5,7 +5,7 @@ pub mod providers;
 use std::sync::{Arc, Weak};
 
 use async_trait::async_trait;
-use rand::{Rng, RngCore, SeedableRng};
+use rand::{Rng, RngExt};
 use rand::rngs::StdRng;
 use rocketbot_interface::{JsonValueExtensions, send_channel_message};
 use rocketbot_interface::commands::{CommandDefinitionBuilder, CommandInstance};
@@ -26,7 +26,7 @@ struct Config {
 pub struct FactPlugin {
     interface: Weak<dyn RocketBotInterface>,
     config: RwLock<Config>,
-    rng: Arc<Mutex<Box<dyn RngCore + Send>>>,
+    rng: Arc<Mutex<Box<dyn Rng + Send>>>,
 }
 impl FactPlugin {
     async fn handle_fact_command(&self, channel_message: &ChannelMessage, _command: &CommandInstance) {
@@ -44,7 +44,7 @@ impl FactPlugin {
         let provider_index = {
             let mut rng_guard = self.rng
                 .lock().await;
-            rng_guard.gen_range(0..config_guard.providers.len())
+            rng_guard.random_range(0..config_guard.providers.len())
         };
 
         let result = config_guard.providers[provider_index]
@@ -96,9 +96,10 @@ impl RocketBotPlugin for FactPlugin {
             config_object,
         );
 
+        let std_rng: StdRng = rand::make_rng();
         let rng = Arc::new(Mutex::new(
             "FactPlugin::rng",
-            Box::new(StdRng::from_entropy()) as Box<dyn RngCore + Send>,
+            Box::new(std_rng) as Box<dyn Rng + Send>,
         ));
 
         let fact_command = CommandDefinitionBuilder::new(

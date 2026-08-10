@@ -3,7 +3,7 @@ use std::fmt::Write;
 use std::sync::{Arc, Weak};
 
 use async_trait::async_trait;
-use rand::{Rng, SeedableRng};
+use rand::RngExt;
 use rand::rngs::StdRng;
 use rocketbot_interface::{JsonValueExtensions, send_channel_message};
 use rocketbot_interface::commands::{CommandDefinitionBuilder, CommandInstance};
@@ -172,7 +172,7 @@ impl RocketBotPlugin for TextCommandsPlugin {
 
         let rng = Mutex::new(
             "TextCommandsPlugin::rng",
-            StdRng::from_entropy(),
+            rand::make_rng(),
         );
 
         TextCommandsPlugin {
@@ -201,7 +201,7 @@ impl RocketBotPlugin for TextCommandsPlugin {
 
             let variant = {
                 let mut rng_guard = self.rng.lock().await;
-                let index = rng_guard.gen_range(0..responses.len());
+                let index = rng_guard.random_range(0..responses.len());
                 responses[index].clone()
             };
 
@@ -217,7 +217,7 @@ impl RocketBotPlugin for TextCommandsPlugin {
 
             let variant = {
                 let mut rng_guard = self.rng.lock().await;
-                let index = rng_guard.gen_range(0..nicknamable_responses.len());
+                let index = rng_guard.random_range(0..nicknamable_responses.len());
                 nicknamable_responses[index].clone()
             };
 
@@ -245,7 +245,7 @@ impl RocketBotPlugin for TextCommandsPlugin {
             } else if command.flags.contains("r") || command.flags.contains("random") {
                 // pick a user randomly
                 let mut rng_guard = self.rng.lock().await;
-                let index = rng_guard.gen_range(0..channel_members.len());
+                let index = rng_guard.random_range(0..channel_members.len());
                 channel_members.iter()
                     .nth(index).expect("user entry exists")
                     .username.clone()
@@ -271,7 +271,7 @@ impl RocketBotPlugin for TextCommandsPlugin {
 
             let mut outgoing = {
                 let mut rng_guard = self.rng.lock().await;
-                let index = rng_guard.gen_range(0..mad_libs_def.response_templates.len());
+                let index = rng_guard.random_range(0..mad_libs_def.response_templates.len());
                 mad_libs_def.response_templates[index].clone()
             };
 
