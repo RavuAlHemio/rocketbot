@@ -1,7 +1,7 @@
 //! Wiktionary `cirrussearch` export to German gender loader
 //!
-//! 1. Obtain a current `enwiktionary-...-cirrussearch-content.json.gz` from
-//! https://dumps.wikimedia.org/other/cirrussearch/ or a mirror.
+//! 1. Obtain a current set of `enwiktionary_content-yyyymmdd-nnnnn.json.bz2` from
+//! https://dumps.wikimedia.org/other/cirrus_search_index/ or a mirror.
 //!
 //! 2. Create a TOML configuration file:
 //! ```toml
