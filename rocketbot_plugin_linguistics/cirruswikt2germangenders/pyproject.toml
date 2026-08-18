@@ -1,0 +1,9 @@
+[project]
+name = "cirruswikt2germangenders"
+version = "0.1.0"
+description = "Extract German nouns from English Wiktionary Cirrus Search indexes and load them into a Postgres database."
+requires-python = ">=3.12"
+dependencies = [
+    "mwparserfromhell>=0.7.2",
+    "psycopg>=3.3.4",
+]
