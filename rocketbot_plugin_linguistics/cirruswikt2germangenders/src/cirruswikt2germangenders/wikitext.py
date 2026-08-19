@@ -1,6 +1,7 @@
 import mwparserfromhell
 
 from .common import FlagHolder, GenderFlag
+from .gender_parsing import GenderSpec, parse_complete_gender_spec
 
 
 LANGUAGE_CODES = frozenset({"de"})
@@ -34,6 +35,18 @@ OK_TO_SKIP_TEMPLATES = frozenset({
 #    "verb form of",
 })
 
+def process_gender_specs(gender_specs: list[GenderSpec], flag_holder: FlagHolder):
+    for gender_spec in gender_specs:
+        if gender_spec.gender == "m":
+            flag_holder.flag |= GenderFlag.MASCULINE
+        elif gender_spec.gender == "f":
+            flag_holder.flag |= GenderFlag.FEMININE
+        elif gender_spec.gender == "n":
+            flag_holder.flag |= GenderFlag.NEUTER
+
+        if "sg" in gender_spec.gender_attributes:
+            flag_holder.flag |= GenderFlag.SINGULARE_TANTUM
+
 
 def de_noun_genders(section: mwparserfromhell.wikicode.Wikicode, flag_holder: FlagHolder) -> None:
     dn_calls = [
@@ -50,20 +63,8 @@ def de_noun_genders(section: mwparserfromhell.wikicode.Wikicode, flag_holder: Fl
         if not param_ones:
             continue
         for param_one in param_ones:
-            if param_one in ("m", "m.weak", "m,,^e", "((<m,s,en>,<m.weak.[less common]>,<m.[rare]>))"):
-                flag_holder.flag |= GenderFlag.MASCULINE
-            elif param_one in ("f",):
-                flag_holder.flag |= GenderFlag.FEMININE
-            elif param_one in ("n", "n,(e)s,^er"):
-                flag_holder.flag |= GenderFlag.NEUTER
-            elif param_one in ("m.sg",):
-                flag_holder.flag |= GenderFlag.MASCULINE | GenderFlag.SINGULARE_TANTUM
-            elif param_one in ("f.sg",):
-                flag_holder.flag |= GenderFlag.FEMININE | GenderFlag.SINGULARE_TANTUM
-            elif param_one in ("n.sg",):
-                flag_holder.flag |= GenderFlag.NEUTER | GenderFlag.SINGULARE_TANTUM
-            else:
-                raise ValueError(f"unknown de-noun gender parameters {param_ones}")
+            gender_specs = parse_complete_gender_spec(param_one)
+            process_gender_specs(gender_specs, flag_holder)
 
 def head_genders(section: mwparserfromhell.wikicode.Wikicode, flag_holder: FlagHolder) -> None:
     head_calls = [
@@ -80,10 +81,8 @@ def head_genders(section: mwparserfromhell.wikicode.Wikicode, flag_holder: FlagH
         if not gender_params:
             continue
         for gender_param in gender_params:
-            if gender_param == "m":
-                flag_holder.flag |= GenderFlag.MASCULINE
-            else:
-                raise ValueError(f"TODO: head gender parameters {gender_params}")
+            gender_specs = parse_complete_gender_spec(gender_param)
+            process_gender_specs(gender_specs, flag_holder)
 
 def is_head_benign(section: mwparserfromhell.wikicode.Wikicode) -> bool:
     head_calls = [tc for tc in section.ifilter_templates() if tc.name == "head"]
@@ -112,10 +111,14 @@ def process_page(title: str, wikitext: str) -> None:
             continue
 
         # assemble the genders
-        print(title)
         holder = FlagHolder()
-        de_noun_genders(section, holder)
-        head_genders(section, holder)
+        try:
+            de_noun_genders(section, holder)
+            head_genders(section, holder)
+        except ValueError:
+            print(f"failed to parse genders of {title!r}")
+            raise
+
         if holder.is_empty:
             # check if we can skip this entry
             skippable = False
@@ -126,4 +129,6 @@ def process_page(title: str, wikitext: str) -> None:
 
             if not skippable:
                 print(section)
-                raise ValueError("unknown word construct")
+                raise ValueError(f"{title}: unknown word construct")
+            continue
+        print(title, repr(holder.flag))
