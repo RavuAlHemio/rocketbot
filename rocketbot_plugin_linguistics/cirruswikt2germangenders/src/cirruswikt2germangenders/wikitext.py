@@ -7,15 +7,22 @@ from .gender_parsing import GenderSpec, parse_complete_gender_spec
 LANGUAGE_CODES = frozenset({"de"})
 OK_TO_SKIP_HEAD_TYPES = frozenset({
     "adjective form",
+    "adverb",
+    "conjunction",
+    "contraction",
     "interjection",
     "noun form",
     "numeral",
     "past participle",
     "phrase",
+    "prefix",
     "present participle",
     "pronoun form",
     "proper noun",
     "proper noun form",
+    "proverb",
+    "suffix",
+    "verb",
     "verb form",
 })
 OK_TO_SKIP_TEMPLATES = frozenset({
@@ -23,26 +30,41 @@ OK_TO_SKIP_TEMPLATES = frozenset({
     "de-adv",
     "de-proper noun",
     "de-verb",
-#
+
+    "abbr of",
     "abbreviation of",
 #    "de-adj form of",
 #    "form of",
 #    "infl of",
-#    "inflection of",
+    "inflection of",
+    "initialism of",
 #    "noun form of",
 #    "past participle of",
 #    "present participle of",
 #    "verb form of",
 })
+OK_TO_SKIP_LABEL_TYPES = frozenset({
+    "idiom",
+})
+
+def process_base_gender(base_gender: str, flag_holder: FlagHolder):
+    if base_gender == "m":
+        flag_holder.flag |= GenderFlag.MASCULINE
+    elif base_gender == "f":
+        flag_holder.flag |= GenderFlag.FEMININE
+    elif base_gender == "n":
+        flag_holder.flag |= GenderFlag.NEUTER
+    elif base_gender == "p":
+        flag_holder.flag |= GenderFlag.PLURALE_TANTUM
 
 def process_gender_specs(gender_specs: list[GenderSpec], flag_holder: FlagHolder):
     for gender_spec in gender_specs:
-        if gender_spec.gender == "m":
-            flag_holder.flag |= GenderFlag.MASCULINE
-        elif gender_spec.gender == "f":
-            flag_holder.flag |= GenderFlag.FEMININE
-        elif gender_spec.gender == "n":
-            flag_holder.flag |= GenderFlag.NEUTER
+        process_base_gender(gender_spec.gender, flag_holder)
+
+        for alternative_gender in gender_spec.alternative_genders:
+            if not alternative_gender.usage_attributes:
+                # no caveats when using this alternate gender; take it into account
+                process_base_gender(alternative_gender.gender, flag_holder)
 
         if "sg" in gender_spec.gender_attributes:
             flag_holder.flag |= GenderFlag.SINGULARE_TANTUM
@@ -63,6 +85,11 @@ def de_noun_genders(section: mwparserfromhell.wikicode.Wikicode, flag_holder: Fl
         if not param_ones:
             continue
         for param_one in param_ones:
+            if param_one.startswith("[["):
+                # this is some complex construct like "[[unbemannt]]es<+> [[Fahrzeug]]<n,(e)s>";
+                # ignore it
+                flag_holder.sane = False
+                continue
             gender_specs = parse_complete_gender_spec(param_one)
             process_gender_specs(gender_specs, flag_holder)
 
@@ -98,6 +125,16 @@ def has_benign_template(section: mwparserfromhell.wikicode.Wikicode) -> bool:
     template_call_names = {str(tc.name) for tc in section.ifilter_templates()}
     return any(tcn in OK_TO_SKIP_TEMPLATES for tcn in template_call_names)
 
+def has_benign_label(section: mwparserfromhell.wikicode.Wikicode) -> bool:
+    label_calls = [tc for tc in section.ifilter_templates() if tc.name in ("lb", "lbl", "label")]
+    label_types = {
+        str(param.value)
+        for tc in label_calls
+        for param in tc.params
+        if param.name == "2"
+    }
+    return any(label_type in OK_TO_SKIP_LABEL_TYPES for label_type in label_types)
+
 def process_page(title: str, wikitext: str) -> None:
     parsed = mwparserfromhell.parse(wikitext)
     for section in parsed.get_sections():
@@ -119,12 +156,18 @@ def process_page(title: str, wikitext: str) -> None:
             print(f"failed to parse genders of {title!r}")
             raise
 
+        if not holder.sane:
+            print(title, "(not sane)")
+            continue
+
         if holder.is_empty:
             # check if we can skip this entry
             skippable = False
             if not skippable and is_head_benign(section):
                 skippable = True
             if not skippable and has_benign_template(section):
+                skippable = True
+            if not skippable and has_benign_label(section):
                 skippable = True
 
             if not skippable:

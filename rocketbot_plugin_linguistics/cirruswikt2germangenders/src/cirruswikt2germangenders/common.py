@@ -15,6 +15,7 @@ class GenderFlag(enum.IntFlag):
 class FlagHolder:
     def __init__(self) -> None:
         self.flag: GenderFlag = GenderFlag(0)
+        self.sane: bool = True
 
     @property
     def is_empty(self) -> bool:

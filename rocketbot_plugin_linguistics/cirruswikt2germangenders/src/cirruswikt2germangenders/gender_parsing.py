@@ -24,8 +24,10 @@ class GenderSpec(NamedTuple):
 def raw_gender():
     """
     Parses a raw gender, such as `m` or `f`.
+
+    May instead return "p" for a _plurale tantum_.
     """
-    gender = yield regex("[mfn]")
+    gender = yield regex("[mfnp]")
     return gender
 
 
@@ -34,7 +36,7 @@ def gender_and_plural_flag():
     """
     Parses a gender with an optional plural flag, such as `m` or `f` or `f-p`.
     """
-    gender = yield regex("[mfn]")
+    gender = yield raw_gender
     plural_flag_result = yield string("-p").optional()
     plural_flag = plural_flag_result is not None
     return (gender, plural_flag)
@@ -157,13 +159,29 @@ def multi_gender_spec():
 
 
 @generate
+def plus_gender_spec():
+    """
+    Parses the "plus" gender specification, `+`.
+    """
+    yield string("+")
+    return [GenderSpec(
+        gender="m",
+        plural_flag=False,
+        alternative_genders=[],
+        gender_attributes=[],
+        usage_attributes=[],
+        suffixes=None,
+    )]
+
+
+@generate
 def complete_gender_spec():
     """
     Parses a gender specification which is either a single or a multi-gender specification.
     """
     # always return a list
     single = single_gender_spec.map(lambda spec: [spec])
-    result = yield (single | multi_gender_spec)
+    result = yield (single | multi_gender_spec | plus_gender_spec)
     return result
 
 

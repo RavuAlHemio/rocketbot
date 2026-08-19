@@ -71,6 +71,7 @@ def test_m_comma_circum_e():
     assert not spec.alternative_genders
     assert not spec.gender_attributes
     assert not spec.usage_attributes
+    assert spec.suffixes is not None
     assert spec.suffixes.genitive == "^e"
     assert spec.suffixes.plural is None
 
@@ -84,6 +85,7 @@ def test_m_dblcomma_circum_e():
     assert not spec.alternative_genders
     assert not spec.gender_attributes
     assert not spec.usage_attributes
+    assert spec.suffixes is not None
     assert spec.suffixes.genitive is None
     assert spec.suffixes.plural == "^e"
 
@@ -97,6 +99,7 @@ def test_multispec_goldbugpapagei():
     assert not specs[0].alternative_genders
     assert not specs[0].gender_attributes
     assert not specs[0].usage_attributes
+    assert specs[0].suffixes is not None
     assert specs[0].suffixes.genitive == "s"
     assert specs[0].suffixes.plural == "en"
 
@@ -127,6 +130,7 @@ def test_m_n_rare():
     assert spec.alternative_genders[0].usage_attributes == ["rare"]
     assert not spec.gender_attributes
     assert not spec.usage_attributes
+    assert spec.suffixes is not None
     assert spec.suffixes.genitive == "s:es"
     assert spec.suffixes.plural == "e"
 
