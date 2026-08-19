@@ -1,3 +1,5 @@
+import re
+
 import mwparserfromhell
 
 from .common import FlagHolder, GenderFlag
@@ -6,6 +8,7 @@ from .gender_parsing import GenderSpec, parse_complete_gender_spec
 
 LANGUAGE_CODES = frozenset({"de"})
 OK_TO_SKIP_HEAD_TYPES = frozenset({
+    "adjective",
     "adjective form",
     "adverb",
     "conjunction",
@@ -16,7 +19,9 @@ OK_TO_SKIP_HEAD_TYPES = frozenset({
     "past participle",
     "phrase",
     "prefix",
+    "prepositional phrase",
     "present participle",
+    "pronoun",
     "pronoun form",
     "proper noun",
     "proper noun form",
@@ -29,10 +34,12 @@ OK_TO_SKIP_TEMPLATES = frozenset({
     "de-adj",
     "de-adv",
     "de-proper noun",
+    "de-superseded spelling of",
     "de-verb",
 
     "abbr of",
     "abbreviation of",
+    "alternative form of",
 #    "de-adj form of",
 #    "form of",
 #    "infl of",
@@ -46,6 +53,8 @@ OK_TO_SKIP_TEMPLATES = frozenset({
 OK_TO_SKIP_LABEL_TYPES = frozenset({
     "idiom",
 })
+
+MULTIPART_GENDER_RE = re.compile("(?:[A-Za-zÄÖÜäöüß]+|\\]\\])<")
 
 def process_base_gender(base_gender: str, flag_holder: FlagHolder):
     if base_gender == "m":
@@ -85,7 +94,7 @@ def de_noun_genders(section: mwparserfromhell.wikicode.Wikicode, flag_holder: Fl
         if not param_ones:
             continue
         for param_one in param_ones:
-            if param_one.startswith("[["):
+            if MULTIPART_GENDER_RE.search(param_one) is not None:
                 # this is some complex construct like "[[unbemannt]]es<+> [[Fahrzeug]]<n,(e)s>";
                 # ignore it
                 flag_holder.sane = False
@@ -135,8 +144,9 @@ def has_benign_label(section: mwparserfromhell.wikicode.Wikicode) -> bool:
     }
     return any(label_type in OK_TO_SKIP_LABEL_TYPES for label_type in label_types)
 
-def process_page(title: str, wikitext: str) -> None:
+def get_genders_from_page(title: str, wikitext: str) -> GenderFlag:
     parsed = mwparserfromhell.parse(wikitext)
+    holder = FlagHolder()
     for section in parsed.get_sections():
         if not section.nodes:
             continue
@@ -148,7 +158,7 @@ def process_page(title: str, wikitext: str) -> None:
             continue
 
         # assemble the genders
-        holder = FlagHolder()
+        holder.sane = True
         try:
             de_noun_genders(section, holder)
             head_genders(section, holder)
@@ -157,7 +167,6 @@ def process_page(title: str, wikitext: str) -> None:
             raise
 
         if not holder.sane:
-            print(title, "(not sane)")
             continue
 
         if holder.is_empty:
@@ -174,4 +183,4 @@ def process_page(title: str, wikitext: str) -> None:
                 print(section)
                 raise ValueError(f"{title}: unknown word construct")
             continue
-        print(title, repr(holder.flag))
+    return holder.flag

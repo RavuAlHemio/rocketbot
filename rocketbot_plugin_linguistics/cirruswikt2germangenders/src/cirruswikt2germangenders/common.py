@@ -1,4 +1,5 @@
 import enum
+from typing import Any, Iterable, Mapping
 
 
 class GenderFlag(enum.IntFlag):
@@ -20,3 +21,27 @@ class FlagHolder:
     @property
     def is_empty(self) -> bool:
         return self.flag == GenderFlag(0)
+
+
+def handle_override_value(
+    override_dict: Mapping[str, Iterable[str]],
+    title: str,
+) -> GenderFlag|None:
+    override_value = override_dict.get(title, None)
+    if override_value is None:
+        return None
+    gender = GenderFlag(0)
+    for flag_str in override_value:
+        flag_value = getattr(GenderFlag, flag_str)
+        gender |= flag_value
+    return gender
+
+
+def get_override_dict(
+    config: Mapping[str, Any],
+) -> dict[str, list[str]]:
+    return {
+        override_obj["key"]: override_obj["gender_flags"]
+        for override_obj
+        in config.get("overrides", [])
+    }

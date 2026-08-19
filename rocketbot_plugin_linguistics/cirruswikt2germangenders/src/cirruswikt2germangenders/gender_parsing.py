@@ -34,10 +34,10 @@ def raw_gender():
 @generate
 def gender_and_plural_flag():
     """
-    Parses a gender with an optional plural flag, such as `m` or `f` or `f-p`.
+    Parses a gender with an optional plural flag, such as `m` or `f` or `fp` or `f-p`.
     """
     gender = yield raw_gender
-    plural_flag_result = yield string("-p").optional()
+    plural_flag_result = yield regex("-?p").optional()
     plural_flag = plural_flag_result is not None
     return (gender, plural_flag)
 
@@ -168,7 +168,23 @@ def plus_gender_spec():
         gender="m",
         plural_flag=False,
         alternative_genders=[],
-        gender_attributes=[],
+        gender_attributes=["plus"],
+        usage_attributes=[],
+        suffixes=None,
+    )]
+
+
+@generate
+def toponym_gender_spec():
+    """
+    Parses the `toponym` gender specification.
+    """
+    yield string("toponym")
+    return [GenderSpec(
+        gender="n",
+        plural_flag=False,
+        alternative_genders=[],
+        gender_attributes=["sg", "toponym"],
         usage_attributes=[],
         suffixes=None,
     )]
@@ -181,7 +197,12 @@ def complete_gender_spec():
     """
     # always return a list
     single = single_gender_spec.map(lambda spec: [spec])
-    result = yield (single | multi_gender_spec | plus_gender_spec)
+    result = yield (
+        single
+        | multi_gender_spec
+        | plus_gender_spec
+        | toponym_gender_spec
+    )
     return result
 
 

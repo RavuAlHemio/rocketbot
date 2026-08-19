@@ -20,7 +20,8 @@ class ByteIoProgressWrapper(BinaryIO):
         self._pos += advance
         if self._pos - self._last_pos > 1024*1024:
             if self._size is not None:
-                print(f"{self._pos:,} B / {self._size:,} B", file=sys.stderr)
+                percentage = self._pos * 100 / self._size
+                print(f"{self._pos:,} B / {self._size:,} B ({percentage:.02}%)", file=sys.stderr)
             else:
                 print(f"{self._pos:,} B", file=sys.stderr)
             self._last_pos = self._pos
