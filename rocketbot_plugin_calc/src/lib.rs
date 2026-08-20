@@ -10,6 +10,7 @@ mod units;
 
 
 use std::collections::BTreeSet;
+use std::fmt::Write;
 use std::sync::{Arc, Weak};
 use std::time::{Duration, Instant};
 
@@ -344,32 +345,83 @@ impl CalcPlugin {
         }
     }
 
-    async fn handle_calcunit(&self, channel_message: &ChannelMessage, _command: &CommandInstance) {
+    fn format_unit<N: AsRef<str>, D: AsRef<str>>(letters: &str, name_opt: Option<N>, description_opt: Option<D>) -> String {
+        match (name_opt, description_opt) {
+            (Some(name), Some(description)) => format!(
+                "`{}` ({}): {}", letters, name.as_ref(), description.as_ref(),
+            ),
+            (Some(name), None) => format!(
+                "`{}` ({}) has no description.", letters, name.as_ref(),
+            ),
+            (None, Some(description)) => format!(
+                "`{}`: {}", letters, description.as_ref(),
+            ),
+            (None, None) => format!(
+                "`{}` has neither name nor description. \u{1F61E}", letters,
+            ),
+        }
+    }
+
+    async fn handle_calcunit(&self, channel_message: &ChannelMessage, command: &CommandInstance) {
         let interface = match self.interface.upgrade() {
             None => return,
             Some(i) => i,
         };
 
-        let all_unit_names = {
-            let config = self.config.read().await;
-            let mut all_unit_names: BTreeSet<String> = BTreeSet::new();
-            for unit in config.unit_database.get_base_unit_names() {
-                all_unit_names.insert(unit);
-            }
-            for unit in config.unit_database.get_derived_unit_names() {
-                all_unit_names.insert(unit);
-            }
-            all_unit_names
-        };
-        let unit_names: Vec<String> = all_unit_names.into_iter()
-            .map(|un| format!("`{}`", un))
-            .collect();
-        let units_str = unit_names.join(", ");
-        send_channel_message!(
-            interface,
-            &channel_message.channel.name,
-            &format!("The following units are known: {}", units_str),
-        ).await;
+        let unit_letters = command.rest.as_str().trim();
+        if unit_letters.len() > 0 {
+            let unit_info = {
+                let config = self.config.read().await;
+                if let Some(base_unit) = config.unit_database.get_base_unit(unit_letters) {
+                    let mut unit_info = Self::format_unit(
+                        unit_letters,
+                        base_unit.name.as_ref(),
+                        base_unit.description.as_ref(),
+                    );
+                    write!(unit_info, "\nbase unit").unwrap();
+                    unit_info
+                } else if let Some(derived_unit) = config.unit_database.get_derived_unit(unit_letters) {
+                    let mut unit_info = Self::format_unit(
+                        unit_letters,
+                        derived_unit.name.as_ref(),
+                        derived_unit.description.as_ref(),
+                    );
+                    write!(unit_info, "\nderived unit equal to {}", derived_unit.factor_of_parents).unwrap();
+                    for (parent_letter, exponent) in &derived_unit.parents {
+                        write!(unit_info, "#{}{}", parent_letter, exponent).unwrap();
+                    }
+                    unit_info
+                } else {
+                    "Unknown unit.".to_owned()
+                }
+            };
+            send_channel_message!(
+                interface,
+                &channel_message.channel.name,
+                &unit_info,
+            ).await;
+        } else {
+            let all_unit_names = {
+                let config = self.config.read().await;
+                let mut all_unit_names: BTreeSet<String> = BTreeSet::new();
+                for unit in config.unit_database.get_base_unit_names() {
+                    all_unit_names.insert(unit);
+                }
+                for unit in config.unit_database.get_derived_unit_names() {
+                    all_unit_names.insert(unit);
+                }
+                all_unit_names
+            };
+            let unit_names: Vec<String> = all_unit_names.into_iter()
+                .map(|un| format!("`{}`", un))
+                .collect();
+            let units_str = unit_names.join(", ");
+            send_channel_message!(
+                interface,
+                &channel_message.channel.name,
+                &format!("The following units are known: {}", units_str),
+            ).await;
+        }
     }
 
     async fn handle_factor(&self, channel_message: &ChannelMessage, command: &CommandInstance) {
