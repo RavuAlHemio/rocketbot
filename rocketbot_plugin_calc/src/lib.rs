@@ -16,7 +16,7 @@ use std::time::{Duration, Instant};
 
 use async_trait::async_trait;
 use chrono::{DateTime, TimeZone, Utc};
-use num_bigint::BigUint;
+use num_bigint::{BigInt, BigUint};
 use once_cell::sync::Lazy;
 use regex::Regex;
 use rocketbot_interface::{JsonValueExtensions, ResultExtensions, send_channel_message};
@@ -388,7 +388,10 @@ impl CalcPlugin {
                     );
                     write!(unit_info, "\nderived unit equal to {}", derived_unit.factor_of_parents).unwrap();
                     for (parent_letter, exponent) in &derived_unit.parents {
-                        write!(unit_info, "#{}{}", parent_letter, exponent).unwrap();
+                        write!(unit_info, "#{}", parent_letter).unwrap();
+                        if exponent != &BigInt::ONE {
+                            write!(unit_info, "{}", exponent).unwrap();
+                        }
                     }
                     unit_info
                 } else {
