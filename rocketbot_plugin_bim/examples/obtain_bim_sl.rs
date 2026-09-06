@@ -30,6 +30,7 @@ struct PageInfo {
     pub csv_url: String,
     pub subsets: BTreeSet<String>,
     #[serde(default)] pub pool_regexes: Option<BTreeSet<EnjoyableRegex>>,
+    #[serde(default)] pub owner_regexes: Option<BTreeSet<EnjoyableRegex>>,
     pub timeout_ms: Option<u64>,
     pub class_to_export_class: HashMap<String, ExportClass>,
     #[serde(default)] pub row_transform_script: Option<String>,
@@ -222,6 +223,17 @@ async fn main() {
                         .any(|pr| pr.is_match(pool));
                     if !pool_matches {
                         // wrong pool
+                        continue;
+                    }
+                }
+            }
+            if let Some(owner_regexes) = page.owner_regexes.as_ref() {
+                if let Some(owner) = map.get("Owner") {
+                    let owner_matches = owner_regexes
+                        .iter()
+                        .any(|pr| pr.is_match(owner));
+                    if !owner_matches {
+                        // wrong owner
                         continue;
                     }
                 }
