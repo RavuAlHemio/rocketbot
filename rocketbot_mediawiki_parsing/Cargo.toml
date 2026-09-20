@@ -4,4 +4,4 @@ version = "0.1.0"
 edition = "2021"
 
 [dependencies]
-reqwest = { version = "0.13", features = ["rustls"] }
+reqwest = { workspace = true, features = ["rustls"] }

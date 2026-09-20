@@ -4,6 +4,6 @@ version = "0.1.0"
 edition = "2021"
 
 [dependencies]
-datamatrix = { version = "0.3" }
-png = { version = "0.18" }
-qrcode = { version = "0.14", default-features = false }
+datamatrix = { workspace = true }
+png = { workspace = true }
+qrcode = { workspace = true }

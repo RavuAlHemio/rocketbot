@@ -4,39 +4,39 @@ version = "0.1.0"
 edition = "2021"
 
 [dependencies]
-async-trait = { version = "0.1" }
-bigdecimal = { version = "0.4" }
-chrono = { version = "0.4", features = ["serde"] }
-ciborium = { version = "0.2" }
-once_cell = { version = "1.21" }
-png = { version = "0.18" }
-rand = { version = "0.10" }
-regex = { version = "1.11" }
+async-trait = { workspace = true }
+bigdecimal = { workspace = true }
+chrono = { workspace = true, features = ["serde"] }
+ciborium = { workspace = true }
+once_cell = { workspace = true }
+png = { workspace = true }
+rand = { workspace = true }
+regex = { workspace = true }
 rocketbot_bim_common = { path = "../rocketbot_bim_common" }
 rocketbot_interface = { path = "../rocketbot_interface" }
 rocketbot_primes = { path = "../rocketbot_primes" }
 rocketbot_render_text = { path = "../rocketbot_render_text", features = ["png"] }
 rocketbot_string = { path = "../rocketbot_string", features = ["regex", "serde"] }
-serde = { version = "1.0", features = ["derive"] }
-serde_json = { version = "1.0" }
-tokio = { version = "1.47", features = ["rt"] }
-tokio-postgres = { version = "0.7", features = ["with-chrono-0_4"] }
-tracing = { version = "0.1" }
+serde = { workspace = true, features = ["derive"] }
+serde_json = { workspace = true }
+tokio = { workspace = true, features = ["rt"] }
+tokio-postgres = { workspace = true, features = ["with-chrono-0_4"] }
+tracing = { workspace = true }
 
 [dev-dependencies]
-boa_engine = { version = "0.21" }
-clap = { version = "4.5", features = ["derive"] }
-csv = { version = "1.2" }
-ego-tree = { version = "0.11" }
-form_urlencoded = { version = "1.2" }
-futures-util = { version = "0.3" }
-indexmap = { version = "2.10", features = ["serde"] }
-reqwest = { version = "0.13", features = ["rustls"] }
-rhai = { version = "1.22", features = ["serde"] }
+boa_engine = { workspace = true }
+clap = { workspace = true, features = ["derive"] }
+csv = { workspace = true }
+ego-tree = { workspace = true }
+form_urlencoded = { workspace = true }
+futures-util = { workspace = true }
+indexmap = { workspace = true, features = ["serde"] }
+reqwest = { workspace = true, features = ["rustls"] }
+rhai = { workspace = true, features = ["serde"] }
 rocketbot_mediawiki_parsing = { path = "../rocketbot_mediawiki_parsing" }
-scraper = { version = "0.27" }
-sxd-document = { version = "0.3" }
-sxd-xpath = { version = "0.4" }
-tokio = { version = "1.47", features = ["macros", "rt-multi-thread"] }
-url = { version = "2.5" }
-zip = { version = "8.6" }
+scraper = { workspace = true }
+sxd-document = { workspace = true }
+sxd-xpath = { workspace = true }
+tokio = { workspace = true, features = ["macros", "rt-multi-thread"] }
+url = { workspace = true }
+zip = { workspace = true }

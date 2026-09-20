@@ -4,9 +4,9 @@ version = "0.1.0"
 edition = "2021"
 
 [dependencies]
-async-trait = { version = "0.1" }
-once_cell = { version = "1.21" }
-fancy-regex = { version = "0.19" }
+async-trait = { workspace = true }
+once_cell = { workspace = true }
+fancy-regex = { workspace = true }
 rocketbot_interface = { path = "../rocketbot_interface" }
-serde_json = { version = "1.0" }
-tracing = { version = "0.1" }
+serde_json = { workspace = true }
+tracing = { workspace = true }

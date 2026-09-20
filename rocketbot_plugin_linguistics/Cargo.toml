@@ -4,19 +4,19 @@ version = "0.1.0"
 edition = "2021"
 
 [dependencies]
-async-trait = { version = "0.1" }
-bitflags = { version = "2.9" }
+async-trait = { workspace = true }
+bitflags = { workspace = true }
 rocketbot_interface = { path = "../rocketbot_interface" }
-serde = { version = "1.0", features = ["derive"] }
-serde_json = { version = "1.0" }
-tokio = { version = "1.47", features = ["rt"] }
-tokio-postgres = { version = "0.7", features = ["with-chrono-0_4"] }
-tracing = { version = "0.1" }
+serde = { workspace = true, features = ["derive"] }
+serde_json = { workspace = true }
+tokio = { workspace = true, features = ["rt"] }
+tokio-postgres = { workspace = true, features = ["with-chrono-0_4"] }
+tracing = { workspace = true }
 
 [dev-dependencies]
-bzip2-rs = { version = "0.1" }
-ego-tree = { version = "0.11" }
-scraper = { version = "0.27" }
-tokio = { version = "1.47", features = ["macros", "rt", "rt-multi-thread"] }
-toml = { version = "1.1" }
-zim = { version = "0.5" }
+bzip2-rs = { workspace = true }
+ego-tree = { workspace = true }
+scraper = { workspace = true }
+tokio = { workspace = true, features = ["macros", "rt", "rt-multi-thread"] }
+toml = { workspace = true }
+zim = { workspace = true }

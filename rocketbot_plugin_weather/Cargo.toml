@@ -4,15 +4,15 @@ version = "0.1.0"
 edition = "2021"
 
 [dependencies]
-async-trait = { version = "0.1" }
-bytes = { version = "1.10" }
-chrono = { version = "0.4" }
-once_cell = { version = "1.21" }
-rand = { version = "0.10" }
-regex = { version = "1.11" }
-reqwest = { version = "0.13", features = ["rustls"] }
+async-trait = { workspace = true }
+bytes = { workspace = true }
+chrono = { workspace = true }
+once_cell = { workspace = true }
+rand = { workspace = true }
+regex = { workspace = true }
+reqwest = { workspace = true, features = ["rustls"] }
 rocketbot_geocoding = { path = "../rocketbot_geocoding" }
 rocketbot_interface = { path = "../rocketbot_interface" }
-serde = { version = "1.0" }
-serde_json = { version = "1.0" }
-tracing = { version = "0.1" }
+serde = { workspace = true }
+serde_json = { workspace = true }
+tracing = { workspace = true }

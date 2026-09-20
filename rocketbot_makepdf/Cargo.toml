@@ -4,9 +4,9 @@ version = "0.1.0"
 edition = "2021"
 
 [dependencies]
-base64 = { version = "0.23" }
-flate2 = { version = "1.1" }
-printpdf = { version = "0.12", features = ["jpeg", "png"] }
-rustybuzz = { version = "0.20" }
-serde = { version = "1.0", features = ["derive"] }
-serde_json = { version = "1.0" }
+base64 = { workspace = true }
+flate2 = { workspace = true }
+printpdf = { workspace = true, features = ["jpeg", "png"] }
+rustybuzz = { workspace = true }
+serde = { workspace = true, features = ["derive"] }
+serde_json = { workspace = true }

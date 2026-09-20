@@ -4,15 +4,15 @@ version = "0.1.0"
 edition = "2021"
 
 [dependencies]
-async-trait = { version = "0.1" }
-csv = { version = "1.2" }
-form_urlencoded = { version = "1.2" }
-hyper = { version = "1.6" }
-indexmap = { version = "2.10", features = ["serde"] }
-regex = { version = "1.11" }
-reqwest = { version = "0.13", features = ["rustls"] }
+async-trait = { workspace = true }
+csv = { workspace = true }
+form_urlencoded = { workspace = true }
+hyper = { workspace = true }
+indexmap = { workspace = true, features = ["serde"] }
+regex = { workspace = true }
+reqwest = { workspace = true, features = ["rustls"] }
 rocketbot_interface = { path = "../rocketbot_interface" }
-serde = { version = "1.0", features = ["derive"] }
-serde_json = { version = "1.0" }
-strsim = { version = "0.11" }
-tracing = { version = "0.1" }
+serde = { workspace = true, features = ["derive"] }
+serde_json = { workspace = true }
+strsim = { workspace = true }
+tracing = { workspace = true }

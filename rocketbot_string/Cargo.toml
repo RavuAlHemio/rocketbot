@@ -8,5 +8,5 @@ regex = ["dep:regex"]
 serde = ["dep:serde"]
 
 [dependencies]
-serde = { version = "1.0", features = ["derive"], optional = true }
-regex = { version = "1.11", optional = true }
+serde = { workspace = true, features = ["derive"], optional = true }
+regex = { workspace = true, optional = true }
