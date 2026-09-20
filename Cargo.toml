@@ -107,7 +107,6 @@ kamadak-exif = { version = "0.6" }
 libc = { version = "0.2" }
 libloading = { version = "0.9" }
 md-5 = { version = "0.11" }
-minicbor = { version = "2.0" }
 minidom = { version = "0.19" }
 num-bigint = { version = "0.5" }
 num-rational = { version = "0.4" }

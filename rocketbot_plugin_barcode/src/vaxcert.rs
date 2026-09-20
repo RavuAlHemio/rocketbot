@@ -1,9 +1,8 @@
 use std::io::{Cursor, Write};
 
 use chrono::{DateTime, NaiveDate, Utc};
+use ciborium::cbor;
 use flate2::write::ZlibEncoder;
-use minicbor;
-use minicbor::data::Tag;
 use rocketbot_barcode::qr::qr_string_to_bitmap;
 use rocketbot_makepdf;
 use rocketbot_makepdf::model::{
@@ -84,65 +83,78 @@ pub(crate) fn encode_vax(vax_info: &VaxInfo) -> String {
     // we can't fake a signature, so just use completely invalid data
 
     // protected: 4 = key ID (8 bytes), 1 = algorithm (-7 = ECDSA-256)
+    let protected_cbor = cbor!(
+        {
+            4 => b"FUCKING!",
+            1 => -7,
+        }
+    )
+        .expect("failed to construct CBOR value");
     let mut protected = Vec::new();
-    {
-        let mut protected_cbor = minicbor::Encoder::new(&mut protected);
-        protected_cbor
-            .map(2).unwrap()
-                .u8(4).unwrap().bytes(b"FUCKING!").unwrap()
-                .u8(1).unwrap().i8(-7).unwrap();
-    }
+    ciborium::into_writer(&protected_cbor, &mut protected)
+        .expect("failed to write CBOR value");
 
     // unprotected is empty
 
     // payload is the whole structure itself
     // let's start with the inner part, the health certificate
+    let payload_cbor = cbor!(
+        {
+            // Issued and Expires are Unix timestamps
+            4 => vax_info.issued.timestamp(),
+            6 => vax_info.expires.timestamp(),
+            1 => &vax_info.country_code,
+            -260 => {
+                1 => {
+                    "v" => [
+                        {
+                            "dn" => vax_info.dose_number,
+                            "ma" => "ORG-100030215", // marketing authorization holder = Biontech
+                            "vp" => "J07BX03", // vaccine prophylaxis = covid-19 vaccine
+                            "dt" => vax_info.issued.format("%Y-%m-%d").to_string(),
+                            "co" => &vax_info.country_code,
+                            "ci" => &vax_info.cert_id,
+                            "mp" => "EU/1/20/1528", // medicinal product = Comirnaty
+                            "is" => &vax_info.issuer,
+                            "sd" => vax_info.total_doses,
+                            "tg" => "840539006", // target disease or agent = COVID-19
+                        },
+                    ],
+                    "nam" => {
+                        "fnt" => &vax_info.surname_normalized,
+                        "fn" => &vax_info.surname,
+                        "gnt" => &vax_info.given_name_normalized,
+                        "gn" => &vax_info.given_name,
+                    },
+                    "ver" => "1.0.0",
+                    "dob" => vax_info.date_of_birth.format("%Y-%m-%d").to_string(),
+                },
+            },
+        }
+    )
+        .expect("failed to construct CBOR value");
     let mut payload = Vec::new();
-    {
-        let mut payload_cbor = minicbor::Encoder::new(&mut payload);
-        payload_cbor
-            .map(4).unwrap()
-                // Issued and Expires are Unix timestamps
-                .u8(4).unwrap().i64(vax_info.issued.timestamp().try_into().unwrap()).unwrap()
-                .u8(6).unwrap().i64(vax_info.expires.timestamp().try_into().unwrap()).unwrap()
-                .u8(1).unwrap().str(&vax_info.country_code).unwrap()
-                .i16(-260).unwrap().map(1).unwrap()
-                    .u8(1).unwrap().map(4).unwrap()
-                        .str("v").unwrap().array(1).unwrap()
-                            .map(10).unwrap()
-                                .str("dn").unwrap().u64(vax_info.dose_number.try_into().unwrap()).unwrap()
-                                .str("ma").unwrap().str("ORG-100030215").unwrap() // marketing authorization holder = Biontech
-                                .str("vp").unwrap().str("J07BX03").unwrap() // vaccine prophylaxis = covid-19 vaccine
-                                .str("dt").unwrap().str(&vax_info.issued.format("%Y-%m-%d").to_string()).unwrap()
-                                .str("co").unwrap().str(&vax_info.country_code).unwrap()
-                                .str("ci").unwrap().str(&vax_info.cert_id).unwrap()
-                                .str("mp").unwrap().str("EU/1/20/1528").unwrap() // medicinal product = Comirnaty
-                                .str("is").unwrap().str(&vax_info.issuer).unwrap()
-                                .str("sd").unwrap().u64(vax_info.total_doses.try_into().unwrap()).unwrap()
-                                .str("tg").unwrap().str("840539006").unwrap() // target disease or agent = COVID-19
-                        .str("nam").unwrap().map(4).unwrap()
-                            .str("fnt").unwrap().str(&vax_info.surname_normalized).unwrap()
-                            .str("fn").unwrap().str(&vax_info.surname).unwrap()
-                            .str("gnt").unwrap().str(&vax_info.given_name_normalized).unwrap()
-                            .str("gn").unwrap().str(&vax_info.given_name).unwrap()
-                        .str("ver").unwrap().str("1.0.0").unwrap()
-                        .str("dob").unwrap().str(&vax_info.date_of_birth.format("%Y-%m-%d").to_string()).unwrap();
-    }
+    ciborium::into_writer(&payload_cbor, &mut payload)
+        .expect("failed to write CBOR value");
 
     // signature is, in the case of ECDSA-256, 64 bytes of signature
     let signature = b"Too stupid to scan a QR code? Your restaurant is a health risk!!";
 
     // encode the whole thing as CBOR again
+    let full_cbor = ciborium::Value::Tag(
+        0x12,
+        Box::new(cbor!(
+            [
+                &protected,
+                {}, // unprotected is empty
+                &payload,
+                &signature[..],
+            ]
+        ).unwrap()),
+    );
     let mut full = Vec::new();
-    {
-        let mut full_cbor = minicbor::Encoder::new(&mut full);
-        full_cbor
-            .tag(Tag::new(0x12)).unwrap().array(4).unwrap()
-                .bytes(&protected).unwrap()
-                .map(0).unwrap() // unprotected is empty
-                .bytes(&payload).unwrap()
-                .bytes(&signature[..]).unwrap();
-    }
+    ciborium::into_writer(&full_cbor, &mut full)
+        .expect("failed to write CBOR value");
 
     // compress with zlib
     let mut zlib_data = Vec::new();

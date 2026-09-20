@@ -7,8 +7,8 @@ edition = "2021"
 async-trait = { workspace = true }
 base45 = { workspace = true }
 chrono = { workspace = true }
+ciborium = { workspace = true }
 flate2 = { workspace = true }
-minicbor = { workspace = true, features = ["std"] }
 rand = { workspace = true }
 rocketbot_barcode = { path = "../rocketbot_barcode" }
 rocketbot_interface = { path = "../rocketbot_interface" }
