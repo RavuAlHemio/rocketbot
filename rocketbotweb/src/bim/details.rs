@@ -27,6 +27,7 @@ struct BimDetailsRidePart {
     pub timestamp: String,
     pub line: Option<String>,
     pub vehicle_number: VehicleNumber,
+    pub vehicle_type_code: Option<String>,
     pub spec_position: i64,
     pub coupling_mode: CouplingMode,
     pub fixed_coupling_position: i64,
@@ -62,7 +63,6 @@ struct RideVehiclePart {
     pub fixed_coupling_position: i64,
 }
 
-
 #[derive(Clone, Debug, Eq, PartialEq, Serialize, Template)]
 #[template(path = "bimdetails.html")]
 struct BimDetailsTemplate {
@@ -71,6 +71,37 @@ struct BimDetailsTemplate {
     pub rides: Vec<BimDetailsRidePart>,
     pub air_conditioned_emoji: &'static str,
     pub not_air_conditioned_emoji: &'static str,
+}
+impl BimDetailsTemplate {
+    pub fn type_is_known(&self) -> bool {
+        self.vehicle.is_some()
+    }
+
+    pub fn same_type_rides(&self) -> impl Iterator<Item = &BimDetailsRidePart> {
+        let this_type = self.vehicle
+            .as_ref()
+            .map(|v| v.type_code.clone());
+        self.rides
+            .iter()
+            .filter(move |r|
+                // return nothing if our type is not known
+                this_type.is_some()
+                && this_type.as_ref() == r.vehicle_type_code.as_ref()
+            )
+    }
+
+    pub fn different_type_rides(&self) -> impl Iterator<Item = &BimDetailsRidePart> {
+        let this_type = self.vehicle
+            .as_ref()
+            .map(|v| v.type_code.clone());
+        self.rides
+            .iter()
+            .filter(move |r|
+                // return nothing if our type is not known
+                this_type.is_some()
+                && this_type.as_ref() != r.vehicle_type_code.as_ref()
+            )
+    }
 }
 
 #[derive(Clone, Debug, Eq, PartialEq, Serialize, Template)]
@@ -134,7 +165,7 @@ pub(crate) async fn handle_bim_detail(request: &Request<Incoming>) -> Result<Res
         "
             SELECT
                 rav.id, rav.rider_username, rav.\"timestamp\", rav.line, rav.vehicle_number,
-                rav.spec_position, rav.coupling_mode, rav.fixed_coupling_position
+                rav.vehicle_type, rav.spec_position, rav.coupling_mode, rav.fixed_coupling_position
             FROM bim.rides_and_vehicles rav
             WHERE rav.company = $1
             AND rav.vehicle_number = $2
@@ -157,9 +188,10 @@ pub(crate) async fn handle_bim_detail(request: &Request<Incoming>) -> Result<Res
         let timestamp: DateTime<Local> = ride_row.get(2);
         let line: Option<String> = ride_row.get(3);
         let vehicle_number = VehicleNumber::from_string(ride_row.get(4));
-        let spec_position: i64 = ride_row.get(5);
-        let coupling_mode_string: String = ride_row.get(6);
-        let fixed_coupling_position: i64 = ride_row.get(7);
+        let vehicle_type_code: Option<String> = ride_row.get(5);
+        let spec_position: i64 = ride_row.get(6);
+        let coupling_mode_string: String = ride_row.get(7);
+        let fixed_coupling_position: i64 = ride_row.get(8);
 
         let coupling_mode = match CouplingMode::try_from_db_str(&coupling_mode_string) {
             Some(cm) => cm,
@@ -178,6 +210,7 @@ pub(crate) async fn handle_bim_detail(request: &Request<Incoming>) -> Result<Res
             timestamp: timestamp.format("%Y-%m-%d %H:%M:%S").to_string(),
             line,
             vehicle_number,
+            vehicle_type_code,
             spec_position,
             coupling_mode,
             fixed_coupling_position,
@@ -244,9 +277,10 @@ pub(crate) async fn handle_bim_line_detail(request: &Request<Incoming>) -> Resul
         let timestamp: DateTime<Local> = ride_row.get(2);
         let line: Option<String> = ride_row.get(3);
         let vehicle_number = VehicleNumber::from_string(ride_row.get(4));
-        let spec_position: i64 = ride_row.get(5);
-        let coupling_mode_string: String = ride_row.get(6);
-        let fixed_coupling_position: i64 = ride_row.get(7);
+        let vehicle_type_code: Option<String> = ride_row.get(5);
+        let spec_position: i64 = ride_row.get(6);
+        let coupling_mode_string: String = ride_row.get(7);
+        let fixed_coupling_position: i64 = ride_row.get(8);
 
         let coupling_mode = match CouplingMode::try_from_db_str(&coupling_mode_string) {
             Some(cm) => cm,
@@ -265,6 +299,7 @@ pub(crate) async fn handle_bim_line_detail(request: &Request<Incoming>) -> Resul
             timestamp: timestamp.format("%Y-%m-%d %H:%M:%S").to_string(),
             line,
             vehicle_number,
+            vehicle_type_code,
             spec_position,
             coupling_mode,
             fixed_coupling_position,

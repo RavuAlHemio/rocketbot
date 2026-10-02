@@ -1,5 +1,38 @@
 {% extends "base.html" %}
 
+{% macro output_rides(rides, css_type, show_vehicle_type) %}
+
+<table class="bim-vehicle-rides {{ css_type }}">
+  <tr>
+    <th class="id">ID</th>
+    {% if show_vehicle_type %}
+      <th class="vehicle-type">type</th>
+    {% endif %}
+    <th class="rider">rider</th>
+    <th class="timestamp">timestamp</th>
+    <th class="line">line</th>
+    <th class="spec-pos">spec position</th>
+    <th class="ride-type">ride type</th>
+    <th class="fixed-coupling-pos">fixed coupling position</th>
+  </tr>
+  {% for ride in rides %}
+  <tr>
+    <td class="id"><a href="bim-ride-by-id?id={{ ride.id }}">{{ ride.id }}</a></td>
+    {% if show_vehicle_type %}
+      <td class="vehicle-type">{% if let Some(veh_type) = ride.vehicle_type_code %}{{ veh_type }}{% endif %}</td>
+    {% endif %}
+    <td class="rider">{{ ride.rider_username|escape }}</td>
+    <td class="timestamp">{{ ride.timestamp|escape }}</td>
+    <td class="line">{% if let Some(line) = ride.line %}<a href="bim-line-detail?company={{ company|urlencode|escape }}&amp;line={{ line|urlencode|escape }}">{{ line|escape }}</a>{% endif %}</td>
+    <td class="spec-pos">{{ ride.spec_position }}</td>
+    <td class="ride-type {{ ride.coupling_mode }}">{{ ride.coupling_mode }}</td>
+    <td class="fixed-coupling-pos">{{ ride.fixed_coupling_position }}</td>
+  </tr>
+  {% endfor %}
+</table>
+
+{% endmacro %}
+
 {% block title %}Public Transport Rides{% endblock %}
 
 {% block content %}
@@ -103,28 +136,29 @@
 <section class="rides">
 <h2>Rides</h2>
 
-<table class="bim-vehicle-rides">
-  <tr>
-    <th class="id">ID</th>
-    <th class="rider">rider</th>
-    <th class="timestamp">timestamp</th>
-    <th class="line">line</th>
-    <th class="spec-pos">spec position</th>
-    <th class="ride-type">ride type</th>
-    <th class="fixed-coupling-pos">fixed coupling position</th>
-  </tr>
-  {% for ride in rides %}
-  <tr>
-    <td class="id"><a href="bim-ride-by-id?id={{ ride.id }}">{{ ride.id }}</a></td>
-    <td class="rider">{{ ride.rider_username|escape }}</td>
-    <td class="timestamp">{{ ride.timestamp|escape }}</td>
-    <td class="line">{% if let Some(line) = ride.line %}<a href="bim-line-detail?company={{ company|urlencode|escape }}&amp;line={{ line|urlencode|escape }}">{{ line|escape }}</a>{% endif %}</td>
-    <td class="spec-pos">{{ ride.spec_position }}</td>
-    <td class="ride-type {{ ride.coupling_mode }}">{{ ride.coupling_mode }}</td>
-    <td class="fixed-coupling-pos">{{ ride.fixed_coupling_position }}</td>
-  </tr>
-  {% endfor %}
-</table>
+{% if type_is_known() %}
+
+{% if same_type_rides().next().is_some() %}
+<section class="same-type">
+<h3>Same type</h3>
+
+{{ output_rides(same_type_rides(), "same-type", false) }}
+
+</section>
+{% endif %}
+
+{% if different_type_rides().next().is_some() %}
+<section class="different-type">
+<h3>Different type</h3>
+
+{{ output_rides(different_type_rides(), "different-type", true) }}
+
+</section>
+{% endif %}
+
+{% else %}
+{{ output_rides(rides, "any-type", false) }}
+{% endif %}
 
 {%- include "parts/bim_position_explanation.html" %}
 </section>
