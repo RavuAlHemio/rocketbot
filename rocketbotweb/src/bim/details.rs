@@ -254,7 +254,7 @@ pub(crate) async fn handle_bim_line_detail(request: &Request<Incoming>) -> Resul
         "
             SELECT
                 rav.id, rav.rider_username, rav.\"timestamp\", rav.line, rav.vehicle_number,
-                rav.spec_position, rav.coupling_mode, rav.fixed_coupling_position
+                rav.vehicle_type, rav.spec_position, rav.coupling_mode, rav.fixed_coupling_position
             FROM bim.rides_and_vehicles rav
             WHERE rav.company = $1
             AND rav.line = $2
