@@ -336,12 +336,20 @@ name = "Pascal"
 description = "SI derived unit of pressure, equal to the force of one Newton over an area of one square meter, named after Blaise Pascal"
 
 [[derived_units]]
+letters = "bar"
+# 100 kPa
+parents = { Pa = "1" }
+factor_of_parents = 100000
+name = "bar"
+description = "European SI-aligned unit of pressure, equal to 100 kilopascals"
+
+[[derived_units]]
 letters = "psi"
 # pounds (force) per square inch, 1 lbf in^-2
 parents = { lbf = "1", in = "-2" }
 factor_of_parents = 1
 name = "pounds per square inch"
-description = "US customary unit of pressure, one pound (force) per square inch"
+description = "US customary unit of pressure in non-barometric contexts, one pound (force) per square inch"
 
 [[derived_units]]
 letters = "mHg"
@@ -350,6 +358,14 @@ parents = { Pa = "1" }
 factor_of_parents = 133322.387415
 name = "meter of mercury"
 description = "SI derived unit of pressure, mostly seen in medicine as mmHg (millimeter of mercury)"
+
+[[derived_units]]
+letters = "inHg"
+# 1 inHg = 3386.389 Pa
+parents = { Pa = "1" }
+factor_of_parents = 3386.398
+name = "inch of mercury"
+description = "US customary unit of barometric pressure"
 
 ### DERIVED UNITS OF ENERGY (FORCE TIMES LENGTH = MASS TIMES LENGTH TIMES LENGTH PER TIME PER TIME)
 
