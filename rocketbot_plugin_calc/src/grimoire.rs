@@ -726,10 +726,9 @@ fn coerce(state: &SimplificationState, operands: &[AstNodeAtLocation]) -> BuiltI
         other => return Err(SimplificationError::UnexpectedOperandType(format!("{:?}", other))),
     };
 
-    match coerce_to_unit(left_number, &right_number.units, &state.units) {
-        Some(n) => Ok(AstNode::Number(n)),
-        None => Err(SimplificationError::UnitReconciliation),
-    }
+    coerce_to_unit(left_number, &right_number.units, &state.units)
+        .map(|n| AstNode::Number(n))
+        .map_err(|ue| SimplificationError::UnitReconciliation(ue))
 }
 
 /// Takes two operands and returns the value of the first operand with the units of the second

@@ -78,6 +78,22 @@ impl fmt::Display for UnitDatabaseError {
 impl std::error::Error for UnitDatabaseError {
 }
 
+#[derive(Clone, Debug, Eq, Hash, Ord, PartialEq, PartialOrd)]
+pub enum UnitError {
+    UnknownUnit(String),
+    NoCommonBase,
+}
+impl fmt::Display for UnitError {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match self {
+            Self::UnknownUnit(u) => write!(f, "unknown unit {:?}", u),
+            Self::NoCommonBase => write!(f, "units have no common base"),
+        }
+    }
+}
+impl std::error::Error for UnitError {
+}
+
 #[derive(Clone, Debug, PartialEq)]
 pub(crate) struct UnitDatabase {
     si_prefix_to_factor: HashMap<String, f64>,
@@ -353,17 +369,17 @@ fn do_coerce_to_common_unit(
     left: Number,
     right: Number,
     database: &UnitDatabase,
-) -> Option<(Number, Number)> {
+) -> Result<(Number, Number), UnitError> {
     // fast-path
     if left.units == right.units {
-        return Some((left.clone(), right.clone()));
+        return Ok((left.clone(), right.clone()));
     }
 
     // collect relevant units by depth
     let mut unit_by_depth = HashMap::new();
     for (unit, _power) in left.units.iter().chain(right.units.iter()) {
         match database.get_max_depth(&unit) {
-            None => return None, // unknown unit
+            None => return Err(UnitError::UnknownUnit(unit.clone())), // unknown unit
             Some(d) => {
                 unit_by_depth.insert(unit.clone(), d);
             },
@@ -394,14 +410,14 @@ fn do_coerce_to_common_unit(
     }
 
     // nothing...
-    None
+    Err(UnitError::NoCommonBase)
 }
 
 pub(crate) fn coerce_to_common_unit(
     left: &Number,
     right: &Number,
     database: &UnitDatabase,
-) -> Option<(Number, Number)> {
+) -> Result<(Number, Number), UnitError> {
     do_coerce_to_common_unit(left.clone(), right.clone(), database)
 }
 
@@ -409,7 +425,7 @@ pub(crate) fn coerce_to_unit(
     number: &Number,
     units: &NumberUnits,
     database: &UnitDatabase,
-) -> Option<Number> {
+) -> Result<Number, UnitError> {
     let template_number = Number::new(
         NumberValue::Float(1.0),
         units.clone(),
@@ -425,7 +441,7 @@ pub(crate) fn coerce_to_unit(
     // that succeeded
     // c_template now contains the factor to convert from the target units to the common unit
     // divide by it to get from the value in the common unit to the value in the target unit
-    Some(Number::new(
+    Ok(Number::new(
         c_number.value / c_template.value,
         units.clone(),
     ))
@@ -670,7 +686,7 @@ mod tests {
         s_units.insert("s".to_owned(), BigInt::from(1));
         let s = Number::new(NumberValue::Float(42.0), s_units);
 
-        assert_eq!(None, coerce_to_common_unit(&m, &s, &database));
+        assert_eq!(Err(UnitError::NoCommonBase), coerce_to_common_unit(&m, &s, &database));
     }
 
     #[test]
@@ -718,7 +734,7 @@ mod tests {
         let mut s_units = NumberUnits::new();
         s_units.insert("s".to_owned(), BigInt::from(1));
 
-        assert_eq!(None, coerce_to_unit(&m, &s_units, &database));
+        assert_eq!(Err(UnitError::NoCommonBase), coerce_to_unit(&m, &s_units, &database));
     }
 
     #[test]

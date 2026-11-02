@@ -6,7 +6,7 @@ use std::ops::{Add, AddAssign, Div, DivAssign, Mul, MulAssign, Neg, Rem, RemAssi
 use num_bigint::{BigInt, ToBigInt};
 use num_traits::{FromPrimitive, ToPrimitive};
 
-use crate::units::{coerce_to_common_unit, NumberUnits, UnitDatabase};
+use crate::units::{NumberUnits, UnitDatabase, UnitError, coerce_to_common_unit};
 
 
 trait WholeDiv {
@@ -346,20 +346,31 @@ impl From<BigInt> for NumberValue {
     }
 }
 
-#[derive(Clone, Copy, Debug, Eq, Hash, PartialEq)]
+#[derive(Clone, Debug, Eq, Hash, Ord, PartialEq, PartialOrd)]
 pub enum NumberOperationError {
     OperationFailed,
-    UnitReconciliation,
+    UnitReconciliation(UnitError),
 }
 impl fmt::Display for NumberOperationError {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
             Self::OperationFailed => write!(f, "operation failed"),
-            Self::UnitReconciliation => write!(f, "failed to reconcile operand units"),
+            Self::UnitReconciliation(ue) => write!(f, "failed to reconcile operand units: {}", ue),
         }
     }
 }
 impl std::error::Error for NumberOperationError {
+    fn source(&self) -> Option<&(dyn std::error::Error + 'static)> {
+        match self {
+            Self::OperationFailed => None,
+            Self::UnitReconciliation(ue) => Some(ue),
+        }
+    }
+}
+impl From<UnitError> for NumberOperationError {
+    fn from(value: UnitError) -> Self {
+        Self::UnitReconciliation(value)
+    }
 }
 
 #[derive(Clone, Debug, PartialEq)]
@@ -382,8 +393,7 @@ impl Number {
 
     pub fn checked_add(&self, rhs: Self, database: &UnitDatabase) -> Result<Self, NumberOperationError> {
         // coerce to same unit
-        let (self_co, rhs_co) = coerce_to_common_unit(&self, &rhs, database)
-            .ok_or(NumberOperationError::UnitReconciliation)?;
+        let (self_co, rhs_co) = coerce_to_common_unit(&self, &rhs, database)?;
         debug_assert_eq!(self_co.units, rhs_co.units);
 
         let new_value = self_co.value.checked_add(rhs_co.value)
@@ -393,8 +403,7 @@ impl Number {
 
     pub fn checked_bit_and(&self, rhs: Self, database: &UnitDatabase) -> Result<Self, NumberOperationError> {
         // coerce to same unit
-        let (self_co, rhs_co) = coerce_to_common_unit(&self, &rhs, database)
-            .ok_or(NumberOperationError::UnitReconciliation)?;
+        let (self_co, rhs_co) = coerce_to_common_unit(&self, &rhs, database)?;
         debug_assert_eq!(self_co.units, rhs_co.units);
 
         let new_value = self_co.value.checked_bit_and(rhs_co.value)
@@ -404,8 +413,7 @@ impl Number {
 
     pub fn checked_bit_or(&self, rhs: Self, database: &UnitDatabase) -> Result<Self, NumberOperationError> {
         // coerce to same unit
-        let (self_co, rhs_co) = coerce_to_common_unit(&self, &rhs, database)
-            .ok_or(NumberOperationError::UnitReconciliation)?;
+        let (self_co, rhs_co) = coerce_to_common_unit(&self, &rhs, database)?;
         debug_assert_eq!(self_co.units, rhs_co.units);
 
         let new_value = self_co.value.checked_bit_or(rhs_co.value)
@@ -415,8 +423,7 @@ impl Number {
 
     pub fn checked_bit_xor(&self, rhs: Self, database: &UnitDatabase) -> Result<Self, NumberOperationError> {
         // coerce to same unit
-        let (self_co, rhs_co) = coerce_to_common_unit(&self, &rhs, database)
-            .ok_or(NumberOperationError::UnitReconciliation)?;
+        let (self_co, rhs_co) = coerce_to_common_unit(&self, &rhs, database)?;
         debug_assert_eq!(self_co.units, rhs_co.units);
 
         let new_value = self_co.value.checked_bit_xor(rhs_co.value)
@@ -426,8 +433,7 @@ impl Number {
 
     pub fn checked_sub(&self, rhs: Self, database: &UnitDatabase) -> Result<Self, NumberOperationError> {
         // coerce to same unit
-        let (self_co, rhs_co) = coerce_to_common_unit(&self, &rhs, database)
-            .ok_or(NumberOperationError::UnitReconciliation)?;
+        let (self_co, rhs_co) = coerce_to_common_unit(&self, &rhs, database)?;
         debug_assert_eq!(self_co.units, rhs_co.units);
 
         let new_value = self_co.value.checked_sub(rhs_co.value)

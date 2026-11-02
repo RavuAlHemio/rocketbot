@@ -7,7 +7,7 @@ use num_traits::cast::ToPrimitive;
 
 use crate::grimoire::{Constant, Function};
 use crate::numbers::{Number, NumberOperationError, NumberValue};
-use crate::units::{NumberUnits, UnitDatabase};
+use crate::units::{NumberUnits, UnitDatabase, UnitError};
 
 
 #[derive(Clone, Copy, Debug, Eq, Hash, PartialEq)]
@@ -82,7 +82,7 @@ pub(crate) enum SimplificationError {
     RightOperandHasUnits,
     LeftOperandUnitsRightOperandFloat,
     OperandHasUnits,
-    UnitReconciliation,
+    UnitReconciliation(UnitError),
     NonIntegralUnitPower(String),
 }
 impl SimplificationError {
@@ -122,20 +122,36 @@ impl fmt::Display for SimplificationError {
                 => write!(f, "left operand has units but the right operand is floating-point"),
             SimplificationError::OperandHasUnits
                 => write!(f, "operand has units; it mustn't"),
-            SimplificationError::UnitReconciliation
-                => write!(f, "failed to reconcile operand units"),
+            SimplificationError::UnitReconciliation(ue)
+                => ue.fmt(f),
             SimplificationError::NonIntegralUnitPower(u)
                 => write!(f, "operation would create a non-integral power for unit {}", u),
         }
     }
 }
 impl std::error::Error for SimplificationError {
+    fn source(&self) -> Option<&(dyn std::error::Error + 'static)> {
+        match self {
+            SimplificationError::ConstantNotFound(_) => None,
+            SimplificationError::FunctionNotFound(_) => None,
+            SimplificationError::IncorrectArgCount { .. } => None,
+            SimplificationError::UnexpectedOperandType(_) => None,
+            SimplificationError::NonIntegralValue(_) => None,
+            SimplificationError::Timeout => None,
+            SimplificationError::OperationFailed => None,
+            SimplificationError::RightOperandHasUnits => None,
+            SimplificationError::LeftOperandUnitsRightOperandFloat => None,
+            SimplificationError::OperandHasUnits => None,
+            SimplificationError::UnitReconciliation(ue) => Some(ue),
+            SimplificationError::NonIntegralUnitPower(_) => None,
+        }
+    }
 }
 impl From<NumberOperationError> for SimplificationError {
     fn from(noe: NumberOperationError) -> Self {
         match noe {
             NumberOperationError::OperationFailed => Self::OperationFailed,
-            NumberOperationError::UnitReconciliation => Self::UnitReconciliation,
+            NumberOperationError::UnitReconciliation(ue) => Self::UnitReconciliation(ue),
         }
     }
 }
