@@ -6,6 +6,7 @@ edition = "2021"
 [dependencies]
 async-trait = { workspace = true }
 rocketbot_interface = { path = "../rocketbot_interface" }
+rocketbot_spelling = { path = "../rocketbot_spelling" }
 serde_json = { workspace = true }
 strsim = { workspace = true }
 tracing = { workspace = true }
