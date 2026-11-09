@@ -154,6 +154,7 @@ impl TextPlugin {
         };
 
         let s = &command.rest;
+        let any = command.flags.contains("any") || command.flags.contains("a");
 
         // go through the rotations
         let mut rot_words = Vec::with_capacity(26);
@@ -171,7 +172,7 @@ impl TextPlugin {
                     return;
                 }
 
-                if spelling_engine_guard.is_correct(&rotated) {
+                if any || spelling_engine_guard.is_correct(&rotated) {
                     rot_words.push(format!("{}: {}", n, rotated));
                 }
             }
@@ -233,6 +234,8 @@ impl RocketBotPlugin for TextPlugin {
                 "{cpfx}rotfind STRING",
                 "Tries to find letter rotation results on the given string that are themselves words.",
             )
+                .add_flag("a")
+                .add_flag("any")
                 .build()
         ).await;
 
