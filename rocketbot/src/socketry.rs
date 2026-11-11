@@ -1820,6 +1820,44 @@ async fn handle_private_message(shared_state: Arc<SharedConnectionState>, sender
     }
 }
 
+async fn process_settings(settings: &serde_json::Value, state: &mut ConnectionState) {
+    for entry in settings.members_or_empty() {
+        if entry["_id"] == "Message_MaxAllowedSize" {
+            if let Some(mas) = entry["value"].as_usize() {
+                let mut settings_guard = state.shared_state.server_settings
+                    .write().await;
+                settings_guard.max_message_length = Some(mas);
+            }
+        } else if entry["_id"] == "UTF8_User_Names_Validation" {
+            if let Some(username_regex_str) = entry["value"].as_str() {
+                // trim anchors
+                let mut unanchored_regex_str = username_regex_str;
+                while unanchored_regex_str.starts_with("^") {
+                    unanchored_regex_str = &unanchored_regex_str[1..];
+                }
+                while unanchored_regex_str.ends_with("$") && !unanchored_regex_str.ends_with("\\$") {
+                    unanchored_regex_str = &unanchored_regex_str[..unanchored_regex_str.len()-1];
+                }
+                match Regex::new(unanchored_regex_str) {
+                    Ok(r) => {
+                        let mut settings_guard = state.shared_state.server_settings
+                            .write().await;
+                        settings_guard.username_regex = EnjoyableRegex::from_regex(r);
+                    },
+                    Err(e) => {
+                        error!(
+                            "ignoring username regex string {:?} (original {:?}) after error: {}",
+                            unanchored_regex_str,
+                            username_regex_str,
+                            e,
+                        );
+                    },
+                }
+            }
+        }
+    }
+}
+
 async fn handle_received(body: &serde_json::Value, mut state: &mut ConnectionState) {
     if body["msg"] == "ping" {
         // answer with a pong
@@ -1890,13 +1928,13 @@ async fn handle_received(body: &serde_json::Value, mut state: &mut ConnectionSta
             .expect("failed to enqueue room update subscription message");
 
         // get the server's settings
-        let get_settings_body = serde_json::json!({
-            "msg": "method",
-            "method": "public-settings/get",
-            "id": GET_SETTINGS_MESSAGE_ID,
-        });
-        state.shared_state.outgoing_sender.send(get_settings_body)
-            .expect("failed to enqueue get-settings message");
+        let no_query_options: [(&str, Option<&str>); 0] = [];
+        let settings_response = get_api_json(
+            &state.shared_state,
+            "api/v1/settings.public",
+            no_query_options,
+        ).await.expect("failed to obtain server settings");
+        process_settings(&settings_response["settings"], state).await;
 
         // get which rooms we are currently in
         let room_list_body = serde_json::json!({
@@ -1942,43 +1980,6 @@ async fn handle_received(body: &serde_json::Value, mut state: &mut ConnectionSta
             no_query_options,
         )
             .await.expect("failed to set status");
-    } else if body["msg"] == "result" && body["id"] == GET_SETTINGS_MESSAGE_ID {
-        let settings = &body["result"];
-        for entry in settings.members_or_empty() {
-            if entry["_id"] == "Message_MaxAllowedSize" {
-                if let Some(mas) = entry["value"].as_usize() {
-                    let mut settings_guard = state.shared_state.server_settings
-                        .write().await;
-                    settings_guard.max_message_length = Some(mas);
-                }
-            } else if entry["_id"] == "UTF8_User_Names_Validation" {
-                if let Some(username_regex_str) = entry["value"].as_str() {
-                    // trim anchors
-                    let mut unanchored_regex_str = username_regex_str;
-                    while unanchored_regex_str.starts_with("^") {
-                        unanchored_regex_str = &unanchored_regex_str[1..];
-                    }
-                    while unanchored_regex_str.ends_with("$") && !unanchored_regex_str.ends_with("\\$") {
-                        unanchored_regex_str = &unanchored_regex_str[..unanchored_regex_str.len()-1];
-                    }
-                    match Regex::new(unanchored_regex_str) {
-                        Ok(r) => {
-                            let mut settings_guard = state.shared_state.server_settings
-                                .write().await;
-                            settings_guard.username_regex = EnjoyableRegex::from_regex(r);
-                        },
-                        Err(e) => {
-                            error!(
-                                "ignoring username regex string {:?} (original {:?}) after error: {}",
-                                unanchored_regex_str,
-                                username_regex_str,
-                                e,
-                            );
-                        },
-                    }
-                }
-            }
-        }
     } else if body["msg"] == "result" && body["id"] == GET_ROOMS_MESSAGE_ID {
         // update our rooms
         for update_room in body["result"]["update"].members_or_empty() {
