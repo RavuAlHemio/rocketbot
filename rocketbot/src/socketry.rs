@@ -55,17 +55,15 @@ use crate::string_utils::{Token, tokenize};
 
 
 static LOGIN_MESSAGE_ID: &'static str = "login4242";
-static GET_SETTINGS_MESSAGE_ID: &'static str = "settings4242";
 static GET_ROOMS_MESSAGE_ID: &'static str = "rooms4242";
 static SUBSCRIBE_ROOMS_MESSAGE_ID: &'static str = "roomchanges4242";
-static SEND_MESSAGE_MESSAGE_ID: &'static str = "sendmessage4242";
 static ID_ALPHABET: &'static str = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789";
-const ID_LENGTH: usize = 17;
 static BOUNDARY_ALPHABET: &'static str = ID_ALPHABET;
 const BOUNDARY_LENGTH: usize = 64;
 static QUOTE_RE: LazyLock<Regex> = LazyLock::new(|| Regex::new(
     "^\\s*\\[ \\]\\([^)]+\\)\\s*",
 ).expect("failed to compile quote regular expression"));
+const NO_QUERY_OPTIONS: [(&str, Option<&str>); 0] = [];
 
 
 struct ChannelDatabase {
@@ -414,16 +412,20 @@ impl RocketBotInterface for ServerConnection {
             }
 
             // create a new PM channel
-            let message_body = serde_json::json!({
-                "msg": "method",
-                "method": "createDirectMessage",
-                "id": format!("create_dm_{}", username),
-                "params": [
-                    username,
-                ],
-            });
-            self.shared_state.outgoing_sender.send(message_body)
-                .expect("failed to enqueue create-DM message");
+            let creation_res = post_api_json(
+                &self.shared_state,
+                "api/v1/dm.create",
+                serde_json::json!({
+                    "username": username,
+                }),
+                NO_QUERY_OPTIONS,
+            ).await;
+            if let Err(e) = creation_res {
+                error!("failed to create direct message with user {:?}: {}", username, e);
+                return;
+            }
+
+            // TODO: find the right moment to process the message stuck in initpm
         }
     }
 
@@ -482,16 +484,20 @@ impl RocketBotInterface for ServerConnection {
             }
 
             // create a new PM channel
-            let message_body = serde_json::json!({
-                "msg": "method",
-                "method": "createDirectMessage",
-                "id": format!("create_dm_{}", username),
-                "params": [
-                    username,
-                ],
-            });
-            self.shared_state.outgoing_sender.send(message_body)
-                .expect("failed to enqueue create-DM message");
+            let creation_res = post_api_json(
+                &self.shared_state,
+                "api/v1/dm.create",
+                serde_json::json!({
+                    "username": username,
+                }),
+                NO_QUERY_OPTIONS,
+            ).await;
+            if let Err(e) = creation_res {
+                error!("failed to create direct message with user {:?}: {}", username, e);
+                return;
+            }
+
+            // TODO: find the right moment to process the message stuck in initpm
         }
     }
 
@@ -522,11 +528,10 @@ impl RocketBotInterface for ServerConnection {
     }
 
     async fn obtain_server_roles(&self) -> Option<HashSet<String>> {
-        let no_query_options: [(&str, Option<&str>); 0] = [];
         let roles_res = get_api_json(
             &self.shared_state,
             "api/v1/roles.list",
-            no_query_options,
+            NO_QUERY_OPTIONS,
         ).await;
         let roles = match roles_res {
             Ok(r) => r,
@@ -863,7 +868,6 @@ impl RocketBotInterface for ServerConnection {
 
     async fn add_reaction(&self, message_id: &str, emoji_short_name: &str) {
         debug!("reacting with emoji {emoji_short_name:?} to message {message_id:?}");
-        let no_query_options: [(&str, Option<&str>); 0] = [];
         let res = post_api_json(
             &self.shared_state,
             "api/v1/chat.react",
@@ -872,7 +876,7 @@ impl RocketBotInterface for ServerConnection {
                 "emoji": emoji_short_name,
                 "shouldReact": true,
             }),
-            no_query_options,
+            NO_QUERY_OPTIONS,
         ).await;
         if let Err(e) = res {
             error!("failed to react with emoji {emoji_short_name:?} to message {message_id:?}: {e}");
@@ -881,7 +885,6 @@ impl RocketBotInterface for ServerConnection {
 
     async fn remove_reaction(&self, message_id: &str, emoji_short_name: &str) {
         debug!("removing reaction with emoji {emoji_short_name:?} from message {message_id:?}");
-        let no_query_options: [(&str, Option<&str>); 0] = [];
         let res = post_api_json(
             &self.shared_state,
             "api/v1/chat.react",
@@ -890,7 +893,7 @@ impl RocketBotInterface for ServerConnection {
                 "emoji": emoji_short_name,
                 "shouldReact": false,
             }),
-            no_query_options,
+            NO_QUERY_OPTIONS,
         ).await;
         if let Err(e) = res {
             error!("failed to remove reaction with emoji {emoji_short_name:?} from message {message_id:?}: {e}");
@@ -1014,10 +1017,6 @@ async fn generate_from_alphabet<R: Rng>(rng_lock: &Mutex<R>, alphabet: &str, out
     }
 
     message_id
-}
-
-async fn generate_message_id<R: Rng>(rng_lock: &Mutex<R>) -> String {
-    generate_from_alphabet(rng_lock, ID_ALPHABET, ID_LENGTH).await
 }
 
 async fn generate_boundary_text<R: Rng>(rng_lock: &Mutex<R>) -> String {
@@ -1325,31 +1324,30 @@ async fn run_connection(mut state: &mut ConnectionState) -> Result<(), WebSocket
     Ok(())
 }
 
-async fn do_send_any_message(shared_state: &SharedConnectionState, target_id: &str, message: OutgoingMessage) -> String {
-    // make an ID for this message
-    let message_id = generate_message_id(&shared_state.rng).await;
+async fn do_send_any_message(shared_state: &SharedConnectionState, target_id: &str, message: OutgoingMessage) -> Option<String> {
     let mut message_body = serde_json::json!({
-        "msg": "method",
-        "method": "sendMessage",
-        "id": SEND_MESSAGE_MESSAGE_ID,
-        "params": [
-            {
-                "_id": message_id,
-                "rid": target_id,
-                "msg": message.body,
-            },
-        ],
+        "roomId": target_id,
+        "text": message.body,
     });
     if let Some(impersonation) = message.impersonation {
-        message_body["params"][0].insert("alias".to_owned(), serde_json::Value::String(impersonation.nickname));
-        message_body["params"][0].insert("avatar".to_owned(), serde_json::Value::String(impersonation.avatar_url));
+        message_body["alias"] = serde_json::Value::String(impersonation.nickname);
+        message_body["avatar"] = serde_json::Value::String(impersonation.avatar_url);
     }
     if let Some(rtmid) = message.reply_to_message_id {
-        message_body["params"][0].insert("tmid".to_owned(), serde_json::Value::String(rtmid));
+        message_body["tmid"] = serde_json::Value::String(rtmid);
     }
-    shared_state.outgoing_sender.send(message_body)
-        .expect("failed to enqueue channel message");
-    message_id
+    let new_message = post_api_json(
+        shared_state,
+        "/api/v1/chat.postMessage",
+        message_body,
+        NO_QUERY_OPTIONS,
+    ).await.expect("failed to send channel message");
+    if let Some(message_id) = new_message["message"]["_id"].as_str() {
+        Some(message_id.to_owned())
+    } else {
+        error!("failed to extract $.message._id from send-message response {:?}", new_message);
+        None
+    }
 }
 
 async fn do_send_any_message_with_attachment(shared_state: &SharedConnectionState, target_id: &str, message: OutgoingMessageWithAttachment) -> Option<String> {
@@ -1562,7 +1560,7 @@ async fn do_send_channel_message(shared_state: &SharedConnectionState, channel: 
         }
     }
 
-    Some(do_send_any_message(shared_state, &channel.id, message).await)
+    do_send_any_message(shared_state, &channel.id, message).await
 }
 
 async fn do_send_private_message(shared_state: &SharedConnectionState, convo: &PrivateConversation, message: OutgoingMessage) -> Option<String> {
@@ -1578,7 +1576,7 @@ async fn do_send_private_message(shared_state: &SharedConnectionState, convo: &P
         }
     }
 
-    Some(do_send_any_message(shared_state, &convo.id, message).await)
+    do_send_any_message(shared_state, &convo.id, message).await
 }
 
 async fn do_send_channel_message_with_attachment(shared_state: &SharedConnectionState, channel: &Channel, message: OutgoingMessageWithAttachment) -> Option<String> {
@@ -1928,11 +1926,10 @@ async fn handle_received(body: &serde_json::Value, mut state: &mut ConnectionSta
             .expect("failed to enqueue room update subscription message");
 
         // get the server's settings
-        let no_query_options: [(&str, Option<&str>); 0] = [];
         let settings_response = get_api_json(
             &state.shared_state,
             "api/v1/settings.public",
-            no_query_options,
+            NO_QUERY_OPTIONS,
         ).await.expect("failed to obtain server settings");
         process_settings(&settings_response["settings"], state).await;
 
@@ -1969,7 +1966,6 @@ async fn handle_received(body: &serde_json::Value, mut state: &mut ConnectionSta
 
         // set our status
         debug!("setting status");
-        let no_query_options: [(&str, Option<&str>); 0] = [];
         post_api_json(
             &state.shared_state,
             "api/v1/users.setStatus",
@@ -1977,7 +1973,7 @@ async fn handle_received(body: &serde_json::Value, mut state: &mut ConnectionSta
                 "message": "",
                 "status": "online",
             }),
-            no_query_options,
+            NO_QUERY_OPTIONS,
         )
             .await.expect("failed to set status");
     } else if body["msg"] == "result" && body["id"] == GET_ROOMS_MESSAGE_ID {
@@ -2338,6 +2334,9 @@ async fn handle_received(body: &serde_json::Value, mut state: &mut ConnectionSta
         }
     } else if body["msg"] == "result" && body["id"].as_str_or_empty().starts_with("create_dm_") {
         // new direct message channel created
+
+        // NOTE: this is probably not called anymore,
+        // move this code elsewhere once the new sequence is understood
 
         // we probably already received the message adding us to the channel
         // now, process the outgoing messages
@@ -3055,14 +3054,13 @@ async fn obtain_builtin_emoji(state: &ConnectionState) -> Vec<Emoji> {
 }
 
 async fn obtain_custom_emoji(shared_state: &SharedConnectionState) -> Vec<Emoji> {
-    let no_query_options: [(&str, Option<&str>); 0] = [];
     let mut custom_emoji = Vec::new();
     let mut offset: usize = 0;
     loop {
         let custom_emoji_response = get_api_json(
             shared_state,
             &format!("api/v1/emoji-custom.all?offset={}", offset),
-            no_query_options,
+            NO_QUERY_OPTIONS,
         )
             .await.expect("failed to obtain custom emoji");
         let mut obtained_count: usize = 0;
