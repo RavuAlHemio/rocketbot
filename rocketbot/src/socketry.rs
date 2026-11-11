@@ -2841,11 +2841,12 @@ async fn get_http_from_server<Q, K, V>(state: &SharedConnectionState, uri_path: 
 
 async fn get_api_json<Q, K, V>(state: &SharedConnectionState, uri_path: &str, query_options: Q) -> Result<serde_json::Value, HttpError>
     where
-        Q: IntoIterator<Item = (K, Option<V>)>,
+        Q: IntoIterator<Item = (K, Option<V>)> + std::fmt::Debug,
         K: AsRef<str>,
         V: AsRef<str>,
 {
     let no_headers: [(&str, &str); 0] = [];
+    debug!("JSON GET {:?} with query options {:?}", uri_path, query_options);
     let request = obtain_request_for_http_from_server(
         &state,
         uri_path,
@@ -2864,12 +2865,13 @@ async fn post_api_json<Q, K, V>(
     query_options: Q,
 ) -> Result<serde_json::Value, HttpError>
     where
-        Q: IntoIterator<Item = (K, Option<V>)>,
+        Q: IntoIterator<Item = (K, Option<V>)> + std::fmt::Debug,
         K: AsRef<str>,
         V: AsRef<str>,
 {
     let body_string = serde_json::to_string(&body_json)
         .expect("failed to serialize JSON value");
+    debug!("JSON POST {:?} with body {:?} and query options {:?}", uri_path, body_string, query_options);
     let body = Full::new(Bytes::from(body_string));
     let headers: [(&str, &str); 1] = [
         ("Content-Type", "application/json"),
