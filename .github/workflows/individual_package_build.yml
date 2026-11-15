@@ -1,5 +1,7 @@
 name: rocketbot individual package build
-on: [push]
+on:
+  push: {}
+  workflow_dispatch: {}
 jobs:
   build-arch-debug-individual-packages:
     runs-on: ubuntu-latest
