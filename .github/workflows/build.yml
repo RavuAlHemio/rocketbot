@@ -1,5 +1,7 @@
 name: rocketbot build
-on: [push]
+on:
+  push: {}
+  workflow_dispatch: {} 
 jobs:
   build-arch-debug:
     runs-on: ubuntu-latest
