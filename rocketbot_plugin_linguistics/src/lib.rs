@@ -68,14 +68,16 @@ impl LinguisticsPlugin {
         let rows = db_client.query(
             "
                 -- try a case-sensitive match, then a case-insensitive match
-                SELECT  cs.word
+                SELECT  cs.id
+                    ,   cs.word
                     ,   cs.gender_flags
                 FROM    linguistics.german_genders cs
                 WHERE   cs.word = $1
 
                 UNION ALL
 
-                SELECT  ci.word
+                SELECT  ci.id
+                    ,   ci.word
                     ,   ci.gender_flags
                 FROM    linguistics.german_genders ci
                 WHERE   LOWER(ci.word) = LOWER($1)
@@ -84,14 +86,18 @@ impl LinguisticsPlugin {
                     FROM linguistics.german_genders cics
                     WHERE cics.word = $1
                 )
+
+                ORDER BY    word
+                    ,       id
             ",
             &[&word],
         ).await?;
         let genders = rows
             .into_iter()
             .map(|row| {
-                let word: String = row.get(0);
-                let flags_i64: i64 = row.get(1);
+                // skip 0, that's just the ID for sorting
+                let word: String = row.get(1);
+                let flags_i64: i64 = row.get(2);
 
                 let gender_flags = GenderFlags::from_bits_truncate(flags_i64);
 
@@ -117,7 +123,10 @@ impl LinguisticsPlugin {
             },
             Ok(genders) => {
                 let mut pieces = Vec::with_capacity(1);
-                for gender in genders {
+                let mut word = "?";
+                for gender in &genders {
+                    word = &gender.word;
+
                     let mut gender_words = Vec::with_capacity(3);
                     if gender.gender_flags.contains(GenderFlags::MASCULINE) {
                         gender_words.push("masculine");
@@ -144,13 +153,15 @@ impl LinguisticsPlugin {
                         gender_words.push("a unisex given name");
                     }
 
-                    if gender_words.is_empty() {
-                        pieces.push(format!("_{}_ is a German noun, but not much more is known", gender.word))
-                    } else {
+                    if !gender_words.is_empty() {
                         pieces.push(format!("_{}_ is {}", gender.word, phrase_join(&gender_words, ", ", " and ")))
                     }
                 }
-                Cow::Owned(pieces.join("\n"))
+                if pieces.len() == 0 {
+                    Cow::Owned(format!("_{}_ is a German noun, but not much more is known", word))
+                } else {
+                    Cow::Owned(pieces.join("\n"))
+                }
             },
             Err(e) => {
                 error!("error querying German gender of {:?}: {}", word, e);
