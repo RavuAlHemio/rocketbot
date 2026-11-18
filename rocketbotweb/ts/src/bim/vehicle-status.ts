@@ -189,6 +189,15 @@ export namespace VehicleStatus {
             vehiclesDiv.removeChild(vehiclesDiv.firstChild);
         }
         const vehicleNumbers = vehicleNumberInput.value.split("+");
+
+        // trim off a single trailing "!" ("I'm riding this one") from the vehicle numbers
+        for (let i = 0; i < vehicleNumbers.length; i++) {
+            const vn = vehicleNumbers[i];
+            if (vn.length > 0 && vn[vn.length-1] === "!") {
+                vehicleNumbers[i] = vn.substring(0, vn.length-1);
+            }
+        }
+
         appendLookedUpVehicles(vehicleNumbers, vehiclesDiv, true);
     }
 
