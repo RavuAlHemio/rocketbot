@@ -30,6 +30,11 @@ bitflags! {
         const MALE_GIVEN = (1 << 5);
         const FEMALE_GIVEN = (1 << 6);
         const UNISEX_GIVEN = (1 << 7);
+        const SKIP_ME = (1 << 8); // internal flag for import process
+        const GENDER_NEUTRAL = (1 << 9);
+        const COMMON_GENDER = (1 << 10);
+        const PROPER_NOUN = (1 << 11);
+        const NONLEMMA = (1 << 12);
     }
 }
 
