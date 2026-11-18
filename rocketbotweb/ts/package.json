@@ -7,9 +7,9 @@
   },
   "source": "./src/rocketbotweb.ts",
   "devDependencies": {
-    "chart.js": "^4.4.4",
-    "chartjs-chart-sankey": "^0.12.0",
-    "parcel": "^2.12.0"
+    "chart.js": "^4.5.1",
+    "chartjs-chart-sankey": "^0.19.1",
+    "parcel": "^2.16.4"
   },
-  "packageManager": "yarn@4.15.0"
+  "packageManager": "yarn@4.18.1"
 }
